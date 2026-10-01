@@ -10,7 +10,10 @@ export function registerAgentIntegration(
   const installed = new Map<Agent, () => void>()
   const install = (agent: Agent): void => {
     if (installed.has(agent)) return
-    installed.set(agent, registerComputerHistoryTools(agent.ctx))
+    installed.set(
+      agent,
+      registerComputerHistoryTools(agent.ctx),
+    )
   }
 
   for (const agent of ctx.agents.list()) install(agent)

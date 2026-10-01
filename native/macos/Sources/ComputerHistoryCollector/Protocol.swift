@@ -13,7 +13,7 @@ struct Hello: Encodable {
 struct Privacy: Encodable { let secure: Bool; let protected: Bool; let reason: String? }
 struct AppInfo: Encodable { let pid: Int32; let bundleId: String; let name: String? }
 struct WindowInfo: Encodable { let title: String?; let document: String?; let url: String? }
-struct ElementInfo: Encodable { let role: String?; let subrole: String?; let identifier: String?; let title: String? }
+struct ElementInfo: Encodable { let role: String?; let subrole: String?; let identifier: String? }
 struct SourceInfo: Encodable { let adapter: String }
 
 struct Observation: Encodable {

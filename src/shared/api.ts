@@ -60,6 +60,7 @@ export interface ComputerHistoryState {
     | 'permission-required'
     | 'degraded'
   readonly accessibilityTrusted: boolean
+  readonly reason?: string
   readonly observationRetentionHours: number
   readonly episodeRetentionDays: number
   readonly autoResume: boolean

@@ -3,10 +3,10 @@ import { pathToFileURL } from 'node:url'
 import {
   CollectorSessionId,
   OBSERVATION_RETENTION_MS,
+  policyRuleMatches,
   type ActivityObservation,
   type NativeObservation,
   type ObservationAdapter,
-  type PolicyRule,
   type PolicySnapshot,
   type ResourceIdentity,
   type WorkspaceRef,
@@ -37,53 +37,49 @@ export function phase1AdapterForBundle(
 
 const SECURE_PATH = /(?:^|\/)(?:\.env(?:\.|$)|\.ssh(?:\/|$))|\.(?:pem|key)$|(?:credentials|secrets)/i
 
-function resourceOf(message: NativeObservation): ResourceIdentity | undefined {
+function resourceOf(
+  message: NativeObservation,
+  adapter: ObservationAdapter,
+): ResourceIdentity | undefined {
   const raw = message.window?.document ?? message.window?.url
   if (!raw) return undefined
   if (/^https?:\/\//i.test(raw)) return { kind: 'url', canonicalUri: raw, ...(message.window?.title ? { displayLabel: message.window.title } : {}) }
   if (/^file:\/\//i.test(raw)) {
     try {
       const url = new URL(raw)
-      return { kind: 'file', canonicalUri: url.href, displayLabel: path.basename(decodeURIComponent(url.pathname)) }
+      return {
+        kind: adapter === 'terminal' ? 'directory' : 'file',
+        canonicalUri: url.href,
+        displayLabel: path.basename(decodeURIComponent(url.pathname)),
+      }
     } catch { return undefined }
   }
-  if (path.isAbsolute(raw)) return { kind: 'file', canonicalUri: pathToFileURL(raw).href, displayLabel: path.basename(raw) }
+  if (path.isAbsolute(raw)) {
+    return {
+      kind: adapter === 'terminal' ? 'directory' : 'file',
+      canonicalUri: pathToFileURL(raw).href,
+      displayLabel: path.basename(raw),
+    }
+  }
   return undefined
 }
 
-function globMatches(pattern: string, value: string): boolean {
-  let patternIndex = 0
-  let valueIndex = 0
-  let starIndex = -1
-  let starValueIndex = -1
-  while (valueIndex < value.length) {
-    if (patternIndex < pattern.length && pattern[patternIndex] === value[valueIndex]) {
-      patternIndex += 1
-      valueIndex += 1
-    } else if (patternIndex < pattern.length && pattern[patternIndex] === '*') {
-      starIndex = patternIndex++
-      starValueIndex = valueIndex
-    } else if (starIndex >= 0) {
-      patternIndex = starIndex + 1
-      valueIndex = ++starValueIndex
-    } else return false
-  }
-  while (patternIndex < pattern.length && pattern[patternIndex] === '*') patternIndex += 1
-  return patternIndex === pattern.length
-}
-
-function matches(rule: PolicyRule, value: string): boolean {
-  if (rule.matcher === 'exact') return value === rule.pattern
-  if (rule.matcher === 'prefix') return value.startsWith(rule.pattern)
-  return globMatches(rule.pattern, value)
-}
-
 export function policyAllows(bundleId: string, resource: ResourceIdentity | undefined, policy: PolicySnapshot): boolean {
-  const appRules = policy.rules.filter(rule => rule.dimension === 'app' && matches(rule, bundleId))
-  if (appRules.some(rule => rule.action === 'deny' || rule.action === 'protect')) return false
-  if (resource && policy.rules.some(rule => rule.dimension === 'resource' && rule.action !== 'allow' && matches(rule, resource.canonicalUri))) return false
-  if (policy.mode === 'include-only') return appRules.some(rule => rule.action === 'allow')
-  return true
+  if (policy.mode !== 'include-only') return false
+
+  const appRules = policy.rules.filter(rule =>
+    rule.dimension === 'app'
+    && policyRuleMatches(rule, bundleId),
+  )
+  if (appRules.some(rule =>
+    rule.action === 'deny' || rule.action === 'protect'
+  )) return false
+  if (resource && policy.rules.some(rule =>
+    rule.dimension === 'resource'
+    && rule.action !== 'allow'
+    && policyRuleMatches(rule, resource.canonicalUri)
+  )) return false
+  return appRules.some(rule => rule.action === 'allow')
 }
 
 export function normalizeObservation(
@@ -91,19 +87,35 @@ export function normalizeObservation(
   policy: PolicySnapshot,
   nowMs: number,
   workspace: WorkspaceRef = { source: 'none', confidence: 0 },
+  resourceOverride?: ResourceIdentity,
 ): ActivityObservation | undefined {
   if (message.privacy.secure || message.privacy.protected) return undefined
   if (PROTECTED_BUNDLES.has(message.app.bundleId)) return undefined
   const safeAdapter = phase1AdapterForBundle(message.app.bundleId)
   if (!safeAdapter) return undefined
-  const resource = resourceOf(message)
+  const resource = resourceOverride
+    ?? resourceOf(message, safeAdapter)
   if (resource?.kind === 'url') return undefined
-  if (resource?.kind === 'file') {
+  if (
+    resource?.kind === 'file'
+    || resource?.kind === 'directory'
+  ) {
     try {
       if (SECURE_PATH.test(decodeURIComponent(new URL(resource.canonicalUri).pathname))) return undefined
     } catch { return undefined }
   }
   if (!policyAllows(message.app.bundleId, resource, policy)) return undefined
+
+  if (message.observedAtMs > nowMs) {
+    return undefined
+  }
+
+  const expiresAtMs = message.observedAtMs + OBSERVATION_RETENTION_MS
+  if (
+    !Number.isSafeInteger(expiresAtMs)
+    || expiresAtMs <= nowMs
+  ) return undefined
+
   return {
     collectorSessionId: CollectorSessionId(message.collectorSession),
     seq: message.seq,
@@ -117,15 +129,34 @@ export function normalizeObservation(
           : safeAdapter === 'preview'
             ? 'document'
             : 'window',
-      ...(message.window?.title ? { title: message.window.title } : {}),
+      ...(
+        safeAdapter !== 'terminal'
+        && message.window?.title
+          ? { title: message.window.title }
+          : {}
+      ),
     },
-    ...(message.element ? { element: message.element } : {}),
+    ...(message.element
+      ? {
+          element: {
+            ...(message.element.role
+              ? { role: message.element.role }
+              : {}),
+            ...(message.element.subrole
+              ? { subrole: message.element.subrole }
+              : {}),
+            ...(message.element.identifier
+              ? { identifier: message.element.identifier }
+              : {}),
+          },
+        }
+      : {}),
     ...(resource ? { resource } : {}),
     workspace,
     activity: message.activity?.idleSeconds === undefined ? {} : { idleSeconds: message.activity.idleSeconds },
     privacy: { secure: false, protected: false },
     source: { provider: 'macos-ax', adapter: safeAdapter },
     policyRevision: policy.revision,
-    expiresAtMs: nowMs + OBSERVATION_RETENTION_MS,
+    expiresAtMs,
   }
 }

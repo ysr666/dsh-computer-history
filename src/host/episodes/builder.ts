@@ -213,16 +213,39 @@ function addObservation(
   }
 }
 
+function firstValues<T>(
+  values: Iterable<T>,
+  limit: number,
+): T[] {
+  const result: T[] = []
+  for (const value of values) {
+    result.push(value)
+    if (result.length >= limit) break
+  }
+  return result
+}
+
 function finishEpisode(
   episode: MutableEpisode,
   endReason: EpisodeBoundaryReason,
+  projection: 'full' | 'compact' = 'full',
 ): EpisodeDetail {
-  const resources: EpisodeResourceSummary[] = [
-    ...episode.resources.values(),
-  ]
-  const surfaces: EpisodeSurfaceSummary[] = [
-    ...episode.surfaces.values(),
-  ]
+  const summaryResources = firstValues(
+    episode.resources.values(),
+    8,
+  )
+  const summarySurfaces = firstValues(
+    episode.surfaces.values(),
+    8,
+  )
+  const resources: EpisodeResourceSummary[] =
+    projection === 'full'
+      ? [...episode.resources.values()]
+      : []
+  const surfaces: EpisodeSurfaceSummary[] =
+    projection === 'full'
+      ? [...episode.surfaces.values()]
+      : []
 
   const workspace = episode.workspace
     ? {
@@ -255,8 +278,8 @@ function finishEpisode(
       ...(workspace?.title
         ? { workspaceTitle: workspace.title }
         : {}),
-      resources,
-      surfaces,
+      resources: summaryResources,
+      surfaces: summarySurfaces,
     }),
     ...(episode.lastStrongResource
       ? {
@@ -323,7 +346,7 @@ export class IncrementalEpisodeBuilder {
     seed: readonly PersistedActivityObservation[] = [],
   ) {
     for (const observation of sortedUnique(seed)) {
-      this.push(observation)
+      this.push(observation, { emission: 'none' })
     }
   }
 
@@ -333,6 +356,13 @@ export class IncrementalEpisodeBuilder {
 
   public push(
     observation: PersistedActivityObservation,
+    options: {
+      readonly emission?:
+        | 'full'
+        | 'compact'
+        | 'boundaries'
+        | 'none'
+    } = {},
   ): readonly EpisodeDetail[] {
     const key = observationKey(observation)
     const existing = this.seen.get(key)
@@ -362,15 +392,35 @@ export class IncrementalEpisodeBuilder {
     if (!isEligible(observation)) return []
 
     const changed: EpisodeDetail[] = []
+    const emission = options.emission ?? 'full'
     let startReason:
       EpisodeBoundaryReason = 'first-observation'
+
+    const emit = (
+      episode: MutableEpisode,
+      reason: EpisodeBoundaryReason,
+      boundary: boolean,
+    ): void => {
+      if (emission === 'none') return
+      if (emission === 'boundaries' && !boundary) return
+      changed.push(finishEpisode(
+        episode,
+        reason,
+        emission === 'compact' ? 'compact' : 'full',
+      ))
+    }
 
     const close = (
       reason: EpisodeBoundaryReason,
     ): void => {
       if (!this.active) return
-      changed.push(finishEpisode(this.active, reason))
+      emit(this.active, reason, true)
       this.active = undefined
+    }
+
+    const emitActive = (): void => {
+      if (!this.active) return
+      emit(this.active, 'timeout', false)
     }
 
     if (
@@ -409,9 +459,7 @@ export class IncrementalEpisodeBuilder {
           startReason,
           true,
         )
-        changed.push(
-          finishEpisode(this.active, 'timeout'),
-        )
+        emitActive()
         return changed
       }
 
@@ -428,9 +476,7 @@ export class IncrementalEpisodeBuilder {
           'workspace-switch',
           true,
         )
-        changed.push(
-          finishEpisode(this.active, 'timeout'),
-        )
+        emitActive()
         return changed
       }
 
@@ -448,9 +494,7 @@ export class IncrementalEpisodeBuilder {
           'timeout',
           true,
         )
-        changed.push(
-          finishEpisode(this.active, 'timeout'),
-        )
+        emitActive()
         return changed
       }
 
@@ -459,9 +503,7 @@ export class IncrementalEpisodeBuilder {
         observation,
         true,
       )
-      changed.push(
-        finishEpisode(this.active, 'timeout'),
-      )
+      emitActive()
       return changed
     }
 
@@ -478,9 +520,7 @@ export class IncrementalEpisodeBuilder {
           observation,
           false,
         )
-        changed.push(
-          finishEpisode(this.active, 'timeout'),
-        )
+        emitActive()
         return changed
       }
 
@@ -496,9 +536,7 @@ export class IncrementalEpisodeBuilder {
           observation,
           false,
         )
-        changed.push(
-          finishEpisode(this.active, 'timeout'),
-        )
+        emitActive()
         return changed
       }
 
@@ -508,9 +546,7 @@ export class IncrementalEpisodeBuilder {
         startReason,
         false,
       )
-      changed.push(
-        finishEpisode(this.active, 'timeout'),
-      )
+      emitActive()
       return changed
     }
 
@@ -521,9 +557,7 @@ export class IncrementalEpisodeBuilder {
         startReason,
         false,
       )
-      changed.push(
-        finishEpisode(this.active, 'timeout'),
-      )
+      emitActive()
       return changed
     }
 
@@ -537,6 +571,12 @@ export class IncrementalEpisodeBuilder {
 
     return changed
   }
+
+  public snapshot(): EpisodeDetail | undefined {
+    return this.active
+      ? finishEpisode(this.active, 'timeout')
+      : undefined
+  }
 }
 
 export function buildEpisodes(
@@ -546,10 +586,15 @@ export function buildEpisodes(
   const builder = new IncrementalEpisodeBuilder()
 
   for (const observation of sortedUnique(input)) {
-    for (const episode of builder.push(observation)) {
+    for (const episode of builder.push(
+      observation,
+      { emission: 'boundaries' },
+    )) {
       episodes.set(String(episode.id), episode)
     }
   }
+  const tail = builder.snapshot()
+  if (tail) episodes.set(String(tail.id), tail)
 
   return [...episodes.values()].toSorted(
     (left, right) =>

@@ -50,6 +50,8 @@ describe('ingestion performance gate', () => {
       updatedAtMs: 1,
     }], 2)
 
+    const nowMs = Date.now()
+    const baseObservedAtMs = nowMs - 1_000_000
     const ingestion = new IngestionService(
       history.db,
       {
@@ -62,7 +64,7 @@ describe('ingestion performance gate', () => {
         }),
       },
       () => policies.get(),
-      Date.now,
+      () => nowMs,
     )
 
     const started = performance.now()
@@ -72,7 +74,7 @@ describe('ingestion performance gate', () => {
         type: 'observation',
         collectorSession: 'benchmark',
         seq: index + 1,
-        observedAtMs: 1_000 + index * 100,
+        observedAtMs: baseObservedAtMs + index * 100,
         app: {
           pid: 1,
           bundleId: 'com.microsoft.VSCode',
@@ -81,7 +83,7 @@ describe('ingestion performance gate', () => {
           title: 'file' + index,
           document:
             '/alpha/src/file'
-            + (index % 20)
+            + index
             + '.ts',
         },
         privacy: {

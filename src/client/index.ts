@@ -5,12 +5,12 @@ import '@deepseek-ai/dsh-client-ui-slots'
 import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client'
 import React, { useCallback, useEffect, useState } from 'react'
 import type { ComputerHistoryState, EpisodeSummary, PolicySnapshot } from '../shared/index.js'
+import { historyApiPath } from './api-route.js'
 
 const PANEL_ID = 'computer-history' as MainPanelId
-const API = 'api/computer-history'
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(API + path, init)
+  const response = await fetch(historyApiPath(path), init)
   if (!response.ok) throw new Error(await response.text())
   return response.json() as Promise<T>
 }
@@ -45,10 +45,26 @@ function HistoryPage(): React.ReactElement {
 
   useEffect(() => { void refresh() }, [refresh])
 
-  const toggle = async (): Promise<void> => {
-    await api(state?.capture === 'paused' ? '/resume' : '/pause', {
-      method: 'POST',
+  const runAction = (
+    action: () => Promise<void>,
+  ): void => {
+    void action().catch(cause => {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : String(cause),
+      )
     })
+  }
+
+  const toggle = async (): Promise<void> => {
+    if (!state?.enabled) return
+    await api(
+      state.capture === 'paused'
+        ? '/resume'
+        : '/pause',
+      { method: 'POST' },
+    )
     await refresh()
   }
 
@@ -121,19 +137,41 @@ function HistoryPage(): React.ReactElement {
     error
       ? React.createElement('p', { role: 'alert' }, error)
       : null,
+    state?.reason
+      ? React.createElement(
+          'p',
+          null,
+          'Status detail: ' + state.reason,
+        )
+      : null,
     React.createElement(
       'div',
       { style: { display: 'flex', gap: 8, marginBottom: 20 } },
       React.createElement(
         'button',
-        { type: 'button', onClick: () => { void toggle() } },
-        state?.capture === 'paused' ? 'Resume capture' : 'Pause capture',
+        {
+          type: 'button',
+          disabled:
+            !state?.enabled
+            || (
+              state.capture !== 'running'
+              && state.capture !== 'paused'
+            ),
+          onClick: () => { runAction(toggle) },
+        },
+        !state?.enabled
+          ? 'Capture disabled in plugin config'
+          : state.capture === 'paused'
+            ? 'Resume capture'
+            : state.capture === 'running'
+              ? 'Pause capture'
+              : 'Capture unavailable',
       ),
       React.createElement(
         'button',
         {
           type: 'button',
-          onClick: () => { void clearAll() },
+          onClick: () => { runAction(clearAll) },
         },
         confirmDeleteAll
           ? 'Confirm delete all history'
@@ -153,7 +191,7 @@ function HistoryPage(): React.ReactElement {
         : null,
       React.createElement(
         'button',
-        { type: 'button', onClick: () => { void refresh() } },
+        { type: 'button', onClick: () => { runAction(refresh) } },
         'Refresh',
       ),
     ),
@@ -165,8 +203,22 @@ function HistoryPage(): React.ReactElement {
       placeholder: 'com.example.App',
       onChange: (event: React.ChangeEvent<HTMLInputElement>) => setBundleId(event.target.value),
     }),
-    React.createElement('button', { type: 'button', onClick: () => { void allowApp() } }, 'Allow app'),
-    React.createElement('button', { type: 'button', onClick: () => { void forgetApp() } }, 'Forget app'),
+    React.createElement(
+      'button',
+      {
+        type: 'button',
+        onClick: () => { runAction(allowApp) },
+      },
+      'Allow app',
+    ),
+    React.createElement(
+      'button',
+      {
+        type: 'button',
+        onClick: () => { runAction(forgetApp) },
+      },
+      'Forget app',
+    ),
     React.createElement('ul', null,
       ...(policy?.rules.filter(rule => rule.dimension === 'app' && rule.action === 'allow') ?? [])
         .map(rule => React.createElement('li', { key: rule.id }, rule.pattern))),

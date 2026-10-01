@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
 import {
-  EPISODE_RETENTION_MS,
   type DeleteHistoryRequest,
   type DeleteHistoryResult,
   type EpisodeDetail,
@@ -23,10 +22,16 @@ function resourceKey(resource: {
   return `${resource.kind}\u0000${resource.canonicalUri}`
 }
 
+interface EpisodeRetentionMeta {
+  readonly createdAtMs: number
+  readonly expiresAtMs?: number
+}
+
 interface DeletionPlan {
   readonly populateTargets: () => void
-  readonly extraEpisodeIds?: readonly EpisodeId[]
-  readonly audit?: {
+  readonly forceEpisodeIds?: readonly EpisodeId[]
+  readonly derivedEpisodeIds?: readonly EpisodeId[]
+  readonly audit: {
     readonly scope: 'time-range' | 'episode' | 'app' | 'all'
     readonly rangeStartMs?: number
     readonly rangeEndMs?: number
@@ -53,13 +58,34 @@ export class DeletionService {
   ): DeleteHistoryResult {
     const scope = request.scope
 
-    if (scope.kind === 'time-range' && scope.endMs <= scope.startMs) {
-      throw new Error('delete time range must have endMs > startMs')
+    if (
+      scope.kind === 'time-range'
+      && scope.endMs <= scope.startMs
+    ) {
+      throw new Error(
+        'delete time range must have endMs > startMs',
+      )
     }
 
-    const allEpisodeIds = scope.kind === 'all'
+    const deletedEpisode =
+      scope.kind === 'episode'
+        ? this.episodes.get(scope.episodeId)
+        : undefined
+
+    const forceEpisodeIds = scope.kind === 'all'
       ? this.listAllEpisodeIds()
-      : undefined
+      : scope.kind === 'episode'
+        ? [scope.episodeId]
+        : undefined
+
+    const derivedEpisodeIds = scope.kind === 'app'
+      ? this.listEpisodesForApp(scope.bundleId)
+      : scope.kind === 'time-range'
+        ? this.listEpisodesOverlapping(
+            scope.startMs,
+            scope.endMs,
+          )
+        : undefined
 
     return this.execute({
       populateTargets: () => {
@@ -99,11 +125,11 @@ export class DeletionService {
           WHERE episode_id = ?
         `).run(scope.episodeId)
       },
-      ...(scope.kind === 'episode'
-        ? { extraEpisodeIds: [scope.episodeId] }
+      ...(forceEpisodeIds
+        ? { forceEpisodeIds }
         : {}),
-      ...(allEpisodeIds
-        ? { extraEpisodeIds: allEpisodeIds }
+      ...(derivedEpisodeIds
+        ? { derivedEpisodeIds }
         : {}),
       audit: {
         scope: scope.kind,
@@ -113,24 +139,18 @@ export class DeletionService {
               rangeEndMs: scope.endMs,
             }
           : {}),
+        ...(scope.kind === 'episode' && deletedEpisode
+          ? {
+              rangeStartMs: deletedEpisode.startedAtMs,
+              rangeEndMs: Math.min(
+                Number.MAX_SAFE_INTEGER,
+                deletedEpisode.endedAtMs + 1,
+              ),
+            }
+          : {}),
         ...(scope.kind === 'app'
           ? { bundleId: scope.bundleId }
           : {}),
-      },
-    }, nowMs)
-  }
-
-  public deleteExpiredObservations(
-    nowMs = Date.now(),
-  ): DeleteHistoryResult {
-    return this.execute({
-      populateTargets: () => {
-        this.db.prepare(`
-          INSERT INTO deletion_targets(id)
-          SELECT id
-          FROM observations
-          WHERE expires_at_ms <= ?
-        `).run(nowMs)
       },
     }, nowMs)
   }
@@ -140,12 +160,16 @@ export class DeletionService {
     nowMs: number,
   ): DeleteHistoryResult {
     if (this.db.isTransaction) {
-      throw new Error('history deletion must own the outer transaction')
+      throw new Error(
+        'history deletion must own the outer transaction',
+      )
     }
 
     this.db.exec('BEGIN IMMEDIATE')
     try {
-      this.db.exec('DROP TABLE IF EXISTS deletion_targets')
+      this.db.exec(
+        'DROP TABLE IF EXISTS deletion_targets',
+      )
       this.db.exec(
         'CREATE TEMP TABLE deletion_targets(id INTEGER PRIMARY KEY)',
       )
@@ -157,11 +181,38 @@ export class DeletionService {
         ).get() as { count: number }).count,
       )
 
-      const affected = new Set<EpisodeId>(
+      const linked = new Set<EpisodeId>(
         this.linkedAffectedEpisodeIds(),
       )
-      for (const id of plan.extraEpisodeIds ?? []) {
-        if (this.episodes.get(id)) affected.add(id)
+      const forced = new Set<EpisodeId>(
+        plan.forceEpisodeIds ?? [],
+      )
+      const derived = new Set<EpisodeId>(
+        plan.derivedEpisodeIds ?? [],
+      )
+      const affected = new Set<EpisodeId>([
+        ...linked,
+        ...forced,
+        ...derived,
+      ])
+
+      const completeness = new Map<
+        EpisodeId,
+        boolean
+      >()
+      const retention = new Map<
+        EpisodeId,
+        EpisodeRetentionMeta
+      >()
+
+      for (const episodeId of affected) {
+        const meta = this.episodeRetentionMeta(episodeId)
+        if (!meta) continue
+        retention.set(episodeId, meta)
+        completeness.set(
+          episodeId,
+          this.hasCompleteProvenance(episodeId),
+        )
       }
 
       this.db.exec(`
@@ -173,10 +224,34 @@ export class DeletionService {
       let episodesRebuilt = 0
 
       for (const episodeId of [...affected].toSorted()) {
-        const remaining = this.observations.listForEpisode(episodeId)
+        if (!this.episodes.get(episodeId)) continue
+
+        const isLinked = linked.has(episodeId)
+        const isForced = forced.has(episodeId)
+        const isDerivedOnly = derived.has(episodeId)
+          && !isLinked
+          && !isForced
+        const complete =
+          completeness.get(episodeId) ?? false
+
+        // A derived-only overlap with complete raw provenance
+        // but no matching raw target is not actually within
+        // the requested deletion scope (possible for a time
+        // range spanning an inactive gap).
+        if (isDerivedOnly && complete) {
+          continue
+        }
+
+        const remaining =
+          this.observations.listForEpisode(episodeId)
         this.episodes.delete(episodeId)
 
-        if (remaining.length === 0) {
+        // Once raw TTL has compacted part of an Episode, a
+        // user Forget/Delete request can no longer safely
+        // reconstruct only the requested slice. Delete the
+        // whole derived Episode rather than preserve content
+        // that may have come from forgotten evidence.
+        if (!complete || remaining.length === 0) {
           episodesDeleted += 1
           continue
         }
@@ -187,40 +262,64 @@ export class DeletionService {
           continue
         }
 
+        const meta = retention.get(episodeId)
         for (const episode of rebuilt) {
-          this.persistRebuiltEpisode(episode, nowMs)
+          this.persistRebuiltEpisode(
+            episode,
+            nowMs,
+            meta,
+          )
           episodesRebuilt += 1
         }
       }
 
       this.cleanupOrphanResources()
 
-      if (plan.audit) {
-        this.log.insert({
-          id: randomUUID(),
-          requestedAtMs: nowMs,
-          scope: plan.audit.scope,
-          ...(plan.audit.rangeStartMs === undefined
-            ? {}
-            : { rangeStartMs: plan.audit.rangeStartMs }),
-          ...(plan.audit.rangeEndMs === undefined
-            ? {}
-            : { rangeEndMs: plan.audit.rangeEndMs }),
-          ...(plan.audit.bundleId
-            ? { bundleId: plan.audit.bundleId }
-            : {}),
-          observationsDeleted: targetCount,
-          episodesDeleted,
-          episodesRebuilt,
-        })
-      }
+      this.log.insert({
+        id: randomUUID(),
+        requestedAtMs: nowMs,
+        scope: plan.audit.scope,
+        ...(plan.audit.rangeStartMs === undefined
+          ? {}
+          : {
+              rangeStartMs:
+                plan.audit.rangeStartMs,
+            }),
+        ...(plan.audit.rangeEndMs === undefined
+          ? {}
+          : {
+              rangeEndMs:
+                plan.audit.rangeEndMs,
+            }),
+        ...(plan.audit.bundleId
+          ? { bundleId: plan.audit.bundleId }
+          : {}),
+        observationsDeleted: targetCount,
+        episodesDeleted,
+        episodesRebuilt,
+      })
 
       this.db.exec('DROP TABLE deletion_targets')
       this.db.exec('COMMIT')
 
-      if (plan.audit && targetCount > 0) {
-        this.db.exec('PRAGMA wal_checkpoint(TRUNCATE)')
-        this.db.exec('VACUUM')
+      if (
+        targetCount > 0
+        || episodesDeleted > 0
+        || episodesRebuilt > 0
+      ) {
+        // The logical deletion is already committed. Physical
+        // compaction is best-effort: a concurrent reader may
+        // temporarily prevent checkpoint/VACUUM, but that must
+        // never turn a successful deletion into a false error.
+        try {
+          this.db.exec(
+            'PRAGMA wal_checkpoint(TRUNCATE)',
+          )
+          this.db.exec('VACUUM')
+        } catch {
+          // secure_delete still applies to SQLite cell removal;
+          // later maintenance/open cycles may reclaim pages.
+        }
       }
 
       return {
@@ -229,36 +328,128 @@ export class DeletionService {
         episodesRebuilt,
       }
     } catch (error) {
-      if (this.db.isTransaction) this.db.exec('ROLLBACK')
+      if (this.db.isTransaction) {
+        this.db.exec('ROLLBACK')
+      }
       try {
-        this.db.exec('DROP TABLE IF EXISTS deletion_targets')
+        this.db.exec(
+          'DROP TABLE IF EXISTS deletion_targets',
+        )
       } catch {
-        // Ignore cleanup errors after rollback; original error is authoritative.
+        // Original failure is authoritative.
       }
       throw error
     }
   }
 
-  private linkedAffectedEpisodeIds(): readonly EpisodeId[] {
+  private linkedAffectedEpisodeIds():
+    readonly EpisodeId[] {
     return this.db.prepare(`
       SELECT DISTINCT eo.episode_id AS id
       FROM episode_observations eo
-      JOIN deletion_targets dt ON dt.id = eo.observation_id
+      JOIN deletion_targets dt
+        ON dt.id = eo.observation_id
       ORDER BY eo.episode_id
-    `).all().map((row) => String(row.id) as EpisodeId)
+    `).all().map(
+      row => String(row.id) as EpisodeId,
+    )
   }
 
-  private listAllEpisodeIds(): readonly EpisodeId[] {
+  private listAllEpisodeIds():
+    readonly EpisodeId[] {
     return this.db.prepare(
       'SELECT id FROM episodes ORDER BY id',
-    ).all().map((row) => String(row.id) as EpisodeId)
+    ).all().map(
+      row => String(row.id) as EpisodeId,
+    )
+  }
+
+  private listEpisodesForApp(
+    bundleId: string,
+  ): readonly EpisodeId[] {
+    return this.db.prepare(`
+      SELECT DISTINCT episode_id AS id
+      FROM episode_surfaces
+      WHERE bundle_id = ?
+      ORDER BY episode_id
+    `).all(bundleId).map(
+      row => String(row.id) as EpisodeId,
+    )
+  }
+
+  private listEpisodesOverlapping(
+    startMs: number,
+    endMs: number,
+  ): readonly EpisodeId[] {
+    return this.db.prepare(`
+      SELECT id
+      FROM episodes
+      WHERE started_at_ms < ?
+        AND ended_at_ms >= ?
+      ORDER BY id
+    `).all(endMs, startMs).map(
+      row => String(row.id) as EpisodeId,
+    )
+  }
+
+  private hasCompleteProvenance(
+    episodeId: EpisodeId,
+  ): boolean {
+    const row = this.db.prepare(`
+      SELECT
+        (
+          SELECT COUNT(*)
+          FROM episode_observations
+          WHERE episode_id = ?
+        ) AS linked,
+        COALESCE((
+          SELECT SUM(observation_count)
+          FROM episode_surfaces
+          WHERE episode_id = ?
+        ), 0) AS expected
+    `).get(
+      episodeId,
+      episodeId,
+    ) as {
+      linked: number
+      expected: number
+    }
+
+    return Number(row.linked)
+      === Number(row.expected)
+  }
+
+  private episodeRetentionMeta(
+    episodeId: EpisodeId,
+  ): EpisodeRetentionMeta | undefined {
+    const row = this.db.prepare(`
+      SELECT created_at_ms, expires_at_ms
+      FROM episodes
+      WHERE id = ?
+    `).get(episodeId) as {
+      created_at_ms: number
+      expires_at_ms: number | null
+    } | undefined
+
+    if (!row) return undefined
+    return {
+      createdAtMs: Number(row.created_at_ms),
+      ...(row.expires_at_ms === null
+        ? {}
+        : {
+            expiresAtMs:
+              Number(row.expires_at_ms),
+          }),
+    }
   }
 
   private persistRebuiltEpisode(
     episode: EpisodeDetail,
     nowMs: number,
+    retention?: EpisodeRetentionMeta,
   ): void {
-    const resourceIds = new Map<string, ResourceId>()
+    const resourceIds =
+      new Map<string, ResourceId>()
 
     for (const resource of episode.resources) {
       const id = this.resources.upsert(
@@ -266,7 +457,10 @@ export class DeletionService {
           kind: resource.kind,
           canonicalUri: resource.canonicalUri,
           ...(resource.displayLabel
-            ? { displayLabel: resource.displayLabel }
+            ? {
+                displayLabel:
+                  resource.displayLabel,
+              }
             : {}),
         },
         resource.lastSeenAtMs,
@@ -274,41 +468,69 @@ export class DeletionService {
       resourceIds.set(resourceKey(resource), id)
     }
 
-    const lastStrongResourceId = episode.lastStrongResource
-      ? resourceIds.get(resourceKey(episode.lastStrongResource))
-      : undefined
+    const lastStrongResourceId =
+      episode.lastStrongResource
+        ? resourceIds.get(
+            resourceKey(
+              episode.lastStrongResource,
+            ),
+          )
+        : undefined
 
     this.episodes.replace({
       id: episode.id,
       startedAtMs: episode.startedAtMs,
       endedAtMs: episode.endedAtMs,
-      startReason: episode.boundary.startReason,
-      endReason: episode.boundary.endReason ?? 'manual-rebuild',
-      ...(episode.workspace ? { workspace: episode.workspace } : {}),
-      ...(episode.threadKey ? { threadKey: episode.threadKey } : {}),
-      ...(lastStrongResourceId ? { lastStrongResourceId } : {}),
+      startReason:
+        episode.boundary.startReason,
+      endReason:
+        episode.boundary.endReason
+        ?? 'manual-rebuild',
+      ...(episode.workspace
+        ? { workspace: episode.workspace }
+        : {}),
+      ...(episode.threadKey
+        ? { threadKey: episode.threadKey }
+        : {}),
+      ...(lastStrongResourceId
+        ? { lastStrongResourceId }
+        : {}),
       summaryKind: episode.summaryKind,
       summary: episode.summary,
       confidence: episode.confidence,
       state: episode.state,
-      createdAtMs: nowMs,
+      createdAtMs:
+        retention?.createdAtMs ?? nowMs,
       updatedAtMs: nowMs,
-      expiresAtMs: nowMs + EPISODE_RETENTION_MS,
-      observationIds: episode.observationIds,
-      resources: episode.resources.map((resource) => {
-        const id = resourceIds.get(resourceKey(resource))
-        if (!id) {
-          throw new Error(
-            `missing resource id while rebuilding episode ${episode.id}`,
+      ...(retention?.expiresAtMs === undefined
+        ? {}
+        : {
+            expiresAtMs:
+              retention.expiresAtMs,
+          }),
+      observationIds:
+        episode.observationIds,
+      resources: episode.resources.map(
+        resource => {
+          const id = resourceIds.get(
+            resourceKey(resource),
           )
-        }
-        return {
-          resourceId: id,
-          firstSeenAtMs: resource.firstSeenAtMs,
-          lastSeenAtMs: resource.lastSeenAtMs,
-          observationCount: resource.observationCount,
-        }
-      }),
+          if (!id) {
+            throw new Error(
+              `missing resource id while rebuilding episode ${episode.id}`,
+            )
+          }
+          return {
+            resourceId: id,
+            firstSeenAtMs:
+              resource.firstSeenAtMs,
+            lastSeenAtMs:
+              resource.lastSeenAtMs,
+            observationCount:
+              resource.observationCount,
+          }
+        },
+      ),
       surfaces: episode.surfaces,
     })
   }

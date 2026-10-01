@@ -154,25 +154,40 @@ implements ComputerHistoryServiceContract {
   public async replacePolicy(
     update: PolicyUpdate,
   ): Promise<PolicySnapshot> {
-    const unsupported = update.rules.find(
-      rule => rule.dimension === 'app'
-        && rule.action === 'allow'
-        && (
-          rule.matcher !== 'exact'
-          || !phase1AdapterForBundle(rule.pattern)
-        ),
-    )
-    if (unsupported) {
-      throw new Error(
-        `Phase 1 cannot capture unsupported app bundle: ${unsupported.pattern}`,
+    const releasePolicyLease =
+      await this.config.acquirePolicyChangeLease?.()
+        ?? (async () => {})
+
+    try {
+      if (update.mode !== 'include-only') {
+        throw new Error(
+          'Phase 1 requires include-only capture policy',
+        )
+      }
+
+      const unsupported = update.rules.find(
+        rule => rule.dimension === 'app'
+          && rule.action === 'allow'
+          && (
+            rule.matcher !== 'exact'
+            || !phase1AdapterForBundle(rule.pattern)
+          ),
       )
+      if (unsupported) {
+        throw new Error(
+          `Phase 1 cannot capture unsupported app bundle: ${unsupported.pattern}`,
+        )
+      }
+
+      const snapshot = this.policies.replace(
+        update.mode,
+        update.rules,
+        this.now(),
+      )
+      await this.config.onPolicyChanged?.(snapshot)
+      return snapshot
+    } finally {
+      await releasePolicyLease()
     }
-    const snapshot = this.policies.replace(
-      update.mode,
-      update.rules,
-      this.now(),
-    )
-    await this.config.onPolicyChanged?.(snapshot)
-    return snapshot
   }
 }

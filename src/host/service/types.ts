@@ -7,7 +7,7 @@ export interface CaptureController {
   resume(): Promise<void>
   getState(): Pick<
     ComputerHistoryState,
-    'enabled' | 'capture' | 'accessibilityTrusted' | 'collector'
+    'enabled' | 'capture' | 'accessibilityTrusted' | 'reason' | 'collector'
   >
 }
 
@@ -16,6 +16,7 @@ export interface LocalBackendConfig {
   readonly episodeRetentionDays: number
   readonly autoResume: boolean
   readonly now?: () => number
+  readonly acquirePolicyChangeLease?: () => Promise<() => Promise<void>>
   readonly onPolicyChanged?: (policy: import('../../shared/index.js').PolicySnapshot) => void | Promise<void>
   readonly onHistoryChanged?: () => void | Promise<void>
 }

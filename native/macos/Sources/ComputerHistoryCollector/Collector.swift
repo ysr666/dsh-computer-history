@@ -62,9 +62,10 @@ final class Collector {
             || policyProtectedBundles.contains(bundle)
         guard !protected,
               !blockedBundles.contains(bundle),
-              adapter(bundle) != nil,
+              phase1AdapterForBundle(bundle) != nil,
               policyMode != "include-only"
-                || allowedBundles.contains(bundle)
+                || allowedBundles.contains(bundle),
+              AXIsProcessTrusted()
         else { return }
 
         var created: AXObserver?
@@ -93,19 +94,27 @@ final class Collector {
     func setPaused(_ value: Bool) {
         paused = value
         emit(StateMessage(state: value ? "paused" : "running", accessibilityTrusted: AXIsProcessTrusted(), reason: nil))
-        if !value, let app = NSWorkspace.shared.frontmostApplication { capture(app) }
+        if !value, let app = NSWorkspace.shared.frontmostApplication {
+            observe(app)
+            capture(app)
+        }
     }
 
     private func capture(_ app: NSRunningApplication) {
         guard !paused else { return }
         let bundle = app.bundleIdentifier ?? "unknown"
         let protected = protectedBundles.contains(bundle) || policyProtectedBundles.contains(bundle)
-        guard let adapterName = adapter(bundle) else { return }
+        guard let adapterName = phase1AdapterForBundle(bundle) else { return }
         if protected || blockedBundles.contains(bundle) { return }
         if policyMode == "include-only" && !allowedBundles.contains(bundle) { return }
         let trusted = AXIsProcessTrusted()
         if !trusted {
-            emit(StateMessage(state: "permission-required", accessibilityTrusted: false, reason: "accessibility"))
+            emit(StateMessage(
+                state: "permission-required",
+                accessibilityTrusted: false,
+                reason: "accessibility"
+            ))
+            return
         }
 
         let appElement = AXUIElementCreateApplication(app.processIdentifier)
@@ -122,23 +131,36 @@ final class Collector {
         let secure = isSecureElement(element)
 
         seq += 1
-        let windowInfo: WindowInfo? = protected || secure ? nil : window.map {
-            WindowInfo(
-                title: safeString($0, kAXTitleAttribute as String),
-                document: safeString($0, kAXDocumentAttribute as String),
-                url: safeString($0, "AXURL")
+        var windowInfo: WindowInfo?
+        if !protected && !secure, let window {
+            let document = safeString(
+                window,
+                kAXDocumentAttribute as String
             )
-        }
-        if let document = windowInfo?.document,
-           protectedPathPatterns.contains(where: { globMatches($0, document) }) {
-            return
+            let url = safeString(window, "AXURL")
+            let resource = document ?? url
+            if let resource,
+               protectedPathPatterns.contains(
+                   where: { globMatches($0, resource) }
+               ) {
+                return
+            }
+            windowInfo = WindowInfo(
+                title: adapterName == "terminal"
+                    ? nil
+                    : safeString(
+                        window,
+                        kAXTitleAttribute as String
+                    ),
+                document: document,
+                url: url
+            )
         }
         let elementInfo: ElementInfo? = protected || secure ? nil : element.map {
             ElementInfo(
                 role: safeString($0, kAXRoleAttribute as String),
                 subrole: safeString($0, kAXSubroleAttribute as String),
-                identifier: safeString($0, kAXIdentifierAttribute as String),
-                title: nil
+                identifier: safeString($0, kAXIdentifierAttribute as String)
             )
         }
         let idle = CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: CGEventType(rawValue: UInt32.max)!)
@@ -152,14 +174,5 @@ final class Collector {
         ))
     }
 
-    private func adapter(_ bundle: String) -> String? {
-        if bundle == "com.microsoft.VSCode"
-            || bundle == "com.todesktop.230313mzl4w4u92" { return "vscode" }
-        if bundle == "com.apple.Terminal"
-            || bundle == "com.googlecode.iterm2" { return "terminal" }
-        if bundle == "com.apple.Preview" { return "preview" }
-        if bundle == "com.apple.finder" { return "finder" }
-        return nil
-    }
 
 }

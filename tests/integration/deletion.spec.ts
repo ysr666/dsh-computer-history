@@ -3,7 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { CollectorSessionId, EpisodeId, type ActivityObservation } from '../../src/shared/index.js'
-import { DeletionService } from '../../src/host/retention/index.js'
+import { DeletionService, RetentionService } from '../../src/host/retention/index.js'
 import { EpisodeStore, ObservationStore, openHistoryDatabase, ResourceStore } from '../../src/host/store/index.js'
 
 const roots: string[] = []
@@ -90,6 +90,15 @@ describe('provenance-aware deletion', () => {
     ])
     expect(rebuilt?.summary).not.toContain('retry.html')
     expect(rebuilt?.summary).not.toContain('Chrome')
+    const retainedDeadline = history.db.prepare(
+      'SELECT expires_at_ms FROM episodes WHERE id = ?',
+    ).get(seeded.episodeId) as {
+      expires_at_ms: number
+    }
+    expect(
+      Number(retainedDeadline.expires_at_ms),
+    ).toBe(100_000)
+
     const chromeResources = history.db.prepare(
       "SELECT COUNT(*) AS count FROM resources WHERE canonical_uri = 'https://docs.example/retry.html'",
     ).get() as { count: number }
@@ -119,6 +128,97 @@ describe('provenance-aware deletion', () => {
     expect(result.observationsDeleted).toBe(1)
     expect(seeded.observations.count()).toBe(2)
     expect(seeded.episodes.get(seeded.episodeId)?.observationIds).toHaveLength(2)
+    history.close()
+  })
+
+  it('forgets an app conservatively after raw provenance has expired', () => {
+    const history = openTempDatabase()
+    const seeded = seedEpisode(history)
+
+    history.db.prepare(
+      'UPDATE observations SET expires_at_ms = 5_000',
+    ).run()
+    expect(
+      new RetentionService(history.db).sweep(10_000),
+    ).toEqual({
+      observationsDeleted: 3,
+      episodesDeleted: 0,
+    })
+    expect(seeded.observations.count()).toBe(0)
+    expect(
+      seeded.episodes.get(seeded.episodeId),
+    ).toBeDefined()
+
+    const result = new DeletionService(history.db).delete({
+      scope: {
+        kind: 'app',
+        bundleId: 'com.google.Chrome',
+      },
+    }, 20_000)
+
+    expect(result).toEqual({
+      observationsDeleted: 0,
+      episodesDeleted: 1,
+      episodesRebuilt: 0,
+    })
+    expect(
+      seeded.episodes.get(seeded.episodeId),
+    ).toBeUndefined()
+
+    history.close()
+  })
+
+  it('deletes an overlapping derived episode for a time-range forget after raw expiry', () => {
+    const history = openTempDatabase()
+    const seeded = seedEpisode(history)
+
+    history.db.prepare(
+      'UPDATE observations SET expires_at_ms = 5_000',
+    ).run()
+    new RetentionService(history.db).sweep(10_000)
+
+    const result = new DeletionService(history.db).delete({
+      scope: {
+        kind: 'time-range',
+        startMs: 1_500,
+        endMs: 2_500,
+      },
+    }, 20_000)
+
+    expect(result).toEqual({
+      observationsDeleted: 0,
+      episodesDeleted: 1,
+      episodesRebuilt: 0,
+    })
+    expect(
+      seeded.episodes.get(seeded.episodeId),
+    ).toBeUndefined()
+
+    history.close()
+  })
+
+  it('deletes a requested derived episode after raw provenance has expired', () => {
+    const history = openTempDatabase()
+    const seeded = seedEpisode(history)
+
+    history.db.prepare(
+      'UPDATE observations SET expires_at_ms = 5_000',
+    ).run()
+    new RetentionService(history.db).sweep(10_000)
+
+    expect(new DeletionService(history.db).delete({
+      scope: {
+        kind: 'episode',
+        episodeId: seeded.episodeId,
+      },
+    }, 20_000)).toEqual({
+      observationsDeleted: 0,
+      episodesDeleted: 1,
+      episodesRebuilt: 0,
+    })
+    expect(
+      seeded.episodes.get(seeded.episodeId),
+    ).toBeUndefined()
     history.close()
   })
 

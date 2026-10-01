@@ -36,7 +36,6 @@ export interface NativeObservation {
     readonly role?: string
     readonly subrole?: string
     readonly identifier?: string
-    readonly title?: string
   }
   readonly activity?: {
     readonly idleSeconds?: number

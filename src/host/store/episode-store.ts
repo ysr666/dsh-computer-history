@@ -37,6 +37,7 @@ export interface EpisodeSearchQuery extends EpisodeListQuery {
 
 export interface PersistEpisodeOptions {
   readonly provenance?: 'replace' | 'append'
+  readonly appendObservationIds?: readonly ObservationId[]
 }
 
 export interface PersistEpisodeInput {
@@ -258,81 +259,164 @@ export class EpisodeStore {
           observation_id
         ) VALUES (?, ?)
       `)
-      const observationStart = append
-        ? Number(
-            (
-              this.db.prepare(`
-                SELECT COUNT(*) AS count
-                FROM episode_observations
-                WHERE episode_id = ?
-              `).get(input.id) as { count: number }
-            ).count,
-          )
-        : 0
+      const observationStart =
+        append && options.appendObservationIds === undefined
+          ? Number(
+              (
+                this.db.prepare(`
+                  SELECT COUNT(*) AS count
+                  FROM episode_observations
+                  WHERE episode_id = ?
+                `).get(input.id) as { count: number }
+              ).count,
+            )
+          : 0
 
-      for (
-        let index = observationStart;
-        index < input.observationIds.length;
-        index += 1
+      if (
+        options.appendObservationIds === undefined
+        && observationStart > input.observationIds.length
       ) {
-        insertObservation.run(
-          input.id,
-          input.observationIds[index]!,
+        throw new Error(
+          `episode provenance regressed for ${input.id}`,
         )
       }
 
-      const insertResource = this.db.prepare(`
-        INSERT INTO episode_resources(
-          episode_id,
-          resource_id,
-          first_seen_at_ms,
-          last_seen_at_ms,
-          observation_count
-        ) VALUES (?, ?, ?, ?, ?)
-        ON CONFLICT(episode_id, resource_id)
-        DO UPDATE SET
-          first_seen_at_ms = excluded.first_seen_at_ms,
-          last_seen_at_ms = excluded.last_seen_at_ms,
-          observation_count = excluded.observation_count
-      `)
-      for (const resource of input.resources) {
-        insertResource.run(
-          input.id,
-          resource.resourceId,
-          resource.firstSeenAtMs,
-          resource.lastSeenAtMs,
-          resource.observationCount,
-        )
-      }
+      if (append) {
+        const appendResource = this.db.prepare(`
+          INSERT INTO episode_resources(
+            episode_id,
+            resource_id,
+            first_seen_at_ms,
+            last_seen_at_ms,
+            observation_count
+          )
+          SELECT ?, o.resource_id, o.observed_at_ms, o.observed_at_ms, 1
+          FROM observations o
+          WHERE o.id = ?
+            AND o.resource_id IS NOT NULL
+          ON CONFLICT(episode_id, resource_id)
+          DO UPDATE SET
+            first_seen_at_ms = MIN(
+              episode_resources.first_seen_at_ms,
+              excluded.first_seen_at_ms
+            ),
+            last_seen_at_ms = MAX(
+              episode_resources.last_seen_at_ms,
+              excluded.last_seen_at_ms
+            ),
+            observation_count =
+              episode_resources.observation_count + 1
+        `)
+        const appendSurface = this.db.prepare(`
+          INSERT INTO episode_surfaces(
+            episode_id,
+            bundle_id,
+            surface_kind,
+            first_seen_at_ms,
+            last_seen_at_ms,
+            observation_count
+          )
+          SELECT ?, o.bundle_id, o.surface_kind,
+            o.observed_at_ms, o.observed_at_ms, 1
+          FROM observations o
+          WHERE o.id = ?
+          ON CONFLICT(
+            episode_id,
+            bundle_id,
+            surface_kind
+          )
+          DO UPDATE SET
+            first_seen_at_ms = MIN(
+              episode_surfaces.first_seen_at_ms,
+              excluded.first_seen_at_ms
+            ),
+            last_seen_at_ms = MAX(
+              episode_surfaces.last_seen_at_ms,
+              excluded.last_seen_at_ms
+            ),
+            observation_count =
+              episode_surfaces.observation_count + 1
+        `)
 
-      const insertSurface = this.db.prepare(`
-        INSERT INTO episode_surfaces(
-          episode_id,
-          bundle_id,
-          surface_kind,
-          first_seen_at_ms,
-          last_seen_at_ms,
-          observation_count
-        ) VALUES (?, ?, ?, ?, ?, ?)
-        ON CONFLICT(
-          episode_id,
-          bundle_id,
-          surface_kind
-        )
-        DO UPDATE SET
-          first_seen_at_ms = excluded.first_seen_at_ms,
-          last_seen_at_ms = excluded.last_seen_at_ms,
-          observation_count = excluded.observation_count
-      `)
-      for (const surface of input.surfaces) {
-        insertSurface.run(
-          input.id,
-          surface.bundleId,
-          surface.surfaceKind,
-          surface.firstSeenAtMs,
-          surface.lastSeenAtMs,
-          surface.observationCount,
-        )
+        const observationIds =
+          options.appendObservationIds
+          ?? input.observationIds.slice(observationStart)
+        for (const observationId of observationIds) {
+          const inserted = insertObservation.run(
+            input.id,
+            observationId,
+          )
+          if (inserted.changes === 0) continue
+          appendResource.run(
+            input.id,
+            observationId,
+          )
+          appendSurface.run(
+            input.id,
+            observationId,
+          )
+        }
+      } else {
+        for (const observationId of input.observationIds) {
+          insertObservation.run(
+            input.id,
+            observationId,
+          )
+        }
+
+        const insertResource = this.db.prepare(`
+          INSERT INTO episode_resources(
+            episode_id,
+            resource_id,
+            first_seen_at_ms,
+            last_seen_at_ms,
+            observation_count
+          ) VALUES (?, ?, ?, ?, ?)
+          ON CONFLICT(episode_id, resource_id)
+          DO UPDATE SET
+            first_seen_at_ms = excluded.first_seen_at_ms,
+            last_seen_at_ms = excluded.last_seen_at_ms,
+            observation_count = excluded.observation_count
+        `)
+        for (const resource of input.resources) {
+          insertResource.run(
+            input.id,
+            resource.resourceId,
+            resource.firstSeenAtMs,
+            resource.lastSeenAtMs,
+            resource.observationCount,
+          )
+        }
+
+        const insertSurface = this.db.prepare(`
+          INSERT INTO episode_surfaces(
+            episode_id,
+            bundle_id,
+            surface_kind,
+            first_seen_at_ms,
+            last_seen_at_ms,
+            observation_count
+          ) VALUES (?, ?, ?, ?, ?, ?)
+          ON CONFLICT(
+            episode_id,
+            bundle_id,
+            surface_kind
+          )
+          DO UPDATE SET
+            first_seen_at_ms = excluded.first_seen_at_ms,
+            last_seen_at_ms = excluded.last_seen_at_ms,
+            observation_count = excluded.observation_count
+        `)
+        for (const surface of input.surfaces) {
+          insertSurface.run(
+            input.id,
+            surface.bundleId,
+            surface.surfaceKind,
+            surface.firstSeenAtMs,
+            surface.lastSeenAtMs,
+            surface.observationCount,
+          )
+        }
       }
 
       if (ownsTransaction) this.db.exec('COMMIT')

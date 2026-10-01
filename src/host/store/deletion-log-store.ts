@@ -21,6 +21,51 @@ export interface DeletionLogEntry {
 export class DeletionLogStore {
   public constructor(private readonly db: DatabaseSync) {}
 
+  public blocksObservation(input: {
+    readonly observedAtMs: number
+    readonly bundleId: string
+  }): boolean {
+    return this.db.prepare(`
+      SELECT 1 AS blocked
+      FROM deletion_log
+      WHERE requested_at_ms >= ?
+        AND (
+          scope = 'all'
+          OR (
+            scope = 'episode'
+            AND range_start_ms <= ?
+            AND range_end_ms > ?
+          )
+          OR (
+            scope = 'app'
+            AND bundle_id = ?
+          )
+          OR (
+            scope = 'time-range'
+            AND range_start_ms <= ?
+            AND range_end_ms > ?
+          )
+        )
+      LIMIT 1
+    `).get(
+      input.observedAtMs,
+      input.observedAtMs,
+      input.observedAtMs,
+      input.bundleId,
+      input.observedAtMs,
+      input.observedAtMs,
+    ) !== undefined
+  }
+
+  public deleteOlderThan(cutoffMs: number): number {
+    return Number(
+      this.db.prepare(`
+        DELETE FROM deletion_log
+        WHERE requested_at_ms < ?
+      `).run(cutoffMs).changes,
+    )
+  }
+
   public insert(entry: DeletionLogEntry): void {
     this.db.prepare(`
       INSERT INTO deletion_log(

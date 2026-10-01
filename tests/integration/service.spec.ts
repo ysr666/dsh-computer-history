@@ -197,8 +197,13 @@ describe('local computer history backend', () => {
       autoResume: false,
     })
 
-    const policy = await backend.replacePolicy({
+    await expect(backend.replacePolicy({
       mode: 'exclude',
+      rules: [],
+    })).rejects.toThrow(/include-only/)
+
+    const policy = await backend.replacePolicy({
+      mode: 'include-only',
       rules: [{
         id: PolicyRuleId('rule-1'),
         dimension: 'app',

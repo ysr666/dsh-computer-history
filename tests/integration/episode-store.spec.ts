@@ -250,6 +250,73 @@ describe('episode store', () => {
     history.close()
   })
 
+  it('increments append-mode resource and surface provenance from observation deltas', () => {
+    const history = openTempDatabase()
+    const resources = new ResourceStore(history.db)
+    const observations = new ObservationStore(history.db)
+    const episodes = new EpisodeStore(history.db)
+    const first = observation(1, 'file:///repo/src/provider.ts')
+    const second = observation(2, 'file:///repo/src/provider.ts')
+    const resourceId = resources.upsert(
+      first.resource!,
+      first.observedAtMs,
+    )
+    resources.upsert(second.resource!, second.observedAtMs)
+    const firstId = observations.insert(first, resourceId)
+    const secondId = observations.insert(second, resourceId)
+    const id = EpisodeId('episode-append')
+    const base = {
+      id,
+      startedAtMs: first.observedAtMs,
+      startReason: 'first-observation' as const,
+      endReason: 'timeout' as const,
+      workspace: { id: 'workspace-1' },
+      lastStrongResourceId: resourceId,
+      summaryKind: 'deterministic' as const,
+      summary: 'Worked in repo.',
+      confidence: 1,
+      state: 'closed' as const,
+      createdAtMs: 20_000,
+      expiresAtMs: 100_000,
+      resources: [],
+      surfaces: [],
+    }
+
+    episodes.replace({
+      ...base,
+      endedAtMs: first.observedAtMs,
+      updatedAtMs: 20_000,
+      observationIds: [firstId],
+    }, {
+      provenance: 'append',
+      appendObservationIds: [firstId],
+    })
+    episodes.replace({
+      ...base,
+      endedAtMs: second.observedAtMs,
+      updatedAtMs: 30_000,
+      observationIds: [firstId, secondId],
+    }, {
+      provenance: 'append',
+      appendObservationIds: [secondId],
+    })
+
+    expect(episodes.get(id)).toMatchObject({
+      observationIds: [firstId, secondId],
+      resources: [{
+        firstSeenAtMs: first.observedAtMs,
+        lastSeenAtMs: second.observedAtMs,
+        observationCount: 2,
+      }],
+      surfaces: [{
+        firstSeenAtMs: first.observedAtMs,
+        lastSeenAtMs: second.observedAtMs,
+        observationCount: 2,
+      }],
+    })
+    history.close()
+  })
+
   it('cascades episode provenance rows when the episode is deleted', () => {
     const history = openTempDatabase()
     const episodes = new EpisodeStore(history.db)

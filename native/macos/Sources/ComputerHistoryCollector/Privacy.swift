@@ -21,11 +21,6 @@ func safeString(_ element: AXUIElement, _ attribute: String) -> String? {
 }
 
 
-let browserBundles: Set<String> = [
-    "com.google.Chrome", "com.apple.Safari", "company.thebrowser.Browser",
-    "com.microsoft.edgemac", "com.brave.Browser"
-]
-
 
 func globMatches(_ pattern: String, _ value: String) -> Bool {
     let p = Array(pattern), v = Array(value)

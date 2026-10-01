@@ -1,6 +1,10 @@
 import '@deepseek-ai/dsh-client-connection'
 import type { Context } from '@deepseek-ai/cordis'
 import { EpisodeId } from '../../shared/index.js'
+import {
+  parseDeleteRequest,
+  parsePolicyUpdate,
+} from './validation.js'
 
 export const HISTORY_API_PREFIX = '/api/computer-history'
 
@@ -107,12 +111,36 @@ export function registerHistoryApi(ctx: Context): void {
       try { body = await request.json() } catch {
         return new Response('Invalid JSON.', { status: 400 })
       }
-      if (!body || typeof body !== 'object' || !('mode' in body) || !('rules' in body)) {
-        return new Response('Invalid policy update.', { status: 400 })
+      let update
+      try {
+        update = parsePolicyUpdate(body)
+      } catch (error) {
+        return new Response(
+          error instanceof Error
+            ? error.message
+            : 'Invalid policy update.',
+          { status: 400 },
+        )
       }
-      return json(await ctx.computerHistory.replacePolicy(
-        body as Parameters<typeof ctx.computerHistory.replacePolicy>[0],
-      ))
+      try {
+        return json(
+          await ctx.computerHistory.replacePolicy(update),
+        )
+      } catch (error) {
+        const message = error instanceof Error
+          ? error.message
+          : 'Policy update failed.'
+        if (
+          message === 'Phase 1 requires include-only capture policy'
+          || message.startsWith('Phase 1 cannot capture unsupported app bundle:')
+        ) {
+          return new Response(message, { status: 400 })
+        }
+        if (message === 'capture policy is owned by another DSH Host') {
+          return new Response(message, { status: 409 })
+        }
+        return new Response('Policy update failed.', { status: 500 })
+      }
     },
   }))
 
@@ -125,13 +153,27 @@ export function registerHistoryApi(ctx: Context): void {
       try { body = await request.json() } catch {
         return new Response('Invalid JSON.', { status: 400 })
       }
-      if (!body || typeof body !== 'object' || !('scope' in body)) {
-        return new Response('Invalid deletion request.', { status: 400 })
+      let deletion
+      try {
+        deletion = parseDeleteRequest(body)
+      } catch (error) {
+        return new Response(
+          error instanceof Error
+            ? error.message
+            : 'Invalid deletion request.',
+          { status: 400 },
+        )
       }
-      return json(await ctx.computerHistory.delete(
-        body as Parameters<typeof ctx.computerHistory.delete>[0],
-        request.signal,
-      ))
+      try {
+        return json(
+          await ctx.computerHistory.delete(
+            deletion,
+            request.signal,
+          ),
+        )
+      } catch {
+        return new Response('Deletion failed.', { status: 500 })
+      }
     },
   }))
 }

@@ -45,6 +45,21 @@ export class ResourceStore {
     return row.id as ResourceId
   }
 
+  public findId(
+    resource: Pick<ResourceIdentity, 'kind' | 'canonicalUri'>,
+  ): ResourceId | undefined {
+    const row = this.db.prepare(`
+      SELECT id
+      FROM resources
+      WHERE kind = ? AND canonical_uri = ?
+    `).get(
+      resource.kind,
+      resource.canonicalUri,
+    ) as { id: number } | undefined
+
+    return row?.id as ResourceId | undefined
+  }
+
   public getById(id: ResourceId): StoredResource | undefined {
     const row = this.db.prepare(`
       SELECT

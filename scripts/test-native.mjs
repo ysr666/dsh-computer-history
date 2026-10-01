@@ -25,6 +25,7 @@ const swiftc = path.join(
   developer,
   'Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc',
 )
+const targetArch = process.arch === 'x64' ? 'x86_64' : 'arm64'
 const root = mkdtempSync(
   path.join(os.tmpdir(), 'dsh-ch-native-test-'),
 )
@@ -52,6 +53,15 @@ struct NativeTests {
         )
         precondition(
             !globMatches("*.pem", "/tmp/readme.txt")
+        )
+        precondition(
+            phase1AdapterForBundle("com.microsoft.VSCode") == "vscode"
+        )
+        precondition(
+            phase1AdapterForBundle("com.google.Chrome") == nil
+        )
+        precondition(
+            phase1AdapterForBundle("org.mozilla.firefox") == nil
         )
 
         let json = """
@@ -104,8 +114,9 @@ try {
   run(swiftc, [
     '-warnings-as-errors',
     '-sdk', sdk,
-    '-target', 'arm64-apple-macos13.0',
+    '-target', targetArch + '-apple-macos13.0',
     'native/macos/Sources/ComputerHistoryCollector/Privacy.swift',
+    'native/macos/Sources/ComputerHistoryCollector/SupportedApps.swift',
     'native/macos/Sources/ComputerHistoryCollector/Protocol.swift',
     testSource,
     '-o', executable,

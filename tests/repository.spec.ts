@@ -45,14 +45,18 @@ describe('repository scaffold', () => {
       new URL('../src/client/index.ts', import.meta.url),
       'utf8',
     )
+    const routeSource = readFileSync(
+      new URL('../src/client/api-route.ts', import.meta.url),
+      'utf8',
+    )
     expect(source).toContain(
-      "const API = 'api/computer-history'",
+      'fetch(historyApiPath(path), init)',
     )
-    expect(source).not.toMatch(
-      /fetch\(\s*['"`]\/api\//u,
+    expect(routeSource).toContain(
+      "'api/computer-history'",
     )
-    expect(source).not.toContain(
-      "const API = '/api/computer-history'",
+    expect(routeSource).not.toContain(
+      "'/api/computer-history'",
     )
   })
 })

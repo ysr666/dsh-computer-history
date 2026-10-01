@@ -60,6 +60,37 @@ describe('collector protocol', () => {
       .toThrow(/version mismatch/)
   })
 
+  it('rejects negative observation identity fields', () => {
+    const base = {
+      v: 1,
+      type: 'observation',
+      collectorSession: 's1',
+      seq: 1,
+      observedAtMs: 1,
+      app: {
+        pid: 1,
+        bundleId: 'com.microsoft.VSCode',
+      },
+      privacy: {
+        secure: false,
+        protected: false,
+      },
+      source: { adapter: 'vscode' },
+    }
+    expect(() => parseCollectorLine(
+      JSON.stringify({ ...base, seq: -1 }),
+    )).toThrow(/non-negative/)
+    expect(() => parseCollectorLine(
+      JSON.stringify({
+        ...base,
+        app: { ...base.app, pid: -1 },
+      }),
+    )).toThrow(/non-negative/)
+    expect(() => parseCollectorLine(
+      JSON.stringify({ ...base, observedAtMs: -1 }),
+    )).toThrow(/non-negative/)
+  })
+
   it('accepts the versioned hello envelope', () => {
     expect(parseCollectorLine(JSON.stringify({
       v: 1,
@@ -77,9 +108,14 @@ describe('collector protocol', () => {
 })
 
 describe('live privacy normalization', () => {
-  it('is include-only and rejects unlisted applications', () => {
+  it('is include-only and rejects unlisted or legacy exclude policies', () => {
     expect(policyAllows('com.microsoft.VSCode', undefined, policy)).toBe(true)
     expect(policyAllows('com.google.Chrome', undefined, policy)).toBe(false)
+    expect(policyAllows(
+      'com.microsoft.VSCode',
+      undefined,
+      { ...policy, mode: 'exclude' },
+    )).toBe(false)
   })
 
   it('rejects secure and protected observations before persistence', () => {
@@ -138,6 +174,48 @@ describe('live privacy normalization', () => {
       app: { pid: 4, bundleId: 'org.mozilla.firefox' },
       source: { adapter: 'generic' },
     }), permissive, 2_000)).toBeUndefined()
+  })
+
+  it('rejects implausibly future-dated observations', () => {
+    expect(normalizeObservation(native({
+      observedAtMs: 10 * 60 * 1000,
+    }), policy, 1_000)).toBeUndefined()
+  })
+
+  it('treats Terminal cwd as a directory resource and protects sensitive directories', () => {
+    const terminalPolicy: PolicySnapshot = {
+      ...policy,
+      rules: [...policy.rules, {
+        ...policy.rules[0]!,
+        id: PolicyRuleId('terminal'),
+        pattern: 'com.apple.Terminal',
+      }],
+    }
+    const terminal = normalizeObservation(native({
+      app: { pid: 5, bundleId: 'com.apple.Terminal' },
+      window: {
+        title: 'secret command --token value',
+        document: '/repo',
+      },
+      source: { adapter: 'terminal' },
+    }), terminalPolicy, 2_000)
+    expect(terminal).toMatchObject({
+      surface: { kind: 'terminal' },
+      resource: {
+        kind: 'directory',
+        canonicalUri: 'file:///repo',
+      },
+    })
+    expect(terminal?.surface.title).toBeUndefined()
+
+    expect(normalizeObservation(native({
+      app: { pid: 6, bundleId: 'com.apple.Terminal' },
+      window: {
+        title: 'shell',
+        document: '/Users/demo/.ssh',
+      },
+      source: { adapter: 'terminal' },
+    }), terminalPolicy, 2_000)).toBeUndefined()
   })
 
   it('normalizes safe metadata without reading content', () => {

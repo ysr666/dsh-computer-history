@@ -59,11 +59,14 @@ export function openHistoryDatabase(
   const db = new DatabaseSync(databasePath)
   hardenMode(databasePath, 0o600)
 
+  // Install the lock wait before WAL initialization/migration:
+  // multiple DSH profiles may open the shared history database
+  // concurrently on first boot.
+  db.exec('PRAGMA busy_timeout = 5000')
   db.exec('PRAGMA journal_mode = WAL')
   db.exec('PRAGMA foreign_keys = ON')
   db.exec('PRAGMA secure_delete = ON')
   db.exec('PRAGMA synchronous = NORMAL')
-  db.exec('PRAGMA busy_timeout = 5000')
 
   migrate(db, options.nowMs)
   hardenDatabaseSidecars(databasePath)

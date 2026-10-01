@@ -18,9 +18,13 @@ function record(value: unknown, name: string): RecordValue {
 function string(
   value: unknown,
   name: string,
+  maxBytes = 4_096,
 ): string {
   if (typeof value !== 'string' || value.length === 0) {
     throw new Error(`${name} must be a non-empty string`)
+  }
+  if (Buffer.byteLength(value, 'utf8') > maxBytes) {
+    throw new Error(`${name} exceeds ${maxBytes} bytes`)
   }
   return value
 }
@@ -28,10 +32,14 @@ function string(
 function optionalString(
   value: unknown,
   name: string,
+  maxBytes = 4_096,
 ): string | undefined {
   if (value === undefined || value === null) return undefined
   if (typeof value !== 'string') {
     throw new Error(`${name} must be a string`)
+  }
+  if (Buffer.byteLength(value, 'utf8') > maxBytes) {
+    throw new Error(`${name} exceeds ${maxBytes} bytes`)
   }
   return value
 }
@@ -55,6 +63,19 @@ function integer(
     throw new Error(`${name} must be a safe integer`)
   }
   return number
+}
+
+function nonNegativeInteger(
+  value: unknown,
+  name: string,
+): number {
+  const parsed = integer(value, name)
+  if (parsed < 0) {
+    throw new Error(
+      `${name} must be a non-negative safe integer`,
+    )
+  }
+  return parsed
 }
 
 function boolean(
@@ -131,12 +152,17 @@ function parseOptionalStringRecord(
   value: unknown,
   name: string,
   keys: readonly string[],
+  maxBytes: number,
 ): Record<string, string> | undefined {
   if (value === undefined || value === null) return undefined
   const source = record(value, name)
   const result: Record<string, string> = {}
   for (const key of keys) {
-    const parsed = optionalString(source[key], `${name}.${key}`)
+    const parsed = optionalString(
+      source[key],
+      `${name}.${key}`,
+      maxBytes,
+    )
     if (parsed !== undefined) result[key] = parsed
   }
   return result
@@ -173,6 +199,7 @@ function parseObservation(
   const appName = optionalString(
     app.name,
     'observation.app.name',
+    512,
   )
   const privacyReason = optionalString(
     privacy.reason,
@@ -182,11 +209,13 @@ function parseObservation(
     message.window,
     'observation.window',
     ['title', 'document', 'url'],
+    4_096,
   )
   const element = parseOptionalStringRecord(
     message.element,
     'observation.element',
-    ['role', 'subrole', 'identifier', 'title'],
+    ['role', 'subrole', 'identifier'],
+    2_048,
   )
 
   return {
@@ -196,16 +225,23 @@ function parseObservation(
       message.collectorSession,
       'observation.collectorSession',
     ),
-    seq: integer(message.seq, 'observation.seq'),
-    observedAtMs: integer(
+    seq: nonNegativeInteger(
+      message.seq,
+      'observation.seq',
+    ),
+    observedAtMs: nonNegativeInteger(
       message.observedAtMs,
       'observation.observedAtMs',
     ),
     app: {
-      pid: integer(app.pid, 'observation.app.pid'),
+      pid: nonNegativeInteger(
+        app.pid,
+        'observation.app.pid',
+      ),
       bundleId: string(
         app.bundleId,
         'observation.app.bundleId',
+        512,
       ),
       ...(appName === undefined ? {} : { name: appName }),
     },
@@ -231,6 +267,7 @@ function parseObservation(
       adapter: string(
         source.adapter,
         'observation.source.adapter',
+        128,
       ),
     },
   }
