@@ -159,7 +159,8 @@ export class EpisodeStore {
   public constructor(private readonly db: DatabaseSync) {}
 
   public replace(input: PersistEpisodeInput): void {
-    this.db.exec('BEGIN IMMEDIATE')
+    const ownsTransaction = !this.db.isTransaction
+    if (ownsTransaction) this.db.exec('BEGIN IMMEDIATE')
     try {
       this.db.prepare(`
         INSERT INTO episodes(
@@ -275,9 +276,9 @@ export class EpisodeStore {
         )
       }
 
-      this.db.exec('COMMIT')
+      if (ownsTransaction) this.db.exec('COMMIT')
     } catch (error) {
-      this.db.exec('ROLLBACK')
+      if (ownsTransaction) this.db.exec('ROLLBACK')
       throw error
     }
   }

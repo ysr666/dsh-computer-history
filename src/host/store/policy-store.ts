@@ -102,7 +102,8 @@ export class PolicyStore {
     rules: readonly PolicyRule[],
     nowMs: number,
   ): PolicySnapshot {
-    this.db.exec('BEGIN IMMEDIATE')
+    const ownsTransaction = !this.db.isTransaction
+    if (ownsTransaction) this.db.exec('BEGIN IMMEDIATE')
     try {
       const current = this.get()
       const revision = current.revision + 1
@@ -134,10 +135,10 @@ export class PolicyStore {
         WHERE singleton = 1
       `).run(revision, mode, nowMs)
 
-      this.db.exec('COMMIT')
+      if (ownsTransaction) this.db.exec('COMMIT')
       return this.get()
     } catch (error) {
-      this.db.exec('ROLLBACK')
+      if (ownsTransaction) this.db.exec('ROLLBACK')
       throw error
     }
   }
