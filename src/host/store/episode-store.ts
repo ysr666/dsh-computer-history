@@ -23,6 +23,18 @@ export interface PersistedEpisodeResource {
 
 export interface PersistedEpisodeSurface extends EpisodeSurfaceSummary {}
 
+export interface EpisodeListQuery {
+  readonly sinceMs?: number
+  readonly workspaceId?: string
+  readonly limit?: number
+}
+
+export interface EpisodeSearchQuery extends EpisodeListQuery {
+  readonly query: string
+  readonly untilMs?: number
+  readonly bundleId?: string
+}
+
 export interface PersistEpisodeInput {
   readonly id: EpisodeId
   readonly startedAtMs: number
@@ -294,15 +306,93 @@ export class EpisodeStore {
     return this.materialize(row)
   }
 
-  public listRecent(limit = 20): readonly EpisodeSummary[] {
-    const bounded = Math.max(1, Math.min(100, Math.trunc(limit)))
+  public listRecent(
+    query: EpisodeListQuery = {},
+  ): readonly EpisodeSummary[] {
+    const clauses = ["e.state != 'invalidated'"]
+    const params: Array<string | number> = []
+
+    if (query.sinceMs !== undefined) {
+      clauses.push('e.ended_at_ms >= ?')
+      params.push(query.sinceMs)
+    }
+    if (query.workspaceId) {
+      clauses.push('e.primary_workspace_id = ?')
+      params.push(query.workspaceId)
+    }
+
+    const bounded = Math.max(
+      1,
+      Math.min(1000, Math.trunc(query.limit ?? 20)),
+    )
+    params.push(bounded)
+
     return this.db.prepare(`
-      SELECT *
-      FROM episodes
-      WHERE state != 'invalidated'
-      ORDER BY ended_at_ms DESC
+      SELECT e.*
+      FROM episodes e
+      WHERE ${clauses.join(' AND ')}
+      ORDER BY e.ended_at_ms DESC
       LIMIT ?
-    `).all(bounded).map((row) => this.materialize(row))
+    `).all(...params).map((row) => this.materialize(row))
+  }
+
+  public search(
+    query: EpisodeSearchQuery,
+  ): readonly EpisodeSummary[] {
+    const clauses = ["e.state != 'invalidated'"]
+    const params: Array<string | number> = []
+
+    if (query.sinceMs !== undefined) {
+      clauses.push('e.ended_at_ms >= ?')
+      params.push(query.sinceMs)
+    }
+    if (query.untilMs !== undefined) {
+      clauses.push('e.started_at_ms < ?')
+      params.push(query.untilMs)
+    }
+    if (query.workspaceId) {
+      clauses.push('e.primary_workspace_id = ?')
+      params.push(query.workspaceId)
+    }
+    if (query.bundleId) {
+      clauses.push(`EXISTS (
+        SELECT 1 FROM episode_surfaces es
+        WHERE es.episode_id = e.id AND es.bundle_id = ?
+      )`)
+      params.push(query.bundleId)
+    }
+
+    const needle = `%${query.query.toLowerCase()}%`
+    clauses.push(`(
+      lower(e.summary_text) LIKE ?
+      OR lower(COALESCE(e.primary_workspace_id, '')) LIKE ?
+      OR lower(COALESCE(e.primary_workspace_title, '')) LIKE ?
+      OR EXISTS (
+        SELECT 1
+        FROM episode_resources er
+        JOIN resources r ON r.id = er.resource_id
+        WHERE er.episode_id = e.id
+          AND (
+            lower(r.canonical_uri) LIKE ?
+            OR lower(COALESCE(r.display_label, '')) LIKE ?
+          )
+      )
+    )`)
+    params.push(needle, needle, needle, needle, needle)
+
+    const bounded = Math.max(
+      1,
+      Math.min(100, Math.trunc(query.limit ?? 20)),
+    )
+    params.push(bounded)
+
+    return this.db.prepare(`
+      SELECT e.*
+      FROM episodes e
+      WHERE ${clauses.join(' AND ')}
+      ORDER BY e.ended_at_ms DESC
+      LIMIT ?
+    `).all(...params).map((row) => this.materialize(row))
   }
 
   public delete(id: EpisodeId): boolean {

@@ -1,0 +1,283 @@
+import {
+  mkdtempSync,
+  rmSync,
+} from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import { Context } from '@deepseek-ai/cordis'
+import { afterEach, describe, expect, it } from 'vitest'
+import {
+  CollectorSessionId,
+  EpisodeId,
+  PolicyRuleId,
+  type ActivityObservation,
+  type ComputerHistoryServiceContract,
+} from '../../src/shared/index.js'
+import {
+  ComputerHistoryService,
+  LocalComputerHistoryBackend,
+  type CaptureController,
+} from '../../src/host/service/index.js'
+import { DeletionService } from '../../src/host/retention/index.js'
+import {
+  EpisodeStore,
+  ObservationStore,
+  openHistoryDatabase,
+  PolicyStore,
+  ResourceStore,
+} from '../../src/host/store/index.js'
+
+const roots: string[] = []
+
+function openTempDatabase() {
+  const root = mkdtempSync(path.join(os.tmpdir(), 'dsh-ch-service-'))
+  roots.push(root)
+  return openHistoryDatabase({
+    dataDirectory: path.join(root, 'history'),
+    nowMs: 1,
+  })
+}
+
+afterEach(() => {
+  for (const root of roots.splice(0)) {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+function seedEpisode(history: ReturnType<typeof openTempDatabase>): EpisodeId {
+  const resources = new ResourceStore(history.db)
+  const observations = new ObservationStore(history.db)
+  const episodes = new EpisodeStore(history.db)
+
+  const value: ActivityObservation = {
+    collectorSessionId: CollectorSessionId('collector-service'),
+    seq: 1,
+    observedAtMs: 1_000,
+    app: {
+      pid: 101,
+      bundleId: 'com.microsoft.VSCode',
+    },
+    surface: {
+      kind: 'editor',
+    },
+    resource: {
+      kind: 'file',
+      canonicalUri: 'file:///alpha/src/provider.ts',
+      displayLabel: 'provider.ts',
+    },
+    workspace: {
+      id: 'alpha',
+      root: '/alpha',
+      title: 'alpha',
+      source: 'dsh',
+      confidence: 1,
+    },
+    activity: {},
+    privacy: {
+      secure: false,
+      protected: false,
+    },
+    source: {
+      provider: 'macos-ax',
+      adapter: 'vscode',
+    },
+    policyRevision: 1,
+    expiresAtMs: 100_000,
+  }
+
+  const resourceId = resources.upsert(value.resource!, value.observedAtMs)
+  const observationId = observations.insert(value, resourceId)
+  const id = EpisodeId('episode:collector-service:1')
+
+  episodes.replace({
+    id,
+    startedAtMs: 1_000,
+    endedAtMs: 1_000,
+    startReason: 'first-observation',
+    endReason: 'timeout',
+    workspace: {
+      id: 'alpha',
+      root: '/alpha',
+      title: 'alpha',
+    },
+    threadKey: 'workspace:alpha',
+    lastStrongResourceId: resourceId,
+    summaryKind: 'deterministic',
+    summary: 'Worked in alpha.',
+    confidence: 1,
+    state: 'closed',
+    createdAtMs: 2_000,
+    updatedAtMs: 2_000,
+    expiresAtMs: 100_000,
+    observationIds: [observationId],
+    resources: [{
+      resourceId,
+      firstSeenAtMs: 1_000,
+      lastSeenAtMs: 1_000,
+      observationCount: 1,
+    }],
+    surfaces: [{
+      bundleId: 'com.microsoft.VSCode',
+      surfaceKind: 'editor',
+      firstSeenAtMs: 1_000,
+      lastSeenAtMs: 1_000,
+      observationCount: 1,
+    }],
+  })
+
+  return id
+}
+
+class FakeCapture implements CaptureController {
+  public paused = false
+
+  public async pause(): Promise<void> {
+    this.paused = true
+  }
+
+  public async resume(): Promise<void> {
+    this.paused = false
+  }
+
+  public getState() {
+    return {
+      enabled: true,
+      capture: this.paused ? 'paused' as const : 'running' as const,
+      accessibilityTrusted: true,
+      collector: {
+        version: '0.1.0',
+        arch: 'arm64',
+      },
+    }
+  }
+}
+
+describe('local computer history backend', () => {
+  it('composes store, resume, policy, capture, and deletion behavior', async () => {
+    const history = openTempDatabase()
+    const episodeId = seedEpisode(history)
+    const episodes = new EpisodeStore(history.db)
+    const policies = new PolicyStore(history.db)
+    policies.ensureInitial(100)
+    const capture = new FakeCapture()
+
+    const backend = new LocalComputerHistoryBackend(
+      episodes,
+      policies,
+      new DeletionService(history.db),
+      capture,
+      {
+        observationRetentionHours: 24,
+        episodeRetentionDays: 30,
+        autoResume: false,
+        now: () => 10_000,
+      },
+    )
+
+    expect(await backend.recent()).toHaveLength(1)
+    expect(
+      (await backend.search({ query: 'provider.ts' }))[0]?.id,
+    ).toBe(episodeId)
+
+    const resolved = await backend.resolveResume({
+      query: '继续 alpha',
+      nowMs: 10_000,
+      turn: 1,
+      source: 'automatic',
+    })
+    expect(resolved.status).toBe('hit')
+
+    await backend.pause()
+    expect(backend.getState().capture).toBe('paused')
+    await backend.resume()
+    expect(backend.getState()).toMatchObject({
+      capture: 'running',
+      observationRetentionHours: 24,
+      episodeRetentionDays: 30,
+      autoResume: false,
+    })
+
+    const policy = await backend.replacePolicy({
+      mode: 'exclude',
+      rules: [{
+        id: PolicyRuleId('rule-1'),
+        dimension: 'app',
+        action: 'deny',
+        matcher: 'exact',
+        pattern: 'com.example.Private',
+        builtIn: false,
+        createdAtMs: 100,
+        updatedAtMs: 100,
+      }],
+    })
+    expect(policy.revision).toBe(2)
+    expect(backend.listPolicyRules()).toHaveLength(1)
+
+    expect(await backend.delete({
+      scope: {
+        kind: 'episode',
+        episodeId,
+      },
+    })).toEqual({
+      observationsDeleted: 1,
+      episodesDeleted: 1,
+      episodesRebuilt: 0,
+    })
+    expect(await backend.recent()).toEqual([])
+
+    history.close()
+  })
+})
+
+describe('Cordis computer history service', () => {
+  it('provides the stable ctx.computerHistory capability', async () => {
+    const state = {
+      enabled: true,
+      capture: 'running' as const,
+      accessibilityTrusted: true,
+      observationRetentionHours: 24,
+      episodeRetentionDays: 30,
+      autoResume: false,
+    }
+
+    const backend: ComputerHistoryServiceContract = {
+      async recent() { return [] },
+      async search() { return [] },
+      async getEpisode() { return undefined },
+      async resolveResume() {
+        return { status: 'none', reason: 'fixture' }
+      },
+      async delete() {
+        return {
+          observationsDeleted: 0,
+          episodesDeleted: 0,
+          episodesRebuilt: 0,
+        }
+      },
+      async pause() {},
+      async resume() {},
+      getState() { return state },
+      listPolicyRules() { return [] },
+      async replacePolicy() {
+        return {
+          revision: 1,
+          mode: 'include-only',
+          rules: [],
+          updatedAtMs: 1,
+        }
+      },
+    }
+
+    const ctx = new Context()
+    const fiber = await ctx.plugin(
+      ComputerHistoryService,
+      { backend },
+    )
+
+    expect(ctx.computerHistory.getState()).toEqual(state)
+    expect(await ctx.computerHistory.recent()).toEqual([])
+
+    await fiber.dispose()
+    expect(ctx.get('computerHistory', false)).toBeUndefined()
+  })
+})

@@ -23,6 +23,7 @@
     "verify": "pnpm check && pnpm verify:privacy"
   },
   "devDependencies": {
+    "@deepseek-ai/cordis": "4.0.4",
     "@types/node": "^22.20.0",
     "@vitest/coverage-v8": "^4.1.8",
     "fast-check": "^4.8.0",
@@ -46,5 +47,8 @@
     "README.zh.md",
     "LICENSE",
     "SECURITY.md"
-  ]
+  ],
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "~4.0.4"
+  }
 }
