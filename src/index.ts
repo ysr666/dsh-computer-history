@@ -1,8 +1,9 @@
 /**
  * DSH Computer History / Work Continuity.
  *
- * Phase 1 implementation starts from typed contracts and deterministic core.
- * Host, Agent, Client, and native collector integrations are added only after
- * their architecture gates are satisfied.
+ * Phase 1 is built from typed contracts and a deterministic core before
+ * native, UI, and automatic-resume integrations are connected.
  */
 export const name = 'dsh-computer-history'
+
+export * from './shared/index.js'
