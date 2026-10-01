@@ -33,7 +33,8 @@ interface MutableResource {
 
 interface MutableSurface {
   readonly bundleId: string
-  readonly surfaceKind: EpisodeSurfaceSummary['surfaceKind']
+  readonly surfaceKind:
+    EpisodeSurfaceSummary['surfaceKind']
   firstSeenAtMs: number
   lastSeenAtMs: number
   observationCount: number
@@ -60,8 +61,16 @@ function resourceKey(resource: ResourceIdentity): string {
   return `${resource.kind}\u0000${resource.canonicalUri}`
 }
 
-function surfaceKey(observation: ActivityObservation): string {
+function surfaceKey(
+  observation: ActivityObservation,
+): string {
   return `${observation.app.bundleId}\u0000${observation.surface.kind}`
+}
+
+function observationKey(
+  observation: PersistedActivityObservation,
+): string {
+  return `${observation.collectorSessionId}\u0000${observation.seq}`
 }
 
 function workspaceMatches(
@@ -74,8 +83,12 @@ function workspaceMatches(
     return episode.workspace.id === observation.workspace.id
   }
 
-  if (episode.workspace.root && observation.workspace.root) {
-    return episode.workspace.root === observation.workspace.root
+  if (
+    episode.workspace.root
+    && observation.workspace.root
+  ) {
+    return episode.workspace.root
+      === observation.workspace.root
   }
 
   return false
@@ -112,7 +125,8 @@ function startEpisode(
 
   const episode: MutableEpisode = {
     id: stableEpisodeId(observation),
-    collectorSessionId: observation.collectorSessionId,
+    collectorSessionId:
+      String(observation.collectorSessionId),
     startReason,
     startedAtMs: observation.observedAtMs,
     workspace,
@@ -157,17 +171,23 @@ function addObservation(
     const key = resourceKey(observation.resource)
     const existing = episode.resources.get(key)
     if (existing) {
-      existing.lastSeenAtMs = observation.observedAtMs
+      existing.lastSeenAtMs =
+        observation.observedAtMs
       existing.observationCount += 1
       if (observation.resource.displayLabel) {
-        existing.displayLabel = observation.resource.displayLabel
+        existing.displayLabel =
+          observation.resource.displayLabel
       }
     } else {
       episode.resources.set(key, {
         kind: observation.resource.kind,
-        canonicalUri: observation.resource.canonicalUri,
+        canonicalUri:
+          observation.resource.canonicalUri,
         ...(observation.resource.displayLabel
-          ? { displayLabel: observation.resource.displayLabel }
+          ? {
+              displayLabel:
+                observation.resource.displayLabel,
+            }
           : {}),
         firstSeenAtMs: observation.observedAtMs,
         lastSeenAtMs: observation.observedAtMs,
@@ -176,13 +196,14 @@ function addObservation(
     }
   }
 
-  const appSurfaceKey = surfaceKey(observation)
-  const existingSurface = episode.surfaces.get(appSurfaceKey)
+  const key = surfaceKey(observation)
+  const existingSurface = episode.surfaces.get(key)
   if (existingSurface) {
-    existingSurface.lastSeenAtMs = observation.observedAtMs
+    existingSurface.lastSeenAtMs =
+      observation.observedAtMs
     existingSurface.observationCount += 1
   } else {
-    episode.surfaces.set(appSurfaceKey, {
+    episode.surfaces.set(key, {
       bundleId: observation.app.bundleId,
       surfaceKind: observation.surface.kind,
       firstSeenAtMs: observation.observedAtMs,
@@ -199,16 +220,21 @@ function finishEpisode(
   const resources: EpisodeResourceSummary[] = [
     ...episode.resources.values(),
   ]
-
   const surfaces: EpisodeSurfaceSummary[] = [
     ...episode.surfaces.values(),
   ]
 
   const workspace = episode.workspace
     ? {
-        ...(episode.workspace.id ? { id: episode.workspace.id } : {}),
-        ...(episode.workspace.root ? { root: episode.workspace.root } : {}),
-        ...(episode.workspace.title ? { title: episode.workspace.title } : {}),
+        ...(episode.workspace.id
+          ? { id: episode.workspace.id }
+          : {}),
+        ...(episode.workspace.root
+          ? { root: episode.workspace.root }
+          : {}),
+        ...(episode.workspace.title
+          ? { title: episode.workspace.title }
+          : {}),
       }
     : undefined
 
@@ -221,21 +247,28 @@ function finishEpisode(
       endReason,
     },
     ...(workspace ? { workspace } : {}),
-    ...(episode.threadKey ? { threadKey: episode.threadKey } : {}),
+    ...(episode.threadKey
+      ? { threadKey: episode.threadKey }
+      : {}),
     summaryKind: 'deterministic',
     summary: renderDeterministicSummary({
-      ...(workspace?.title ? { workspaceTitle: workspace.title } : {}),
+      ...(workspace?.title
+        ? { workspaceTitle: workspace.title }
+        : {}),
       resources,
       surfaces,
     }),
     ...(episode.lastStrongResource
-      ? { lastStrongResource: episode.lastStrongResource }
+      ? {
+          lastStrongResource:
+            episode.lastStrongResource,
+        }
       : {}),
     resources,
     surfaces,
     confidence: episode.confidence,
     state: 'closed',
-    observationIds: [...episode.observationIds],
+    observationIds: episode.observationIds,
   }
 }
 
@@ -246,14 +279,21 @@ function isEligible(
     && !observation.privacy.protected
 }
 
-export function buildEpisodes(
+function sortedUnique(
   input: readonly PersistedActivityObservation[],
-): readonly EpisodeDetail[] {
-  const unique = new Map<string, PersistedActivityObservation>()
+): PersistedActivityObservation[] {
+  const unique = new Map<
+    string,
+    PersistedActivityObservation
+  >()
+
   for (const observation of input) {
-    const key = `${observation.collectorSessionId}\u0000${observation.seq}`
+    const key = observationKey(observation)
     const existing = unique.get(key)
-    if (existing && !isDeepStrictEqual(existing, observation)) {
+    if (
+      existing
+      && !isDeepStrictEqual(existing, observation)
+    ) {
       throw new Error(
         `conflicting duplicate observation for ${observation.collectorSessionId}:${observation.seq}`,
       )
@@ -261,45 +301,100 @@ export function buildEpisodes(
     if (!existing) unique.set(key, observation)
   }
 
-  const observations = [...unique.values()].toSorted((left, right) =>
-    left.observedAtMs - right.observedAtMs
-    || String(left.collectorSessionId).localeCompare(
-      String(right.collectorSessionId),
-    )
-    || left.seq - right.seq,
+  return [...unique.values()].toSorted(
+    (left, right) =>
+      left.observedAtMs - right.observedAtMs
+      || String(left.collectorSessionId).localeCompare(
+        String(right.collectorSessionId),
+      )
+      || left.seq - right.seq,
   )
+}
 
-  const result: EpisodeDetail[] = []
-  let active: MutableEpisode | undefined
+export class IncrementalEpisodeBuilder {
+  private active: MutableEpisode | undefined
+  private readonly seen = new Map<
+    string,
+    PersistedActivityObservation
+  >()
+  private lastObservedAtMs: number | undefined
 
-  const close = (reason: EpisodeBoundaryReason): void => {
-    if (!active) return
-    result.push(finishEpisode(active, reason))
-    active = undefined
+  public constructor(
+    seed: readonly PersistedActivityObservation[] = [],
+  ) {
+    for (const observation of sortedUnique(seed)) {
+      this.push(observation)
+    }
   }
 
-  for (const observation of observations) {
-    if (!isEligible(observation)) continue
+  public get lastObservedAt(): number | undefined {
+    return this.lastObservedAtMs
+  }
 
-    let startReason: EpisodeBoundaryReason = 'first-observation'
+  public push(
+    observation: PersistedActivityObservation,
+  ): readonly EpisodeDetail[] {
+    const key = observationKey(observation)
+    const existing = this.seen.get(key)
+
+    if (existing) {
+      if (!isDeepStrictEqual(existing, observation)) {
+        throw new Error(
+          `conflicting duplicate observation for ${observation.collectorSessionId}:${observation.seq}`,
+        )
+      }
+      return []
+    }
 
     if (
-      active
+      this.lastObservedAtMs !== undefined
+      && observation.observedAtMs
+        < this.lastObservedAtMs
+    ) {
+      throw new Error(
+        'out-of-order observation requires episode builder reseed',
+      )
+    }
+
+    this.seen.set(key, observation)
+    this.lastObservedAtMs = observation.observedAtMs
+
+    if (!isEligible(observation)) return []
+
+    const changed: EpisodeDetail[] = []
+    let startReason:
+      EpisodeBoundaryReason = 'first-observation'
+
+    const close = (
+      reason: EpisodeBoundaryReason,
+    ): void => {
+      if (!this.active) return
+      changed.push(finishEpisode(this.active, reason))
+      this.active = undefined
+    }
+
+    if (
+      this.active
       && String(observation.collectorSessionId)
-        !== active.collectorSessionId
+        !== this.active.collectorSessionId
     ) {
       close('collector-restart')
       startReason = 'collector-restart'
     }
 
-    if (active && observationForcesIdleBoundary(observation)) {
+    if (
+      this.active
+      && observationForcesIdleBoundary(observation)
+    ) {
       close('idle')
       startReason = 'idle'
     }
 
     if (
-      active
-      && observation.observedAtMs - active.lastIncludedAtMs >= 480_000
+      this.active
+      && observation.observedAtMs
+        - this.active.lastIncludedAtMs
+        >= 480_000
     ) {
       close('timeout')
       startReason = 'timeout'
@@ -308,75 +403,157 @@ export function buildEpisodes(
     const strong = hasStrongWorkspace(observation)
 
     if (strong) {
-      if (!active) {
-        active = startEpisode(observation, startReason, true)
-        continue
+      if (!this.active) {
+        this.active = startEpisode(
+          observation,
+          startReason,
+          true,
+        )
+        changed.push(
+          finishEpisode(this.active, 'timeout'),
+        )
+        return changed
       }
 
-      if (!active.workspace || !workspaceMatches(active, observation)) {
+      if (
+        !this.active.workspace
+        || !workspaceMatches(
+          this.active,
+          observation,
+        )
+      ) {
         close('workspace-switch')
-        active = startEpisode(
+        this.active = startEpisode(
           observation,
           'workspace-switch',
           true,
         )
-        continue
+        changed.push(
+          finishEpisode(this.active, 'timeout'),
+        )
+        return changed
       }
 
       if (
-        active.detourStartedAtMs !== undefined
-        && active.lastStrongAtMs !== undefined
+        this.active.detourStartedAtMs !== undefined
+        && this.active.lastStrongAtMs !== undefined
         && detourExpired(
-          active.lastStrongAtMs,
+          this.active.lastStrongAtMs,
           observation.observedAtMs,
         )
       ) {
         close('timeout')
-        active = startEpisode(observation, 'timeout', true)
-        continue
+        this.active = startEpisode(
+          observation,
+          'timeout',
+          true,
+        )
+        changed.push(
+          finishEpisode(this.active, 'timeout'),
+        )
+        return changed
       }
 
-      addObservation(active, observation, true)
-      continue
+      addObservation(
+        this.active,
+        observation,
+        true,
+      )
+      changed.push(
+        finishEpisode(this.active, 'timeout'),
+      )
+      return changed
     }
 
     if (observation.resource?.kind === 'url') {
       if (
-        active?.workspace
-        && active.lastStrongAtMs !== undefined
-        && observation.observedAtMs - active.lastStrongAtMs
+        this.active?.workspace
+        && this.active.lastStrongAtMs !== undefined
+        && observation.observedAtMs
+          - this.active.lastStrongAtMs
           <= URL_ATTACH_WINDOW_MS
       ) {
-        addObservation(active, observation, false)
-        continue
+        addObservation(
+          this.active,
+          observation,
+          false,
+        )
+        changed.push(
+          finishEpisode(this.active, 'timeout'),
+        )
+        return changed
       }
 
       if (
-        active
-        && !active.workspace
-        && observation.observedAtMs - active.lastIncludedAtMs
+        this.active
+        && !this.active.workspace
+        && observation.observedAtMs
+          - this.active.lastIncludedAtMs
           <= URL_ATTACH_WINDOW_MS
       ) {
-        addObservation(active, observation, false)
-        continue
+        addObservation(
+          this.active,
+          observation,
+          false,
+        )
+        changed.push(
+          finishEpisode(this.active, 'timeout'),
+        )
+        return changed
       }
 
-      if (active) close('workspace-switch')
-      active = startEpisode(observation, startReason, false)
-      continue
+      if (this.active) close('workspace-switch')
+      this.active = startEpisode(
+        observation,
+        startReason,
+        false,
+      )
+      changed.push(
+        finishEpisode(this.active, 'timeout'),
+      )
+      return changed
     }
 
     if (observation.resource) {
-      if (active) close('workspace-switch')
-      active = startEpisode(observation, startReason, false)
-      continue
+      if (this.active) close('workspace-switch')
+      this.active = startEpisode(
+        observation,
+        startReason,
+        false,
+      )
+      changed.push(
+        finishEpisode(this.active, 'timeout'),
+      )
+      return changed
     }
 
-    if (active && active.detourStartedAtMs === undefined) {
-      active.detourStartedAtMs = observation.observedAtMs
+    if (
+      this.active
+      && this.active.detourStartedAtMs === undefined
+    ) {
+      this.active.detourStartedAtMs =
+        observation.observedAtMs
+    }
+
+    return changed
+  }
+}
+
+export function buildEpisodes(
+  input: readonly PersistedActivityObservation[],
+): readonly EpisodeDetail[] {
+  const episodes = new Map<string, EpisodeDetail>()
+  const builder = new IncrementalEpisodeBuilder()
+
+  for (const observation of sortedUnique(input)) {
+    for (const episode of builder.push(observation)) {
+      episodes.set(String(episode.id), episode)
     }
   }
 
-  close('timeout')
-  return result
+  return [...episodes.values()].toSorted(
+    (left, right) =>
+      left.startedAtMs - right.startedAtMs
+      || String(left.id).localeCompare(String(right.id)),
+  )
 }

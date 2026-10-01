@@ -17,4 +17,5 @@ export interface LocalBackendConfig {
   readonly autoResume: boolean
   readonly now?: () => number
   readonly onPolicyChanged?: (policy: import('../../shared/index.js').PolicySnapshot) => void | Promise<void>
+  readonly onHistoryChanged?: () => void | Promise<void>
 }

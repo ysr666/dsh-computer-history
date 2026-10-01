@@ -125,6 +125,21 @@ describe('live privacy normalization', () => {
     }), permissive, 2_000)).toBeUndefined()
   })
 
+  it('fails closed for unsupported app families', () => {
+    const permissive: PolicySnapshot = {
+      ...policy,
+      rules: [...policy.rules, {
+        ...policy.rules[0]!,
+        id: PolicyRuleId('firefox'),
+        pattern: 'org.mozilla.firefox',
+      }],
+    }
+    expect(normalizeObservation(native({
+      app: { pid: 4, bundleId: 'org.mozilla.firefox' },
+      source: { adapter: 'generic' },
+    }), permissive, 2_000)).toBeUndefined()
+  })
+
   it('normalizes safe metadata without reading content', () => {
     expect(normalizeObservation(native(), policy, 2_000)).toMatchObject({
       app: { bundleId: 'com.microsoft.VSCode' },

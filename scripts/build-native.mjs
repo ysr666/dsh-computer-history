@@ -1,13 +1,20 @@
-import { mkdirSync, readdirSync } from 'node:fs'
+import {
+  mkdirSync,
+  readdirSync,
+} from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import path from 'node:path'
 
 if (process.platform !== 'darwin') {
-  console.log('native collector build skipped: macOS only')
+  console.log(
+    'native collector build skipped: macOS only',
+  )
   process.exit(0)
 }
 
-const developer = process.env.DEVELOPER_DIR ?? '/Applications/Xcode.app/Contents/Developer'
+const developer =
+  process.env.DEVELOPER_DIR
+  ?? '/Applications/Xcode.app/Contents/Developer'
 const sdk = path.join(
   developer,
   'Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk',
@@ -18,21 +25,39 @@ const toolchain = path.join(
 )
 const swiftc = path.join(toolchain, 'swiftc')
 const lipo = path.join(toolchain, 'lipo')
-const sourceDir = 'native/macos/Sources/ComputerHistoryCollector'
+const codesign = '/usr/bin/codesign'
+const sourceDir =
+  'native/macos/Sources/ComputerHistoryCollector'
 const sources = readdirSync(sourceDir)
   .filter(name => name.endsWith('.swift'))
   .map(name => path.join(sourceDir, name))
 const outputDir = 'bin'
+const universal = path.join(
+  outputDir,
+  'dsh-computer-history-collector',
+)
+const identifier =
+  'ai.deepseek.dsh.computer-history.collector'
+
 mkdirSync(outputDir, { recursive: true })
 
 function run(command, args) {
-  const result = spawnSync(command, args, { stdio: 'inherit' })
-  if (result.status !== 0) process.exit(result.status ?? 1)
+  const result = spawnSync(
+    command,
+    args,
+    { stdio: 'inherit' },
+  )
+  if (result.status !== 0) {
+    process.exit(result.status ?? 1)
+  }
 }
 
 const outputs = []
 for (const arch of ['arm64', 'x86_64']) {
-  const output = path.join(outputDir, 'collector-' + arch)
+  const output = path.join(
+    outputDir,
+    'collector-' + arch,
+  )
   run(swiftc, [
     '-warnings-as-errors',
     '-sdk', sdk,
@@ -47,6 +72,32 @@ run(lipo, [
   '-create',
   ...outputs,
   '-output',
-  path.join(outputDir, 'dsh-computer-history-collector'),
+  universal,
 ])
-console.log('built universal macOS collector')
+
+const identity =
+  process.env.DSH_COMPUTER_HISTORY_CODESIGN_IDENTITY
+  ?? '-'
+const signArgs = [
+  '--force',
+  '--sign', identity,
+  '--identifier', identifier,
+]
+if (identity === '-') {
+  signArgs.push('--timestamp=none')
+} else {
+  signArgs.push('--options', 'runtime', '--timestamp')
+}
+signArgs.push(universal)
+
+run(codesign, signArgs)
+run(codesign, [
+  '--verify',
+  '--strict',
+  '--verbose=2',
+  universal,
+])
+
+console.log(
+  `built and signed universal macOS collector (${identifier})`,
+)

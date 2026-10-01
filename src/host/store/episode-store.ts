@@ -35,6 +35,10 @@ export interface EpisodeSearchQuery extends EpisodeListQuery {
   readonly bundleId?: string
 }
 
+export interface PersistEpisodeOptions {
+  readonly provenance?: 'replace' | 'append'
+}
+
 export interface PersistEpisodeInput {
   readonly id: EpisodeId
   readonly startedAtMs: number
@@ -170,7 +174,10 @@ function resourceKind(value: string): ResourceKind {
 export class EpisodeStore {
   public constructor(private readonly db: DatabaseSync) {}
 
-  public replace(input: PersistEpisodeInput): void {
+  public replace(
+    input: PersistEpisodeInput,
+    options: PersistEpisodeOptions = {},
+  ): void {
     const ownsTransaction = !this.db.isTransaction
     if (ownsTransaction) this.db.exec('BEGIN IMMEDIATE')
     try {
@@ -230,22 +237,48 @@ export class EpisodeStore {
         input.expiresAtMs ?? null,
       )
 
-      this.db.prepare(
-        'DELETE FROM episode_observations WHERE episode_id = ?',
-      ).run(input.id)
-      this.db.prepare(
-        'DELETE FROM episode_resources WHERE episode_id = ?',
-      ).run(input.id)
-      this.db.prepare(
-        'DELETE FROM episode_surfaces WHERE episode_id = ?',
-      ).run(input.id)
+      const append =
+        options.provenance === 'append'
+
+      if (!append) {
+        this.db.prepare(
+          'DELETE FROM episode_observations WHERE episode_id = ?',
+        ).run(input.id)
+        this.db.prepare(
+          'DELETE FROM episode_resources WHERE episode_id = ?',
+        ).run(input.id)
+        this.db.prepare(
+          'DELETE FROM episode_surfaces WHERE episode_id = ?',
+        ).run(input.id)
+      }
 
       const insertObservation = this.db.prepare(`
-        INSERT INTO episode_observations(episode_id, observation_id)
-        VALUES (?, ?)
+        INSERT OR IGNORE INTO episode_observations(
+          episode_id,
+          observation_id
+        ) VALUES (?, ?)
       `)
-      for (const observationId of input.observationIds) {
-        insertObservation.run(input.id, observationId)
+      const observationStart = append
+        ? Number(
+            (
+              this.db.prepare(`
+                SELECT COUNT(*) AS count
+                FROM episode_observations
+                WHERE episode_id = ?
+              `).get(input.id) as { count: number }
+            ).count,
+          )
+        : 0
+
+      for (
+        let index = observationStart;
+        index < input.observationIds.length;
+        index += 1
+      ) {
+        insertObservation.run(
+          input.id,
+          input.observationIds[index]!,
+        )
       }
 
       const insertResource = this.db.prepare(`
@@ -256,6 +289,11 @@ export class EpisodeStore {
           last_seen_at_ms,
           observation_count
         ) VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(episode_id, resource_id)
+        DO UPDATE SET
+          first_seen_at_ms = excluded.first_seen_at_ms,
+          last_seen_at_ms = excluded.last_seen_at_ms,
+          observation_count = excluded.observation_count
       `)
       for (const resource of input.resources) {
         insertResource.run(
@@ -276,6 +314,15 @@ export class EpisodeStore {
           last_seen_at_ms,
           observation_count
         ) VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(
+          episode_id,
+          bundle_id,
+          surface_kind
+        )
+        DO UPDATE SET
+          first_seen_at_ms = excluded.first_seen_at_ms,
+          last_seen_at_ms = excluded.last_seen_at_ms,
+          observation_count = excluded.observation_count
       `)
       for (const surface of input.surfaces) {
         insertSurface.run(

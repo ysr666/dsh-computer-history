@@ -18,11 +18,12 @@
     "test:coverage": "vitest run --coverage",
     "check": "pnpm typecheck && pnpm lint && pnpm test",
     "native:build": "node scripts/build-native.mjs",
-    "native:test": "swift test --package-path native/macos",
+    "native:test": "node scripts/test-native.mjs",
     "verify:privacy": "node scripts/verify-privacy-boundary.mjs",
     "verify": "pnpm check && pnpm verify:privacy",
-    "verify:p1": "pnpm verify && pnpm build && pnpm native:build",
-    "prepack": "pnpm build && pnpm native:build"
+    "verify:p1": "pnpm verify && pnpm build && pnpm benchmark:ingestion && pnpm native:build && pnpm native:test",
+    "prepack": "pnpm build && pnpm native:build",
+    "benchmark:ingestion": "vitest run --config vitest.benchmark.config.ts"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "4.0.4",
@@ -32,6 +33,7 @@
     "@deepseek-ai/dsh-client-ui-renderer": "0.2.0-rc.2",
     "@deepseek-ai/dsh-client-ui-sidebar": "0.2.0-rc.2",
     "@deepseek-ai/dsh-client-ui-slots": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-home-paths": "0.2.0-rc.2",
     "@deepseek-ai/dsh-http-proxy": "0.2.0-rc.2",
     "@deepseek-ai/dsh-subprocess": "0.2.0-rc.2",
     "@deepseek-ai/dsh-system-prompt": "0.2.0-rc.2",
@@ -69,7 +71,8 @@
     "README.zh.md",
     "LICENSE",
     "SECURITY.md",
-    "scripts/build-native.mjs"
+    "scripts/build-native.mjs",
+    "scripts/test-native.mjs"
   ],
   "peerDependencies": {
     "@deepseek-ai/cordis": "~4.0.4",
@@ -83,7 +86,8 @@
     "@deepseek-ai/dsh-system-prompt": ">=0.2.0-rc.2 <0.3.0",
     "@deepseek-ai/dsh-tools": ">=0.2.0-rc.2 <0.3.0",
     "@deepseek-ai/dsh-workspace": ">=0.2.0-rc.2 <0.3.0",
-    "react": "^18.2.0"
+    "react": "^18.2.0",
+    "@deepseek-ai/dsh-home-paths": ">=0.2.0-rc.2 <0.3.0"
   },
   "dsh": {
     "client": {

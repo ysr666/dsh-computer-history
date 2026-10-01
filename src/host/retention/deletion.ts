@@ -218,6 +218,11 @@ export class DeletionService {
       this.db.exec('DROP TABLE deletion_targets')
       this.db.exec('COMMIT')
 
+      if (plan.audit && targetCount > 0) {
+        this.db.exec('PRAGMA wal_checkpoint(TRUNCATE)')
+        this.db.exec('VACUUM')
+      }
+
       return {
         observationsDeleted: targetCount,
         episodesDeleted,

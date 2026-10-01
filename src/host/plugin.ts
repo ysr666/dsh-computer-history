@@ -1,5 +1,5 @@
-import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { dshHomePath } from '@deepseek-ai/dsh-home-paths'
 import type { Context } from '@deepseek-ai/cordis'
 import '@deepseek-ai/dsh-agent'
 import '@deepseek-ai/dsh-client-connection'
@@ -41,6 +41,13 @@ export interface Config {
   readonly autoResume?: boolean
 }
 
+export function resolveHistoryDataDirectory(
+  config: Config = {},
+): string {
+  return config.dataDirectory
+    ?? dshHomePath('computer-history')
+}
+
 class ManagedCapture implements CaptureController {
   public constructor(
     private readonly manager: CollectorManager | undefined,
@@ -79,8 +86,7 @@ class ManagedCapture implements CaptureController {
 
 export async function apply(ctx: Context, config: Config = {}): Promise<void> {
   const enabled = config.enabled ?? false
-  const dataDirectory = config.dataDirectory
-    ?? path.resolve(process.cwd(), '.data/computer-history')
+  const dataDirectory = resolveHistoryDataDirectory(config)
   const history = openHistoryDatabase({ dataDirectory })
   ctx.effect(() => () => history.close())
 
@@ -90,17 +96,23 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
   const deletion = new DeletionService(history.db)
   const retention = new RetentionService(history.db)
   retention.sweep(Date.now())
-  const retentionTimer = setInterval(
-    () => { retention.sweep(Date.now()) },
-    60 * 60 * 1000,
-  )
-  retentionTimer.unref()
-  ctx.effect(() => () => { clearInterval(retentionTimer) })
 
   const ingestion = new IngestionService(
     history.db,
     new DshWorkspaceResolver(ctx),
     () => policies.get(),
+  )
+
+  const retentionTimer = setInterval(
+    () => {
+      retention.sweep(Date.now())
+      ingestion.reseed()
+    },
+    60 * 60 * 1000,
+  )
+  retentionTimer.unref()
+  ctx.effect(
+    () => () => { clearInterval(retentionTimer) },
   )
 
   let manager: CollectorManager | undefined
@@ -137,6 +149,7 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
         EPISODE_RETENTION_MS / 86_400_000,
       autoResume: config.autoResume ?? false,
       ...(manager ? { onPolicyChanged: policy => manager?.configure(policy) } : {}),
+      onHistoryChanged: () => { ingestion.reseed() },
     },
   )
 

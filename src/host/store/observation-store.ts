@@ -183,6 +183,35 @@ export class ObservationStore {
     return row.id as ObservationId
   }
 
+  public hasCollectorSequence(
+    collectorSession: string,
+    seq: number,
+  ): boolean {
+    return this.db.prepare(`
+      SELECT 1 AS present
+      FROM observations
+      WHERE collector_session = ? AND collector_seq = ?
+      LIMIT 1
+    `).get(collectorSession, seq) !== undefined
+  }
+
+  public getById(
+    id: ObservationId,
+  ): PersistedActivityObservation | undefined {
+    const row = this.db.prepare(`
+      SELECT
+        o.*,
+        r.kind AS resource_kind,
+        r.canonical_uri AS resource_uri,
+        r.display_label AS resource_label
+      FROM observations o
+      LEFT JOIN resources r ON r.id = o.resource_id
+      WHERE o.id = ?
+    `).get(id)
+
+    return row ? this.materialize(row) : undefined
+  }
+
   public listForEpisode(
     episodeId: EpisodeId,
   ): readonly PersistedActivityObservation[] {

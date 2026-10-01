@@ -18,17 +18,24 @@ const PROTECTED_BUNDLES = new Set([
   'com.lastpass.LastPass',
 ])
 
-const BROWSER_BUNDLES = new Set([
-  'com.google.Chrome', 'com.apple.Safari', 'company.thebrowser.Browser',
-  'com.microsoft.edgemac', 'com.brave.Browser',
-])
+export function phase1AdapterForBundle(
+  bundleId: string,
+): ObservationAdapter | undefined {
+  if (
+    bundleId === 'com.microsoft.VSCode'
+    || bundleId === 'com.todesktop.230313mzl4w4u92'
+  ) return 'vscode'
+  if (
+    bundleId === 'com.apple.Terminal'
+    || bundleId === 'com.googlecode.iterm2'
+  ) return 'terminal'
+  if (bundleId === 'com.apple.Preview') return 'preview'
+  if (bundleId === 'com.apple.finder') return 'finder'
+  return undefined
+}
+
 
 const SECURE_PATH = /(?:^|\/)(?:\.env(?:\.|$)|\.ssh(?:\/|$))|\.(?:pem|key)$|(?:credentials|secrets)/i
-
-function adapter(value: string): ObservationAdapter {
-  return ['generic','vscode','terminal','preview','finder'].includes(value)
-    ? value as ObservationAdapter : 'generic'
-}
 
 function resourceOf(message: NativeObservation): ResourceIdentity | undefined {
   const raw = message.window?.document ?? message.window?.url
@@ -87,8 +94,10 @@ export function normalizeObservation(
 ): ActivityObservation | undefined {
   if (message.privacy.secure || message.privacy.protected) return undefined
   if (PROTECTED_BUNDLES.has(message.app.bundleId)) return undefined
-  if (BROWSER_BUNDLES.has(message.app.bundleId)) return undefined
+  const safeAdapter = phase1AdapterForBundle(message.app.bundleId)
+  if (!safeAdapter) return undefined
   const resource = resourceOf(message)
+  if (resource?.kind === 'url') return undefined
   if (resource?.kind === 'file') {
     try {
       if (SECURE_PATH.test(decodeURIComponent(new URL(resource.canonicalUri).pathname))) return undefined
@@ -100,13 +109,22 @@ export function normalizeObservation(
     seq: message.seq,
     observedAtMs: message.observedAtMs,
     app: { pid: message.app.pid, bundleId: message.app.bundleId, ...(message.app.name ? { displayName: message.app.name } : {}) },
-    surface: { kind: adapter(message.source.adapter) === 'vscode' ? 'editor' : adapter(message.source.adapter) === 'terminal' ? 'terminal' : adapter(message.source.adapter) === 'preview' ? 'document' : resource?.kind === 'url' ? 'browser' : 'window', ...(message.window?.title ? { title: message.window.title } : {}) },
+    surface: {
+      kind: safeAdapter === 'vscode'
+        ? 'editor'
+        : safeAdapter === 'terminal'
+          ? 'terminal'
+          : safeAdapter === 'preview'
+            ? 'document'
+            : 'window',
+      ...(message.window?.title ? { title: message.window.title } : {}),
+    },
     ...(message.element ? { element: message.element } : {}),
     ...(resource ? { resource } : {}),
     workspace,
     activity: message.activity?.idleSeconds === undefined ? {} : { idleSeconds: message.activity.idleSeconds },
     privacy: { secure: false, protected: false },
-    source: { provider: 'macos-ax', adapter: adapter(message.source.adapter) },
+    source: { provider: 'macos-ax', adapter: safeAdapter },
     policyRevision: policy.revision,
     expiresAtMs: nowMs + OBSERVATION_RETENTION_MS,
   }

@@ -7,7 +7,7 @@ import React, { useCallback, useEffect, useState } from 'react'
 import type { ComputerHistoryState, EpisodeSummary, PolicySnapshot } from '../shared/index.js'
 
 const PANEL_ID = 'computer-history' as MainPanelId
-const API = '/api/computer-history'
+const API = 'api/computer-history'
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(API + path, init)
@@ -24,6 +24,7 @@ function HistoryPage(): React.ReactElement {
   const [episodes, setEpisodes] = useState<readonly EpisodeSummary[]>([])
   const [policy, setPolicy] = useState<PolicySnapshot>()
   const [bundleId, setBundleId] = useState('')
+  const [confirmDeleteAll, setConfirmDeleteAll] = useState(false)
   const [error, setError] = useState<string>()
 
   const refresh = useCallback(async () => {
@@ -52,11 +53,19 @@ function HistoryPage(): React.ReactElement {
   }
 
   const clearAll = async (): Promise<void> => {
+    if (!confirmDeleteAll) {
+      setConfirmDeleteAll(true)
+      return
+    }
+
     await api('/delete', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ scope: { kind: 'all' } }),
+      body: JSON.stringify({
+        scope: { kind: 'all' },
+      }),
     })
+    setConfirmDeleteAll(false)
     await refresh()
   }
 
@@ -122,9 +131,26 @@ function HistoryPage(): React.ReactElement {
       ),
       React.createElement(
         'button',
-        { type: 'button', onClick: () => { void clearAll() } },
-        'Delete all history',
+        {
+          type: 'button',
+          onClick: () => { void clearAll() },
+        },
+        confirmDeleteAll
+          ? 'Confirm delete all history'
+          : 'Delete all history',
       ),
+      confirmDeleteAll
+        ? React.createElement(
+            'button',
+            {
+              type: 'button',
+              onClick: () => {
+                setConfirmDeleteAll(false)
+              },
+            },
+            'Cancel',
+          )
+        : null,
       React.createElement(
         'button',
         { type: 'button', onClick: () => { void refresh() } },
@@ -133,7 +159,7 @@ function HistoryPage(): React.ReactElement {
     ),
     React.createElement('h2', null, 'Privacy & app access'),
     React.createElement('p', null,
-      'Capture is include-only. Only explicitly allowed bundle IDs can be persisted; secure fields and protected apps are rejected before storage.'),
+      'Capture is include-only. Phase 1 accepts only supported metadata adapters (VS Code/Cursor, Terminal/iTerm, Preview, Finder); browsers and unknown apps fail closed before storage.'),
     React.createElement('input', {
       value: bundleId,
       placeholder: 'com.example.App',

@@ -15,6 +15,7 @@ import type {
   SearchEpisodesRequest,
 } from '../../shared/index.js'
 import { resolveResume } from '../resume/index.js'
+import { phase1AdapterForBundle } from '../ingestion/index.js'
 import { DeletionService } from '../retention/index.js'
 import {
   EpisodeStore,
@@ -113,7 +114,14 @@ implements ComputerHistoryServiceContract {
     request: DeleteHistoryRequest,
     _signal?: AbortSignal,
   ): Promise<DeleteHistoryResult> {
-    return this.deletion.delete(request, this.now())
+    try {
+      return this.deletion.delete(
+        request,
+        this.now(),
+      )
+    } finally {
+      await this.config.onHistoryChanged?.()
+    }
   }
 
   public pause(): Promise<void> {
@@ -146,6 +154,19 @@ implements ComputerHistoryServiceContract {
   public async replacePolicy(
     update: PolicyUpdate,
   ): Promise<PolicySnapshot> {
+    const unsupported = update.rules.find(
+      rule => rule.dimension === 'app'
+        && rule.action === 'allow'
+        && (
+          rule.matcher !== 'exact'
+          || !phase1AdapterForBundle(rule.pattern)
+        ),
+    )
+    if (unsupported) {
+      throw new Error(
+        `Phase 1 cannot capture unsupported app bundle: ${unsupported.pattern}`,
+      )
+    }
     const snapshot = this.policies.replace(
       update.mode,
       update.rules,

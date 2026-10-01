@@ -53,9 +53,17 @@ struct ConfigureEnvelope: Decodable {
 
 enum Command: Decodable {
     case configure(ConfigurePayload), pause, resume, shutdown
-    private enum Keys: String, CodingKey { case type }
+    private enum Keys: String, CodingKey { case v, type }
     init(from decoder: Decoder) throws {
         let box = try decoder.container(keyedBy: Keys.self)
+        let version = try box.decode(Int.self, forKey: .v)
+        guard version == 1 else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .v,
+                in: box,
+                debugDescription: "unsupported protocol version"
+            )
+        }
         switch try box.decode(String.self, forKey: .type) {
         case "configure": self = .configure(try ConfigureEnvelope(from: decoder).policy)
         case "pause": self = .pause

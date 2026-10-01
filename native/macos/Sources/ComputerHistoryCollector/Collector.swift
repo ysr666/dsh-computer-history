@@ -56,6 +56,17 @@ final class Collector {
             CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .defaultMode)
         }
         axObserver = nil
+
+        let bundle = app.bundleIdentifier ?? "unknown"
+        let protected = protectedBundles.contains(bundle)
+            || policyProtectedBundles.contains(bundle)
+        guard !protected,
+              !blockedBundles.contains(bundle),
+              adapter(bundle) != nil,
+              policyMode != "include-only"
+                || allowedBundles.contains(bundle)
+        else { return }
+
         var created: AXObserver?
         guard AXObserverCreate(app.processIdentifier, accessibilityCallback, &created) == .success,
               let observer = created else { return }
@@ -73,7 +84,10 @@ final class Collector {
         blockedBundles = Set(policy.blockedBundleIds)
         policyProtectedBundles = Set(policy.protectedBundleIds)
         protectedPathPatterns = policy.protectedPathPatterns
-        if !paused, let app = NSWorkspace.shared.frontmostApplication { capture(app) }
+        if !paused, let app = NSWorkspace.shared.frontmostApplication {
+            observe(app)
+            capture(app)
+        }
     }
 
     func setPaused(_ value: Bool) {
@@ -86,7 +100,8 @@ final class Collector {
         guard !paused else { return }
         let bundle = app.bundleIdentifier ?? "unknown"
         let protected = protectedBundles.contains(bundle) || policyProtectedBundles.contains(bundle)
-        if protected || browserBundles.contains(bundle) || blockedBundles.contains(bundle) { return }
+        guard let adapterName = adapter(bundle) else { return }
+        if protected || blockedBundles.contains(bundle) { return }
         if policyMode == "include-only" && !allowedBundles.contains(bundle) { return }
         let trusted = AXIsProcessTrusted()
         if !trusted {
@@ -133,15 +148,18 @@ final class Collector {
             app: AppInfo(pid: app.processIdentifier, bundleId: bundle, name: app.localizedName),
             window: windowInfo, element: elementInfo, activity: Activity(idleSeconds: idle),
             privacy: Privacy(secure: secure, protected: protected, reason: protected ? "protected-app" : secure ? "secure-field" : nil),
-            source: SourceInfo(adapter: adapter(bundle))
+            source: SourceInfo(adapter: adapterName)
         ))
     }
 
-    private func adapter(_ bundle: String) -> String {
-        if bundle == "com.microsoft.VSCode" || bundle.contains("cursor") { return "vscode" }
-        if bundle == "com.apple.Terminal" || bundle.contains("iterm") { return "terminal" }
+    private func adapter(_ bundle: String) -> String? {
+        if bundle == "com.microsoft.VSCode"
+            || bundle == "com.todesktop.230313mzl4w4u92" { return "vscode" }
+        if bundle == "com.apple.Terminal"
+            || bundle == "com.googlecode.iterm2" { return "terminal" }
         if bundle == "com.apple.Preview" { return "preview" }
         if bundle == "com.apple.finder" { return "finder" }
-        return "generic"
+        return nil
     }
+
 }
