@@ -1,0 +1,54 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+lib/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Native / Swift
+native/**/.build/
+native/**/.swiftpm/
+native/**/Package.resolved
+bin/
+
+# Local runtime data
+.data/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.db
+*.db-wal
+*.db-shm
+
+# Logs and debug artifacts
+.debug/
+debug/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Bench / live local captures
+tests/benchmark/field/private/
+tests/live/output/
+*.ndjson
+
+# Environment / credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Temporary packaging
+tmp/
+tmp-pack/
+*.tgz

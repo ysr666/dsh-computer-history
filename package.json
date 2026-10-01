@@ -1,0 +1,50 @@
+{
+  "name": "dsh-computer-history",
+  "version": "0.1.0-dev.0",
+  "description": "Privacy-first work continuity for DeepSeek Harness: metadata-only computer history, deterministic work episodes, and selective resume context.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "packageManager": "pnpm@11.7.0",
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc --noEmit",
+    "lint": "oxlint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "check": "pnpm typecheck && pnpm lint && pnpm test",
+    "native:build": "swift build --package-path native/macos",
+    "native:test": "swift test --package-path native/macos",
+    "verify:privacy": "node scripts/verify-privacy-boundary.mjs",
+    "verify": "pnpm check && pnpm verify:privacy"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.0",
+    "@vitest/coverage-v8": "^4.1.8",
+    "fast-check": "^4.8.0",
+    "oxlint": "1.76.0",
+    "tsdown": "^0.22.2",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.8"
+  },
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "README.md",
+    "README.zh.md",
+    "LICENSE",
+    "SECURITY.md"
+  ]
+}
