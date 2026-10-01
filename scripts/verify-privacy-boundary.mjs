@@ -6,6 +6,12 @@ const forbidden = [
   'AXSelectedText',
   'AXNumberOfCharacters',
   'AXVisibleCharacterRange',
+  'ScreenCaptureKit',
+  'CGWindowListCreateImage',
+  'CGEventTapCreate',
+  'addGlobalMonitorForEvents',
+  'AVAudioEngine',
+  'AVCaptureSession',
 ]
 
 async function walk(dir) {

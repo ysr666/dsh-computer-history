@@ -119,7 +119,6 @@ describe('policy store', () => {
     expect(policies.ensureInitial(100)).toMatchObject({
       revision: 1,
       mode: 'include-only',
-      rules: [],
       updatedAtMs: 100,
     })
 
@@ -140,8 +139,8 @@ describe('policy store', () => {
 
     expect(updated.revision).toBe(2)
     expect(updated.mode).toBe('exclude')
-    expect(updated.rules).toHaveLength(1)
-    expect(updated.rules[0]?.updatedAtMs).toBe(200)
+    expect(updated.rules.some(rule => rule.builtIn)).toBe(true)
+    expect(updated.rules.find(rule => rule.id === PolicyRuleId('rule-1'))?.updatedAtMs).toBe(200)
     history.close()
   })
 })

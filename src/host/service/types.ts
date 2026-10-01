@@ -16,4 +16,5 @@ export interface LocalBackendConfig {
   readonly episodeRetentionDays: number
   readonly autoResume: boolean
   readonly now?: () => number
+  readonly onPolicyChanged?: (policy: import('../../shared/index.js').PolicySnapshot) => void | Promise<void>
 }

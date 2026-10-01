@@ -51,6 +51,21 @@ function policyMatcher(value: string): PolicyMatcher {
   throw new Error(`invalid policy matcher: ${value}`)
 }
 
+const BUILT_IN_RULES = [
+  ['builtin:1password', 'app', 'protect', 'exact', 'com.1password.1password'],
+  ['builtin:bitwarden', 'app', 'protect', 'exact', 'com.bitwarden.desktop'],
+  ['builtin:keychain', 'app', 'protect', 'exact', 'com.apple.keychainaccess'],
+  ['builtin:dashlane', 'app', 'protect', 'exact', 'com.dashlane.Dashlane'],
+  ['builtin:lastpass', 'app', 'protect', 'exact', 'com.lastpass.LastPass'],
+  ['builtin:env', 'resource', 'protect', 'glob', '*/.env'],
+  ['builtin:env-suffix', 'resource', 'protect', 'glob', '*/.env.*'],
+  ['builtin:pem', 'resource', 'protect', 'glob', '*.pem'],
+  ['builtin:key', 'resource', 'protect', 'glob', '*.key'],
+  ['builtin:ssh', 'resource', 'protect', 'glob', '*/.ssh/*'],
+  ['builtin:credentials', 'resource', 'protect', 'glob', '*credentials*'],
+  ['builtin:secrets', 'resource', 'protect', 'glob', '*secrets*'],
+] as const
+
 export class PolicyStore {
   public constructor(private readonly db: DatabaseSync) {}
 
@@ -60,6 +75,15 @@ export class PolicyStore {
         singleton, revision, mode, updated_at_ms
       ) VALUES (1, 1, 'include-only', ?)
     `).run(nowMs)
+    const insert = this.db.prepare(`
+      INSERT OR IGNORE INTO policy_rules(
+        id, dimension, action, matcher, pattern,
+        built_in, created_at_ms, updated_at_ms
+      ) VALUES (?, ?, ?, ?, ?, 1, ?, ?)
+    `)
+    for (const [id, dimension, action, matcher, pattern] of BUILT_IN_RULES) {
+      insert.run(id, dimension, action, matcher, pattern, nowMs, nowMs)
+    }
     return this.get()
   }
 

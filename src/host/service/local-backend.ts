@@ -139,13 +139,19 @@ implements ComputerHistoryServiceContract {
     return this.policies.get().rules
   }
 
+  public getPolicy(): PolicySnapshot {
+    return this.policies.get()
+  }
+
   public async replacePolicy(
     update: PolicyUpdate,
   ): Promise<PolicySnapshot> {
-    return this.policies.replace(
+    const snapshot = this.policies.replace(
       update.mode,
       update.rules,
       this.now(),
     )
+    await this.config.onPolicyChanged?.(snapshot)
+    return snapshot
   }
 }

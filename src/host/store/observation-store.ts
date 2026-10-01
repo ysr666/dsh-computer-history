@@ -200,6 +200,16 @@ export class ObservationStore {
     `).all(episodeId).map((row) => this.materialize(row))
   }
 
+  public listAll(): readonly PersistedActivityObservation[] {
+    return this.db.prepare(`
+      SELECT o.*, r.kind AS resource_kind, r.canonical_uri AS resource_uri,
+        r.display_label AS resource_label
+      FROM observations o
+      LEFT JOIN resources r ON r.id = o.resource_id
+      ORDER BY o.observed_at_ms, o.collector_session, o.collector_seq
+    `).all().map((row) => this.materialize(row))
+  }
+
   public deleteExpired(nowMs: number): number {
     return Number(
       this.db.prepare(

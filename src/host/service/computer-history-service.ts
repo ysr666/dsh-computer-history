@@ -93,6 +93,10 @@ export class ComputerHistoryService
     return this.backend.listPolicyRules()
   }
 
+  public getPolicy(): PolicySnapshot {
+    return this.backend.getPolicy()
+  }
+
   public replacePolicy(
     update: PolicyUpdate,
   ): Promise<PolicySnapshot> {

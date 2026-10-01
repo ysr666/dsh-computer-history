@@ -25,3 +25,8 @@
 - 构建：tsdown
 
 开始开发前请阅读 ARCHITECTURE.md、SECURITY.md 和 docs/development.md。
+
+
+## Phase 1 状态
+
+Phase 1 DSH 集成 Alpha 已完成：本地 SQLite、确定性 Work Episode / Resume、macOS Accessibility 元数据采集器、DSH 托管子进程、认证 Host API、History/Privacy 面板、Agent 作用域查询工具，以及默认关闭的实验性一次性 ResumeHint。采集默认关闭，App 默认 include-only；浏览器在有能力可靠识别隐私/无痕边界的 companion 落地前保持 fail-closed。完整 Gate：pnpm verify:p1。

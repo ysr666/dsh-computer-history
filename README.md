@@ -6,7 +6,7 @@ This project is building a new DSH context source: recent work performed outside
 
 ## Status
 
-Phase 1 implementation is beginning. The repository is intentionally initialized before feature code so architecture, privacy, testing, and release rules are stable from the first implementation commit.
+Phase 1 DSH-integrated alpha is implemented. It includes the local SQLite evidence store, deterministic Work Episodes and resume resolver, an event-driven macOS Accessibility collector, DSH-managed helper lifecycle, authenticated Host API, History/Privacy Client panel, Agent-scoped history tools, and an experimental one-shot ResumeHint that is off by default.
 
 ## Design boundary
 
@@ -23,3 +23,8 @@ The Phase 1 collector is metadata-only. It is designed to identify applications,
 - tsdown for TypeScript packaging.
 
 See ARCHITECTURE.md, SECURITY.md, and docs/development.md before implementation work.
+
+
+## Phase 1 defaults
+
+Capture is off by default and app access is include-only. Browsers are fail-closed until a browser companion can enforce private/incognito boundaries. The packaged macOS collector is a universal arm64/x86_64 binary built by pnpm native:build. Run pnpm verify:p1 for the complete TypeScript/privacy/build/native gate.

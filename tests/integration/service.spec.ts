@@ -211,7 +211,7 @@ describe('local computer history backend', () => {
       }],
     })
     expect(policy.revision).toBe(2)
-    expect(backend.listPolicyRules()).toHaveLength(1)
+    expect(backend.listPolicyRules().some(rule => rule.id === PolicyRuleId('rule-1'))).toBe(true)
 
     expect(await backend.delete({
       scope: {
@@ -258,6 +258,7 @@ describe('Cordis computer history service', () => {
       async resume() {},
       getState() { return state },
       listPolicyRules() { return [] },
+      getPolicy() { return { revision: 1, mode: 'include-only', rules: [], updatedAtMs: 1 } },
       async replacePolicy() {
         return {
           revision: 1,

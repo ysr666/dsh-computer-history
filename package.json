@@ -17,17 +17,32 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "check": "pnpm typecheck && pnpm lint && pnpm test",
-    "native:build": "swift build --package-path native/macos",
+    "native:build": "node scripts/build-native.mjs",
     "native:test": "swift test --package-path native/macos",
     "verify:privacy": "node scripts/verify-privacy-boundary.mjs",
-    "verify": "pnpm check && pnpm verify:privacy"
+    "verify": "pnpm check && pnpm verify:privacy",
+    "verify:p1": "pnpm verify && pnpm build && pnpm native:build",
+    "prepack": "pnpm build && pnpm native:build"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "4.0.4",
+    "@deepseek-ai/dsh-agent": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-client-connection": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-client-ui-layout": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-client-ui-renderer": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-client-ui-sidebar": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-client-ui-slots": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-http-proxy": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-subprocess": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-system-prompt": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-tools": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-workspace": "0.2.0-rc.2",
     "@types/node": "^22.20.0",
+    "@types/react": "18.3.12",
     "@vitest/coverage-v8": "^4.1.8",
     "fast-check": "^4.8.0",
     "oxlint": "1.76.0",
+    "react": "18.3.1",
     "tsdown": "^0.22.2",
     "typescript": "^6.0.3",
     "vitest": "^4.1.8"
@@ -39,16 +54,45 @@
       "types": "./lib/index.d.ts",
       "default": "./lib/index.js"
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./client": {
+      "types": "./lib/client.d.ts",
+      "default": "./lib/client.js"
+    }
   },
   "files": [
     "lib",
+    "bin/dsh-computer-history-collector",
+    "native/macos/Sources",
+    "native/macos/Package.swift",
     "README.md",
     "README.zh.md",
     "LICENSE",
-    "SECURITY.md"
+    "SECURITY.md",
+    "scripts/build-native.mjs"
   ],
   "peerDependencies": {
-    "@deepseek-ai/cordis": "~4.0.4"
+    "@deepseek-ai/cordis": "~4.0.4",
+    "@deepseek-ai/dsh-agent": ">=0.2.0-rc.2 <0.3.0",
+    "@deepseek-ai/dsh-client-connection": ">=0.2.0-rc.2 <0.3.0",
+    "@deepseek-ai/dsh-client-ui-layout": ">=0.2.0-rc.2 <0.3.0",
+    "@deepseek-ai/dsh-client-ui-renderer": ">=0.2.0-rc.2 <0.3.0",
+    "@deepseek-ai/dsh-client-ui-sidebar": ">=0.2.0-rc.2 <0.3.0",
+    "@deepseek-ai/dsh-client-ui-slots": ">=0.2.0-rc.2 <0.3.0",
+    "@deepseek-ai/dsh-subprocess": ">=0.2.0-rc.2 <0.3.0",
+    "@deepseek-ai/dsh-system-prompt": ">=0.2.0-rc.2 <0.3.0",
+    "@deepseek-ai/dsh-tools": ">=0.2.0-rc.2 <0.3.0",
+    "@deepseek-ai/dsh-workspace": ">=0.2.0-rc.2 <0.3.0",
+    "react": "^18.2.0"
+  },
+  "dsh": {
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-renderer",
+        "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-client-ui-sidebar"
+      ],
+      "platform": "web"
+    }
   }
 }

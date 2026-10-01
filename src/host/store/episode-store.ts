@@ -395,6 +395,10 @@ export class EpisodeStore {
     `).all(...params).map((row) => this.materialize(row))
   }
 
+  public deleteAll(): number {
+    return Number(this.db.prepare('DELETE FROM episodes').run().changes)
+  }
+
   public delete(id: EpisodeId): boolean {
     return this.db.prepare(
       'DELETE FROM episodes WHERE id = ?',

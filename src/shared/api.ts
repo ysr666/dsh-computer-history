@@ -99,5 +99,6 @@ export interface ComputerHistoryServiceContract {
   resume(): Promise<void>
   getState(): ComputerHistoryState
   listPolicyRules(): readonly PolicyRule[]
+  getPolicy(): PolicySnapshot
   replacePolicy(update: PolicyUpdate): Promise<PolicySnapshot>
 }
