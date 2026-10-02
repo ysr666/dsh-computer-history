@@ -124,3 +124,38 @@ Two defects were caught by running the checks rather than reading them:
 on dispose, refuse delivery while capture is paused, and surface
 "companion unavailable" in `/state`. Recorded here so the gap is visible rather
 than implied.
+
+## T2.1-2b — plugin wiring, verified live
+
+The intake is started with the plugin (stoppable through `ctx.effect`), the
+state surfaces through `/state.companion`, and delivery is refused unless the
+plugin owns capture and the helper reports `running` — pause means nothing new
+is recorded, for the companion exactly as for the Accessibility collector.
+
+Measured on the real Host (plugin injected into a one-time data directory,
+`pnpm build` + `dev_reload_package` first):
+
+```text
+GET /state            {"listening":true,"port":19388,"paired":false}   capture: running
+lsof -iTCP:19388      DeepSeek 18729 … TCP 127.0.0.1:19388 (LISTEN)     loopback only
+pragma user_version   2      (migration 0002 applied, companion_pairing exists)
+POST (paired, ?token=secret#frag)   201 {"stored":true}
+POST (no token)                     401
+POST (incognito: true)              403 {"error":"incognito tabs are never reported"}
+POST (while paused)                 202 {"stored":false}
+stored row           companion.browser | Example page | provider companion | adapter browser
+stored resource      url | https://example.test/docs/guide | label "Example page"
+after unload         port 19388 free (the listener is closed with the plugin)
+```
+
+The stored URI is the acceptance for two rules at once: the query string and the
+fragment are gone, and the URL only exists because the observation carried
+companion provenance.
+
+**The stale-module trap recurred.** The first live attempt showed
+`companion: undefined`, no listener, and no `companion_pairing` table — the
+running instance predated the build, exactly as in the 2.0 fragmentation
+verification. `dev_reload_package` fixed it, and the checks that exposed it
+(`/state`, `lsof`, `pragma user_version`) are now part of the recipe rather than
+something to remember. A live measurement after a build is only meaningful
+after the reload.

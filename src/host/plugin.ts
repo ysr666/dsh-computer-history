@@ -14,6 +14,9 @@ import {
   type ComputerHistoryState,
 } from '../shared/index.js'
 import { registerHistoryApi } from './api/index.js'
+import { CompanionIntake } from './companion/intake.js'
+import { companionObservation } from './companion/observation.js'
+import { CompanionTokenStore } from './companion/token-store.js'
 import {
   CAPTURE_LOCK_PROBE_WAIT_MS,
   CaptureOwnershipLock,
@@ -46,6 +49,9 @@ export interface Config {
   readonly autoResume?: boolean
   readonly collectorRestart?: boolean
   readonly captureLockProbeWaitMs?: number
+  /** Loopback port for the browser companion intake (ADR 0007). */
+  readonly companionPort?: number
+
 }
 
 export function resolveHistoryDataDirectory(
@@ -60,6 +66,9 @@ class ManagedCapture implements CaptureController {
     private readonly manager: CollectorManager | undefined,
     private readonly enabled: boolean,
     private readonly ownsCapture: () => boolean,
+    private readonly companion: () => NonNullable<
+      ComputerHistoryState['companion']
+    > = () => ({ listening: false, paired: false }),
   ) {}
 
   private requireOwnedManager(): CollectorManager {
@@ -88,7 +97,12 @@ class ManagedCapture implements CaptureController {
   }
   public getState(): Pick<
     ComputerHistoryState,
-    'enabled' | 'capture' | 'accessibilityTrusted' | 'reason' | 'collector'
+    | 'enabled'
+    | 'capture'
+    | 'accessibilityTrusted'
+    | 'reason'
+    | 'collector'
+    | 'companion'
   > {
     const snapshot = this.manager?.snapshot()
     return {
@@ -113,6 +127,7 @@ class ManagedCapture implements CaptureController {
             },
           }
         : {}),
+      companion: this.companion(),
     }
   }
 }
@@ -290,11 +305,63 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
       return async () => { await probe.release() }
     }
 
+  // Browser companion intake (ADR 0007). It cannot live on the DSH webserver:
+  // those routes sit behind a session auth an extension cannot present, so the
+  // plugin owns a loopback listener with its own pairing token.
+  const companionTokens = new CompanionTokenStore(history.db)
+  const companionIntake = new CompanionIntake({
+    tokens: companionTokens,
+    ...(config.companionPort === undefined
+      ? {}
+      : { port: config.companionPort }),
+    deliver: async (payload) => {
+      // Pause means nothing new is recorded — for the companion exactly as for
+      // the Accessibility collector.
+      const snapshot = manager?.snapshot().state
+      if (!enabled || !ownsCapture || snapshot?.state !== 'running') {
+        return false
+      }
+      return ingestion.ingest(companionObservation(payload))
+    },
+  })
+  let companionState: NonNullable<
+    ComputerHistoryState['companion']
+  > = {
+    listening: false,
+    paired: companionTokens.state().paired,
+    reason: 'companion intake not started',
+  }
+  void companionIntake.start()
+    .then((port) => {
+      companionState = {
+        listening: true,
+        port,
+        paired: companionTokens.state().paired,
+      }
+    })
+    .catch((error: unknown) => {
+      companionState = {
+        listening: false,
+        paired: companionTokens.state().paired,
+        reason: error instanceof Error
+          ? error.message
+          : 'companion intake failed',
+      }
+    })
+  ctx.effect(() => async () => {
+    await companionIntake.stop()
+  })
+
   const backend = new LocalComputerHistoryBackend(
     episodes,
     policies,
     deletion,
-    new ManagedCapture(manager, enabled, () => ownsCapture),
+    new ManagedCapture(
+      manager,
+      enabled,
+      () => ownsCapture,
+      () => companionState,
+    ),
     {
       observationRetentionHours:
         OBSERVATION_RETENTION_MS / 3_600_000,

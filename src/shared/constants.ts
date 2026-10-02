@@ -158,6 +158,13 @@ export const PHASE1_ADAPTERS: readonly Phase1AdapterDefinition[] = [
   },
 ]
 
+/**
+ * The bundle id the browser companion reports. It belongs to the synthetic
+ * `browser` adapter and no real application carries it, so an Accessibility
+ * observation can never claim companion provenance.
+ */
+export const COMPANION_BUNDLE_ID = 'companion.browser'
+
 export const PHASE1_SUPPORTED_BUNDLE_IDS: readonly string[] =
   PHASE1_ADAPTERS.flatMap(adapter => [...adapter.bundleIds])
 
