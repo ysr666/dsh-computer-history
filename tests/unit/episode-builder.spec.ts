@@ -397,3 +397,58 @@ describe('deterministic episode builder', () => {
     )
   })
 })
+
+describe('document-less observations (Phase 1 validation, seq 1-2)', () => {
+  // The real-machine run that opened a file in VS Code produced:
+  //   seq 1  "Visual Studio Code"  no resource, no workspace
+  //   seq 2  "normal-text.html"    no resource, no workspace
+  //   seq 3  "normal-text.html"    resource file:///…/normal-text.html
+  // The first two are stored as evidence but anchor no episode: at that moment
+  // the collector had not read a document yet, and the episode must not claim
+  // a workspace it never observed. These tests pin that decision; T2.0-7 owns
+  // the question of whether such an early observation should later be adopted
+  // by the episode its window turns out to belong to.
+  it('keeps an early document-less observation out of the episode its successor anchors', () => {
+    const episodes = buildEpisodes([
+      observation({ id: 1, atMs: 1_000 }),
+      observation({
+        id: 2,
+        atMs: 6_000,
+        workspace: 'alpha',
+        resource: 'file:///alpha/src/normal-text.html',
+      }),
+    ])
+
+    expect(episodes).toHaveLength(1)
+    const episode = episodes[0]!
+    expect(episode.observationIds).toEqual([2])
+    expect(episode.startedAtMs).toBe(6_000)
+    expect(episode.workspace?.root).toBe('/alpha')
+    expect(episode.resources.map(item => item.canonicalUri)).toEqual([
+      'file:///alpha/src/normal-text.html',
+    ])
+  })
+
+  it('treats a document-less observation inside an episode as a detour', () => {
+    const episodes = buildEpisodes([
+      observation({
+        id: 1,
+        atMs: 1_000,
+        workspace: 'alpha',
+        resource: 'file:///alpha/src/provider.ts',
+      }),
+      observation({ id: 2, atMs: 4_000 }),
+      observation({
+        id: 3,
+        atMs: 9_000,
+        workspace: 'alpha',
+        resource: 'file:///alpha/src/provider.ts',
+      }),
+    ])
+
+    expect(episodes).toHaveLength(1)
+    // The middle observation is not silently promoted into the episode: it
+    // marks a detour window and stays evidence-only.
+    expect(episodes[0]!.observationIds).toEqual([1, 3])
+  })
+})

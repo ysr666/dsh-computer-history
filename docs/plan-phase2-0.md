@@ -133,20 +133,25 @@ must be recorded as such.
 
 ## T2.0-5 — VS Code workspace attribution stability
 
-**Goal:** stop losing the workspace root when the first observation of a window
-arrives before `kAXDocument` is readable (Phase 1 validation saw exactly that:
-`collector_seq=2` had a title and no workspace, `seq=3` had both).
+**Goal (corrected during execution):** understand what happens when a window's
+first observations arrive before `kAXDocument` is readable, and pin the answer.
 
-**Write scope:** `src/host/ingestion/ingestion-service.ts`,
-`src/host/resume/` (workspace resolver), `tests/integration/ingestion.spec.ts`.
+The original goal assumed a defect ("stop losing the workspace root"). The
+evidence says otherwise: the document-less observations are stored as evidence
+and anchor no episode, which is the documented design, and the acceptance as
+first written was already met by existing behaviour. See
+`docs/validation-phase2-0.md` T2.0-5 for the real rows.
 
-**Deliverable:** attribution derives from document/root when present and is
-retried on the next observation of the same window instead of being frozen as
-`undefined`.
+**Write scope:** `tests/unit/episode-builder.spec.ts` (the pinning tests),
+`docs/validation-phase2-0.md`.
 
-**Acceptance:** an integration test feeds a document-less observation followed
-by a document-bearing one and asserts the second is attributed; a real-machine
-re-run records both observations in the report.
+**Deliverable:** tests that pin the two cases (a document-less observation does
+not join the episode its successor anchors; a document-less observation inside
+an episode is a detour), and the adoption question handed to T2.0-7 with the
+real data.
+
+**Acceptance:** `pnpm test` green with the two new cases; the real-machine rows
+recorded in the validation report.
 
 **Depends on:** T2.0-0.
 
@@ -183,10 +188,17 @@ surface instead of producing one episode each.
 **Write scope:** `src/host/episodes/builder.ts`,
 `tests/unit/episode-*.spec.ts`, `scripts/verify/unanchored-metric.mjs`.
 
+**Also decide (handed over from T2.0-5):** whether an early document-less
+observation should be adopted by the episode its window later turns out to
+belong to (fidelity) or stay evidence-only (no inference). Real data and the
+current pinned semantics are in `docs/validation-phase2-0.md` T2.0-5.
+
 **Acceptance:** unit tests for the aggregation boundary (same app+surface
 merges; a resource-bearing observation still starts/extends a resource
 episode); a scripted 30-minute session reports the unanchored rate as a number
-recorded in the report, to be compared after every later adapter lands.
+recorded in the report, to be compared after every later adapter lands; and the
+adoption question is answered in writing with the tests that follow from the
+answer.
 
 **Depends on:** T2.0-0.
 
@@ -286,5 +298,6 @@ Browser companion (2.1), semantic summaries and work threads (2.2), UI/audit
 | T2.0-3 Xcode adapter | done | registry + shared table + union; real Xcode 27.0 probe recorded in `docs/adapters.md` (`adapter=xcode`, `document=file://…/sample.swift`); policy-compilation test updated for the new supported bundle; 208/208 |
 | T2.0-4 Word + WPS adapters | partial | Word: `adapter=word` + `document=file://…/sample.rtf`; WPS: `adapter=wps`, no document (`-25212`), title-only rows; both recorded in `docs/adapters.md`. Notes deliberately unmeasured (shows the user's real notes); Obsidian pending download |
 | T2.0-2 JetBrains family | blocked on ADR 0006 | measured: IntelliJ platform returns an unqueryable focused element (`-25202` on role/subrole/attribute list) while the window reads fine, so the fail-closed rule drops everything. ADR 0006 (proposed) offers a per-adapter `window-only` declaration; conservative default kept meanwhile. `ax-probe --attributes` added to make the distinction measurable |
-| T2.0-5 … T2.0-11 | open | — |
+| T2.0-5 document-less observations | done (diagnosis corrected) | real e2e rows show seq 1-2 are evidence-only orphans by design; the original acceptance was already met, so the task was amended to pin the semantics with two tests (210 green) and to hand the fidelity question to T2.0-7 |
+| T2.0-6 … T2.0-11 | open | — |
 
