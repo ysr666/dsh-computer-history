@@ -283,3 +283,52 @@ say.
 `docs/release.md` still documents the checkout install as the verified path and
 states that copying the tarball in leaves the fiber unstarted, with the evidence
 above - the phase's whole point is that a release document says what was measured.
+
+### T2.7-4, fourth attempt: two hypotheses disproven, and the boundary named
+
+The peer hypothesis was tested rather than written down as if confirmed, and it is
+**wrong**:
+
+```text
+tarball at ~/.dsh/profiles/desktop/node_modules/dsh-computer-history
+  with node_modules symlinked beside it (cordis, dsh-agent, dsh-atomic-write)
+  → entry created, fiber.state = none      (not 'failed': never started)
+then declared in the profile - dependencies += and bundles += the package
+  → entry recreated, fiber.state = none again
+checkout copy at the same path (junction to the repository)
+  → [active]
+```
+
+So it is not the missing files (lib and manifest are byte-identical), not the
+missing peers (providing them changes nothing), and not the profile declaration
+either. What fits is the install tool's own note while doing exactly this:
+*"restart 后由 bundles 列表正常装配"* - a package declared in the profile is
+assembled **at Host startup**, while the runtime path that starts a plugin is the
+development one.
+
+**That is as far as this session can go, and the boundary is the point.** The Host
+carrying this GUI is the session itself, so the restart that would settle it is not
+something I can perform; and claiming the artifact starts because the declaration
+says it will is exactly the failure this phase exists to prevent.
+
+| claim | evidence |
+|---|---|
+| packing produces a complete artifact | tarball contents, byte-identical `lib/`, manifest match |
+| a copy in the profile does not start at runtime | `fiber.state = none`, three ways |
+| a checkout install starts | `[active]`, this phase and every earlier one |
+| a declared bundle is assembled at startup | the install tool's report, and `none` at runtime |
+
+**Next probe, named:** restart the Host once with the package declared, then read
+that entry's fiber state. If it starts, the release document's install step is
+"declare it and restart"; if it does not, the artifact has a real defect and
+`entry._initTask` is where the error lives - the one accessor my three probes never
+managed to read.
+
+`docs/release.md` therefore documents the verified checkout install, states plainly
+that the tarball path is not verified with what was measured, and covers upgrade and
+rollback - including that a rollback across a migration is not merely a code
+revert.
+
+Environment restored: the profile's `dependencies`/`bundles` entries removed, the
+installed directory deleted, the patch residue cleared, the store symlink and every
+`/tmp/dsh-ch-27*` directory removed, the tarball left in place for the next probe.
