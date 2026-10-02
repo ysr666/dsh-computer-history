@@ -86,6 +86,12 @@ implements ComputerHistoryServiceContract {
     private readonly pairingTokens?: CompanionTokenStore,
     private readonly semanticOptIns?: SemanticOptInStore,
     private readonly db?: DatabaseSync,
+    /**
+     * A callback rather than the ingestion service itself: the backend needs one
+     * number out of it, and a callback keeps the dependency to one function.
+     * Appended last so no existing construction moves.
+     */
+    private readonly refusalCounts?: () => ReadonlyMap<string, number>,
   ) {
     this.now = config.now ?? Date.now
   }
@@ -223,6 +229,11 @@ implements ComputerHistoryServiceContract {
   public getState(): ComputerHistoryState {
     return {
       ...this.capture.getState(),
+      // Why things were refused, when the host can tell us: a bare count is a
+      // number, and this is the sentence a new installation needs.
+      ...(this.refusalCounts
+        ? { refusedByReason: Object.fromEntries(this.refusalCounts()) }
+        : {}),
       observationRetentionHours:
         this.config.observationRetentionHours,
       episodeRetentionDays:

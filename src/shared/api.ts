@@ -88,6 +88,11 @@ export interface ComputerHistoryState {
     | 'permission-required'
     | 'degraded'
   readonly accessibilityTrusted: boolean
+  /**
+   * How many observations were refused, by reason. The product says "nothing is
+   * allowed yet"; this is the same fact with the evidence attached.
+   */
+  readonly refusedByReason?: Record<string, number>
   readonly reason?: string
   /**
    * The browser companion's intake state (ADR 0007). `listening: false` with a

@@ -449,3 +449,25 @@ Option 1 is the one that matches the existing shape, and it is the next change. 
 then the sentence the panel can say stops at "nothing is allowed yet"; it cannot yet
 add "and 12 observations have been refused because of it", which is the same fact with
 the evidence attached.
+
+### The wiring, part done and the last line named
+
+Two of the three pieces are in and safe, because the new constructor parameter is
+optional and nothing passes it yet:
+
+```text
+LocalComputerHistoryBackend   accepts refusalCounts?: () => ReadonlyMap<string, number>
+                              (a callback, not the service: the backend needs one
+                              number out of it, and a callback keeps the dependency
+                              to one function)
+getState()                    spreads `refusedByReason` into the state when the
+                              callback is present
+ComputerHistoryState          carries refusedByReason?: Record<string, number>
+```
+
+The one line left is at `src/host/plugin.ts:369`, in the
+`new LocalComputerHistoryBackend(...)` argument list: pass
+`() => ingestion.refusalCounts()` as the **final** argument. The list is long and the
+construction spans about twenty lines, so it is named here rather than edited blind -
+this phase has already mangled two files by guessing at anchors, and neither of those
+mistakes was worth the round it cost.
