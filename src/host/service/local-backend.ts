@@ -1,4 +1,6 @@
 import type {
+  PairingRotation,
+  PairingState,
   ComputerHistoryServiceContract,
   ComputerHistoryState,
   DeleteHistoryRequest,
@@ -14,6 +16,7 @@ import type {
   ResumeResolution,
   SearchEpisodesRequest,
 } from '../../shared/index.js'
+import type { CompanionTokenStore } from '../companion/token-store.js'
 import { resolveResume } from '../resume/index.js'
 import { phase1AdapterForBundle } from '../ingestion/index.js'
 import { DeletionService } from '../retention/index.js'
@@ -51,6 +54,7 @@ implements ComputerHistoryServiceContract {
     private readonly deletion: DeletionService,
     private readonly capture: CaptureController,
     private readonly config: LocalBackendConfig,
+    private readonly pairingTokens?: CompanionTokenStore,
   ) {
     this.now = config.now ?? Date.now
   }
@@ -185,6 +189,28 @@ implements ComputerHistoryServiceContract {
         this.config.episodeRetentionDays,
       autoResume: this.config.autoResume,
     }
+  }
+
+  public pairing(): PairingState {
+    const state = this.pairingTokens?.state() ?? { paired: false }
+    const companion = this.capture.getCompanionState?.()
+    return {
+      ...state,
+      listening: companion?.listening ?? false,
+      ...(companion?.port === undefined ? {} : { port: companion.port }),
+    }
+  }
+
+  /**
+   * Rotate the companion token. The caller must show it once: only the digest
+   * is stored (ADR 0007), so it cannot be read back later.
+   */
+  public rotatePairing(): PairingRotation {
+    if (!this.pairingTokens) {
+      throw new Error('companion pairing is unavailable')
+    }
+    const token = this.pairingTokens.rotate(this.now())
+    return { ...this.pairing(), token }
   }
 
   public listPolicyRules(): readonly PolicyRule[] {

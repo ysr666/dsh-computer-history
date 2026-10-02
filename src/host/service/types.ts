@@ -7,8 +7,15 @@ export interface CaptureController {
   resume(): Promise<void>
   getState(): Pick<
     ComputerHistoryState,
-    'enabled' | 'capture' | 'accessibilityTrusted' | 'reason' | 'collector'
+    | 'enabled'
+    | 'capture'
+    | 'accessibilityTrusted'
+    | 'reason'
+    | 'collector'
+    | 'companion'
   >
+  /** Present on the real controller; used by the pairing route. */
+  getCompanionState?(): NonNullable<ComputerHistoryState['companion']>
 }
 
 export interface LocalBackendConfig {

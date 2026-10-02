@@ -10,6 +10,8 @@ import type {
   EpisodeDetail,
   EpisodeId,
   EpisodeSummary,
+  PairingRotation,
+  PairingState,
   PolicyRule,
   PolicySnapshot,
   PolicyUpdate,
@@ -86,6 +88,14 @@ export class ComputerHistoryService
 
   public getState(): ComputerHistoryState {
     return this.backend.getState()
+  }
+
+  public pairing(): PairingState {
+    return this.backend.pairing()
+  }
+
+  public rotatePairing(): PairingRotation {
+    return this.backend.rotatePairing()
   }
 
   public listPolicyRules(): readonly PolicyRule[] {

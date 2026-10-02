@@ -96,6 +96,38 @@ export function registerHistoryApi(ctx: Context): void {
   }))
 
   ctx.effect(() => ctx.connection.fetch.register({
+    path: HISTORY_API_PREFIX + '/pairing',
+    methods: ['GET'],
+    requestBody: 'buffered',
+    fetch: () => {
+      try {
+        return Promise.resolve(json(history.pairing()))
+      } catch {
+        return Promise.resolve(textResponse('Request failed.', 500))
+      }
+    },
+  }))
+
+  ctx.effect(() => ctx.connection.fetch.register({
+    path: HISTORY_API_PREFIX + '/pairing/rotate',
+    methods: ['POST'],
+    requestBody: 'buffered',
+    fetch: () => {
+      try {
+        // The token is returned once and never stored in clear: the response
+        // must not be cached anywhere between here and the panel.
+        return Promise.resolve(json(history.rotatePairing()))
+      } catch (error) {
+        const message = error instanceof Error ? error.message : ''
+        if (message === 'companion pairing is unavailable') {
+          return Promise.resolve(textResponse(message, 503))
+        }
+        return Promise.resolve(textResponse('Request failed.', 500))
+      }
+    },
+  }))
+
+  ctx.effect(() => ctx.connection.fetch.register({
     path: HISTORY_API_PREFIX + '/recent',
     methods: ['GET'],
     requestBody: 'buffered',

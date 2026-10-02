@@ -159,3 +159,32 @@ verification. `dev_reload_package` fixed it, and the checks that exposed it
 (`/state`, `lsof`, `pragma user_version`) are now part of the recipe rather than
 something to remember. A live measurement after a build is only meaningful
 after the reload.
+
+## T2.1-1b — pairing routes
+
+`GET /pairing` reports the pairing state plus whether the intake is listening
+and on which port; `POST /pairing/rotate` issues a new token and returns it
+once (the response is `no-store`, and only a digest is stored).
+
+Live, against the running Host:
+
+```text
+GET  /pairing (unpaired)      {"paired":false,"listening":false}
+POST /pairing/rotate          {"paired":true,"listening":false,"tokenChars":43}
+POST /companion/observation   with token #1 → 201 {"stored":true}
+POST /pairing/rotate          token #2 issued
+POST with token #1            401 {"error":"pairing token required"}
+POST with token #2            201 {"stored":true}
+stored rows                   seq 1 and seq 3, provider companion
+```
+
+The absent seq 2 is the point: the rejected attempt stored nothing, and both
+surviving rows carry companion provenance. That is the "token rotated" cell of
+the privacy matrix, measured at the API level; T2.1-6 repeats it with the
+extension in Chrome.
+
+**A state that lied, caught by reading its own output:** the first run reported
+`"listening":false` while the intake was accepting requests on 19388. The
+optional `getCompanionState()` in the capture-controller interface had no
+implementation, so the accessor silently fell back to the default. It exists now,
+and `GET /pairing` and `/state.companion` both report the live listener.

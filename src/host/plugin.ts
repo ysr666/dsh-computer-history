@@ -95,6 +95,16 @@ class ManagedCapture implements CaptureController {
   public async resume(): Promise<void> {
     await this.requireOwnedManager().resume()
   }
+  /**
+   * The companion listener's state, so the pairing route reports where the
+   * intake actually listens instead of assuming it started.
+   */
+  public getCompanionState(): NonNullable<
+    ComputerHistoryState['companion']
+  > {
+    return this.companion()
+  }
+
   public getState(): Pick<
     ComputerHistoryState,
     | 'enabled'
@@ -384,6 +394,7 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
         : {}),
       onHistoryChanged: () => { ingestion.reseed() },
     },
+     companionTokens,
   )
 
   // Teardown is registered immediately, before anything that can throw,

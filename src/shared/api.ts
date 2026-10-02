@@ -51,6 +51,19 @@ export interface PolicyUpdate {
   readonly rules: readonly PolicyRule[]
 }
 
+export interface PairingState {
+  readonly paired: boolean
+  readonly createdAtMs?: number
+  /** Whether the companion intake is listening, and on which loopback port. */
+  readonly listening: boolean
+  readonly port?: number
+}
+
+export interface PairingRotation extends PairingState {
+  /** Returned once; the store keeps only its digest. */
+  readonly token: string
+}
+
 export interface ComputerHistoryState {
   readonly enabled: boolean
   readonly capture:
@@ -82,6 +95,12 @@ export interface ComputerHistoryState {
 }
 
 export interface ComputerHistoryServiceContract {
+  /** Companion pairing state (ADR 0007). */
+  pairing(): PairingState
+
+  /** Rotate the pairing token; the token is returned once. */
+  rotatePairing(): PairingRotation
+
   recent(
     request?: RecentEpisodesRequest,
     signal?: AbortSignal,
