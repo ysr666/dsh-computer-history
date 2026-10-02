@@ -41,6 +41,26 @@ Completed on 2026-10-01.
 
 Normal turns receive no Computer History payload. Agent scopes receive three query tools. Experimental automatic resume only activates for deterministic resume intent and remains off by default. A hint is bounded, marked as untrusted observation, and instructs the Agent to reopen authoritative sources before acting.
 
+## Phase 2 — Daily-driver alpha (planned)
+
+Draft plan: `docs/plan-phase2.md`. Boundary decisions: ADR 0002 stays
+(metadata-only); ADR 0004 (proposed) governs semantic summaries.
+
+1. **2.0 Quality and trust base** — adapter coverage and resource attribution
+   (JetBrains/Xcode/Notes/Obsidian/Word, Cursor Agents window, unanchored
+   aggregation) + encrypted store and a written threat model.
+2. **2.1 Browser companion** — Chrome MV3 extension with incognito fail-closed
+   and site-level allow/deny; retires the "browser deferred" clause below with
+   evidence.
+3. **2.2 Semantic layer** — local-first summaries with observation citations,
+   Work Threads over the existing `threadKey`, and a usable opt-in ResumeHint.
+4. **2.3 UI and audit** — timeline, per-app/per-site controls, export/audit,
+   redaction preview; closes the Phase 1 findings (F13, unanchored
+   presentation, allow/forget ergonomics).
+
 ## Deferred
 
-Chrome companion, semantic/model enrichment, Work Thread intelligence, shell/editor companions, Windows/Linux collectors, and always-on background model processing are intentionally outside Phase 1.
+Semantic/model enrichment beyond local-first summaries, Work Thread
+intelligence beyond 2.2, shell/editor companions, Windows/Linux collectors,
+and always-on background *remote* model processing stay outside Phase 2.
+
