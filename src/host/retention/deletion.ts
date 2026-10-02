@@ -491,6 +491,7 @@ export class DeletionService {
       endedAtMs: episode.endedAtMs,
       startReason:
         episode.boundary.startReason,
+      summaryObservationIds: episode.summaryObservationIds,
       endReason:
         episode.boundary.endReason
         ?? 'manual-rebuild',

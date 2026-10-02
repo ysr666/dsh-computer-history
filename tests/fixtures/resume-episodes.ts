@@ -20,6 +20,7 @@ function episode(input: {
 }): EpisodeSummary {
   return {
     id: EpisodeId(input.id),
+    summaryObservationIds: [1 as never],
     startedAtMs: input.endedAtMs - 1_000,
     endedAtMs: input.endedAtMs,
     boundary: {

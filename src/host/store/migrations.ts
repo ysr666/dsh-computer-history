@@ -1,17 +1,27 @@
 import type { DatabaseSync } from 'node:sqlite'
 import { migration0001 } from './migrations/0001-initial.js'
 import { migration0002 } from './migrations/0002-companion-pairing.js'
+import { migration0003 } from './migrations/0003-semantic-citations.js'
 
 export interface Migration {
   readonly version: number
   readonly name: string
   readonly checksum: string
+  /**
+   * Set by a migration that rebuilds a table other tables reference. SQLite's
+   * documented rebuild procedure runs with foreign keys disabled, and the
+   * pragma is a no-op inside a transaction, so the runner has to toggle it
+   * around this migration's own transaction. Integrity is re-checked before
+   * the transaction commits.
+   */
+  readonly rebuildsReferencedTable?: boolean
   up(db: DatabaseSync): void
 }
 
 const MIGRATIONS: readonly Migration[] = [
   migration0001,
   migration0002,
+  migration0003,
 ]
 
 function schemaVersion(db: DatabaseSync): number {
@@ -73,8 +83,10 @@ export function migrate(
   for (const migration of MIGRATIONS) {
     if (migration.version <= initial) continue
 
-    db.exec('BEGIN IMMEDIATE')
+    const foreignKeysOff = migration.rebuildsReferencedTable === true
+    if (foreignKeysOff) db.exec('PRAGMA foreign_keys = OFF')
     try {
+      db.exec('BEGIN IMMEDIATE')
       // Another Host may have migrated this shared
       // DSH_HOME database while this connection waited
       // for the writer lock. Re-read under BEGIN IMMEDIATE
@@ -91,6 +103,16 @@ export function migrate(
       }
 
       migration.up(db)
+      if (foreignKeysOff) {
+        // A rebuild that lost a child row would leave the database quietly
+        // inconsistent; refuse to commit instead.
+        const violations = db.prepare('PRAGMA foreign_key_check').all()
+        if (violations.length > 0) {
+          throw new Error(
+            `migration ${migration.version} left ${violations.length} foreign key violation(s)`,
+          )
+        }
+      }
       db.prepare(`
         INSERT INTO schema_migrations(
           version,
@@ -113,6 +135,8 @@ export function migrate(
         db.exec('ROLLBACK')
       }
       throw error
+    } finally {
+      if (foreignKeysOff) db.exec('PRAGMA foreign_keys = ON')
     }
   }
 

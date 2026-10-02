@@ -125,6 +125,9 @@ describe('episode store', () => {
       threadKey: 'workspace:workspace-1',
       summaryKind: 'deterministic',
       summary: 'Worked in repo.',
+      // A summary's citations are the observations it was derived from
+      // (ADR 0004 §5); the store derives them from the episode's own set.
+      summaryObservationIds: [firstObservation, secondObservation],
       lastStrongResource: {
         kind: 'file',
         canonicalUri: 'file:///repo/src/other.ts',

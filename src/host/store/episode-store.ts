@@ -42,6 +42,12 @@ export interface PersistEpisodeOptions {
 
 export interface PersistEpisodeInput {
   readonly id: EpisodeId
+  /**
+   * The observations the summary was derived from (ADR 0004 §5). Defaults to
+   * this episode's own observations, which is what the deterministic builder
+   * means; a model provider may cite a subset.
+   */
+  readonly summaryObservationIds?: readonly ObservationId[]
   readonly startedAtMs: number
   readonly endedAtMs: number
   readonly startReason: EpisodeBoundaryReason
@@ -141,7 +147,11 @@ function episodeState(value: string): EpisodeState {
 }
 
 function summaryKind(value: string): EpisodeSummaryKind {
-  if (value === 'deterministic' || value === 'model') return value
+  if (
+    value === 'deterministic'
+    || value === 'local'
+    || value === 'remote'
+  ) return value
   throw new Error(`invalid episode summary kind: ${value}`)
 }
 
@@ -396,6 +406,24 @@ export class EpisodeStore {
       }
 
       commit()
+      // Citations are replaced wholesale: a summary's evidence is whatever the
+      // builder says it is now, and a stale citation would claim support the
+      // summary no longer has (ADR 0004 §5).
+      this.db.prepare(
+        'DELETE FROM episode_summary_citations WHERE episode_id = ?',
+      ).run(input.id)
+      const cite = this.db.prepare(`
+        INSERT OR IGNORE INTO episode_summary_citations(
+          episode_id,
+          observation_id
+        ) VALUES (?, ?)
+      `)
+      const citations = input.summaryObservationIds
+        ?? input.observationIds
+      for (const observationId of citations) {
+        cite.run(input.id, Number(observationId))
+      }
+
     } catch (error) {
       if (ownsTransaction && this.db.isTransaction) {
         this.db.exec('ROLLBACK')
@@ -685,6 +713,14 @@ export class EpisodeStore {
       ...optionalThreadKey(row),
       summaryKind: summaryKind(stringValue(row, 'summary_kind')),
       summary: stringValue(row, 'summary_text'),
+      summaryObservationIds: (
+        this.db.prepare(`
+          SELECT observation_id
+          FROM episode_summary_citations
+          WHERE episode_id = ?
+          ORDER BY observation_id
+        `).all(id) as Array<{ observation_id: number }>
+      ).map(citation => citation.observation_id as ObservationId),
       ...(lastStrongResource ? { lastStrongResource } : {}),
       resources,
       surfaces,

@@ -274,6 +274,9 @@ function finishEpisode(
       ? { threadKey: episode.threadKey }
       : {}),
     summaryKind: 'deterministic',
+    // The deterministic summary is a function of exactly these observations,
+    // so they are its citations.
+    summaryObservationIds: episode.observationIds,
     summary: renderDeterministicSummary({
       ...(workspace?.title
         ? { workspaceTitle: workspace.title }

@@ -364,6 +364,7 @@ export class IngestionService {
       startedAtMs: episode.startedAtMs,
       endedAtMs: episode.endedAtMs,
       startReason: episode.boundary.startReason,
+      summaryObservationIds: episode.summaryObservationIds,
       endReason:
         episode.boundary.endReason ?? 'timeout',
       ...(episode.workspace
