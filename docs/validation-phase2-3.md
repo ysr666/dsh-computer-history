@@ -303,3 +303,40 @@ running plugin's periodic work reacted to an episode whose resource cannot be
 canonicalised. That is the lead for the next round, and it is now a question
 about the *sweep and repair path with an unresolvable resource*, not about
 `replace()`.
+
+### T2.3-5, third attempt: the buttons render, the state change is still unproven
+
+The right recipe fixed the two earlier blockers. A **real file on disk** matters
+because the ingestion path canonicalises a file resource and fails closed when an
+existing prefix is a symlink — and macOS makes `/tmp` and `/var` symlinks — so a
+seed pointing at a path nobody created is a seed the pipeline would never
+produce. With `.verify-scratch/report.md` created for real, and the allow rule in
+place *before* seeding:
+
+```text
+timeline        Timeline | Wrote report.md in demo.
+click episode   CLICKED
+detail          Why was this recorded? | Recorded because a supported application
+                became active; and it ended because the machine went idle;
+                2 observations cited; 1 resource; 1 application; policy revision
+                0; confidence 0.80.
+controls        Allow com.microsoft.VSCode | Forget com.microsoft.VSCode
+click Allow     CLICKED
+```
+
+So the per-episode controls **do** render — the piece that was missing in the two
+earlier attempts — the detail's counts are real (2/1/1), and a click reaches the
+panel's own action path.
+
+**What is still not proven is that a click changes stored state**, and the reason
+is my own setup: the app was already allowed before the click, so "clicked Allow"
+and "did nothing" produce the same policy. The variant that would decide it —
+clicking **Forget** — left the policy at revision 4 with the rule still `allow`
+and no entry in `deletion_log`; and my own output filter (`controls|forget|saved`)
+hid that run's click line, which is labelled `allow:`, so I cannot even say from
+that log whether the click fired.
+
+The next attempt is therefore a clean one: keep the allow rule long enough to
+seed, then click **Forget** and show the rule disappear or the deletion appear,
+not filtered by a grep that was written for a different script. Until then the
+click evidence stays **unproven**, and this section says so.
