@@ -333,15 +333,18 @@ describe('provenance-aware deletion', () => {
   })
 })
 
-describe('deletion coherence for summary citations (ADR 0004 §5)', () => {
-  function citations(db: ReturnType<typeof openTempDatabase>['db'], episodeId: EpisodeId) {
-    return (db.prepare(`
-      SELECT observation_id FROM episode_summary_citations
-      WHERE episode_id = ? ORDER BY observation_id
-    `).all(episodeId) as Array<{ observation_id: number }>)
-      .map(row => row.observation_id)
-  }
+function citations(
+  db: ReturnType<typeof openTempDatabase>['db'],
+  episodeId: EpisodeId,
+): number[] {
+  return (db.prepare(`
+    SELECT observation_id FROM episode_summary_citations
+    WHERE episode_id = ? ORDER BY observation_id
+  `).all(episodeId) as Array<{ observation_id: number }>)
+    .map(row => row.observation_id)
+}
 
+describe('deletion coherence for summary citations (ADR 0004 §5)', () => {
   it('keeps foreign keys enforced, which is what makes the cascade work', () => {
     // Migration 0003 rebuilds `episodes` with `PRAGMA foreign_keys = OFF`
     // (SQLite's documented procedure) and the runner turns it back on. If that
