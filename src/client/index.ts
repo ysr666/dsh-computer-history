@@ -33,6 +33,8 @@ function HistoryPage(): React.ReactElement {
   const [policy, setPolicy] = useState<PolicySnapshot>()
   const [bundleId, setBundleId] = useState('')
   const [confirmDeleteAll, setConfirmDeleteAll] = useState(false)
+  const [companionToken, setCompanionToken] = useState<string>()
+  const [siteOrigin, setSiteOrigin] = useState('')
   const [error, setError] = useState<string>()
 
   const refresh = useCallback(async () => {
@@ -131,6 +133,120 @@ function HistoryPage(): React.ReactElement {
     await refresh()
   }
 
+  const rotateCompanionToken = async (): Promise<void> => {
+    // The token exists in clear only in this response: the Host keeps a digest
+    // (ADR 0007), so this is the one moment it can be copied.
+    const result = await api<{ token: string }>(
+      '/pairing/rotate',
+      { method: 'POST' },
+    )
+    setCompanionToken(result.token)
+    await refresh()
+  }
+
+  const setSiteRule = async (action: 'allow' | 'deny'): Promise<void> => {
+    const value = siteOrigin.trim().replace(/\/+$/, '')
+    if (!/^https?:\/\/[^/?#]+$/.test(value) || !policy) return
+    const now = Date.now()
+    const rules = policy.rules.filter(rule =>
+      !(rule.dimension === 'resource' && rule.pattern === value),
+    )
+    rules.push({
+      id: ('site:' + value) as never,
+      dimension: 'resource',
+      action,
+      matcher: 'prefix',
+      pattern: value,
+      builtIn: false,
+      createdAtMs: now,
+      updatedAtMs: now,
+    })
+    await api('/policy', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ mode: 'include-only', rules }),
+    })
+    setSiteOrigin('')
+    await refresh()
+  }
+
+  const companion = state?.companion
+
+  const companionSection = React.createElement(
+    'section',
+    {
+      style: {
+        border: '1px solid #d0d0d0',
+        borderRadius: 8,
+        padding: 12,
+        marginBottom: 20,
+      },
+    },
+    React.createElement('h2', { style: { margin: '0 0 8px' } }, 'Browser companion'),
+    React.createElement(
+      'p',
+      null,
+      !companion
+        ? 'Companion state unavailable on this Host.'
+        : companion.listening
+          ? `Listening on 127.0.0.1:${companion.port} · ${companion.paired ? 'paired' : 'not paired yet'}`
+          : `Companion unavailable${companion.reason ? ': ' + companion.reason : ''}`,
+    ),
+    React.createElement(
+      'div',
+      { style: { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' } },
+      React.createElement(
+        'button',
+        { type: 'button', onClick: () => { runAction(rotateCompanionToken) } },
+        companion?.paired ? 'Rotate pairing token' : 'Create pairing token',
+      ),
+      companionToken
+        ? React.createElement(
+            'code',
+            {
+              style: {
+                padding: '4px 8px',
+                background: '#f2f2f2',
+                borderRadius: 4,
+                userSelect: 'all',
+              },
+            },
+            companionToken,
+          )
+        : null,
+    ),
+    companionToken
+      ? React.createElement(
+          'p',
+          { style: { color: '#555' } },
+          'Copy this into the extension’s options now — only a digest is stored, so it cannot be shown again.',
+        )
+      : null,
+    React.createElement(
+      'div',
+      { style: { display: 'flex', gap: 8, alignItems: 'center', marginTop: 12 } },
+      React.createElement('input', {
+        type: 'text',
+        placeholder: 'https://example.com',
+        value: siteOrigin,
+        onChange: (event: { target: { value: string } }) => {
+          setSiteOrigin(event.target.value)
+        },
+        style: { flex: 1, padding: 6 },
+      }),
+      React.createElement(
+        'button',
+        { type: 'button', onClick: () => { runAction(() => setSiteRule('allow')) } },
+        'Allow site',
+      ),
+      React.createElement(
+        'button',
+        { type: 'button', onClick: () => { runAction(() => setSiteRule('deny')) } },
+        'Deny site',
+      ),
+    ),
+  )
+
   return React.createElement(
     'main',
     { style: { padding: 24, maxWidth: 960, margin: '0 auto' } },
@@ -152,6 +268,7 @@ function HistoryPage(): React.ReactElement {
           'Status detail: ' + state.reason,
         )
       : null,
+    companionSection,
     React.createElement(
       'div',
       { style: { display: 'flex', gap: 8, marginBottom: 20 } },

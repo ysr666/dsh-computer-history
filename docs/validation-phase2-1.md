@@ -285,3 +285,43 @@ T2.1-5 (panel controls) is not done: the token rotation and the listening state
 are reachable over the API and through the extension's options page, but the
 panel itself does not yet show them or offer per-origin allow/deny shortcuts.
 Recorded here rather than implied by the matrix being green.
+
+## T2.1-5 — panel controls
+
+The panel gained a **Browser companion** section: the listening state and port
+(or the reason it is unavailable), a token button that creates or rotates the
+pairing token, the token shown once with the sentence that says why, and an
+origin field with *Allow site* / *Deny site* that writes a `resource` rule.
+
+Measured in the real GUI (headless Chrome over CDP with the session cookie, the
+plugin injected, 2026-10-02). The sidebar entry is `◷ Computer History` inside
+the plugin menu; opening it renders:
+
+```text
+Browser companion | Listening on 127.0.0.1:19388 · not paired yet |
+Create pairing token | Allow site | Deny site
+```
+
+Clicking *Create pairing token* answered with a 43-character token and the hint
+
+```text
+rVhI9jRIDmKtwFxO-Pi5PlCGsQbo5QuIeMvN_TbwqxY |
+Copy this into the extension's options now — only a digest is stored, so it
+cannot be shown again.
+```
+
+The screenshot is `/tmp/dsh-panel-21.png` (reviewed): the sidebar highlights
+*Computer History*, the header reads `Capture: running · Accessibility: granted
+· Raw retention: 24h`, and the companion box sits above the existing
+pause/delete/refresh controls with the origin field and both site buttons.
+
+Three attempts failed before this one, which is worth recording because each
+failure looked like a rendering bug and was not:
+
+1. clicking any element whose text contained "Computer History" hit a chat
+   message in the conversation behind the sidebar;
+2. `#/main/computer-history`, `?panel=computer-history` and `#computer-history`
+   are not routes the shell answers;
+3. the clickable control is the `BUTTON[aria-label="插件"]` two levels above the
+   `sidebar.panellist` slot, and the panel entry only exists *after* that menu is
+   opened — so the successful sequence is two clicks, not one.
