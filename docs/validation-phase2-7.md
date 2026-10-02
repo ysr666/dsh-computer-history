@@ -207,3 +207,40 @@ exists to prevent.
 Environment restored: loader entry removed, junction and `~/.dsh/computer-history`
 deleted, `/tmp/dsh-ch-27-install` and the store directory removed, the tarball left
 in place for the next attempt.
+
+### T2.7-4, second attempt: the finding stands, and one of my probes did not
+
+Two things were checked, and the record needs both.
+
+**My first probe was unrepresentative.** Extracting the tarball to `/tmp` and
+importing the entry with plain `node` fails with
+`Cannot find package '@deepseek-ai/dsh-home-paths'` - but a working profile
+plugin (`dsh-context`) imports `@deepseek-ai/dsh-session` at runtime too, and the
+profile has no such package in its `node_modules`. The Host's loader provides
+that resolution itself, so a bare Node import says nothing about whether the
+artifact loads. (A symlink into the profile does not help either: Node resolves
+the real path first, which is why the error still named `/private/tmp/...`.)
+
+**The finding itself survives a fair test.** Installing the tarball as a real
+directory at `~/.dsh/profiles/desktop/node_modules/dsh-computer-history` - the
+shape a real install has, with a directory rather than a symlink - and creating
+the entry gives:
+
+```text
+repo copy, junction → repository      [active]
+packaged copy, real profile install   {"fiber":"no-fiber"}
+```
+
+So the packaged plugin does not start, twice, in two install shapes; the same tree
+loaded from a checkout does. `dsh-context` proves that importing DSH packages from
+a profile install is normal, so the cause is something about **this** package.
+
+**The next probe is named, not guessed.** The loader leaves an entry without a
+fiber when its import fails, and 2.6 showed where that error surfaces
+(`entry._error` / the created entry's fields). The comparison to run is the
+extracted package against the repository file by file - starting with what the
+`dsh` manifest names: the client entry, the preset, and anything the whitelist
+might have dropped even though `lib/` looks complete.
+
+`docs/release.md` will document the checkout install (verified) and state that
+the tarball path currently fails to start, with this evidence.
