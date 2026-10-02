@@ -1,5 +1,10 @@
 import * as vscode from 'vscode'
-import { buildEditorPayload, surfaceKindOf, type EditorMetadata } from './payload'
+import {
+  buildEditorPayload,
+  declaredIdentity,
+  surfaceKindOf,
+  type EditorMetadata,
+} from './payload'
 
 /**
  * The editor companion (ADR 0009).
@@ -61,6 +66,9 @@ async function send(): Promise<void> {
       },
       body: JSON.stringify(buildEditorPayload({
         metadata,
+        // What this extension says it is: the product the editor reports about
+        // itself, so one package serves every VS Code-based editor.
+        identity: declaredIdentity(vscode.env.appName),
         session,
         seq,
         observedAtMs: Date.now(),

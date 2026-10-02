@@ -46,6 +46,12 @@ declare module 'vscode' {
     readonly subscriptions: Disposable[]
   }
 
+  export interface Env {
+    readonly appName: string
+    readonly appHost: string
+  }
+
   export const workspace: Workspace
   export const window: Window
+  export const env: Env
 }

@@ -41,3 +41,44 @@ silently did nothing - the helper I meant to edit has different indentation than
 the pattern I matched - so two tests failed for a reason unrelated to the change.
 The report keeps it because it is the third time this session that an unasserted
 edit looked like success.
+
+## T2.8-3 — the extension declares itself
+
+`declaredIdentity(appName)` maps the product the editor reports about itself to an
+identity, so one package serves every VS Code-based editor: VS Code and Insiders
+to their real bundle ids, Cursor and Windsurf to theirs, and anything else to a
+readable id of its own (`com.dsh.editor.<slug>`) - which is the point of the
+general path, because a new editor then needs no Host release and the user decides
+whether to allow it like any other application.
+
+```text
+pnpm test extension-editor/tests/payload.spec.ts → 8 passed
+  known products map to the ids the allow-list uses
+  an unknown editor gets com.dsh.editor.some-new-editor, a blank name gets
+    com.dsh.editor.unknown
+  the identity travels in the payload, and the key set is asserted - which is what
+    Cursor would send, in the shape the intake tests prove the Host accepts
+node scripts/build-editor-extension.mjs → dsh-computer-history-editor.vsix
+pnpm verify → 316 tests, lint 0 warnings
+```
+
+### The live run did not happen, and the reason was mine
+
+I prepared the environment, rotated a token and launched VS Code - and every step
+downstream failed with `not found`. One check explains all of it:
+
+```text
+curl /api/computer-history/state → HTTP 404
+```
+
+**The plugin was never loaded.** My staged loader returned `{"ok":true}`
+unconditionally instead of checking that the entry existed, so a failed load looked
+like a successful one and I built a sixty-second live run on top of it. Nothing
+about the extension was tested or disproved; the run was simply invalid, and the
+result is recorded as "not run" rather than as a result.
+
+The fix for the harness is one line - report the entry count, not a constant - and
+the retry is the next attempt. Environment restored: VS Code quit, the user's
+settings restored from the backup taken before the token was written, the extension
+directory and the scratch workspace removed, the junction and the store symlink
+deleted, the profile patch residue cleared.

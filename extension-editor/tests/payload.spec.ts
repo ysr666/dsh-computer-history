@@ -3,6 +3,7 @@ import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   buildEditorPayload,
+  declaredIdentity,
   surfaceKindOf,
 } from '../src/payload'
 
@@ -11,6 +12,7 @@ const SOURCE_DIR = path.join(import.meta.dirname, '..', 'src')
 describe('editor companion payload (ADR 0009)', () => {
   it('carries exactly the editor metadata and the envelope', () => {
     const payload = buildEditorPayload({
+      identity: { bundleId: 'com.microsoft.VSCode', name: 'Visual Studio Code' },
       metadata: {
         workspaceRoot: '/Users/someone/Projects/demo',
         filePath: '/Users/someone/Projects/demo/src/main.ts',
@@ -23,8 +25,8 @@ describe('editor companion payload (ADR 0009)', () => {
       observedAtMs: 1_000,
     })
     expect(Object.keys(payload).toSorted()).toEqual([
-      'editorSession', 'filePath', 'languageId', 'observedAtMs', 'seq', 'source',
-      'surfaceKind', 'title', 'workspaceRoot',
+      'app', 'editorSession', 'filePath', 'languageId', 'observedAtMs', 'seq',
+      'source', 'surfaceKind', 'title', 'workspaceRoot',
     ])
     expect(payload.source).toBe('editor')
   })
@@ -40,6 +42,7 @@ describe('editor companion payload (ADR 0009)', () => {
       selection: 'secret selection',
     }
     const payload = buildEditorPayload({
+      identity: { bundleId: 'com.microsoft.VSCode', name: 'Visual Studio Code' },
       metadata: documentLike,
       session: 's',
       seq: 1,
@@ -78,5 +81,46 @@ describe('the extension never reads what ADR 0002 forbids', () => {
       }
     }
     expect(offenders).toEqual([])
+  })
+})
+
+describe('the identity an editor declares (ADR 0011)', () => {
+  it('maps known products to the id the allow-list uses', () => {
+    expect(declaredIdentity('Visual Studio Code')).toEqual({
+      bundleId: 'com.microsoft.VSCode',
+      name: 'Visual Studio Code',
+    })
+    expect(declaredIdentity('Cursor').bundleId).toBe('com.todesktop.230313mzl4w4u92')
+    expect(declaredIdentity('Windsurf').bundleId).toBe('com.exafunction.windsurf')
+  })
+
+  it('gives an unknown editor a readable id of its own', () => {
+    // The point of the general path: a new editor needs no Host release, and the
+    // user decides whether to allow it like any other application.
+    expect(declaredIdentity('Some New Editor')).toEqual({
+      bundleId: 'com.dsh.editor.some-new-editor',
+      name: 'Some New Editor',
+    })
+    expect(declaredIdentity('  ').bundleId).toBe('com.dsh.editor.unknown')
+  })
+
+  it('carries the identity into the wire payload', () => {
+    const payload = buildEditorPayload({
+      identity: declaredIdentity('Cursor'),
+      metadata: { workspaceRoot: '/repo', filePath: '/repo/src/main.ts' },
+      session: 's',
+      seq: 1,
+      observedAtMs: 1,
+    })
+    expect(payload.app).toEqual({
+      bundleId: 'com.todesktop.230313mzl4w4u92',
+      name: 'Cursor',
+    })
+    // What Cursor would send is a shape the Host already accepts; the intake
+    // tests prove it, this proves the client produces it.
+    expect(Object.keys(payload).toSorted()).toEqual([
+      'app', 'editorSession', 'filePath', 'observedAtMs', 'seq', 'source',
+      'workspaceRoot',
+    ])
   })
 })
