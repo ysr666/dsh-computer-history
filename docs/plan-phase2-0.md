@@ -278,6 +278,6 @@ Browser companion (2.1), semantic summaries and work threads (2.2), UI/audit
 |---|---|---|
 | T2.0-0 toolkit into the repo | done | commit `215e9e1`; `pnpm verify:tools` builds both helpers; `pnpm verify` green (204 tests); guard scans `scripts/` after excluding itself (self-reference caught by running it) |
 | T2.0-1 adapter registry | done | commit pending; `Phase1Adapter` registry replaces the `adapterName == "terminal"` test; XCTest invariants + preconditions; `pnpm native:test` green; the repo's own Host/native allowlist guard was updated to read `bundleIds` |
-| T2.0-1b surface-kind single source | open | native registry carries `surfaceKind`, `src/host/ingestion/normalize.ts` still maps adapter ids independently; decide generate-vs-validate and add a drift check |
+| T2.0-1b adapter table single source | done | `PHASE1_ADAPTERS` in `src/shared/constants.ts` is canonical; looked up by `normalize.ts` for surface kind, title policy and resource kind; the repository guard now compares all four fields against the Swift registry, and a deliberate `surfaceKind` drift was used to prove the guard fails (208/208 when restored) |
 | T2.0-2 … T2.0-11 | open | — |
 

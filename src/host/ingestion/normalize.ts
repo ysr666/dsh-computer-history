@@ -3,10 +3,13 @@ import { pathToFileURL } from 'node:url'
 import {
   CollectorSessionId,
   OBSERVATION_RETENTION_MS,
+  PHASE1_ADAPTERS,
+  phase1AdapterDefinition,
   policyRuleMatches,
   type ActivityObservation,
   type NativeObservation,
   type ObservationAdapter,
+  type Phase1AdapterDefinition,
   type PolicySnapshot,
   type ResourceIdentity,
   type WorkspaceRef,
@@ -18,20 +21,17 @@ const PROTECTED_BUNDLES = new Set([
   'com.lastpass.LastPass',
 ])
 
+/**
+ * Resolve a bundle id through the shared adapter table. An unknown bundle is
+ * not an adapter: the caller drops the observation rather than guessing a
+ * surface, so a helper that invents a bundle id cannot widen the surface.
+ */
 export function phase1AdapterForBundle(
   bundleId: string,
 ): ObservationAdapter | undefined {
-  if (
-    bundleId === 'com.microsoft.VSCode'
-    || bundleId === 'com.todesktop.230313mzl4w4u92'
-  ) return 'vscode'
-  if (
-    bundleId === 'com.apple.Terminal'
-    || bundleId === 'com.googlecode.iterm2'
-  ) return 'terminal'
-  if (bundleId === 'com.apple.Preview') return 'preview'
-  if (bundleId === 'com.apple.finder') return 'finder'
-  return undefined
+  return PHASE1_ADAPTERS.find(adapter =>
+    adapter.bundleIds.includes(bundleId),
+  )?.id
 }
 
 
@@ -111,7 +111,7 @@ function isProtectedMetadata(
 
 function resourceOf(
   message: NativeObservation,
-  adapter: ObservationAdapter,
+  adapter: Phase1AdapterDefinition,
 ): ResourceIdentity | undefined {
   const raw = message.window?.document ?? message.window?.url
   if (!raw) return undefined
@@ -120,7 +120,7 @@ function resourceOf(
     try {
       const url = new URL(raw)
       return {
-        kind: adapter === 'terminal' ? 'directory' : 'file',
+        kind: adapter.documentResourceKind,
         canonicalUri: url.href,
         displayLabel: path.basename(decodeURIComponent(url.pathname)),
       }
@@ -128,7 +128,7 @@ function resourceOf(
   }
   if (path.isAbsolute(raw)) {
     return {
-      kind: adapter === 'terminal' ? 'directory' : 'file',
+      kind: adapter.documentResourceKind,
       canonicalUri: pathToFileURL(raw).href,
       displayLabel: path.basename(raw),
     }
@@ -166,8 +166,10 @@ export function normalizeObservation(
   if (isProtectedMetadata(message, policy)) return undefined
   const safeAdapter = phase1AdapterForBundle(message.app.bundleId)
   if (!safeAdapter) return undefined
+  const adapter = phase1AdapterDefinition(safeAdapter)
+  if (!adapter) return undefined
   const resource = resourceOverride
-    ?? resourceOf(message, safeAdapter)
+    ?? resourceOf(message, adapter)
   if (resource?.kind === 'url') return undefined
   if (
     resource?.kind === 'file'
@@ -195,15 +197,9 @@ export function normalizeObservation(
     observedAtMs: message.observedAtMs,
     app: { pid: message.app.pid, bundleId: message.app.bundleId, ...(message.app.name ? { displayName: message.app.name } : {}) },
     surface: {
-      kind: safeAdapter === 'vscode'
-        ? 'editor'
-        : safeAdapter === 'terminal'
-          ? 'terminal'
-          : safeAdapter === 'preview'
-            ? 'document'
-            : 'window',
+      kind: adapter.surfaceKind,
       ...(
-        safeAdapter !== 'terminal'
+        !adapter.suppressesWindowTitle
         && message.window?.title
           ? { title: message.window.title }
           : {}
