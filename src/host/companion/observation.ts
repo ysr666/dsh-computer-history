@@ -26,15 +26,13 @@ export function companionObservation(
       collectorSession: payload.editorSession,
       seq: payload.seq,
       observedAtMs: payload.observedAtMs,
-      // The extension runs inside the editor, so claiming the editor's real
-      // bundle id is the truthful answer - and it means the rule the user
-      // already has for "allow VS Code" governs this too. A synthetic id (the
-      // browser path uses one because an Accessibility window may not name a
-      // specific browser) would have created a second thing to allow.
+      // The identity the extension declared (ADR 0011). It is recorded as a
+      // claim - `source.provider` stays 'companion' - and the allow-list and the
+      // protected set decide exactly as they do for any other observation.
       app: {
         pid: 0,
-        bundleId: 'com.microsoft.VSCode',
-        name: 'Visual Studio Code',
+        bundleId: payload.app.bundleId,
+        name: payload.app.name,
       },
       window: {
         ...(payload.title ? { title: payload.title } : {}),

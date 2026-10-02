@@ -249,6 +249,7 @@ function editorPayload(
 ): Record<string, unknown> {
   return {
     source: 'editor',
+    app: { bundleId: 'com.microsoft.VSCode', name: 'Visual Studio Code' },
     workspaceRoot: '/Users/someone/Projects/demo',
     filePath: '/Users/someone/Projects/demo/src/main.ts',
     languageId: 'typescript',
@@ -326,6 +327,47 @@ describe('editor payloads (ADR 0009)', () => {
     expect(response.status).toBe(400)
     expect(response.json).toMatchObject({
       error: expect.stringContaining('source must be'),
+    })
+    await intake.stop()
+  })
+})
+
+describe('a declared identity (ADR 0011)', () => {
+  it('accepts a claim and carries it through', async () => {
+    const { intake, port, delivered } = await harness()
+    const response = await post(port, JSON.stringify(editorPayload({
+      app: { bundleId: 'com.todesktop.230313mzl4w4u92', name: 'Cursor' },
+    })))
+    expect(response.status).toBe(201)
+    expect(delivered[0]).toMatchObject({
+      source: 'editor',
+      app: { bundleId: 'com.todesktop.230313mzl4w4u92', name: 'Cursor' },
+    })
+    await intake.stop()
+  })
+
+  it('refuses a claim that is not an identity', async () => {
+    const { intake, port } = await harness()
+    for (const app of [
+      { bundleId: '', name: 'Cursor' },
+      { bundleId: 'com.example cursor', name: 'Cursor' },
+      { bundleId: 'com.example.cursor', name: '   ' },
+      { bundleId: 'com.example.cursor', name: 'Cursor', extra: 'x' },
+      'com.example.cursor',
+    ]) {
+      const response = await post(port, JSON.stringify(editorPayload({ app })))
+      expect(response.status, JSON.stringify(app)).toBe(400)
+    }
+    await intake.stop()
+  })
+
+  it('refuses an editor payload with no identity at all', async () => {
+    const { intake, port } = await harness()
+    const { app: _app, ...withoutApp } = editorPayload() as Record<string, unknown>
+    const response = await post(port, JSON.stringify(withoutApp))
+    expect(response.status).toBe(400)
+    expect(response.json).toMatchObject({
+      error: expect.stringContaining('app is required'),
     })
     await intake.stop()
   })

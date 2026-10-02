@@ -23,6 +23,16 @@ export interface BrowserCompanionPayload {
  */
 export interface EditorCompanionPayload {
   readonly source: 'editor'
+  /**
+   * The application this extension declares it is (ADR 0011). It is a **claim**,
+   * not something the operating system observed: the Host validates its shape,
+   * records it as a claim, and lets the allow-list and the protected set decide
+   * exactly as they do for any other observation.
+   */
+  readonly app: {
+    readonly bundleId: string
+    readonly name: string
+  }
   /** Absolute path. The editor vouches for it, verbatim. */
   readonly workspaceRoot: string
   readonly filePath?: string
@@ -58,9 +68,16 @@ const BROWSER_FIELDS = new Set([
   'observedAtMs',
 ])
 const EDITOR_FIELDS = new Set([
-  'source', 'workspaceRoot', 'filePath', 'languageId', 'surfaceKind', 'title',
-  'editorSession', 'seq', 'observedAtMs',
+  'source', 'app', 'workspaceRoot', 'filePath', 'languageId', 'surfaceKind',
+  'title', 'editorSession', 'seq', 'observedAtMs',
 ])
+
+/**
+ * A declared identity must look like an application id, and nothing else: a
+ * claim that carries whitespace or a sentence is not an identity, it is an
+ * attempt to put text somewhere it does not belong.
+ */
+const DECLARED_BUNDLE_ID = /^[A-Za-z0-9][A-Za-z0-9.-]{2,127}$/
 
 const DEFAULT_PORT = 19388
 const DEFAULT_MAX_BODY = 8 * 1024
@@ -322,6 +339,25 @@ export class CompanionIntake {
         return `unknown field for an editor payload: ${key}`
       }
     }
+    const app = record.app
+    if (typeof app !== 'object' || app === null) {
+      return 'app is required for an editor payload'
+    }
+    const claimed = app as Record<string, unknown>
+    const bundleId = claimed.bundleId
+    if (typeof bundleId !== 'string' || !DECLARED_BUNDLE_ID.test(bundleId)) {
+      return 'app.bundleId must look like an application id'
+    }
+    const declaredName = claimed.name
+    if (typeof declaredName !== 'string' || declaredName.trim().length === 0) {
+      return 'app.name is required'
+    }
+    for (const key of Object.keys(claimed)) {
+      if (key !== 'bundleId' && key !== 'name') {
+        return `unknown field for a declared application: ${key}`
+      }
+    }
+
     const workspaceRoot = record.workspaceRoot
     if (
       typeof workspaceRoot !== 'string'
@@ -374,6 +410,7 @@ export class CompanionIntake {
 
     return {
       source: 'editor',
+      app: { bundleId, name: declaredName.slice(0, this.truncateTitleAt) },
       workspaceRoot,
       ...(filePath === undefined ? {} : { filePath }),
       ...(languageId === undefined ? {} : { languageId }),

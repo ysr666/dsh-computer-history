@@ -44,6 +44,7 @@ describe('editor observations (ADR 0009)', () => {
   it('maps the editor payload to a file resource with companion provenance', () => {
     const observation = companionObservation({
       source: 'editor',
+      app: { bundleId: 'com.microsoft.VSCode', name: 'Visual Studio Code' },
       workspaceRoot: '/Users/someone/Projects/demo',
       filePath: '/Users/someone/Projects/demo/src/main.ts',
       languageId: 'typescript',
