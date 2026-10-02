@@ -156,7 +156,7 @@ describe('a vouched workspace (ADR 0009)', () => {
   })
 })
 
-function editorMessage(input: {
+function claimedMessage(input: {
   seq: number
   bundleId: string
   name: string
@@ -183,7 +183,7 @@ describe('a declared identity is a claim, and the rules still decide (ADR 0011)'
     const { root, file } = workspaceOnDisk()
     const { history, ingestion, now } = service(root)
     // The policy in `service` allows VS Code only.
-    const stored = await ingestion.ingest(editorMessage({
+    const stored = await ingestion.ingest(claimedMessage({
       seq: 1,
       bundleId: 'com.todesktop.230313mzl4w4u92',
       name: 'Cursor',
@@ -212,7 +212,7 @@ describe('a declared identity is a claim, and the rules still decide (ADR 0011)'
     })
     // Even allowed by the user, a password manager is protected by the built-in
     // list: declaring the identity cannot unlock it.
-    const stored = await ingestion.ingest(editorMessage({
+    const stored = await ingestion.ingest(claimedMessage({
       seq: 1,
       bundleId: 'com.1password.1password',
       name: '1Password',
@@ -228,7 +228,7 @@ describe('a declared identity is a claim, and the rules still decide (ADR 0011)'
   it('records an allowed claim as coming from a companion', async () => {
     const { root, file } = workspaceOnDisk()
     const { history, ingestion, now } = service(root)
-    expect(await ingestion.ingest(editorMessage({
+    expect(await ingestion.ingest(claimedMessage({
       seq: 1,
       bundleId: 'com.microsoft.VSCode',
       name: 'Cursor',
