@@ -299,5 +299,6 @@ Browser companion (2.1), semantic summaries and work threads (2.2), UI/audit
 | T2.0-4 Word + WPS adapters | partial | Word: `adapter=word` + `document=file://…/sample.rtf`; WPS: `adapter=wps`, no document (`-25212`), title-only rows; both recorded in `docs/adapters.md`. Notes deliberately unmeasured (shows the user's real notes); Obsidian pending download |
 | T2.0-2 JetBrains family | blocked on ADR 0006 | measured: IntelliJ platform returns an unqueryable focused element (`-25202` on role/subrole/attribute list) while the window reads fine, so the fail-closed rule drops everything. ADR 0006 (proposed) offers a per-adapter `window-only` declaration; conservative default kept meanwhile. `ax-probe --attributes` added to make the distinction measurable |
 | T2.0-5 document-less observations | done (diagnosis corrected) | real e2e rows show seq 1-2 are evidence-only orphans by design; the original acceptance was already met, so the task was amended to pin the semantics with two tests (210 green) and to hand the fidelity question to T2.0-7 |
-| T2.0-6 … T2.0-11 | open | — |
+| T2.0-8 `verify:adapters` | done | `scripts/verify-adapters.mjs` parses the shared table and requires a dated row, a section and a probe command per adapter; wired into `pnpm verify`; calibrated both ways (removing the WPS row fails, restoring passes: 7 adapters / 9 bundle ids) |
+| T2.0-6, T2.0-7, T2.0-9, T2.0-10, T2.0-11 | open | — |
 

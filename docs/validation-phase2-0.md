@@ -118,9 +118,21 @@ by the episode its window turns out to belong to — is a fidelity-versus-
 inference tradeoff and is handed to T2.0-7 with this data attached, instead of
 being implemented speculatively.
 
+## T2.0-8 — adapter evidence gate
+
+`pnpm verify:adapters` → `adapter evidence complete: 7 adapters, 9 bundle ids
+(vscode, xcode, word, wps, terminal, preview, finder)`.
+
+The parser was written against the wrong indentation first and reported "no
+adapters parsed" — a guard that fails on its own input is not a guard, so it
+now matches on content and says why it found nothing. Calibration from both
+sides: deleting the `wps` row makes it fail (`docs/adapters.md: adapter "wps"
+has no evidence row`, pnpm reports exit code 1); restoring it passes. The check
+is part of `pnpm verify`, so evidence rot now breaks the normal gate.
+
 ## Pending in 2.0
 
 `T2.0-2` (owner decision on ADR 0006), `T2.0-6` (Cursor Agents metadata
 review), `T2.0-7` (aggregation rule + metric + the adoption question above),
-`T2.0-8` (`verify:adapters`), `T2.0-9` (at-rest protection, ADR 0005),
-`T2.0-10` (threat model), `T2.0-11` (store self-check).
+`T2.0-9` (at-rest protection, ADR 0005), `T2.0-10` (threat model),
+`T2.0-11` (store self-check).
