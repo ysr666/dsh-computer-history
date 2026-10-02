@@ -330,3 +330,27 @@ no design-document prose, and a visual system with one spacing scale, theme toke
 button hierarchy and danger marking). ⑥ is done except for the grouping question - the
 destructive action is *marked* but still sits in the same row as 暂停采集 and 刷新, and the
 warning line that would separate it did not land.
+
+## Iteration 9 - the destructive action has its own line
+
+Evidence: `docs/assets/panel-2026-10-03-after9.png` (top) and
+`docs/assets/panel-2026-10-03-after9-bottom.png` (scrolled to the end).
+
+`删除全部历史` used to sit between `暂停采集` and `刷新` as if it were routine. It now lives
+in its own block - `width: 100%` inside the same row so it breaks onto its own line, a
+hairline above it, and the sentence that says what it does:
+
+```text
+删除全部历史不可撤销，它只删除这台电脑上的记录。
+```
+
+The change is small and the reason is a product one: an action that cannot be undone
+should not look like the buttons beside it, and the user should not have to discover that
+by pressing it.
+
+**A note on how this iteration was verified, because the first capture was not enough.**
+The panel is taller than the viewport, so the screenshot that verified the previous eight
+iterations stopped at 工作线索 and the destructive row was below the fold - which would have
+been "verified by looking" in name only. The capture was redone scrolled to the end, and the
+rendered text of that region is printed with it. That is the same trap as the two silent
+replacements: a check that reports success while not covering the thing it claims to.

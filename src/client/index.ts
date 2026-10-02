@@ -841,28 +841,44 @@ function HistoryPage(): React.ReactElement {
               ? t('Pause capture', '暂停采集')
               : t('Capture unavailable', '采集暂不可用'),
       ),
+      // The destructive action gets its own line, separated and explained: it used to
+      // sit between 暂停采集 and 刷新 as if it were routine.
       React.createElement(
-        'button',
+        'div',
         {
-          type: 'button', style: BUTTON_DANGER,
-          onClick: () => { runAction(clearAll) },
+          style: {
+            width: '100%', marginTop: SPACE.md, paddingTop: SPACE.md, borderTop: HAIRLINE,
+          },
         },
+        React.createElement(
+          'button',
+          {
+            type: 'button', style: BUTTON_DANGER,
+            onClick: () => { runAction(clearAll) },
+          },
+          confirmDeleteAll
+            ? t('Confirm delete all history', '确认：删除全部历史')
+            : t('Delete all history', '删除全部历史'),
+        ),
         confirmDeleteAll
-          ? t('Confirm delete all history', '确认：删除全部历史')
-          : t('Delete all history', '删除全部历史'),
-      ),
-      confirmDeleteAll
-        ? React.createElement(
-            'button',
-            {
-              type: 'button', style: BUTTON,
-              onClick: () => {
-                setConfirmDeleteAll(false)
+          ? React.createElement(
+              'button',
+              {
+                type: 'button', style: { ...BUTTON, marginLeft: SPACE.sm },
+                onClick: () => {
+                  setConfirmDeleteAll(false)
+                },
               },
-            },
-            t('Cancel', '取消'),
-          )
-        : null,
+              t('Cancel', '取消'),
+            )
+          : null,
+        React.createElement(
+          'p',
+          { style: { ...MUTED, margin: `${SPACE.sm}px 0 0` } },
+          t('Deleting all history cannot be undone. It removes the record from this machine.',
+            '删除全部历史不可撤销，它只删除这台电脑上的记录。'),
+        ),
+      ),
       React.createElement(
         'button',
         { type: 'button', style: BUTTON, onClick: () => { runAction(refresh) } },
