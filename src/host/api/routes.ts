@@ -98,6 +98,27 @@ export function registerHistoryApi(ctx: Context): void {
   }))
 
   ctx.effect(() => ctx.connection.fetch.register({
+    path: HISTORY_API_PREFIX + '/timeline',
+    methods: ['GET'],
+    requestBody: 'buffered',
+    fetch: async (request: Request) => {
+      try {
+        const url = new URL(request.url)
+        const days = optionalQueryInteger(url, 'days', 1, 31)
+        const timeline = await history.timeline(
+          days === undefined ? {} : { days },
+        )
+        return json(timeline)
+      } catch (error) {
+        if (error instanceof RequestValidationError) {
+          return textResponse(error.message, 400)
+        }
+        return textResponse('Request failed.', 500)
+      }
+    },
+  }))
+
+  ctx.effect(() => ctx.connection.fetch.register({
     // "What would you not keep?": the same predicates ingestion uses, run over
     // rows that are already stored.
     path: HISTORY_API_PREFIX + '/audit/preview',

@@ -109,3 +109,31 @@ real:
 The third failure was my premise, not the code: I had written "an empty policy
 excludes nothing", but an `include-only` policy with no allow rule excludes
 everything. The test now asserts both directions.
+
+## T2.3-4 — timeline and "why was this recorded"
+
+`GET /timeline?days=` groups stored episodes into the local days they happened on
+(newest first) and the panel lists them; clicking an episode fetches
+`GET /episode?id=` and shows **why it exists**, in words a person reads rather
+than the Host's own vocabulary:
+
+```text
+Recorded because a supported application became active; and it ended because the
+machine went idle; 2 observations cited; 1 resource; 1 application; policy
+revision 4; confidence 0.80.
+```
+
+`describeProvenance` and `buildTimeline` live in `src/shared/audit-view.ts`, so
+the sentence is testable without a browser. `pnpm test` → five cases: grouping by
+local day with the newest day first and the newest episode first inside it, the
+day limit, the sentence itself, the not-yet-ended case with singular counts, and
+one case per boundary reason proving the machine vocabulary was translated.
+
+That last test failed first because it asserted the sentence never contains the
+word `idle` — which it legitimately does, inside "the machine went idle". The
+assertion now targets the hyphenated tokens (`first-observation`,
+`workspace-switch`, `collector-restart`, `manual-rebuild`), which cannot appear
+by accident, and that is the claim worth making.
+
+An episode with no readable resource says so and names the applications instead,
+rather than showing an empty resource list.

@@ -130,6 +130,7 @@ describe('Computer History Host API', () => {
       '/api/computer-history/semantic/preview',
       '/api/computer-history/semantic/revoke',
       '/api/computer-history/state',
+      '/api/computer-history/timeline',
       '/api/computer-history/threads',
     ])
 

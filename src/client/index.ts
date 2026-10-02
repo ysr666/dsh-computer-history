@@ -16,11 +16,14 @@ import type {
   ComputerHistoryState,
   EpisodeSummary,
   PolicySnapshot,
+  EpisodeDetail,
   MinimisedSummaryPayload,
+  TimelineDay,
   ResumeResolution,
   SemanticSummaryState,
   WorkThread,
 } from '../shared/index.js'
+import { describeProvenance } from '../shared/audit-view.js'
 import { historyApiPath } from './api-route.js'
 
 const PANEL_ID = 'computer-history' as MainPanelId
@@ -42,6 +45,8 @@ function HistoryPage(): React.ReactElement {
   const [resumeQuery, setResumeQuery] = useState('')
   const [hint, setHint] = useState<ResumeResolution>()
   const [semantic, setSemantic] = useState<SemanticSummaryState>()
+  const [timeline, setTimeline] = useState<readonly TimelineDay[]>([])
+  const [selected, setSelected] = useState<EpisodeDetail>()
   const [preview, setPreview] = useState<string>()
   const [policy, setPolicy] = useState<PolicySnapshot>()
   const [bundleId, setBundleId] = useState('')
@@ -52,19 +57,23 @@ function HistoryPage(): React.ReactElement {
 
   const refresh = useCallback(async () => {
     try {
-      const [nextState, nextEpisodes, nextPolicy, nextThreads, nextSemantics]
-        = await Promise.all([
+      const [
+        nextState, nextEpisodes, nextPolicy, nextThreads, nextSemantics,
+        nextTimeline,
+      ] = await Promise.all([
           api<ComputerHistoryState>('/state'),
           api<readonly EpisodeSummary[]>('/recent?limit=50'),
           api<PolicySnapshot>('/policy'),
           api<readonly WorkThread[]>('/threads?limit=20'),
           api<SemanticSummaryState>('/semantic'),
+          api<readonly TimelineDay[]>('/timeline?days=7'),
         ])
       setState(nextState)
       setEpisodes(nextEpisodes)
       setPolicy(nextPolicy)
       setThreads(nextThreads)
       setSemantic(nextSemantics)
+      setTimeline(nextTimeline)
       setError(undefined)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause))
@@ -325,6 +334,86 @@ function HistoryPage(): React.ReactElement {
       : null,
   )
 
+  const openEpisode = async (id: string): Promise<void> => {
+    setSelected(await api<EpisodeDetail>(`/episode?id=${encodeURIComponent(id)}`))
+  }
+
+  const timelineSection = React.createElement(
+    'section',
+    { style: { marginBottom: 20 } },
+    React.createElement('h2', { style: { margin: '0 0 8px' } }, 'Timeline'),
+    timeline.length === 0
+      ? React.createElement(
+          'p',
+          { style: { color: '#555' } },
+          'Nothing recorded in the last seven days.',
+        )
+      : React.createElement(
+          'div',
+          null,
+          ...timeline.map(day => React.createElement(
+            'div',
+            { key: day.dayKey, style: { marginBottom: 10 } },
+            React.createElement(
+              'div',
+              { style: { fontWeight: 600 } },
+              `${day.dayKey} · ${day.episodeCount} episode${day.episodeCount === 1 ? '' : 's'}`,
+            ),
+            React.createElement(
+              'ul',
+              { style: { margin: '4px 0 0', paddingLeft: 18 } },
+              ...day.episodes.map(item => React.createElement(
+                'li',
+                { key: String(item.id) },
+                React.createElement(
+                  'button',
+                  {
+                    type: 'button',
+                    onClick: () => { runAction(() => openEpisode(String(item.id))) },
+                  },
+                  item.summary,
+                ),
+              )),
+            ),
+          )),
+        ),
+    selected
+      ? React.createElement(
+          'div',
+          {
+            style: {
+              border: '1px solid #d0d0d0',
+              borderRadius: 8,
+              padding: 12,
+              marginTop: 8,
+            },
+          },
+          React.createElement('h3', { style: { margin: '0 0 6px' } }, 'Why was this recorded?'),
+          React.createElement('p', null, describeProvenance({
+            boundary: selected.boundary,
+            // The stored episode does not carry the revision that was in
+              // force when it was written; the boundary reasons and citations
+              // are what the reader can check.
+            policyRevision: 0,
+            citations: selected.summaryObservationIds,
+            resources: selected.resources,
+            surfaces: selected.surfaces,
+            confidence: selected.confidence,
+          })),
+          React.createElement(
+            'p',
+            { style: { color: '#555' } },
+            selected.resources.length > 0
+              ? 'Resources: ' + selected.resources
+                .map(item => item.displayLabel ?? item.canonicalUri)
+                .join(', ')
+              : 'No resource was visible, so this episode shows what the applications were instead: '
+                + selected.surfaces.map(item => item.bundleId).join(', '),
+          ),
+        )
+      : null,
+  )
+
   const companion = state?.companion
 
   const companionSection = React.createElement(
@@ -450,6 +539,7 @@ function HistoryPage(): React.ReactElement {
         )
       : null,
     companionSection,
+    timelineSection,
     semanticSection,
     resumeSection,
     threadSection,

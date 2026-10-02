@@ -14,6 +14,7 @@ import type {
   MinimisedSummaryPayload,
   PairingRotation,
   RedactionPreview,
+  TimelineDay,
   PairingState,
   SemanticOptIn,
   SemanticSummaryState,
@@ -110,6 +111,12 @@ export class ComputerHistoryService
     document: unknown,
   ): { readonly imported: Record<string, number> } {
     return this.backend.importAll(document)
+  }
+
+  public timeline(
+    request: { readonly days?: number } = {},
+  ): Promise<readonly TimelineDay[]> {
+    return this.backend.timeline(request)
   }
 
   public redactionPreview(request: {

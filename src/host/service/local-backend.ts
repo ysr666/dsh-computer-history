@@ -14,6 +14,7 @@ import type {
   PolicyUpdate,
   RecentEpisodesRequest,
   RedactionPreview,
+  TimelineDay,
   SemanticOptIn,
   SemanticSummaryState,
   ResumeRequest,
@@ -33,6 +34,7 @@ import {
   type SemanticOptInStore,
 } from '../semantic/opt-in.js'
 import { buildRedactionPreview } from '../audit/preview.js'
+import { buildTimeline } from '../../shared/audit-view.js'
 import { buildWorkThreads } from '../episodes/threads.js'
 import { resolveResume } from '../resume/index.js'
 import { phase1AdapterForBundle } from '../ingestion/index.js'
@@ -325,6 +327,16 @@ implements ComputerHistoryServiceContract {
   private requireDb(): DatabaseSync {
     if (!this.db) throw new Error('the audit export is unavailable')
     return this.db
+  }
+
+  /** Episodes grouped into the days they happened on, newest first. */
+  public async timeline(
+    request: { readonly days?: number } = {},
+  ): Promise<readonly TimelineDay[]> {
+    const episodes = await this.recent({ limit: 200 })
+    return buildTimeline(episodes, {
+      days: boundedLimit(request.days, 1, 31),
+    })
   }
 
   /**

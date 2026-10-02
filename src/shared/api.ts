@@ -4,6 +4,7 @@ import type {
   WorkThread,
 } from './episode.js'
 import type { HistoryExport, RedactionPreview } from './audit.js'
+import type { TimelineDay } from './audit-view.js'
 import type { EpisodeId } from './ids.js'
 import type {
   MinimisedSummaryPayload,
@@ -116,6 +117,11 @@ export interface ComputerHistoryServiceContract {
 
   /** Read an export back. Throws HistoryImportError-shaped failures as messages. */
   importAll(document: unknown): { readonly imported: Record<string, number> }
+
+  /** Episodes grouped into the days they happened on, newest first. */
+  timeline(request?: {
+    readonly days?: number
+  }): Promise<readonly TimelineDay[]>
 
   /** What the policy would not keep for a scope, using ingestion's own rules. */
   redactionPreview(request: {

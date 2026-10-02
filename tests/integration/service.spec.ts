@@ -281,6 +281,7 @@ describe('Cordis computer history service', () => {
       async resume() {},
       getState() { return state },
       async threads() { return [] },
+      async timeline() { return [] },
       redactionPreview() {
         return {
           scopeKey: 'app:x',
