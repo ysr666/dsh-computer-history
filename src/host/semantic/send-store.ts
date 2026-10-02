@@ -3,7 +3,7 @@ import type { DatabaseSync } from 'node:sqlite'
 /** One request that left the machine (ADR 0010), with no content in it. */
 export interface RemoteSend {
   readonly id: number
-  readonly episodeId?: string
+  readonly episodeId?: string | undefined
   readonly scopeKey: string
   readonly endpointHost: string
   readonly model: string
@@ -17,7 +17,7 @@ export interface RemoteSendInput {
   readonly model: string
   readonly payloadDigest: string
   readonly sentAtMs: number
-  readonly episodeId?: string
+  readonly episodeId?: string | undefined
 }
 
 /**
@@ -55,20 +55,17 @@ export class RemoteSendStore {
         ORDER BY sent_at_ms DESC, id DESC
         LIMIT ?
       `).all(scopeKey, limit) as Array<Record<string, unknown>>
-    ).map((row): RemoteSend => {
-      const base = {
-        id: Number(row.id),
-        scopeKey: String(row.scope_key),
-        endpointHost: String(row.endpoint_host),
-        model: String(row.model),
-        payloadDigest: String(row.payload_digest),
-        sentAtMs: Number(row.sent_at_ms),
-      }
-      // The link is optional because deleting an episode keeps the audit fact.
-      return row.episode_id === null
-        ? base
-        : { ...base, episodeId: String(row.episode_id) }
-    })
+    ).map((row): RemoteSend => ({
+      id: Number(row.id),
+      // Undefined, not absent: deleting an episode keeps the audit fact and
+      // drops only the link, and one object literal keeps lint quiet.
+      episodeId: row.episode_id === null ? undefined : String(row.episode_id),
+      scopeKey: String(row.scope_key),
+      endpointHost: String(row.endpoint_host),
+      model: String(row.model),
+      payloadDigest: String(row.payload_digest),
+      sentAtMs: Number(row.sent_at_ms),
+    }))
   }
 
   /**
