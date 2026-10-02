@@ -57,6 +57,7 @@ function HistoryPage(): React.ReactElement {
   const [bundleId, setBundleId] = useState('')
   const [confirmDeleteAll, setConfirmDeleteAll] = useState(false)
   const [companionToken, setCompanionToken] = useState<string>()
+  const [copiedToken, setCopiedToken] = useState(false)
   const [siteOrigin, setSiteOrigin] = useState('')
   const [error, setError] = useState<string>()
 
@@ -615,9 +616,51 @@ function HistoryPage(): React.ReactElement {
     ),
     companionToken
       ? React.createElement(
-          'p',
-          { style: { color: '#555' } },
-          'Copy this into the extension’s options now — only a digest is stored, so it cannot be shown again.',
+          'div',
+          null,
+          React.createElement(
+            'p',
+            { style: { color: '#555' } },
+            'Only a digest is stored, so this is the one moment it can be copied. Rotating it again stops any client still using the old one.',
+          ),
+          React.createElement(
+            'button',
+            {
+              type: 'button',
+              onClick: () => {
+                void navigator.clipboard?.writeText(companionToken).then(
+                  () => { setCopiedToken(true) },
+                  () => { setCopiedToken(false) },
+                )
+              },
+            },
+            copiedToken ? 'Copied' : 'Copy token',
+          ),
+          React.createElement(
+            'ol',
+            { style: { color: '#555', marginTop: 8, paddingLeft: 20 } },
+            React.createElement(
+              'li',
+              null,
+              'Browser: open the extension’s options page and paste it there.',
+            ),
+            React.createElement(
+              'li',
+              null,
+              'VS Code or Cursor: in Settings search for ',
+              React.createElement('code', null, 'computer history'),
+              ', then set the token (and the port ',
+              React.createElement('code', null, String(companion?.port ?? 19388)),
+              ').',
+            ),
+            React.createElement(
+              'li',
+              null,
+              'Then reload that client. If nothing arrives, its own log says why: the editor extension writes one to ',
+              React.createElement('code', null, '~/.dsh/computer-history-editor.log'),
+              '.',
+            ),
+          ),
         )
       : null,
     React.createElement(

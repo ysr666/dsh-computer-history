@@ -162,3 +162,37 @@ pnpm verify → 321 tests, lint 0 warnings
 Still open in this task: the refusal counter is not on the panel yet (it needs the
 wiring discussed last round), and the sentence has not been looked at in a real
 window - a screenshot is the honest next evidence, and reading source is not.
+
+## T2.9-2 — pairing, from "here is a token" to "here is what to do with it"
+
+Reading the panel first changed the size of this task. The pairing UI already
+existed and was already honest: a button that creates or rotates the token, the token
+shown once in a selectable block, and the sentence that only a digest is stored so it
+cannot be shown again. What was missing was **the step after that** - a new user held
+a token and had nowhere to put it without reading the repository.
+
+Added, in the panel, under the token:
+
+1. a **copy** button (the clipboard is the only sane way to move a 43-character
+   token; the text stays selectable for anyone who prefers that);
+2. **the three steps**: browser extension → its options page; VS Code or Cursor →
+   Settings, search "computer history", set the token and the port shown right there
+   in the sentence; then reload the client;
+3. **where to look when nothing arrives**: the editor extension writes its decisions
+   to `~/.dsh/computer-history-editor.log`, which is the file that turned the last
+   phase's silent failure into a sentence.
+
+```text
+pnpm typecheck → clean
+pnpm verify → 321 tests, lint 0 warnings
+```
+
+**Still open, and named rather than implied:** the panel cannot yet say "a token
+exists, but no client has ever connected". That is a backend fact -
+`companion.lastSeenAtMs`, set when a request passes the token check - and it is the
+next change. Without it, a user who mistyped the token still sees "paired" and
+nothing else, which is the same class of ambiguity this phase exists to remove.
+
+**Also still open:** neither this section nor the health sentence has been looked at
+in a real window yet. Reading source is not evidence; the screenshot is, and it is
+the next piece of work.
