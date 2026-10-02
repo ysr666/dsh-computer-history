@@ -141,6 +141,8 @@ Terminal:      axurl err=-25205，document=file:///Users/ysradmin/
 
 库内共 7 条（2 个 collector session），全部为上述 Finder 合成 fixture；无任何真实私密文件/内容进入采集。
 
+**前置条件（产品语义，必须记录）**：collector 的 `allowedBundleIds` 来自 policy 中 `action='allow'` 的规则（`manager.ts` 的 `bundleIdsFor('allow')`），而初始策略只有 12 条 **protect** 规则 —— 即 **include-only + 无 allow 规则 = 什么都不采**（这正是"未经用户明确同意不采集"的默认）。本节那 7 条能落库，是因为前一节的路由验证里我通过 `POST /policy`（owner）加了一条 `allow com.apple.finder`。首次端到端 A4 复现时因为没有 allow 规则，Finder 与 fixture 都不落库，加上 `allow com.microsoft.VSCode` 后立刻恢复。
+
 ### 5.3 A6 — pause 真 detach
 
 - `POST /pause` → `200 {"capture":"paused"...}`（协议要求 native `paused` ack 完成才返回，200 即 ack 往返成功）。
@@ -214,6 +216,19 @@ plain  fixture: {"privacy":{"secure":false},"window":{"document":"file:///…"},
 
 → A4 的三态在**真实 AX 元素**上双向验证：真实 secure 字段被识别并丢元数据；普通文本框不再被误杀。
 
+### 5.8 A4 端到端：Host 直接丢弃 secure observation（一次性目录 `/tmp/dsh-ch-e2e-20261002-170930`）
+
+collector 级证据之外，补上"Host ingestion 是否真的丢"的闭环：同一注入实例（capture ON、一次性 dataDirectory、policy 显式 `allow com.microsoft.VSCode`），先后把 fixture 切到前台：
+
+```text
+plain 阶段（前台 12s）: observations total 1 | privacy_secure 0
+                        row = {bundle_id: com.microsoft.VSCode, window_title: dsh-fixture-plain}
+                        resources = {id 1, kind file, canonical_uri file:///private/tmp/dsh-live-fixtures/normal-text.html}
+secure 阶段（前台 10s）: rows before 1 -> after 1（delta 0）| secure_rows 0
+```
+
+即：secure 观察在 collector 侧确实产生（§5.6 探针 4/4 证明），但**Host 端一条都没落库**——fail-closed 从原生层到存储层全程成立；plain 对照同时证明落库路径（含 resource 规范化）正常。
+
 ### 5.7 C10 — helper 退出未确认仍释放锁
 
 - **崩溃路径**：`kill -9` helper（PID 82077）→ 3s 内自动拉起新 helper（PID 83920），`/state` 仍 `running`，采集继续落库（计数 +1）。
@@ -227,7 +242,7 @@ plain  fixture: {"privacy":{"secure":false},"window":{"document":"file:///…"},
 | F1 | **blocker** | **已修复** | client bundle 缺 `__ModuleLoader__` 包装、且 import 了 loader 不注册的 `.../client` 子路径 id → UI 半根本加载不了。修复后 live Slots occupant 为 active。 |
 | F2 | **blocker** | **已修复** | 插件用 `ctx.computerHistory` 访问自己提供的服务 → cordis 抛 `without inject`，8 条路由全 500/503、agent 工具不可用；204 个既有测试因"假 ctx"未覆盖。改用 `ctx.get()`；测试 harness 同步改为真语义。 |
 | F3 | 中（工具链） | **已报告未修** | `dsh-super-injector` v0.3.3 的 `KNOWN_SLOTS` 白名单过时：`main`、`sidebar.panellist` 等 live 槽位被误判为坏骨架，阻断合法插件注入。建议白名单补全 live slots，或改为查询运行中 client Slots 拓扑。证据：live `Slots.listSubTree`。 |
-| F4 | **blocker（已修复，规则经二次修正）** | 已修复 + 真机双向复验 | Terminal adapter 曾 3/3 判 `unreadable-focused-element` → `privacy.secure=true` → Host drop，**Terminal 观测事实性归零**。根因（AX 探针实测）：focused element 的 `kAXSubroleAttribute` 返回 `-25205 = kAXErrorAttributeUnsupported`，原 `isSecureElement` 把所有非 success 一律当 `.unreadable`。修复分两步：(1) 把"属性不存在/不支持"与"读取失败/超时"分开，分类抽成纯函数 `classifySecureFieldState`；(2) 合成 fixture 量出 secure 与 plain 的唯一差别就是 subrole 是否存在（`NSSecureTextField` → `AXSecureTextField`；`NSTextField`/`AXTextArea` → `attributeUnsupported`），于是去掉"`AXTextField` 无 subrole 仍 fail-closed"这条会误杀**普通文本框**的守卫，只保留**读取失败**才 fail-closed。真机复验：Terminal `secure:false` 8/8（含 document）、plain 文本框 `secure:false` 9/9、真实 secure 字段 `secure:true/secure-field` 4/4 且 window/element 全扣留。 |
+| F4 | **blocker（已修复，规则经二次修正）** | 已修复 + 真机双向复验 | Terminal adapter 曾 3/3 判 `unreadable-focused-element` → `privacy.secure=true` → Host drop，**Terminal 观测事实性归零**。根因（AX 探针实测）：focused element 的 `kAXSubroleAttribute` 返回 `-25205 = kAXErrorAttributeUnsupported`，原 `isSecureElement` 把所有非 success 一律当 `.unreadable`。修复分两步：(1) 把"属性不存在/不支持"与"读取失败/超时"分开，分类抽成纯函数 `classifySecureFieldState`；(2) 合成 fixture 量出 secure 与 plain 的唯一差别就是 subrole 是否存在（`NSSecureTextField` → `AXSecureTextField`；`NSTextField`/`AXTextArea` → `attributeUnsupported`），于是去掉"`AXTextField` 无 subrole 仍 fail-closed"这条会误杀**普通文本框**的守卫，只保留**读取失败**才 fail-closed。真机复验：Terminal `secure:false` 8/8（含 document）、plain 文本框 `secure:false` 9/9、真实 secure 字段 `secure:true/secure-field` 4/4 且 window/element 全扣留。端到端（§5.8）：secure 前台 10s → Host 落库 **delta 0**、`secure_rows=0`；plain 对照落库 1 条并生成 `file` resource。 |
 | F5 | 记录 | — | Finder 的 kAXDocument 为 nil → `resource_id` 空；Preview 的 document 为 file:// URL → 资源可用。resource 识别能力随 app 不同而分裂，产品假设需按 app 记账。 |
 | F6 | 环境 | — | 本机 VS Code 为不可启动的假壳；编辑器 adapter（`vscode`）无法真机验证。 |
 | F7 | 范围 | — | 浏览器类 app 无 adapter：交接文档 §4.1 建议的"本地 HTML 假密码框"测法在当前 Phase 1 适配器集下**不可达**；同理 kAXURL 也缺少可触发场景。 |
@@ -243,7 +258,7 @@ plain  fixture: {"privacy":{"secure":false},"window":{"document":"file:///…"},
 [x] capture 开启后采集到真实 observation 并落库（一次性目录，7 条）
 [x] 记录真实 observation 字段（app/adapter/window/privacy/resource 实际情况见 §5）
 [~] §6 八问：A1 ✅ / A2 部分（Finder、Preview、Terminal 修复后 ✅ 真机复验；编辑器 adapter 契约 ✅ 合成 app，真实 VS Code 语义未确认）
-     A3 场景不存在+解码已单测锁定 / A4 ✅ 双向真机复验（secure 4/4 识别、plain 9/9 不误杀、Terminal 8/8 恢复）/ A5 ✅ 受控卡死实测 / A6 ✅
+     A3 场景不存在+解码已单测锁定 / A4 ✅ 双向真机复验（secure 4/4 识别、plain 9/9 不误杀、Terminal 8/8 恢复、Host 端 drop 端到端见 §5.8）/ A5 ✅ 受控卡死实测 / A6 ✅
      B7 ✅ / B8 ✅ / C9 ✅ / C10 部分（分支已有单测，真机不可构造）
 [x] 缺陷：修 blocker #1/#2/#3（Terminal fail-closed）+ 补回归护栏（client 契约、ctx.get 语义、secure 分类分支）+ 本报告
 [x] 验证报告落盘（本文件）
@@ -256,7 +271,7 @@ plain  fixture: {"privacy":{"secure":false},"window":{"document":"file:///…"},
 |---|---|---|
 | kAXURL CFURL 解码是否生效 | 真机探测的所有应用（Chrome/Finder/Terminal）都返回 `kAXErrorAttributeUnsupported`，没有可触发场景 | 已单测锁定解码逻辑；若将来出现 AXURL 有值的应用，可直接用 `/tmp/dsh-ax-url` 样式探针复测 |
 | 真实 VS Code 的 kAXDocument 语义 | 本机 VS Code 是不可启动假壳；bundle-id→adapter 映射与 AXDocument 管线已用合成 app 验证（§5.5） | 安装可启动的 VS Code 或 Cursor，用 `/tmp/dsh-ch-probe.mjs` + 编辑器前台复测 |
-| secure 三态在"真实密码框"的阳性路径 | ✅ 已用合成 fixture 关闭：真实 `NSSecureTextField`（空值、非真实凭据）被识别为 `secure-field` 且元数据扣留；plain 文本框对照不误杀 | 若要覆盖"真实应用自身的密码框"，需支持应用中出现 secure 字段（浏览器无 adapter）；fixture 源码 `/tmp/dsh-fixture-app/main.swift` 可复用 |
+| secure 三态在"真实密码框"的阳性路径 | ✅ 已用合成 fixture 关闭（含 Host 端 drop 端到端）：真实 `NSSecureTextField`（空值、非真实凭据）被识别为 `secure-field`、元数据扣留、Host 落库 delta 0；plain 文本框对照落库且不误杀 | 若要覆盖"真实应用自身的密码框"，需支持应用中出现 secure 字段（浏览器无 adapter）；fixture 源码 `/tmp/dsh-fixture-app/main.swift` 可复用 |
 | 0.5s timeout 对真正卡死应用 | ✅ 已用合成 fixture 关闭：冻结 6s 期间 `paused` ack 最大 975ms（对照 0ms） | — |
 | `collector-exit-unconfirmed` 分支 | 未触发 | 单测已覆盖该分支（释放锁 + 记 degraded）；真机触发需 helper 存活 SIGKILL，不可构造，故不再作为真机待办 |
 | 子路径挂载下的 public mount | 本环境根挂载 | 一个子路径部署的 DSH web 实例 |
@@ -302,11 +317,12 @@ tests/integration/plugin-multi-host.spec.ts 同上
 /tmp/dsh-ax-url-src/main.swift  AXURL 探测（链接仓库 Privacy.swift）
 /tmp/dsh-fixture-app/main.swift 合成 fixture app 源码（secure/plain/hung 三模式；app bundle 用完即删）
 /tmp/dsh-verify-injector-patch.mjs  注入器补丁离线复演
+/tmp/dsh-ch-e2e-20261002-170930/history.sqlite  A4 端到端证据库（1 条 plain observation + 1 条 file resource；secure 阶段 delta 0）
 ```
 
 ## 10. 下一阶段（重启后按序执行）
 
-本阶段已收口：真机验证、三个 blocker 修复（client bundle 格式 / cordis inject 门禁 / Terminal fail-closed）、环境还原、forward commit 链 `62cb5a1 → ef8d4bc → 551f4bc → d34a823 → 6e426e6`。下一阶段每完成一步就更新本报告：
+本阶段已收口：真机验证、三个 blocker 修复（client bundle 格式 / cordis inject 门禁 / Terminal fail-closed）、A4/A5 受控夹具闭环、环境还原、forward commit 链 `62cb5a1 → ef8d4bc → 551f4bc → d34a823 → 6e426e6 → b10fe2b → 554223b`。下一阶段每完成一步就更新本报告：
 
 | # | 动作 | 前置 | 验收 |
 |---|---|---|---|
