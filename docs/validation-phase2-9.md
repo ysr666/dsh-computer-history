@@ -280,3 +280,39 @@ pnpm verify → 323 tests, lint 0 warnings
 Still open, and unchanged from last round: **nobody has looked at this in a real
 window yet.** The sentence is verified by tests and by types; the screenshot is the
 evidence that counts, and it needs the panel opened (or the browser bridge connected).
+
+## T2.9-3 — screen lock and sleep, and a test I deleted rather than keep
+
+The question was whether a locked Mac records activity that never happened. Three
+attempts to pin it, and the honest result is that **none of them measured what they
+claimed**:
+
+1. a new rule (`NOT_ACTIVITY_BUNDLES` for `com.apple.loginwindow` and the screen
+   saver) plus a test: the test passed - and **kept passing with the rule deleted**,
+   so the rule was not what produced the behaviour. It also duplicated a mechanism
+   that already exists, so the rule was **removed** rather than kept as dead code;
+2. the same test, isolated by allowing those bundle ids explicitly so the policy
+   could not be the reason: it passed **again** with the adapter lookup deliberately
+   broken, so something *else* refuses them - and I do not know what;
+3. the calibration did go red - but on **two other tests** ("fails closed for
+   browsers and protected applications", "fails closed for unsupported app
+   families"), which is real evidence that the adapter lookup is load-bearing,
+   just not evidence about my case.
+
+So the test was **deleted**. A test whose premise is unverified is worse than no
+test: it looks like coverage while measuring nothing, and it would have been quoted
+in this very report as proof. What stands is weaker and true:
+
+- the lock screen and screen saver are **not** recorded as activity on this build -
+  the timeline cannot show work that never happened;
+- **which** fail-closed path does it is not established. The adapter lookup is
+  load-bearing (proved above), and at least one other path also refuses these
+  bundles, since breaking the first did not change the outcome;
+- sleep is covered by construction rather than by this work: the process is
+  suspended, so the next observation arrives after a gap, and episodes already end
+  on a quiet period (`endReason: 'timeout'`, "a quiet period passed").
+
+The next attempt starts by asking the observation **why** it was refused - the
+normalizer decides in several places and today none of them say which one fired -
+which is the same complaint this phase keeps finding: a decision that is not
+reported cannot be checked.
