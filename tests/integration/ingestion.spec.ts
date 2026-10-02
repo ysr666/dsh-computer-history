@@ -699,8 +699,7 @@ describe('every adapter in the table can be stored', () => {
   })
 })
 
-describe('URL resources are provenance-gated (ADR 0007)', () => {
-  function service(root: string) {
+function browserIngestionService(root: string) {
     const history = openHistoryDatabase({
       dataDirectory: path.join(root, 'history'),
       nowMs: 1,
@@ -726,12 +725,13 @@ describe('URL resources are provenance-gated (ADR 0007)', () => {
         () => 100_000,
       ),
     }
-  }
+}
 
+describe('URL resources are provenance-gated (ADR 0007)', () => {
   it('still drops a URL that came through Accessibility', async () => {
     const root = mkdtempSync(path.join(os.tmpdir(), 'dsh-ch-url-ax-'))
     roots.push(root)
-    const { history, ingestion } = service(root)
+    const { history, ingestion } = browserIngestionService(root)
     expect(await ingestion.ingest({
       ...native('com.microsoft.VSCode'),
       window: { title: 'A page', url: 'https://example.test/private?token=abc' },
@@ -744,7 +744,7 @@ describe('URL resources are provenance-gated (ADR 0007)', () => {
   it('stores a companion URL without its query string or fragment', async () => {
     const root = mkdtempSync(path.join(os.tmpdir(), 'dsh-ch-url-companion-'))
     roots.push(root)
-    const { history, ingestion } = service(root)
+    const { history, ingestion } = browserIngestionService(root)
     expect(await ingestion.ingest({
       ...native('companion.browser'),
       window: {
