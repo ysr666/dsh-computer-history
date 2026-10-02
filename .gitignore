@@ -28,6 +28,8 @@ debug/
 *.log
 npm-debug.log*
 pnpm-debug.log*
+# Tool-run artifacts (e.g. vision router screenshots) are not project files
+.dsh-vision-router/
 
 # Bench / live local captures
 tests/benchmark/field/private/
