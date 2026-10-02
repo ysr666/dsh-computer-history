@@ -54,3 +54,5 @@ tests/live/output/
 tmp/
 tmp-pack/
 *.tgz
+extension-editor/out/
+*.vsix

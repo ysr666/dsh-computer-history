@@ -1,0 +1,30 @@
+{
+  "name": "dsh-computer-history-editor",
+  "displayName": "DSH Computer History (editor companion)",
+  "description": "Tells the local DeepSeek Harness where work is happening: the workspace root and the active file, nothing else.",
+  "version": "0.1.0",
+  "publisher": "dsh-local",
+  "private": true,
+  "engines": { "vscode": "^1.75.0" },
+  "categories": ["Other"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./out/extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "DSH Computer History",
+      "properties": {
+        "dshComputerHistory.port": {
+          "type": "number",
+          "default": 19388,
+          "description": "Loopback port the Host listens on for companion observations."
+        },
+        "dshComputerHistory.token": {
+          "type": "string",
+          "default": "",
+          "description": "Pairing token. Shown once in the Host panel; without it nothing is sent."
+        }
+      }
+    }
+  },
+  "scripts": { "compile": "tsc -p ." }
+}

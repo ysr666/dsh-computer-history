@@ -28,7 +28,8 @@
     "verify:adapters": "node scripts/verify-adapters.mjs",
     "verify:store-protection": "node scripts/verify-store-protection.mjs",
     "build:extension": "node scripts/build-extension.mjs",
-    "verify:semantic-boundary": "node scripts/verify-semantic-boundary.mjs"
+    "verify:semantic-boundary": "node scripts/verify-semantic-boundary.mjs",
+    "build:editor-extension": "node scripts/build-editor-extension.mjs"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "4.0.4",

@@ -102,3 +102,45 @@ records the distinction.
   failed **silently** because that particular patch had no assertion. It has one
   now, and the failure then read `invalid workspace source: companion` - the
   error doing its job.
+
+## T2.5-3 — the extension
+
+`extension-editor/` is a VS Code extension with two modules: `payload.ts`, which
+is deliberately free of the `vscode` API so it can be tested directly, and
+`extension.ts`, which reads exactly three things — the workspace folder paths,
+the active document's **path and language id**, and whether the view is a diff or
+a terminal. It never calls `getText`, never looks at a selection, and never reads
+a line. Unpaired means nothing is sent at all: the request is not even built.
+
+```text
+pnpm test tests/unit/editor-extension.spec.ts → 5 passed
+
+the payload carries exactly the metadata keys and the envelope
+a document-like object passed as metadata cannot leak its text or its getText
+surfaceKindOf maps editor / diff / terminal
+the forbidden-read guard matches getText(), .text and .selection in synthetic
+  text (red) and finds none in the extension sources (green)
+```
+
+That guard is the extension-side counterpart of the Host's unknown-field refusal:
+the Host refuses a body it has no field for, and this asserts the extension never
+tries to produce one. It is calibrated both ways, because a grep that matches
+nothing is exactly what a broken grep looks like.
+
+```text
+pnpm exec tsc -p extension-editor        → no output (clean)
+node scripts/build-editor-extension.mjs  → built dsh-computer-history-editor.vsix
+unzip -l dsh-computer-history-editor.vsix → 7 files, extension/out/*.js, package.json
+```
+
+The packer is forty lines of `zip` rather than a packaging framework: the VSIX is
+a zip with a manifest and `[Content_Types].xml`, and a hand-rolled one is easier
+to audit than a dependency. `extension-editor/src/vscode.d.ts` declares the slice
+of the editor API the extension uses, so the package compiles outside the editor -
+and keeping that surface small means a future change that needs another API shows
+up in the diff.
+
+Still open for T2.5-4: installing the `.vsix` on the real VS Code and proving the
+anchoring live. The spike could not find a `code` shim in the app bundle, so the
+next attempt starts from `~/.vscode/extensions/` (which the editor scans) or the
+GUI's "Install from VSIX".
