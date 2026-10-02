@@ -31,7 +31,7 @@ commit 链：`62cb5a1 → ef8d4bc → 551f4bc → d34a823 → 6e426e6 → b10fe2
 
 **证据位置**：`/tmp/dsh-ch-probe*.log`（原生直驱原始 NDJSON）、`/tmp/dsh-ch-e2e-20261002-170930/history.sqlite`（A4 端到端）、`/tmp/dsh-fixture-app/main.swift`（合成 fixture 源码，secure/plain/hung 三模式）、注入器补丁备份 `/tmp/dsh-*.bak-*`。
 
-**注意**：`/tmp` 证据是机器级的、goal/todo 是会话级的（重启不继承）；仓库级以本报告 + commit 链为准，续做看 §10。
+**注意**：`/tmp` 证据是机器级的、goal/todo 是会话级的（重启不继承）；仓库级以本报告 + commit 链为准，续做看 §10；第三轮对抗性复验（含一处自我纠正）见 §11。
 
 ---
 
@@ -290,6 +290,7 @@ secure 阶段（前台 10s）: rows before 1 -> after 1（delta 0）| secure_row
 | F10 | 中（工具链） | 已记录 | `dev_inject_plugin` 的 profile 目标与运行 Host 不一致：重启后它把 junction 建到 `profiles/web`（返回 `host ✗ / client ✗`），而 Host 实际跑在 desktop profile。运行期注入 desktop 需"手工 `profiles/desktop/node_modules` junction + staging `loader.create`"（N1 即以此完成）。另外 `dev_uninject_plugin` 会往**它选中的那个 profile** 的 `cordis.patch.yml` 写 `disabled` 残留行（本轮已手工清除 `profiles/web` 的那两行）。 |
 | F11 | **blocker（已修复 + 真机端到端验证）** | 已修复 | **Chromium/Electron 应用的焦点读取误杀**：真 VS Code 1.140.0 前台时，app 级 `kAXFocusedUIElement` 返回 `-25212`、系统级返回 `-25204`（连测 5 次一致），而窗口 title/document 可读；原代码把"元素为 nil"一律判 `.unreadable` → `privacy.secure=true / unreadable-focused-element` → **编辑器 adapter 观测 100% 丢弃**（与 F4 同类，但影响 vscode/Cursor 全部）。修复：`isSecureElement(_:readStatus:)` 用读取状态区分——`attributeUnsupported`/`noValue` = 该 app 没有 focused 属性（正向证据 ⇒ `.notSecure`），其余（超时/无效元素/API disabled）= 读取失败仍 fail-closed。真机复验：真 VS Code `secure:false` + document；secure fixture 仍 `secure:true/secure-field`（元数据扣留）；plain fixture `secure:false`；Terminal 仍 `secure:false`（F4 无回退）；Host 端到端 3 条落库 + file resource。 |
 | F12 | 环境 | 已记录 | **`ELECTRON_RUN_AS_NODE=1` 泄漏**：DSH 自己是 Electron 宿主，该变量出现在子进程 env 里，于是从 shell 启动任何 Electron 应用（VS Code/Cursor…）都会把它的启动器当 Node 跑——`Contents/MacOS/Code --version` 打印 `v24.21.0` 而非 VS Code 版本，`open -a` 静默无窗口。解法：`env -u ELECTRON_RUN_AS_NODE` 启动。这条也是 F6 误判的根因。 |
+| F13 | 低（隐私面） | 已记录，待产品决定 | **受保护路径的"纯标题"残留**：窗口被 protect 规则命中时，若那一刻 `kAXDocument` 尚不可读，collector 仍会落一条**只有标题、无 resource** 的原始观测（实测 `18:22:39 notes.txt res='-'`）。原因：protect 的路径 glob（如 `*dsh-unprotected*`）匹配不到纯文件名，而敏感标记启发式（`sensitiveResourceMarker`：`.env`/`.ssh/`/`.pem`/`.key`/`credentials`/`secrets`）只对 resource 值生效、不对 title 生效。影响面小：无 resource → 不成 episode → `recent`/`search` 看不到，且随原始观测 24h TTL 过期；但文件名（如 `id_rsa` 这类不在标记集里的名字）会短暂留在原始表。可选修法（需产品拍板）：把标记集同时作用于 title，或把密钥类文件名并入标记集。 |
 
 ## 7. §7 验收清单
 
@@ -378,3 +379,19 @@ tests/integration/plugin-multi-host.spec.ts 同上
 | N5 | 修注入器自重载 `selfEntry 无官方 _dispose`（F8） | 可选，改注入器源码 | ✅ **已完成并验证**：重启后连续两次自重载成功（无 reboot-failed），改注入器代码不再需要重启；细节见 F8 |
 
 每阶段收尾固定动作：关闭本阶段打开的应用/窗口/后台进程；更新报告与 todo；forward commit；确认 worktree clean。
+
+## 11. 对抗性复验（第三轮，2026-10-02 18:1x–18:2x）
+
+用户追问"确定没 bug 吗"，故对**此前从未真正跑过**的面做了对抗性验证（全部真机、真 Host）：
+
+| 面 | 之前的状态 | 本轮结果 |
+|---|---|---|
+| `/recent`、`/search` | 只在**空库**上验过（都返回 `[]`） | ✅ 带 3 条真实观测/1 个 episode 验证：`/recent` 返回 episode（含 boundary/summary/resources/surfaces），`/search?q=normal-text` 与 `?q=vscode` 命中同一 episode，`?q=zzz-nomatch` → `[]` |
+| search 输入校验（最易藏 500） | 未测 | ✅ 10 组对抗输入（FTS 语法糖 `"`/`NEAR(`/`*`/`a-b`、`file:///tmp`、空串、缺失、`AND`；`limit=abc/-1/0/100000`）→ 全部 `400` 或 `[]`，**无一 500** |
+| agent 工具（LLM 面） | 只确认出现在工具表，从未调用 | ✅ `computer_history_search` / `computer_history_episode` 实调：返回结构化 episode + 不可信数据防护前缀；坏参数走同一校验 |
+| episode 管线 | 从没产出过（`/episode` 曾 404） | ✅ 真实产出：`episode:<session>:<seq>`，`state=closed`、`summaryKind=deterministic`、seed/资源/面/`observationIds` 正确；资源锚定 → episode 的行为符合设计（无 resource/无 workspace 的观测不锚定，见下） |
+| protect（隐私关键路径） | 未在真机测过 | ✅ **同文件严格对照**：受保护文件前台 20s → 带 resource 的行 **0 新增**；把规则换到另一个文件后，对照文件 → **+1 行**（证明采集是活的，丢弃来自规则）。另用原生探针直发 `protectedPathPatterns` 验证 helper 侧：有待保护 pattern → 0 观测，去掉 → 1 观测 |
+
+**一处自我纠正（记录在案）**：本轮中途我一度判断"protect 规则未生效（隐私 bug）"，并按 collector session 重新归因后**被推翻**——第一次统计把**上一轮 session** 的行算进了本轮。教训：跨 session 对比必须按 `collector_session` 分期，否则旧行会伪装成新泄漏。最终结论是 protect 路径工作正常（上表）。
+
+**仍未验证（诚实清单，非欠账）**：UI 面板的真实渲染（只有 Slots 注册证据，没有视觉证据）；iTerm2 / Cursor（未安装）；留存/清理（24h/30d TTL 触发）；`/delete` 在**有数据**时的语义；多 Host 并发占用；受支持应用内的**真实**密码框（当前只有合成 `NSSecureTextField`）。
