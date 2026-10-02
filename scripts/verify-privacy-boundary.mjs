@@ -14,17 +14,26 @@ const forbidden = [
   'AVCaptureSession',
 ]
 
+// This file defines the denylist, so it necessarily contains the tokens it
+// forbids. It is the only file exempt from its own scan: the check would
+// otherwise always fail once scripts/ is scanned.
+const SELF = 'verify-privacy-boundary.mjs'
+
 async function walk(dir) {
   const entries = await readdir(dir, { withFileTypes: true })
   const nested = await Promise.all(entries.map(async (entry) => {
     const full = path.join(dir, entry.name)
     if (entry.isDirectory()) return walk(full)
+    if (entry.name === SELF) return []
     return /\.(swift|ts|tsx|js|mjs)$/.test(entry.name) ? [full] : []
   }))
   return nested.flat()
 }
 
-const roots = ['src', 'native']
+// The verification helpers under scripts/ are scanned too: they touch the
+// Accessibility API directly, so they must respect the same boundary as the
+// collector they exercise.
+const roots = ['src', 'native', 'scripts']
 const rootFiles = await Promise.all(roots.map(async (root) => {
   try {
     return await walk(root)

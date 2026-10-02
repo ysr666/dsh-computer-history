@@ -23,7 +23,8 @@
     "verify": "pnpm check && pnpm verify:privacy",
     "verify:p1": "pnpm verify && pnpm build && pnpm benchmark:ingestion && pnpm native:build && pnpm native:test",
     "prepack": "pnpm build && pnpm native:build",
-    "benchmark:ingestion": "vitest run --config vitest.benchmark.config.ts"
+    "benchmark:ingestion": "vitest run --config vitest.benchmark.config.ts",
+    "verify:tools": "node scripts/verify/build-tools.mjs"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "4.0.4",
