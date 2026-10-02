@@ -183,3 +183,39 @@ tarball, a never-before-loaded name) all came back without one.
 
 That is a boundary to hand over, not to paper over: the live run is the first thing
 to do after a restart, and the phase report says so.
+
+### After the restart: the Host side is fixed, the installer is the last step
+
+The owner restarted DSH, and the same probe that had failed three times came back
+differently:
+
+```text
+{"target":"dsh-computer-history","created":"e7894ab3","entries":1,
+ "states":"e7894ab3:fiber=2"}          ← running
+```
+
+**The environment diagnosis is confirmed**: with a fresh Host session the plugin
+loads and runs, on the same junction-to-checkout recipe, from the same build. The
+previous three attempts failed on the session's loader state, not on the plugin, and
+`docs/release.md`'s correction stands for the right reason.
+
+The live editor run then hit a **narrower** obstacle, on the VS Code side:
+
+```text
+code --install-extension dsh-computer-history-editor.vsix
+  → Failed Installing (exit 1, "Internal")     with VS Code closed, directory removed
+extensions.json still mentions the extension  ← a dangling entry from the earlier
+                                                successful install
+60 seconds of watching                        → 0 companion rows
+```
+
+So the remaining work is the **extension installer**, not the Host and not the
+protocol: the same `.vsix` installed successfully in 2.6 and does not now, and
+VS Code's own cache still points at a directory that no longer exists. The next
+attempt starts there - install with the editor closed, verify the directory exists
+and the cache entry matches it, then watch the store.
+
+Environment restored: VS Code quit, the user's settings restored from the backup
+taken before the token was written, the extension directory removed, the dangling
+cache entry cleared, the junction and store symlink deleted, the scratch workspace
+and temporary files removed, the profile patch residue cleared.
