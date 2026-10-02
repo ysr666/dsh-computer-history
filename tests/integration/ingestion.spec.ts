@@ -638,7 +638,7 @@ describe('repeated work on one file outside a DSH workspace', () => {
 
     const episodes = new EpisodeStore(history.db).listRecent()
     expect(episodes).toHaveLength(1)
-    const detail = new EpisodeStore(history.db).get(String(episodes[0]!.id))
+    const detail = new EpisodeStore(history.db).get(episodes[0]!.id)
     expect(detail?.observationIds).toHaveLength(3)
     history.close()
   })
