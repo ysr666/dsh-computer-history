@@ -10,7 +10,7 @@
 
 ## 0. 快速交接摘要（重启后先读这一节）
 
-**当前状态**：Phase 1 已在真实 DSH Host + 真实 macOS 会话中跑通；三个 blocker 已修复并真机复验（client bundle 格式、cordis inject 门禁、Terminal fail-closed）；A4/A5 已用受控合成 fixture 双向验证；环境已还原；worktree clean。
+**当前状态**：Phase 1 已在真实 DSH Host + 真实 macOS 会话中跑通；**四个 blocker 已修复并真机复验**（client bundle 格式、cordis inject 门禁、Terminal fail-closed、Chromium/Electron 焦点误杀 F11）；A4/A5 已用受控合成 fixture 双向验证；真 VS Code 1.140.0 端到端打通到落库 + resource；注入器自重载已修并验证（改注入器代码不再需要重启）；环境已还原；worktree clean。
 commit 链：`62cb5a1 → ef8d4bc → 551f4bc → d34a823 → 6e426e6 → b10fe2b → 554223b → cb1753f → 226c86e`。
 
 **N1 已完成（2026-10-02 17:55，DSH 重启后实测）**：
@@ -25,9 +25,9 @@ commit 链：`62cb5a1 → ef8d4bc → 551f4bc → d34a823 → 6e426e6 → b10fe2
 
 **仍未确认（条件项，不是欠账）**：
 
-- 真 VS Code/Cursor 的 kAXDocument 语义 —— adapter 契约已由合成 app 覆盖（§5.5）；`brew install --cask visual-studio-code`（本机有 brew 6.0.18、无本地缓存）后用 `/tmp/dsh-ch-probe.mjs` + 编辑器前台复测；
-- 注入器自重载补丁 (A)(B) 未验证（见 F8）——需要一次成功的自重载才能执行；
-- 三个"已归位"项：kAXURL 无触发场景（解码已单测锁定）、helper-exit 分支已有单测且真机不可构造、子路径挂载无环境。
+- ~~真 VS Code 语义~~ ✅ 已完成（§5.5）；~~注入器自重载~~ ✅ (A) 已验证（F8）；注入器 (B) 兜底补丁保留但未确认被触发；
+- 三个"已归位"项：kAXURL 无触发场景（解码已单测锁定）、helper-exit 分支已有单测且真机不可构造、子路径挂载无环境；
+- 环境提醒：从 shell 启动任何 Electron 应用（VS Code/Cursor…）前必须 `env -u ELECTRON_RUN_AS_NODE`（F12），否则启动器被当 Node 跑、静默无窗口。
 
 **证据位置**：`/tmp/dsh-ch-probe*.log`（原生直驱原始 NDJSON）、`/tmp/dsh-ch-e2e-20261002-170930/history.sqlite`（A4 端到端）、`/tmp/dsh-fixture-app/main.swift`（合成 fixture 源码，secure/plain/hung 三模式）、注入器补丁备份 `/tmp/dsh-*.bak-*`。
 
@@ -201,8 +201,20 @@ hung（冻结 6s 期间，三个时点）:     pauseDelay 3500ms -> pausedAckMs 
 ```
 
 结论分层：
-- ✅ **已验证**：bundle-id → adapter 映射（`vscode`）、`NSWindow.representedURL → kAXDocument(file://…)` → observation 的管线成立；文件型应用的 resource 有值。
-- ❓ **仍未确认**：真实 VS Code 的 AXDocument 究竟是文件路径、`file://` URL 还是 vscode 自己的 URI scheme —— 需要可启动的真 VS Code/Cursor（N2）。
+- ✅ **已验证（合成 app）**：bundle-id → adapter 映射（`vscode`）、`NSWindow.representedURL → kAXDocument(file://…)` → observation 的管线成立；文件型应用的 resource 有值。
+- ✅ **已用真 VS Code 1.140.0 复测**（2026-10-02 18:0x，见 F12 的启动前提）：
+
+```text
+真 VS Code 窗口: document(file:///private/tmp/dsh-work-continuity-p05/…/provider.ts) title(provider.ts)
+                 axurl(err=-25205)     focusedUIElement(err=-25212)  ← Chromium 系：app 级无 focused 属性
+合成文件窗口  : document(file:///tmp/dsh-live-fixtures/normal-text.html) title(normal-text.html)
+collector 观测: {"adapter":"vscode","privacy":{"secure":false},
+                "window":{"title":"normal-text.html","document":"file:///tmp/dsh-live-fixtures/normal-text.html"}}
+Host 端到端   : 3 条 observation 落库（含 window_title=normal-text.html）
+                resources = {kind file, canonical_uri file:///private/tmp/dsh-live-fixtures/normal-text.html}
+```
+
+→ 真实 VS Code 的 `kAXDocument` 也是 **`file://` URL**（与合成 app 一致），adapter 管线端到端成立。
 
 fixture 用完即删（app bundle 已移除，进程已退出），不留在系统里冒用真实 bundle id。
 
@@ -271,11 +283,13 @@ secure 阶段（前台 10s）: rows before 1 -> after 1（delta 0）| secure_row
 | F3 | 中（工具链） | **已修复 + 重启后验证** | `dsh-super-injector` v0.3.3 的 `KNOWN_SLOTS` 白名单过时（11 条），把 live 槽位 `main`、`sidebar.panellist` 误判为坏骨架，阻断合法插件注入。已按 live client 拓扑补到 91 条（built lib + source 双份）；DSH 重启后 `dev_inject_plugin` **放行**（N1 通过）。证据：live `Slots.listSubTree` + 重启前后两次注入返回对比。 |
 | F4 | **blocker（已修复，规则经二次修正）** | 已修复 + 真机双向复验 | Terminal adapter 曾 3/3 判 `unreadable-focused-element` → `privacy.secure=true` → Host drop，**Terminal 观测事实性归零**。根因（AX 探针实测）：focused element 的 `kAXSubroleAttribute` 返回 `-25205 = kAXErrorAttributeUnsupported`，原 `isSecureElement` 把所有非 success 一律当 `.unreadable`。修复分两步：(1) 把"属性不存在/不支持"与"读取失败/超时"分开，分类抽成纯函数 `classifySecureFieldState`；(2) 合成 fixture 量出 secure 与 plain 的唯一差别就是 subrole 是否存在（`NSSecureTextField` → `AXSecureTextField`；`NSTextField`/`AXTextArea` → `attributeUnsupported`），于是去掉"`AXTextField` 无 subrole 仍 fail-closed"这条会误杀**普通文本框**的守卫，只保留**读取失败**才 fail-closed。真机复验：Terminal `secure:false` 8/8（含 document）、plain 文本框 `secure:false` 9/9、真实 secure 字段 `secure:true/secure-field` 4/4 且 window/element 全扣留。端到端（§5.8）：secure 前台 10s → Host 落库 **delta 0**、`secure_rows=0`；plain 对照落库 1 条并生成 `file` resource。 |
 | F5 | 记录 | — | Finder 的 kAXDocument 为 nil → `resource_id` 空；Preview 的 document 为 file:// URL → 资源可用。resource 识别能力随 app 不同而分裂，产品假设需按 app 记账。 |
-| F6 | 环境 | — | 本机 VS Code 为不可启动的假壳（`Contents/MacOS/Code` 实为 Node 脚本），故**真实** VS Code 语义不可验证；但 bundle-id→adapter 映射与 AXDocument 管线已用合成 app 验证（§5.5），故此项只剩"真 app 语义"这一层。 |
+| F6 | 环境 | **已更正 + 已解决** | 早前把 `/Applications/Visual Studio Code.app` 判为"不可启动的假壳"是**错误结论**：它是真的 VS Code **1.140.0**（1.4 GB、Microsoft 签名并已公证）。真实原因是启动环境陷阱（见 F12）——`ELECTRON_RUN_AS_NODE=1` 被 DSH（Electron 宿主）泄漏给子进程，导致任何 Electron 应用的启动器被当成 Node 运行而静默退出。清掉该变量后 VS Code 正常启动并完成端到端验证（§5.5）。 |
 | F7 | 范围 | — | 浏览器类 app 无 adapter：交接文档 §4.1 建议的"本地 HTML 假密码框"测法在当前 Phase 1 适配器集下**不可达**；同理 kAXURL 也缺少可触发场景。 |
-| F8 | 中（工具链） | 已打补丁 / 运行中仍未激活 | `dsh-super-injector` 自重载路径有三处缺陷，本轮全部定位：(A) 复工器硬要求 `entry._dispose`，而 DSH 0.2.0-rc.2 的 loader entry **没有该 API**（实测 dump：`_dispose: undefined`，但 `fiber.dispose` / `entry.update` / `entry.refresh` / `parent.remove` 均为 function）→ `reboot-failed: selfEntry 无官方 _dispose`；(B) reload 的"磁盘降级"路径 import 后只在注入器**私有 loadCache** 里找 URL，而裸 `ctx.loader.import` 不写该缓存，且首次自毁已把缓存删空 → 永远匹配不到；(C) 更深一层：即使补 (B)，`dev_reload_package dsh-super-injector` 仍返回 `缓存中无匹配且磁盘降级失败`（失败点在 entry/URL 匹配更早处，未继续深挖）。已对 (A)(B) 打补丁（built lib + source 双份，备份 `/tmp/dsh-injector-rebuilder-*.bak-*`、`/tmp/dsh-injector-fallback-*.bak-*`），但**本会话无法验证**——它们只在一次成功的自重载里才会执行，而 (C) 挡住了触发。后果不变：**注入器代码改动必须重启 DSH Host 才生效**。附：首次失败后自愈日志有 `heal-ok: 第 1 次 touch patch 官方重装配成功`，但运行实例仍是旧代码（再调 `dev_inject_plugin` 报旧的 11 条白名单）。 |
+| F8 | 中（工具链） | **已修复 + 已验证** | `dsh-super-injector` 自重载路径有三处缺陷：(A) 复工器硬要求 `entry._dispose`，而 DSH 0.2.0-rc.2 的 loader entry **没有该 API**（实测 dump：`_dispose: undefined`，但 `fiber.dispose` / `entry.update` / `entry.refresh` / `parent.remove` 均为 function）→ `reboot-failed: selfEntry 无官方 _dispose`；(B) reload 的"磁盘降级"路径 import 后只在注入器**私有 loadCache** 里找 URL，而裸 `ctx.loader.import` 不写该缓存；(C) 曾在重启前表现为 `缓存中无匹配且磁盘降级失败`。修复：built lib + source 双份改成 `fiber.dispose()` 优先、磁盘降级用刚 import 的 URL 兜底。**重启后实测：连续两次 `dev_reload_package dsh-super-injector` 都成功**（`self-heal.log` 10:07:23Z 与 10:07:39Z 各自触发 → 110ms 后新实例 `purge-stale-tools` + `client-meta-healed`，**无 reboot-failed**；工具面仍可用）→ **(A) 已验证**，改注入器代码不再需要重启 DSH；(B) 补丁保留但本轮未确认被触发；(C) 重启后不复现。备份 `/tmp/dsh-injector-*.bak-*`。 |
 | F9 | 记录 | — | 需要位置信息的应用把 URL 放在 **`kAXDocument`**（Chrome 实测 `https://chatgpt.com/...`，Preview/Terminal 为 `file://...`），`kAXURL` 在这些应用上返回 `kAXErrorAttributeUnsupported`。若将来加 browser adapter，位置应读 AXDocument；`safeURL` 的 CFURL 分支仍保留防御。 |
-| F10 | 中（工具链） | 已记录 | `dev_inject_plugin` 的 profile 目标与运行 Host 不一致：重启后本轮它把 junction 建到 `profiles/web`（返回 `host ✗ / client ✗`），而 Host 实际跑在 desktop profile。运行期注入 desktop 需"手工 `profiles/desktop/node_modules` junction + staging `loader.create`"（N1 即以此完成）。另外 `dev_uninject_plugin` 会往**它选中的那个 profile** 的 `cordis.patch.yml` 写 `disabled` 残留行（本轮已手工清除 `profiles/web` 的那两行）。 |
+| F10 | 中（工具链） | 已记录 | `dev_inject_plugin` 的 profile 目标与运行 Host 不一致：重启后它把 junction 建到 `profiles/web`（返回 `host ✗ / client ✗`），而 Host 实际跑在 desktop profile。运行期注入 desktop 需"手工 `profiles/desktop/node_modules` junction + staging `loader.create`"（N1 即以此完成）。另外 `dev_uninject_plugin` 会往**它选中的那个 profile** 的 `cordis.patch.yml` 写 `disabled` 残留行（本轮已手工清除 `profiles/web` 的那两行）。 |
+| F11 | **blocker（已修复 + 真机端到端验证）** | 已修复 | **Chromium/Electron 应用的焦点读取误杀**：真 VS Code 1.140.0 前台时，app 级 `kAXFocusedUIElement` 返回 `-25212`、系统级返回 `-25204`（连测 5 次一致），而窗口 title/document 可读；原代码把"元素为 nil"一律判 `.unreadable` → `privacy.secure=true / unreadable-focused-element` → **编辑器 adapter 观测 100% 丢弃**（与 F4 同类，但影响 vscode/Cursor 全部）。修复：`isSecureElement(_:readStatus:)` 用读取状态区分——`attributeUnsupported`/`noValue` = 该 app 没有 focused 属性（正向证据 ⇒ `.notSecure`），其余（超时/无效元素/API disabled）= 读取失败仍 fail-closed。真机复验：真 VS Code `secure:false` + document；secure fixture 仍 `secure:true/secure-field`（元数据扣留）；plain fixture `secure:false`；Terminal 仍 `secure:false`（F4 无回退）；Host 端到端 3 条落库 + file resource。 |
+| F12 | 环境 | 已记录 | **`ELECTRON_RUN_AS_NODE=1` 泄漏**：DSH 自己是 Electron 宿主，该变量出现在子进程 env 里，于是从 shell 启动任何 Electron 应用（VS Code/Cursor…）都会把它的启动器当 Node 跑——`Contents/MacOS/Code --version` 打印 `v24.21.0` 而非 VS Code 版本，`open -a` 静默无窗口。解法：`env -u ELECTRON_RUN_AS_NODE` 启动。这条也是 F6 误判的根因。 |
 
 ## 7. §7 验收清单
 
@@ -287,7 +301,7 @@ secure 阶段（前台 10s）: rows before 1 -> after 1（delta 0）| secure_row
 [x] 记录真实 observation 字段（app/adapter/window/privacy/resource 实际情况见 §5）
 [~] §6 八问：A1 ✅ / A2 部分（Finder、Preview、Terminal 修复后 ✅ 真机复验；编辑器 adapter 契约 ✅ 合成 app，真实 VS Code 语义未确认）
      A3 场景不存在+解码已单测锁定 / A4 ✅ 双向真机复验（secure 4/4 识别、plain 9/9 不误杀、Terminal 8/8 恢复、Host 端 drop 端到端见 §5.8）/ A5 ✅ 受控卡死实测 / A6 ✅
-     B7 ✅ / B8 ✅ / C9 ✅ / C10 部分（分支已有单测，真机不可构造）
+     A2 ✅ 真 VS Code 1.140.0 端到端（含 F11 修复）；B7 ✅ / B8 ✅ / C9 ✅ / C10 部分（分支已有单测，真机不可构造）
 [x] 缺陷：修 blocker #1/#2/#3（Terminal fail-closed）+ 补回归护栏（client 契约、ctx.get 语义、secure 分类分支）+ 本报告
 [x] 验证报告落盘（本文件）
 [x] worktree clean + forward commit（`62cb5a1 … 226c86e`，见 §9）
@@ -298,7 +312,7 @@ secure 阶段（前台 10s）: rows before 1 -> after 1（delta 0）| secure_row
 | 项 | 原因 | 需要什么条件 |
 |---|---|---|
 | kAXURL CFURL 解码是否生效 | 真机探测的所有应用（Chrome/Finder/Terminal）都返回 `kAXErrorAttributeUnsupported`，没有可触发场景 | 已单测锁定解码逻辑；若将来出现 AXURL 有值的应用，可直接用 `/tmp/dsh-ax-url` 样式探针复测 |
-| 真实 VS Code 的 kAXDocument 语义 | 本机 VS Code 是不可启动假壳；bundle-id→adapter 映射与 AXDocument 管线已用合成 app 验证（§5.5） | 安装可启动的 VS Code 或 Cursor，用 `/tmp/dsh-ch-probe.mjs` + 编辑器前台复测 |
+| ~~真实 VS Code 的 kAXDocument 语义~~ | ✅ **已解决**（§5.5：真 VS Code 1.140.0 的 `kAXDocument` 是 `file://` URL，与合成 app 一致；Host 端到端 3 条落库 + file resource）。启动前提：Electron 应用需清 `ELECTRON_RUN_AS_NODE`（F12） | — |
 | secure 三态在"真实密码框"的阳性路径 | ✅ 已用合成 fixture 关闭（含 Host 端 drop 端到端）：真实 `NSSecureTextField`（空值、非真实凭据）被识别为 `secure-field`、元数据扣留、Host 落库 delta 0；plain 文本框对照落库且不误杀 | 若要覆盖"真实应用自身的密码框"，需支持应用中出现 secure 字段（浏览器无 adapter）；fixture 源码 `/tmp/dsh-fixture-app/main.swift` 可复用 |
 | 0.5s timeout 对真正卡死应用 | ✅ 已用合成 fixture 关闭：冻结 6s 期间 `paused` ack 最大 975ms（对照 0ms） | — |
 | `collector-exit-unconfirmed` 分支 | 未触发 | 单测已覆盖该分支（释放锁 + 记 degraded）；真机触发需 helper 存活 SIGKILL，不可构造，故不再作为真机待办 |
@@ -317,9 +331,10 @@ src/host/service/computer-history-service.ts   新增 ctx.get() 访问器 helper
 src/host/api/routes.ts                  改用 helper（8 条路由）
 src/agent/tools.ts                      改用 helper（3 个工具）
 src/agent/resume-hint.ts                改用 helper
-native/macos/Sources/ComputerHistoryCollector/Privacy.swift  secure 分类纯函数（缺失/不支持 subrole = 非 secure；仅读取失败 fail-closed）；kAXURL 解码抽成 decodeURLAttribute
-native/macos/Tests/ComputerHistoryCollectorTests/PrivacyTests.swift  secure 分类 + URL 解码分支测试
-scripts/test-native.mjs                 secure 分类 + URL 解码分支 native 回归断言
+native/macos/Sources/ComputerHistoryCollector/Privacy.swift  secure 分类纯函数（缺失/不支持 subrole = 非 secure；仅读取失败 fail-closed）；kAXURL 解码抽成 decodeURLAttribute；焦点读取状态感知（F11）
+native/macos/Sources/ComputerHistoryCollector/Collector.swift     把 kAXFocusedUIElement 的读取状态传给分类器（F11）
+native/macos/Tests/ComputerHistoryCollectorTests/PrivacyTests.swift  secure 分类 + URL 解码 + 焦点读取状态分支测试
+scripts/test-native.mjs                 secure 分类 + URL 解码 + 焦点读取状态 native 回归断言
 tests/unit/host-api.spec.ts             harness 改为 ctx.get() 语义
 tests/unit/agent-tools.spec.ts          同上
 tests/unit/resume-hint-lifecycle.spec.ts 同上
@@ -343,21 +358,23 @@ tests/integration/plugin-multi-host.spec.ts 同上
 /tmp/dsh-ch-ack-probe.mjs    pause ack 计时探针（A5）
 /tmp/dsh-ax-probe.swift      AX 属性探针（secure 字段 / subrole / AXURL 诊断）
 /tmp/dsh-ax-url-src/main.swift  AXURL 探测（链接仓库 Privacy.swift）
+/tmp/dsh-ax-focus-src/main.swift 焦点来源探测（app 级 / 窗口级 / 系统级，F11 证据）
 /tmp/dsh-fixture-app/main.swift 合成 fixture app 源码（secure/plain/hung 三模式；app bundle 用完即删）
 /tmp/dsh-verify-injector-patch.mjs  注入器补丁离线复演
 /tmp/dsh-ch-e2e-20261002-170930/history.sqlite  A4 端到端证据库（1 条 plain observation + 1 条 file resource；secure 阶段 delta 0）
+/tmp/dsh-ch-vscode-e2e/history.sqlite  真 VS Code 端到端证据库（3 条 observation + file resource）
 ```
 
 ## 10. 下一阶段（重启后按序执行）
 
-本阶段已收口：真机验证、三个 blocker 修复（client bundle 格式 / cordis inject 门禁 / Terminal fail-closed）、A4/A5 受控夹具闭环、环境还原、forward commit 链见 §0。下一阶段每完成一步就更新本报告：
+本阶段已收口：真机验证、**四个 blocker 修复**（client bundle 格式 / cordis inject 门禁 / Terminal fail-closed / Chromium 焦点误杀 F11）、A4/A5 受控夹具闭环、真 VS Code 端到端、注入器自重载修复与验证、环境还原，forward commit 链见 §0。**N1–N5 全部完成**（N2/N5 于 2026-10-02 18:0x 补完），余下仅为已归位的条件项与观测项：
 
 | # | 动作 | 前置 | 验收 |
 |---|---|---|---|
 | N1 | 重启 DSH Host 后验证注入器补丁：`dev_plugin_status` 确认 injector active → `dev_inject_plugin {dir}` 应直接放行（不再报 `main`/`sidebar.panellist` 不在白名单）→ live client Slots 里 `computer-history` occupant 仍 active | DSH 重启 | ✅ **已完成（2026-10-02 17:55）**：重启前离线复演通过；重启后 `dev_inject_plugin` 校验放行、host 路由 200、client occupant active、`pnpm verify:p1` exit 0；注入目标 profile 的偏差见 F10（以 desktop junction + staging loader.create 完成），环境已还原 |
-| N2 | 安装真实可启动的 VS Code 或 Cursor → 复测真实 editor 的 kAXDocument 语义 | 可用编辑器 | ✅ 契约部分完成（§5.5 合成 app：adapter 映射 + AXDocument 管线）；真实 VS Code 语义仍待真机 |
+| N2 | 安装真实可启动的 VS Code 或 Cursor → 复测真实 editor 的 kAXDocument 语义 | 可用编辑器 | ✅ **已完成（2026-10-02 18:0x）**：真 VS Code 1.140.0 `kAXDocument = file://…`；collector 观测 + Host 端到端落库 + file resource；过程中发现并修复 F11（Chromium 焦点误杀）；启动前提见 F12 |
 | N3 | 在 AXURL 有值的场景复测 `safeURL` 的 CFURL 解码 | 可触发场景 | ✅ 已完成可行部分：真机探针证明 AXURL 无触发场景（F9），解码逻辑改为纯函数 `decodeURLAttribute` + native/XCTest 覆盖 |
 | N4 | 故障注入"helper 退出无法确认" | 可选 | 逻辑已有单测覆盖（`tests/unit/collector-hardening.spec.ts:847` "releases ownership but records an unconfirmed exit"）；真机触发需要 helper 能存活 SIGKILL（不可构造），故真机项保持未触发 |
-| N5 | 修注入器自重载 `selfEntry 无官方 _dispose`（F8） | 可选，改注入器源码 | 已定位三处缺陷并对 (A)(B) 打补丁（built+source，见 F8/§9）；(C) 未解，故补丁**未验证**——post-restart 验证点：自重载能跑完并加载新代码 |
+| N5 | 修注入器自重载 `selfEntry 无官方 _dispose`（F8） | 可选，改注入器源码 | ✅ **已完成并验证**：重启后连续两次自重载成功（无 reboot-failed），改注入器代码不再需要重启；细节见 F8 |
 
 每阶段收尾固定动作：关闭本阶段打开的应用/窗口/后台进程；更新报告与 todo；forward commit；确认 worktree clean。

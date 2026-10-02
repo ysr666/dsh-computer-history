@@ -76,6 +76,31 @@ final class PrivacyTests: XCTestCase {
         )
     }
 
+    func testMissingFocusedElementAttributeIsNotUnreadable() {
+        // Chromium/Electron applications expose no focused-element attribute
+        // (VS Code 1.140.0 answers -25212 on the application element and
+        // -25204 system-wide, on every retry) while their window attributes
+        // read fine. Treating that as unreadable dropped every observation
+        // from the editor adapters.
+        XCTAssertEqual(
+            isSecureElement(nil, readStatus: .noValue),
+            .notSecure
+        )
+        XCTAssertEqual(
+            isSecureElement(nil, readStatus: .attributeUnsupported),
+            .notSecure
+        )
+        // A failed read still withholds metadata.
+        XCTAssertEqual(
+            isSecureElement(nil, readStatus: .cannotComplete),
+            .unreadable
+        )
+        XCTAssertEqual(
+            isSecureElement(nil),
+            .unreadable
+        )
+    }
+
     func testSecureSubroleClassifiesAsSecure() {
         XCTAssertEqual(
             classifySecureFieldState(

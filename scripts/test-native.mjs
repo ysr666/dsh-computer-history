@@ -117,6 +117,23 @@ struct NativeTests {
         precondition(isSecureElement(nil) == .unreadable)
         precondition(windowElement(from: nil) == nil)
 
+        // Chromium/Electron applications expose no focused-element attribute
+        // at all (VS Code 1.140.0: -25212 on the application element and
+        // -25204 system-wide, on every retry) while their window attributes
+        // read fine. A missing attribute is positive evidence, a failed read
+        // is not.
+        precondition(isSecureElement(nil, readStatus: .noValue) == .notSecure)
+        precondition(
+            isSecureElement(nil, readStatus: .attributeUnsupported)
+                == .notSecure
+        )
+        precondition(
+            isSecureElement(nil, readStatus: .cannotComplete) == .unreadable
+        )
+        precondition(
+            isSecureElement(nil, readStatus: .invalidUIElement) == .unreadable
+        )
+
         // A *missing* subrole is not a failed read. Secure fields are
         // defined by the AXSecureTextField subrole, while AXTextArea and
         // AXGroup commonly have none (real-host regression: Terminal's

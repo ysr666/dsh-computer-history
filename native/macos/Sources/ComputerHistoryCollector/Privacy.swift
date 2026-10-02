@@ -81,12 +81,35 @@ func classifySecureFieldState(
     return .unreadable
 }
 
-func isSecureElement(_ element: AXUIElement?) -> SecureFieldState {
-    // A nil focused element means the read failed or the application
-    // exposes no focused element. The two are indistinguishable from
-    // here, so treat the surface as unreadable and withhold metadata
-    // rather than risk recording a secure field's window.
-    guard let element else { return .unreadable }
+func isSecureElement(
+    _ element: AXUIElement?,
+    readStatus: AXError = .success
+) -> SecureFieldState {
+    // A nil focused element has two very different causes, and `readStatus`
+    // is the only thing that tells them apart:
+    //
+    // - `attributeUnsupported` / `noValue`: the application has no
+    //   focused-element attribute at all. Measured on real Chromium/Electron
+    //   apps (VS Code 1.140.0): the application element answers -25212 and
+    //   the system-wide element -25204 on every retry, while the window
+    //   attributes (title, document) read fine. There is no focused element
+    //   we could be missing, so this is positive evidence, exactly like a
+    //   missing subrole.
+    // - anything else (timeouts, invalid elements, API disabled): the read
+    //   failed. We could not ask, so the surface stays unreadable and the
+    //   metadata is withheld.
+    //
+    // Before this distinction existed, the first case dropped every
+    // observation from the editor adapters — the same fail-closed false
+    // positive that removed Terminal from capture.
+    guard let element else {
+        switch readStatus {
+        case .attributeUnsupported, .noValue:
+            return .notSecure
+        default:
+            return .unreadable
+        }
+    }
 
     var subrole: CFTypeRef?
     let subroleStatus = AXUIElementCopyAttributeValue(

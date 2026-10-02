@@ -387,7 +387,7 @@ final class Collector {
             kAXFocusedWindowAttribute as CFString,
             &focusedWindowRef
         )
-        AXUIElementCopyAttributeValue(
+        let focusedElementStatus = AXUIElementCopyAttributeValue(
             appElement,
             kAXFocusedUIElementAttribute as CFString,
             &focusedElementRef
@@ -399,11 +399,13 @@ final class Collector {
         if let window { applyMessagingTimeout(window) }
         if let element { applyMessagingTimeout(element) }
 
-        let secureState = isSecureElement(element)
-        // Only a positively-read, positively-not-secure focused element
-        // may unlock window metadata. `.secure` and `.unreadable` both
-        // withhold the title/document/URL rather than risk persisting a
-        // secure field's surface.
+        let secureState = isSecureElement(element, readStatus: focusedElementStatus)
+        // Window metadata is unlocked only when the focused element is
+        // positively not secure: either a readable element without the secure
+        // subrole, or an application that exposes no focused-element
+        // attribute at all (Chromium/Electron). A failed read still withholds
+        // the title/document/URL rather than risk persisting a secure
+        // field's surface.
         let metadataAllowed = secureState == .notSecure
         observeWindow(metadataAllowed ? window : nil)
 
