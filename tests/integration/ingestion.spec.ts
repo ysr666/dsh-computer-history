@@ -769,57 +769,57 @@ describe('URL resources are provenance-gated (ADR 0007)', () => {
   })
 })
 
-describe('F13: a file name we cannot locate is not stored (ADR 0008)', () => {
-  function protectService(root: string, protectRules: boolean) {
-    const history = openHistoryDatabase({
-      dataDirectory: path.join(root, 'history'),
-      nowMs: 1,
-    })
-    const now = Date.now()
-    // Built by hand: these cases are about the normaliser's decision, not about
-    // how a policy is persisted, and the built-in protect rules an initial
-    // policy carries would only obscure which rule did the dropping.
-    const snapshot: PolicySnapshot = {
-      revision: 2,
-      mode: 'include-only',
-      updatedAtMs: now,
-      rules: [
-        {
-          id: PolicyRuleId('allow-vscode'),
-          dimension: 'app',
-          action: 'allow',
-          matcher: 'exact',
-          pattern: 'com.microsoft.VSCode',
-          builtIn: false,
-          createdAtMs: now,
-          updatedAtMs: now,
-        },
-        ...(protectRules
-          ? [{
-              id: PolicyRuleId('protect-client'),
-              dimension: 'resource' as const,
-              action: 'deny' as const,
-              matcher: 'glob' as const,
-              pattern: '/Users/someone/private/*',
-              builtIn: false,
-              createdAtMs: now,
-              updatedAtMs: now,
-            }]
-          : []),
-      ],
-    }
-    return {
-      history,
-      snapshot,
-      ingestion: new IngestionService(
-        history.db,
-        { resolve: async () => ({ source: 'none' as const, confidence: 0 }) },
-        () => snapshot,
-        () => 100_000,
-      ),
-    }
+function protectService(root: string, protectRules: boolean) {
+  const history = openHistoryDatabase({
+    dataDirectory: path.join(root, 'history'),
+    nowMs: 1,
+  })
+  const now = Date.now()
+  // Built by hand: these cases are about the normaliser's decision, not about
+  // how a policy is persisted, and the built-in protect rules an initial
+  // policy carries would only obscure which rule did the dropping.
+  const snapshot: PolicySnapshot = {
+    revision: 2,
+    mode: 'include-only',
+    updatedAtMs: now,
+    rules: [
+      {
+        id: PolicyRuleId('allow-vscode'),
+        dimension: 'app',
+        action: 'allow',
+        matcher: 'exact',
+        pattern: 'com.microsoft.VSCode',
+        builtIn: false,
+        createdAtMs: now,
+        updatedAtMs: now,
+      },
+      ...(protectRules
+        ? [{
+            id: PolicyRuleId('protect-client'),
+            dimension: 'resource' as const,
+            action: 'deny' as const,
+            matcher: 'glob' as const,
+            pattern: '/Users/someone/private/*',
+            builtIn: false,
+            createdAtMs: now,
+            updatedAtMs: now,
+          }]
+        : []),
+    ],
   }
+  return {
+    history,
+    snapshot,
+    ingestion: new IngestionService(
+      history.db,
+      { resolve: async () => ({ source: 'none' as const, confidence: 0 }) },
+      () => snapshot,
+      () => 100_000,
+    ),
+  }
+}
 
+describe('F13: a file name we cannot locate is not stored (ADR 0008)', () => {
   // A window that offers only its file name: no document, no URL.
   function titleOnly(title: string): NativeObservation {
     return {
