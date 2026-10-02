@@ -432,3 +432,17 @@ the wrapping put each action on its own line, so 暂停采集, 删除全部历�
 vertically. The fix is to move the destructive block to the **end** of the row, so the
 routine actions share a line and the destructive one has the line below it. It is a small
 reorder and it needs the block read first - which is the rule this phase keeps teaching.
+
+### And the gate caught me again, in the same way
+
+The commit that added `scripts/panel-shot.mjs` went in with `pnpm verify` failing - 2
+warnings and 1 error: an unused `readFileSync` import and two `on`-handler preferences.
+**I read the gate result after committing instead of before**, which is the second time in
+this session and the same mistake as the very first one, where a guard script that did not
+parse was committed and I read the failure afterwards.
+
+Fixed forward: the import is gone, the handlers use `addEventListener`, the gate is green
+(324 tests, 0 warnings) and the script still measures what it did - `buttons: 10 | squeezed:
+0`, `destructive warning: {"found":true,"visible":true}`. The rule that keeps failing is not
+"run the gate", it is **read the gate before the commit**, and the report keeps saying so
+until it stops happening.

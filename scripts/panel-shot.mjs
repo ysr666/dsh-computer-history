@@ -10,7 +10,7 @@
 //
 // The rule learned the hard way: reload first, then measure, then capture - the number and
 // the picture must come from the same run, or they describe different builds.
-import { readFileSync, writeFileSync } from 'node:fs'
+import { writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 
 const PORT = process.env.CDP_PORT ?? '19222'
@@ -24,8 +24,11 @@ const ws = new WebSocket(page.webSocketDebuggerUrl)
 let id = 0
 const pending = new Map()
 const send = (method, params = {}) => new Promise(r => { const i = ++id; pending.set(i, r); ws.send(JSON.stringify({ id: i, method, params })) })
-ws.onmessage = (e) => { const m = JSON.parse(e.data); if (m.id && pending.has(m.id)) { pending.get(m.id)(m.result); pending.delete(m.id) } }
-await new Promise(r => { ws.onopen = r })
+ws.addEventListener('message', (e) => {
+  const m = JSON.parse(e.data)
+  if (m.id && pending.has(m.id)) { pending.get(m.id)(m.result); pending.delete(m.id) }
+})
+await new Promise(r => { ws.addEventListener('open', r) })
 await send('Page.enable'); await send('Runtime.enable')
 const evaluate = async (expression) => (await send('Runtime.evaluate', { returnByValue: true, expression })).result?.value
 
