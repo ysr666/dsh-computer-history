@@ -215,7 +215,7 @@ window axurl(err=-25205 value=nil)   ← kAXURL 属性不被 Terminal 支持
 | VS Code 的 kAXDocument | 本机 VS Code 是不可启动假壳 | 安装可启动的 VS Code 或 Cursor 后重跑探针 |
 | secure 三态在"真实密码框"的阳性路径 | 支持应用里没有 secure 字段；浏览器无 adapter | 支持应用中出现真实 secure 字段，或加一个测试专用 adapter；fail-closed 误杀（Terminal）已定位并修复、真机复验 8/8 |
 | 0.5s timeout 对真正卡死应用 | SIGSTOP 实验未产生可观察状态变化 | 可复现的 AX 无响应场景（如 AX 层阻塞的 app / 注入故障） |
-| `collector-exit-unconfirmed` 分支 | 未触发 | 构造"helper 退出无法确认"的故障注入 |
+| `collector-exit-unconfirmed` 分支 | 未触发 | 单测已覆盖该分支（释放锁 + 记 degraded）；真机触发需 helper 存活 SIGKILL，不可构造，故不再作为真机待办 |
 | 子路径挂载下的 public mount | 本环境根挂载 | 一个子路径部署的 DSH web 实例 |
 | 注入器白名单补丁在运行中生效 | 注入器自重载路径失败（F8），运行实例仍是旧代码 | 重启 DSH Host 后 profile 从 patched lib 装配；restart 后 `dev_inject_plugin` 应直接放行 `main`/`sidebar.panellist` |
 
@@ -259,7 +259,7 @@ tests/integration/plugin-multi-host.spec.ts 同上
 | N1 | 重启 DSH Host 后验证注入器补丁：`dev_plugin_status` 确认 injector active → `dev_inject_plugin {dir}` 应直接放行（不再报 `main`/`sidebar.panellist` 不在白名单）→ live client Slots 里 `computer-history` occupant 仍 active | DSH 重启 | 标准 §5 注入路径可用；UI 半 active；`pnpm verify:p1` 全绿 |
 | N2 | 安装真实可启动的 VS Code 或 Cursor → 原生探针复测编辑器 adapter 的 kAXDocument 与资源映射 | 可用编辑器 | 回填 §5 A2 的 VS Code 行 |
 | N3 | 在 AXURL 有值的场景复测 `safeURL` 的 CFURL 解码 | 可触发场景 | ✅ 已完成可行部分：真机探针证明 AXURL 无触发场景（F9），解码逻辑改为纯函数 `decodeURLAttribute` + native/XCTest 覆盖 |
-| N4 | 故障注入"helper 退出无法确认" | 可选 | 回填 C10 剩余分支 |
+| N4 | 故障注入"helper 退出无法确认" | 可选 | 逻辑已有单测覆盖（`tests/unit/collector-hardening.spec.ts:847` "releases ownership but records an unconfirmed exit"）；真机触发需要 helper 能存活 SIGKILL（不可构造），故真机项保持未触发 |
 | N5 | 修注入器自重载 `selfEntry 无官方 _dispose（loader 契约缺失）`（F8） | 可选，改注入器源码 | 补丁免重启生效 |
 
 每阶段收尾固定动作：关闭本阶段打开的应用/窗口/后台进程；更新报告与 todo；forward commit；确认 worktree clean。
