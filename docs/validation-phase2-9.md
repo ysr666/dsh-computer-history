@@ -119,3 +119,46 @@ next change, and it is a client change only.
 The refusal counter is worth exposing, but it belongs with the wiring work: the
 honest place is wherever `/state` is composed with access to the stores, not smuggled
 into a plugin that has none.
+
+## T2.9-1 — the sentence that tells empty from broken
+
+The panel now opens with one line that names what is actually going on, built by a
+pure function in the shared layer rather than inside the view:
+
+```text
+level blocked  "Collection is paused, so nothing new is being recorded."
+level blocked  "Collection is stopped, so nothing new is being recorded."
+level blocked  "macOS has not granted Accessibility to the collector, so nothing can
+                be recorded. Grant it in System Settings, Privacy & Security,
+                Accessibility."
+level blocked  "Nothing is allowed yet, so nothing will be recorded. Add an
+                application below to start."
+level idle     "Collecting, and ready. Nothing has been recorded yet."
+level recording "Recording: 5 observations, newest 3 minute(s) ago."
+```
+
+It renders above every other section, in amber when it is blocking and green when it
+is not. The ordering is the part that matters: **a state the user must act on
+outranks a state that is merely quiet** - so "nothing is allowed yet" is said even
+when the collection is running perfectly and has simply recorded nothing.
+
+The data comes from endpoints the panel already fetched - `capture` and
+`accessibilityTrusted` from `/state`, the allow-rule count from `/policy`, the
+newest observation from `/recent` - so this needed no new backend field, which was
+the design decision recorded in the previous round.
+
+**The type told me my model was too narrow.** I had modelled `capture` as
+`running | stopped | degraded`; the real state also has `paused` and
+`permission-required`, and `permission-required` is the collector saying out loud
+what a missing Accessibility grant means. Modelling both cases properly is three
+lines and two test cases, and it is the difference between a sentence that is true
+in five states and one that is true in three.
+
+```text
+pnpm test tests/unit/health.spec.ts → 4 passed
+pnpm verify → 321 tests, lint 0 warnings
+```
+
+Still open in this task: the refusal counter is not on the panel yet (it needs the
+wiring discussed last round), and the sentence has not been looked at in a real
+window - a screenshot is the honest next evidence, and reading source is not.

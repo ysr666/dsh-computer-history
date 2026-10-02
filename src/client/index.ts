@@ -25,6 +25,7 @@ import type {
   WorkThread,
 } from '../shared/index.js'
 import { describeProvenance } from '../shared/audit-view.js'
+import { describeHealth } from '../shared/health.js'
 import { historyApiPath } from './api-route.js'
 
 const PANEL_ID = 'computer-history' as MainPanelId
@@ -219,6 +220,36 @@ function HistoryPage(): React.ReactElement {
     })
     setHint(result)
   }
+
+  // First thing on the page: whether the product is working at all. An empty
+  // timeline has four meanings and only this sentence distinguishes them.
+  const health = describeHealth({
+    capture: state?.capture ?? 'stopped',
+    accessibilityTrusted: state?.accessibilityTrusted ?? false,
+    allowRules: policy?.rules.filter(rule => rule.action === 'allow').length ?? 0,
+    observationCount: episodes.length,
+    newestObservationAtMs: episodes[0]?.startedAtMs,
+    nowMs: Date.now(),
+  })
+  const healthSection = React.createElement(
+    'section',
+    { style: { margin: '0 0 16px' } },
+    React.createElement(
+      'p',
+      {
+        role: 'status',
+        style: {
+          margin: 0,
+          padding: '8px 10px',
+          borderRadius: 6,
+          border: '1px solid',
+          borderColor: health.level === 'blocked' ? '#d97706' : '#3f6212',
+          background: health.level === 'blocked' ? '#fffbeb' : '#f7fee7',
+        },
+      },
+      health.text,
+    ),
+  )
 
   const resumeSection = React.createElement(
     'section',
@@ -665,6 +696,7 @@ function HistoryPage(): React.ReactElement {
     retentionSection,
     timelineSection,
     semanticSection,
+    healthSection,
     resumeSection,
     threadSection,
     React.createElement(
