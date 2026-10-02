@@ -98,18 +98,17 @@ export function registerHistoryApi(ctx: Context): void {
     },
   }))
 
+  // One registration per path: the connection registry keys routes by exact
+  // path, so a second register() for the same path throws during setup and
+  // takes the whole plugin down with it. Method dispatch happens inside.
   ctx.effect(() => ctx.connection.fetch.register({
     path: HISTORY_API_PREFIX + '/retention',
-    methods: ['GET'],
-    requestBody: 'buffered',
-    fetch: () => Promise.resolve(json(history.retention())),
-  }))
-
-  ctx.effect(() => ctx.connection.fetch.register({
-    path: HISTORY_API_PREFIX + '/retention',
-    methods: ['POST'],
+    methods: ['GET', 'POST'],
     requestBody: 'buffered',
     fetch: async (request: Request) => {
+      if (request.method === 'GET') {
+        return json(history.retention())
+      }
       let body: unknown
       try {
         body = await request.json()

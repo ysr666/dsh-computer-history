@@ -407,3 +407,58 @@ instead, and fifteen tests across the hardening suite failed: ingests refused,
 episodes not re-derived, one test timing out. The gate caught it immediately;
 the fix is the parameter at the end, with a comment saying why, because the next
 person to add one will face the same trap.
+
+### The plugin failed to load, and the error text found it
+
+The retention change took the whole plugin down: the fiber went `active → failed`
+on reload. I did not guess at it. Three probes, each narrower than the last:
+
+1. `ctx.loader.create(...)` inside a try/catch returned **no** error — the failure
+   is asynchronous, so the loader marks the fiber failed after setup;
+2. the reload log and the super-injector debug log carried no stack;
+3. dumping the loader entry's fields showed `fiber._error` — a field I had not
+   looked at — and one call later the cause was in plain text:
+
+```text
+Error: connection: exact Fetch route "/api/computer-history/retention"
+is already registered
+    at registerHistoryApi (/…/dsh-computer-history/lib/index.js:3938)
+```
+
+I had registered `/retention` **twice** — once for GET and once for POST — and the
+connection registry keys routes by exact path, so the second `register()` threw
+during setup. It is now one registration with `methods: ['GET', 'POST']` and the
+dispatch inside, with a comment saying why, because the next person to add a
+second method to a route will reach for the same shape.
+
+That the route-set test stayed green is itself the finding: it compares a sorted
+list of paths against a **stub** registry that never rejects a duplicate, so the
+real registry is the only place this can fail. Left as a note rather than a
+silent gap: a guard would need the real registration path, not the stub.
+
+A second, smaller defect came out of the same round and is committed separately:
+the plugin still handed the retention provider to `IngestionService` as the
+fourth argument, which is the clock after I moved the new parameter to the end.
+
+### T2.3-5 — retention, verified live
+
+```text
+GET  /retention        {"observationRetentionHours":24,"episodeRetentionDays":30,"updatedAtMs":0}
+POST /retention        {"observationRetentionHours":6,"episodeRetentionDays":14,"updatedAtMs":1790948888780}
+POST observationHours=0    HTTP 400
+panel                  Raw observations are kept for 6 hours and episodes for 14 days.
+                       A change applies to what is recorded from now on; it does
+                       not delete history you already have.
+                       Observation hours 6   Episode days 14   [Save retention]
+click Save retention   CLICKED
+GET  /retention        {"observationRetentionHours":6,"episodeRetentionDays":14,"updatedAtMs":1790948899933}
+```
+
+The revision that matters is `updatedAtMs`: it moved because a button in the
+panel was clicked, and it was read from the API rather than from the panel's own
+account of itself. The screenshot is `/tmp/dsh-panel-retention.png`.
+
+So T2.3-5 is complete: the controls render, the per-application click moves the
+policy revision (2 → 3, round 9), the retention click moves `updatedAtMs`, and
+the retention semantics — from now on, not retroactive — are stated in the panel
+next to the inputs.
