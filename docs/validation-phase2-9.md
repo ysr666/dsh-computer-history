@@ -65,3 +65,27 @@ answer "is it working?" - and they are T2.9-1. Item 3 is T2.9-2.
 
 Clean store at `/tmp/dsh-ch-29-fresh`, plugin loaded and running (`fiber=2`), junction
 and store symlink in place for the next round. Nothing else was started.
+
+## T2.9-1 — the number that separates "nothing happened" from "nothing is allowed"
+
+The first fact is in: how many messages the policy turned away since this Host
+started. It is counted in one place - around `ingestNow`, so every refusal path is
+covered without touching seven `return false` sites - and exposed as
+`IngestionService.refusedSinceStart()`.
+
+```text
+pnpm test tests/integration/companion-workspace.spec.ts → 7 passed
+
+  refusedSinceStart() is 0 on a fresh Host
+  a message the policy refuses → 1, and the store stays empty
+  an allowed message → stored, and the counter does not move
+```
+
+The test goes through the real path (a companion claim the user has not allowed),
+not a stub, so it measures the same thing a fresh install would experience.
+
+Still to do for this task, and the reason it is not finished: the number is not yet
+reported by `/state` and therefore not visible in the panel, and the "nothing is
+allowed" state - `include-only` with zero allow rules - is still something the user
+has to infer from the policy rules. The remaining work is the state payload and the
+panel sentence, both of which are small.

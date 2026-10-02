@@ -196,6 +196,35 @@ describe('a declared identity is a claim, and the rules still decide (ADR 0011)'
     history.close()
   })
 
+  it('counts what the policy refused, so an empty timeline can explain itself', async () => {
+    const { root, file } = workspaceOnDisk()
+    const { history, ingestion, now } = service(root)
+    expect(ingestion.refusedSinceStart()).toBe(0)
+
+    // Refused: the user has not allowed this application.
+    expect(await ingestion.ingest(claimedMessage({
+      seq: 1,
+      bundleId: 'com.todesktop.230313mzl4w4u92',
+      name: 'Cursor',
+      file,
+      root,
+      now,
+    }))).toBe(false)
+    expect(ingestion.refusedSinceStart()).toBe(1)
+
+    // Stored: this one is allowed, so the counter must not move.
+    expect(await ingestion.ingest(claimedMessage({
+      seq: 2,
+      bundleId: 'com.microsoft.VSCode',
+      name: 'Visual Studio Code',
+      file,
+      root,
+      now,
+    }))).toBe(true)
+    expect(ingestion.refusedSinceStart()).toBe(1)
+    history.close()
+  })
+
   it('drops a claim naming a protected application', async () => {
     const { root, file } = workspaceOnDisk()
     const { history, ingestion, now } = service(root, {

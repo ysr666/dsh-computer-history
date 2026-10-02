@@ -120,10 +120,24 @@ export class IngestionService {
     return this.inFlight
   }
 
+  /**
+   * How many messages were turned away since this Host started. An empty timeline
+   * means one of several things; this is the number that separates "nothing
+   * happened" from "the policy refused everything".
+   */
+  private refused = 0
+
+  public refusedSinceStart(): number {
+    return this.refused
+  }
+
   public async ingest(
     message: NativeObservation,
   ): Promise<boolean> {
     const running = this.ingestNow(message)
+    void running.then((stored) => {
+      if (!stored) this.refused += 1
+    })
     const idle: Promise<void> = running
       .then(() => undefined, () => undefined)
     this.inFlight = idle
