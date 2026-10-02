@@ -348,15 +348,18 @@ describe('a declared identity (ADR 0011)', () => {
 
   it('refuses a claim that is not an identity', async () => {
     const { intake, port } = await harness()
-    for (const app of [
+    const claims = [
       { bundleId: '', name: 'Cursor' },
       { bundleId: 'com.example cursor', name: 'Cursor' },
       { bundleId: 'com.example.cursor', name: '   ' },
       { bundleId: 'com.example.cursor', name: 'Cursor', extra: 'x' },
       'com.example.cursor',
-    ]) {
-      const response = await post(port, JSON.stringify(editorPayload({ app })))
-      expect(response.status, JSON.stringify(app)).toBe(400)
+    ]
+    const responses = await Promise.all(
+      claims.map(app => post(port, JSON.stringify(editorPayload({ app })))),
+    )
+    for (const [index, response] of responses.entries()) {
+      expect(response.status, JSON.stringify(claims[index])).toBe(400)
     }
     await intake.stop()
   })
