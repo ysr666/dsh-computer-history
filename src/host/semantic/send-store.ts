@@ -55,15 +55,20 @@ export class RemoteSendStore {
         ORDER BY sent_at_ms DESC, id DESC
         LIMIT ?
       `).all(scopeKey, limit) as Array<Record<string, unknown>>
-    ).map(row => ({
-      id: Number(row.id),
-      ...(row.episode_id === null ? {} : { episodeId: String(row.episode_id) }),
-      scopeKey: String(row.scope_key),
-      endpointHost: String(row.endpoint_host),
-      model: String(row.model),
-      payloadDigest: String(row.payload_digest),
-      sentAtMs: Number(row.sent_at_ms),
-    }))
+    ).map((row): RemoteSend => {
+      const base = {
+        id: Number(row.id),
+        scopeKey: String(row.scope_key),
+        endpointHost: String(row.endpoint_host),
+        model: String(row.model),
+        payloadDigest: String(row.payload_digest),
+        sentAtMs: Number(row.sent_at_ms),
+      }
+      // The link is optional because deleting an episode keeps the audit fact.
+      return row.episode_id === null
+        ? base
+        : { ...base, episodeId: String(row.episode_id) }
+    })
   }
 
   /**
