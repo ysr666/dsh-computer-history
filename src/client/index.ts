@@ -897,6 +897,14 @@ function HistoryPage(): React.ReactElement {
       ...(policy?.rules.filter(rule => rule.dimension === 'app' && rule.action === 'allow') ?? [])
         .map(rule => React.createElement('li', { key: rule.id }, rule.pattern))),
     React.createElement('h2', null, t('Recent work episodes', '最近的工作片段')),
+    episodes.length === 0
+      ? React.createElement(
+          'p',
+          { style: MUTED },
+          t('No episodes yet. An episode appears here once something has been recorded for a while.',
+            '还没有工作片段。记录持续一会儿之后，这里会出现第一个片段。'),
+        )
+      : null,
     ...episodes.map(episode => React.createElement(
       'article',
       {

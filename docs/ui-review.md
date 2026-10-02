@@ -301,3 +301,32 @@ design intent and leaving the wiring for later, and the typecheck is what makes 
 最近的工作片段 renders nothing at all when there is nothing to show), and the four action
 buttons still share one row - `删除全部历史` now looks dangerous but still sits beside
 `刷新`, which is a grouping question rather than a styling one.
+
+## Iteration 8 - the empty state for the one section that had none
+
+Evidence: `docs/assets/panel-2026-10-03-after8.png`.
+
+`最近的工作片段` rendered **nothing at all** when there were no episodes: a heading with
+empty space under it, which is the exact state the plan calls "the user faces a blank and
+does not know what to do". It now says:
+
+```text
+还没有工作片段。记录持续一会儿之后，这里会出现第一个片段。
+```
+
+which answers both halves - what this section is, and what would make something appear in
+it.
+
+**One change did not land, and it is recorded rather than quietly retried.** I tried to add
+a warning under the destructive action ("删除全部历史不可撤销；它只删除这台电脑上的记录。")
+by anchoring on the refresh button's tail; the anchor did not match the source, the
+assertion fired, and nothing was written. The next attempt reads that block first - which is
+the rule I keep relearning in this phase, and the reason two of these eight iterations have
+"saved" a replacement that never happened.
+
+**What is left of the goal's six criteria:** ①-⑤ are done and verified by looking (the
+actionable sentence first, the interface's language, both languages at every level,
+no design-document prose, and a visual system with one spacing scale, theme tokens,
+button hierarchy and danger marking). ⑥ is done except for the grouping question - the
+destructive action is *marked* but still sits in the same row as 暂停采集 and 刷新, and the
+warning line that would separate it did not land.
