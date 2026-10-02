@@ -22,16 +22,16 @@ afterEach(() => {
 })
 
 interface StubState {
-  readonly routes: Map<string, unknown>
-  readonly effects: number
-  readonly disposers: Array<() => void>
+  routes: Map<string, unknown>
+  effects: number
+  disposers: Array<() => void>
 }
 
 function stubContext(): { ctx: unknown, state: StubState } {
   const state: StubState = { routes: new Map(), effects: 0, disposers: [] }
-  const methods = ['on', 'off', 'emit', 'parallel', 'waterfall', 'bail', 'serial']
+  const methods = new Set(['on', 'off', 'emit', 'parallel', 'waterfall', 'bail', 'serial'])
   const handler: ProxyHandler<Record<string, unknown>> = {
-    get: (_target, property) => {
+    get: (_target: Record<string, unknown>, property: string | symbol) => {
       if (property === 'effect') {
         return (factory: () => unknown) => {
           state.effects += 1
@@ -55,18 +55,18 @@ function stubContext(): { ctx: unknown, state: StubState } {
       // shape is enough for setup, and this test asserts registration, not
       // behaviour.
       if (property === 'get' || property === 'require') {
-        return () => new Proxy(() => undefined, handler)
+        return () => new Proxy(() => undefined, handler as never)
       }
       // Collection accessors must return something iterable: a plugin that lists
       // workspaces calls `list()` and spreads the result.
       if (property === 'list' || property === 'all' || property === 'entries') {
         return () => []
       }
-      if (methods.includes(String(property))) return () => () => {}
+      if (methods.has(String(property))) return () => () => {}
       // Any other service the plugin touches is a no-op function that also
       // behaves like an object: enough to let setup run, and nothing pretends to
       // be a real service.
-      return new Proxy(() => undefined, handler)
+      return new Proxy(() => undefined, handler as never)
     },
   }
   return { ctx: new Proxy({} as Record<string, unknown>, handler), state }
