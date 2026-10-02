@@ -91,3 +91,52 @@ The order of work for the next iteration therefore does not change: fix the orde
 then translate what is left, then replace the engineering sentences with human ones,
 then the visual system. Each step ends with a capture and a comparison, which is how
 this iteration found both the bug and the thing it did not fix.
+
+## Iteration 2 - order, colour and the words a user actually reads
+
+Evidence: `docs/assets/panel-2026-10-03-after2.png` (against `-after1` and `-before`).
+
+What the panel now reads, top to bottom:
+
+```text
+电脑使用记录
+这台电脑被用来做了什么，只保存在本机。
+| 还没有允许任何应用，所以什么都不会被记录。在下面添加一个应用即可开始。
+采集：running · 辅助功能：已授权 · 保留：24 小时
+浏览器伴侣   [重新生成配对令牌] [https://example.com] [允许该网站] [拒绝该网站]
+保留策略     … [保存]
+时间线       …
+摘要         …
+从这里继续   [找到上次的位置]
+工作线索     [暂停采集] [删除全部历史] [刷新]
+隐私与应用权限 …
+```
+
+Three fixes, each one caused by looking rather than by reading:
+
+1. **The order was wrong in a way I had misdiagnosed.** I had inserted the health
+   section into the list that assembles the sections - but the visible order is decided
+   by the children of `<main>`, which is a different list. That is why the previous
+   iteration reported "fixed" while the screenshot still opened with a status line. The
+   actionable sentence is now the first thing under the title.
+2. **Every hardcoded colour is gone** (8 sites: `#555`, `#666`, `#f2f2f2`). They were the
+   same mistake as the invisible bar - light-theme constants - and on the dark theme they
+   rendered as the dim, hard-to-read grey visible in the earlier screenshots. Emphasis is
+   now `opacity` and `currentColor`, which the theme owns.
+3. **The strings a user reads first are bilingual**, following `<html lang>`: the title,
+   the one-line explanation of what the product is, every section heading and the buttons.
+   That includes a subtitle the panel never had - "这台电脑被用来做了什么，只保存在本机",
+   which answers "what is this thing" before any control.
+
+**Still English, and next:** the body prose inside the sections (the pairing line, the
+retention explanation, the empty states, `Observation hours` / `Episode days`, the work
+threads line, and the whole privacy paragraph, which is still design-document prose:
+"Capture is include-only. Phase 1 accepts only supported metadata adapters…").
+
+**Also still raw:** the status line prints `采集：running`, mixing a Chinese label with the
+collector's internal state word.
+
+After the prose and the raw state, what remains of this work is the visual system -
+spacing scale, inputs with labels, actions grouped, one accent - which is worth doing
+after the words, because the words are what makes it usable and the polish is what makes
+it pleasant.

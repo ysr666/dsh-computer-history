@@ -286,7 +286,7 @@ function HistoryPage(): React.ReactElement {
         marginBottom: 20,
       },
     },
-    React.createElement('h2', { style: { margin: '0 0 8px' } }, 'Resume'),
+    React.createElement('h2', { style: { margin: '0 0 8px' } }, t('Resume', '从这里继续')),
     React.createElement(
       'div',
       { style: { display: 'flex', gap: 8 } },
@@ -306,7 +306,7 @@ function HistoryPage(): React.ReactElement {
           disabled: resumeQuery.trim().length === 0,
           onClick: () => { runAction(findWhereILeftOff) },
         },
-        'Find where I left off',
+        t('Find where I left off', '找到上次的位置'),
       ),
     ),
     hint
@@ -342,7 +342,7 @@ function HistoryPage(): React.ReactElement {
   const semanticSection = React.createElement(
     'section',
     { style: { marginBottom: 20 } },
-    React.createElement('h2', { style: { margin: '0 0 8px' } }, 'Summaries'),
+    React.createElement('h2', { style: { margin: '0 0 8px' } }, t('Summaries', '摘要')),
     React.createElement(
       'p',
       null,
@@ -355,7 +355,7 @@ function HistoryPage(): React.ReactElement {
     !semantic || semantic.scopes.length === 0
       ? React.createElement(
           'p',
-          { style: { color: '#555' } },
+          { style: { opacity: 0.75 } },
           'No scope uses a model, so every summary here was computed locally.',
         )
       : React.createElement(
@@ -390,7 +390,7 @@ function HistoryPage(): React.ReactElement {
           'pre',
           {
             style: {
-              background: '#f2f2f2',
+              background: 'rgba(127,127,127,0.18)',
               padding: 8,
               borderRadius: 4,
               overflowX: 'auto',
@@ -416,14 +416,14 @@ function HistoryPage(): React.ReactElement {
   const retentionSection = React.createElement(
     'section',
     { style: { marginBottom: 20 } },
-    React.createElement('h2', { style: { margin: '0 0 8px' } }, 'Retention'),
+    React.createElement('h2', { style: { margin: '0 0 8px' } }, t('Retention', '保留策略')),
     retention
       ? React.createElement(
           'div',
           null,
           React.createElement(
             'p',
-            { style: { color: '#555', margin: '0 0 6px' } },
+            { style: { opacity: 0.75, margin: '0 0 6px' } },
             'Raw observations are kept for '
               + retention.observationRetentionHours
               + ' hours and episodes for '
@@ -464,7 +464,7 @@ function HistoryPage(): React.ReactElement {
           React.createElement(
             'button',
             { type: 'button', onClick: () => { runAction(saveRetention) } },
-            'Save retention',
+            t('Save retention', '保存'),
           ),
         )
       : null,
@@ -477,11 +477,11 @@ function HistoryPage(): React.ReactElement {
   const timelineSection = React.createElement(
     'section',
     { style: { marginBottom: 20 } },
-    React.createElement('h2', { style: { margin: '0 0 8px' } }, 'Timeline'),
+    React.createElement('h2', { style: { margin: '0 0 8px' } }, t('Timeline', '时间线')),
     timeline.length === 0
       ? React.createElement(
           'p',
-          { style: { color: '#555' } },
+          { style: { opacity: 0.75 } },
           'Nothing recorded in the last seven days.',
         )
       : React.createElement(
@@ -538,7 +538,7 @@ function HistoryPage(): React.ReactElement {
           })),
           React.createElement(
             'p',
-            { style: { color: '#555' } },
+            { style: { opacity: 0.75 } },
             selected.resources.length > 0
               ? 'Resources: ' + selected.resources
                 .map(item => item.displayLabel ?? item.canonicalUri)
@@ -605,7 +605,7 @@ function HistoryPage(): React.ReactElement {
         marginBottom: 20,
       },
     },
-    React.createElement('h2', { style: { margin: '0 0 8px' } }, 'Browser companion'),
+    React.createElement('h2', { style: { margin: '0 0 8px' } }, t('Browser companion', '浏览器伴侣')),
     React.createElement(
       'p',
       null,
@@ -621,7 +621,7 @@ function HistoryPage(): React.ReactElement {
       React.createElement(
         'button',
         { type: 'button', onClick: () => { runAction(rotateCompanionToken) } },
-        companion?.paired ? 'Rotate pairing token' : 'Create pairing token',
+        companion?.paired ? t('Rotate pairing token', '重新生成配对令牌') : 'Create pairing token',
       ),
       companionToken
         ? React.createElement(
@@ -629,7 +629,7 @@ function HistoryPage(): React.ReactElement {
             {
               style: {
                 padding: '4px 8px',
-                background: '#f2f2f2',
+                background: 'rgba(127,127,127,0.18)',
                 borderRadius: 4,
                 userSelect: 'all',
               },
@@ -644,7 +644,7 @@ function HistoryPage(): React.ReactElement {
           null,
           React.createElement(
             'p',
-            { style: { color: '#555' } },
+            { style: { opacity: 0.75 } },
             'Only a digest is stored, so this is the one moment it can be copied. Rotating it again stops any client still using the old one.',
           ),
           React.createElement(
@@ -662,7 +662,7 @@ function HistoryPage(): React.ReactElement {
           ),
           React.createElement(
             'ol',
-            { style: { color: '#555', marginTop: 8, paddingLeft: 20 } },
+            { style: { opacity: 0.75, marginTop: 8, paddingLeft: 20 } },
             React.createElement(
               'li',
               null,
@@ -702,12 +702,12 @@ function HistoryPage(): React.ReactElement {
       React.createElement(
         'button',
         { type: 'button', onClick: () => { runAction(() => setSiteRule('allow')) } },
-        'Allow site',
+        t('Allow site', '允许该网站'),
       ),
       React.createElement(
         'button',
         { type: 'button', onClick: () => { runAction(() => setSiteRule('deny')) } },
-        'Deny site',
+        t('Deny site', '拒绝该网站'),
       ),
     ),
   )
@@ -715,11 +715,11 @@ function HistoryPage(): React.ReactElement {
   const threadSection = React.createElement(
     'section',
     { style: { marginBottom: 20 } },
-    React.createElement('h2', { style: { margin: '0 0 8px' } }, 'Work threads'),
+    React.createElement('h2', { style: { margin: '0 0 8px' } }, t('Work threads', '工作线索')),
     threads.length === 0
       ? React.createElement(
           'p',
-          { style: { color: '#555' } },
+          { style: { opacity: 0.75 } },
           'No threaded work yet: episodes need a workspace the Host can vouch for.',
         )
       : React.createElement(
@@ -731,7 +731,7 @@ function HistoryPage(): React.ReactElement {
             thread.summary,
             React.createElement(
               'span',
-              { style: { color: '#666' } },
+              { style: { opacity: 0.65 } },
               ` (${thread.episodeCount} episode${thread.episodeCount === 1 ? '' : 's'}, ${thread.summaryObservationIds.length} citations)`,
             ),
           )),
@@ -741,7 +741,15 @@ function HistoryPage(): React.ReactElement {
   return React.createElement(
     'main',
     { style: { padding: 24, maxWidth: 960, margin: '0 auto' } },
-    React.createElement('h1', null, 'Computer History'),
+    React.createElement('h1', { style: { margin: '0 0 4px' } }, t('Computer History', '电脑使用记录')),
+    React.createElement(
+      'p',
+      { style: { margin: '0 0 18px', opacity: 0.7 } },
+      t('What this machine has been used for, kept locally.',
+        '这台电脑被用来做了什么，只保存在本机。'),
+    ),
+    // First after the title: the one fact that needs an action, before any status.
+    healthSection,
     React.createElement(
       'p',
       null,
@@ -763,7 +771,6 @@ function HistoryPage(): React.ReactElement {
     retentionSection,
     timelineSection,
     semanticSection,
-    healthSection,
     resumeSection,
     threadSection,
     React.createElement(
@@ -786,7 +793,7 @@ function HistoryPage(): React.ReactElement {
           : state.capture === 'paused'
             ? 'Resume capture'
             : state.capture === 'running'
-              ? 'Pause capture'
+              ? t('Pause capture', '暂停采集')
               : 'Capture unavailable',
       ),
       React.createElement(
@@ -797,7 +804,7 @@ function HistoryPage(): React.ReactElement {
         },
         confirmDeleteAll
           ? 'Confirm delete all history'
-          : 'Delete all history',
+          : t('Delete all history', '删除全部历史'),
       ),
       confirmDeleteAll
         ? React.createElement(
@@ -814,10 +821,10 @@ function HistoryPage(): React.ReactElement {
       React.createElement(
         'button',
         { type: 'button', onClick: () => { runAction(refresh) } },
-        'Refresh',
+        t('Refresh', '刷新'),
       ),
     ),
-    React.createElement('h2', null, 'Privacy & app access'),
+    React.createElement('h2', null, t('Privacy & app access', '隐私与应用权限')),
     React.createElement('p', null,
       'Capture is include-only. Phase 1 accepts only supported metadata adapters (VS Code/Cursor, Terminal/iTerm, Preview, Finder); browsers and unknown apps fail closed before storage.'),
     React.createElement('input', {
@@ -831,7 +838,7 @@ function HistoryPage(): React.ReactElement {
         type: 'button',
         onClick: () => { runAction(allowApp) },
       },
-      'Allow app',
+      t('Allow app', '允许该应用'),
     ),
     React.createElement(
       'button',
@@ -839,12 +846,12 @@ function HistoryPage(): React.ReactElement {
         type: 'button',
         onClick: () => { runAction(forgetApp) },
       },
-      'Forget app',
+      t('Forget app', '忘记该应用'),
     ),
     React.createElement('ul', null,
       ...(policy?.rules.filter(rule => rule.dimension === 'app' && rule.action === 'allow') ?? [])
         .map(rule => React.createElement('li', { key: rule.id }, rule.pattern))),
-    React.createElement('h2', null, 'Recent work episodes'),
+    React.createElement('h2', null, t('Recent work episodes', '最近的工作片段')),
     ...episodes.map(episode => React.createElement(
       'article',
       {
