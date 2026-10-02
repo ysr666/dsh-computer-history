@@ -385,3 +385,33 @@ right; it was placed on one path instead of all of them.
 Reverted: `ingestion-service.ts` and `normalize.ts` are back to the committed state,
 `pnpm typecheck` is clean, and the refusal-reason vocabulary from the previous round
 still stands.
+
+## T2.9-3 — the breakdown, finished this time
+
+The previous attempt counted on one path and therefore counted nothing for the case
+that matters most. Fixed by counting **where the refusal actually happens**:
+
+```text
+preliminary normalize   now receives a refusal report - this is the path an
+                        unallowed application takes, and the one a new installation
+                        hits first
+canonical normalize     reports its own reason, as before
+every other refusal     counted exactly once as 'unknown' by the ingest wrapper, so
+                        the total is complete and nothing is silently missing
+```
+
+```text
+pnpm test tests/integration/companion-workspace.spec.ts → 7 passed
+  refusedSinceStart() is 0 on a fresh Host
+  an unallowed claim → total 1, and refusalCounts().get('policy') === 1
+  an allowed claim  → stored, and neither number moves
+pnpm verify → 324 tests, lint 0 warnings, typecheck clean
+```
+
+The product can now say the sentence a new installation needs - "12 observations were
+refused because nothing is allowed" - rather than a bare count, which is what
+`docs/plan-phase2-9.md` calls "the product says whether it is working".
+
+Not yet done, and named: `/state` does not carry the breakdown yet, so the panel
+cannot show it. That is the wiring step, and it is the last piece of T2.9-1/2 before
+the screenshot.

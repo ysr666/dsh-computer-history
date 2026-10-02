@@ -20,7 +20,11 @@ import {
   ResourceStore,
 } from '../store/index.js'
 import { canonicalizeResource } from './canonicalize.js'
-import { normalizeObservation } from './normalize.js'
+import {
+  normalizeObservation,
+  type RefusalReason,
+  type RefusalReport,
+} from './normalize.js'
 
 export interface WorkspaceResolver {
   resolve(
@@ -125,18 +129,39 @@ export class IngestionService {
    * means one of several things; this is the number that separates "nothing
    * happened" from "the policy refused everything".
    */
-  private refused = 0
+  private readonly refusals = new Map<RefusalReason, number>()
 
   public refusedSinceStart(): number {
-    return this.refused
+    let total = 0
+    for (const count of this.refusals.values()) total += count
+    return total
+  }
+
+  /**
+   * Why things were refused, not only how many. "Twelve observations were refused
+   * because nothing is allowed" is a sentence a new user can act on; "twelve were
+   * refused" is not (T2.9-3).
+   */
+  public refusalCounts(): ReadonlyMap<RefusalReason, number> {
+    return this.refusals
+  }
+
+  private refuse(reason: RefusalReason): false {
+    this.refusals.set(reason, (this.refusals.get(reason) ?? 0) + 1)
+    return false
   }
 
   public async ingest(
     message: NativeObservation,
   ): Promise<boolean> {
+    const before = this.refusedSinceStart()
     const running = this.ingestNow(message)
     void running.then((stored) => {
-      if (!stored) this.refused += 1
+      // Refusals that named their reason are already counted; the rest are visible
+      // as unattributed rather than missing from the total.
+      if (!stored && this.refusedSinceStart() === before) {
+        this.refusals.set('unknown', (this.refusals.get('unknown') ?? 0) + 1)
+      }
     })
     const idle: Promise<void> = running
       .then(() => undefined, () => undefined)
@@ -165,6 +190,7 @@ export class IngestionService {
       return false
     }
 
+    const preliminaryRefusal: RefusalReport = {}
     const preliminary = normalizeObservation(
       message,
       this.policy(),
@@ -172,8 +198,11 @@ export class IngestionService {
       undefined,
       undefined,
       this.observationRetentionMs(),
+      preliminaryRefusal,
     )
-    if (!preliminary) return false
+    // This is the path an unallowed application takes, which is the case a new
+    // installation hits first - counting it anywhere else counted nothing.
+    if (!preliminary) return this.refuse(preliminaryRefusal.reason ?? 'unknown')
 
     const canonicalResource =
       await canonicalizeResource(preliminary.resource)
@@ -224,6 +253,7 @@ export class IngestionService {
         return false
       }
 
+      const refusal: RefusalReport = {}
       const observation = normalizeObservation(
         message,
         this.policy(),
@@ -231,10 +261,11 @@ export class IngestionService {
         workspace,
         canonicalResource,
         this.observationRetentionMs(),
+        refusal,
       )
       if (!observation) {
         this.db.exec('COMMIT')
-        return false
+        return this.refuse(refusal.reason ?? 'unknown')
       }
 
       if (this.deletions.blocksObservation({

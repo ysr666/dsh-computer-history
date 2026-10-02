@@ -194,6 +194,8 @@ export type RefusalReason =
   | 'unlocatable-name'
   | 'secure-path'
   | 'policy'
+  /** A refusal nothing attributed: visible rather than silent. */
+  | 'unknown'
 
 export interface RefusalReport {
   reason?: RefusalReason

@@ -211,6 +211,10 @@ describe('a declared identity is a claim, and the rules still decide (ADR 0011)'
       now,
     }))).toBe(false)
     expect(ingestion.refusedSinceStart()).toBe(1)
+    // And it says *why*, which is the sentence a new installation needs: nothing is
+    // allowed, so nothing is being stored. Counting without a reason told a user
+    // nothing they could act on.
+    expect(ingestion.refusalCounts().get('policy')).toBe(1)
 
     // Stored: this one is allowed, so the counter must not move.
     expect(await ingestion.ingest(claimedMessage({
