@@ -93,3 +93,30 @@ Two things are worth writing down rather than smoothing over:
 - the guard's own self-check is what would have caught this class if it had been
   the *detector* that broke - here it was plain syntax, and nothing in the
   pipeline substitutes for reading the gate result before committing.
+
+## T2.6-2 — the record of what left the machine
+
+Migration 0007 adds `remote_summary_sends`: episode id, scope key, endpoint host,
+model, payload digest, time. **No content** - not the payload, not the summary,
+not a path - which is what lets the row outlive the episode it was about.
+
+The two deletions this phase promised pull in opposite directions, and the schema
+says which is which:
+
+- deleting an **episode** is about content, so the link goes and the audit fact
+  stays: `episode_id` is `ON DELETE SET NULL`;
+- revoking an **opt-in** is an instruction to forget, so the rows go outright
+  (`deleteForScope`).
+
+```text
+pnpm test tests/integration/remote-send-store.spec.ts → 3 passed
+
+a send round-trips, and PRAGMA table_info lists exactly the seven columns -
+  there is no column a payload or a summary could occupy
+deleting the episode keeps "something left for this scope" and drops the link
+revoking one scope forgets that scope and leaves the other untouched
+```
+
+Still open: the provenance sink is not yet wired into a summary flow, because
+there is no panel switch that produces a remote summary until T2.6-3. The store
+and its schema are the part this task promised.
