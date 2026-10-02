@@ -300,5 +300,8 @@ Browser companion (2.1), semantic summaries and work threads (2.2), UI/audit
 | T2.0-2 JetBrains family | blocked on ADR 0006 | measured: IntelliJ platform returns an unqueryable focused element (`-25202` on role/subrole/attribute list) while the window reads fine, so the fail-closed rule drops everything. ADR 0006 (proposed) offers a per-adapter `window-only` declaration; conservative default kept meanwhile. `ax-probe --attributes` added to make the distinction measurable |
 | T2.0-5 document-less observations | done (diagnosis corrected) | real e2e rows show seq 1-2 are evidence-only orphans by design; the original acceptance was already met, so the task was amended to pin the semantics with two tests (210 green) and to hand the fidelity question to T2.0-7 |
 | T2.0-8 `verify:adapters` | done | `scripts/verify-adapters.mjs` parses the shared table and requires a dated row, a section and a probe command per adapter; wired into `pnpm verify`; calibrated both ways (removing the WPS row fails, restoring passes: 7 adapters / 9 bundle ids) |
-| T2.0-6, T2.0-7, T2.0-9, T2.0-10, T2.0-11 | open | — |
+| T2.0-9 at-rest protection | done | ADR 0005 Accepted (option 3: FileVault + permissions + non-synced location, with options 1/2 recorded as the follow-ups a changed threat model needs). Measured before deciding: FileVault on, store `0700`/`0600`, search is a `LIKE` substring over summary/URI/label, which is why column encryption was rejected for 2.0 |
+| T2.0-10 threat model | done | `docs/threat-model.md`: assets, eight adversaries with what each learns, residual risks and an enforcement map; `SECURITY.md` links it |
+| T2.0-11 store self-check | done | `scripts/verify-store-protection.mjs`, part of `pnpm verify`; calibrated both ways (0755 directory + 0644 file → exit 1; a path inside `Library/Mobile Documents` → flagged, no directory needed; default path passes) |
+| T2.0-6, T2.0-7 | open | — |
 

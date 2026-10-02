@@ -18,6 +18,8 @@ User-requested Forget/Delete is stronger than TTL compaction. When complete raw 
 
 SQLite uses restrictive filesystem permissions and `secure_delete`. After successful logical deletion, WAL checkpoint/truncation and VACUUM are best-effort cleanup only. This project does not claim forensic erasure; protection against recovered disk blocks depends on full-disk encryption such as FileVault and the underlying platform/storage guarantees.
 
+ADR 0005 records that decision and makes it checkable: `pnpm verify:store-protection` requires the store directory to be `0700` (or stricter), every file in it `0600` (or stricter), the store to live outside synced and network locations (iCloud Drive, Dropbox, OneDrive, Google Drive, `/Volumes/**`), and FileVault to be on. The assets, the adversaries, what each of them learns, and the residual risks this does not cover are in `docs/threat-model.md`.
+
 ## Sensitive applications and resources
 
 Protected applications are excluded before AX observation is attached. Sensitive path rules fail closed. Browser private/incognito resource capture is not considered safe until a browser companion provides a reliable privacy boundary.

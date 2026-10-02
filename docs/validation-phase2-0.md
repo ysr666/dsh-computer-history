@@ -130,9 +130,45 @@ sides: deleting the `wps` row makes it fail (`docs/adapters.md: adapter "wps"
 has no evidence row`, pnpm reports exit code 1); restoring it passes. The check
 is part of `pnpm verify`, so evidence rot now breaks the normal gate.
 
+## T2.0-9 / T2.0-10 / T2.0-11 — trust base
+
+Measurements taken before deciding (ADR 0005): `fdesetup status` → `FileVault
+is On.`; store directory `0700`, `history.sqlite` `0600`; search is a `LIKE`
+substring over `summary_text`, `primary_workspace_id`, `primary_workspace_title`,
+`canonical_uri` and `display_label`. The search shape is what rules out
+field-level encryption inside Phase 2.0: encrypting those columns breaks the
+panel's and the agent tools' substring search, and a searchable-index design is
+its own project.
+
+Decision: depend on full-volume encryption, enforce it, and say so. Enforced by
+`scripts/verify-store-protection.mjs`, wired into `pnpm verify`:
+
+```text
+store protection holds (ADR 0005): /Users/ysradmin/.dsh/computer-history — permissions, non-synced location, FileVault
+```
+
+Calibrated from both sides, because a check that cannot fail is decoration:
+
+- a `0755` directory with a `0644` `history.sqlite` → exit 1 with both
+  violations named;
+- a path inside `Library/Mobile Documents` (iCloud Drive) → flagged as a synced
+  location, and the check does not require the directory to exist (the `mkdir`
+  was refused by macOS and the check still worked);
+- the default path → passes.
+
+`docs/threat-model.md` records what the store holds, what eight adversaries
+learn, and the residual risks that remain accepted (a session-local attacker
+reads everything; titles are descriptive text; the sync-location check is
+textual and covers documented locations). `SECURITY.md` links it and states
+that `pnpm verify:store-protection` enforces the permission, location and
+FileVault requirements.
+
 ## Pending in 2.0
 
 `T2.0-2` (owner decision on ADR 0006), `T2.0-6` (Cursor Agents metadata
-review), `T2.0-7` (aggregation rule + metric + the adoption question above),
-`T2.0-9` (at-rest protection, ADR 0005), `T2.0-10` (threat model),
-`T2.0-11` (store self-check).
+review), `T2.0-7` (aggregation rule + metric + the adoption question above).
+
+Exit gate status: `pnpm verify:p1` green, `pnpm verify` green (210 tests,
+`verify:privacy`, `verify:adapters` with 7 adapters/9 bundle ids,
+`verify:store-protection`), ADR 0005 Accepted and enforced, threat model
+written and linked.
