@@ -371,3 +371,27 @@ The fix is one option, not a scroll: `Page.captureScreenshot` with
 `captureBeyondViewport: true` and a clip over the full page height, which is what the next
 iteration uses - and the image is compared against the previous one before it is stored,
 which is the check I skipped.
+
+## Iteration 10 - the fix that broke something, seen only by looking
+
+Evidence: `docs/assets/panel-2026-10-03-after10-bottom.png`.
+
+Giving the destructive action its own line worked, and **broke the row it was in**: with
+`width: 100%` inside a flex row that did not wrap, `暂停采集` was squeezed into a two-line
+column and `刷新` into two vertical characters. Nothing in the source looked wrong; the
+panel did. The row now wraps (`flexWrap: 'wrap'`), which is what makes a full-width child
+mean "own line" instead of "squeeze the others".
+
+**The scroll problem was real, and the fix was to stop scrolling the wrong thing.**
+`window.scrollTo` and `captureBeyondViewport` both produced the same viewport-sized image,
+because the panel scrolls inside a container and the document has no extra height. The
+capture now scrolls **every scrollable ancestor** of the row it wants to show and reports
+the row's geometry before shooting:
+
+```text
+warning row: {"found":true,"scrolled":1,"top":808,"visible":true}
+```
+
+so "verified by looking" is a measurement here, not a hope - which is the check I skipped
+two iterations ago when I stored an image identical to the previous one and called it the
+bottom.

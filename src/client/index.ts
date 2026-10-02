@@ -820,7 +820,10 @@ function HistoryPage(): React.ReactElement {
     threadSection,
     React.createElement(
       'div',
-      { style: { display: 'flex', gap: 8, marginBottom: SPACE.xl } },
+      // flexWrap matters: the destructive block asks for a full line, and without
+      // wrapping it squeezes the buttons beside it into two-character columns - which
+      // only looking at the panel revealed.
+      { style: { display: 'flex', gap: SPACE.sm, flexWrap: 'wrap', marginBottom: SPACE.xl } },
       React.createElement(
         'button',
         {
