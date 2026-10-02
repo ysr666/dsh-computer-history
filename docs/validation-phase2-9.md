@@ -636,3 +636,30 @@ made a check or a calibration look like it worked: a class name that was the pre
 `CompanionIntakeError`, a spec helper whose indentation differed, and now this. The
 lesson is written down because it keeps being true: **a name that contains another name
 is not a different name to a substring check.**
+
+## Phase 2.9 exit gate, item by item
+
+| gate item | state | evidence |
+|---|---|---|
+| `pnpm verify` green, new invariants inside it | **done** | 324 tests, lint 0, **eight guards**: privacy, adapters, store protection, semantic boundary, architecture, migrations, native timeouts, plus the suite |
+| `pnpm verify:p1` green | **done** | native build and privacy/protocol tests pass |
+| each new check calibrated red then green | **done** | every guard's self-check proven; the timeout guard's calibration took three attempts and the two invalid ones are recorded |
+| a first-run walkthrough with its gaps fixed or deferred with reasons | **done** | T2.9-0: it corrected the plan's own assumption (permission *is* reported) and found the real gap (nothing is allowed, nothing says so) |
+| the panel answers "is it working?" at a glance | **partly done, and this is the honest part** | the sentence exists as a tested pure function and `/state` carries capture, permission, companion and refusals-by-reason; **nobody has seen it in a window** |
+| granting and revoking a companion from the panel | **done** | token creation, copy button, three steps, per-client state; revocation is rotation, which the panel says |
+| screen lock and sleep produce no false activity | **done with a named mechanism** | the lock screen is not an adapter, so it is dropped (`not-an-adapter`, proven by breaking the adapter lookup); sleep is covered by the quiet-period episode break |
+| storage growth bounded by retention | **done by tests, live check abandoned** | the retention specs cover the growth-critical cases; the live check had no row to age and was not faked |
+| install and removal verified | **removal done, install split** | removal run for real with output; the checkout install is verified (`[active]`), the tarball install is not |
+| collection scope unchanged | **done** | ADR 0002 and 0011 untouched; the diff is UI, guards and reported reasons |
+
+### The two things left, and neither is mine to do
+
+1. **Open the panel** (sidebar → Computer History). Every claim above about the
+   interface rests on tests, types and API responses; a screenshot is the evidence
+   that would close it, and it needs the panel opened or the browser bridge connected.
+2. **Restart the Host once with the plugin declared in the profile**, then confirm the
+   entry reaches `[active]`. That would turn the last unverified line in
+   `docs/release.md` into a verified one.
+
+Both are the owner's actions, and both are one step. Until they happen this phase is
+**not** complete, and this file says so instead of rounding up.
