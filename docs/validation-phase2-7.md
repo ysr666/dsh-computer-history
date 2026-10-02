@@ -244,3 +244,42 @@ might have dropped even though `lib/` looks complete.
 
 `docs/release.md` will document the checkout install (verified) and state that
 the tarball path currently fails to start, with this evidence.
+
+### T2.7-4, third attempt: what is actually different, and what `no-fiber` means
+
+Three probes, each correcting the previous one's reading of the loader API:
+
+```text
+loader.create(...) returns the entry ID as a string ("695447a0"), not an entry
+  object - my first two accessors were reading indices of that string, which is
+  why one of them reported keys "0,1,2,3,4,5,6,7"
+the entry found by that id has fiber.state === 'none'
+  not 'failed': the fiber exists and never started
+the packaged lib/*.js and the manifest are byte-identical to the repository's
+```
+
+So the artifact is not different; its **install location** is. And the useful
+comparison is with a plugin that works from the same location: `dsh-context`
+lives in `~/.dsh/profiles/desktop/node_modules`, imports
+`@deepseek-ai/dsh-session` at runtime, ships only `zod` of its own, and runs - so
+the Host does resolve DSH packages for profile installs. My package declares them
+as `peerDependencies`, which is the same classification.
+
+What that leaves, stated as a hypothesis rather than a conclusion: the fiber is
+created and never started, which is the state a fiber holds while the loader is
+waiting for something - its dependencies to be injected, or its entry to be
+imported. The repository copy resolves `@deepseek-ai/*` through the repository's
+own `node_modules`; the profile install has none, and the one third-party plugin
+that demonstrably imports a DSH package from that location is `dsh-context`.
+
+**Next probe, named:** dump the entry's own fields with the correct accessor
+(`_initTask` came back undefined this time, so it needs the same treatment the
+fiber needed in 2.6), and test the peer hypothesis directly by installing the
+tarball **with its dependencies** into the profile rather than copying it in, then
+reading the fiber state. If the fiber starts, the release document's install
+command is the dependency-installing one, and that is what `docs/release.md` will
+say.
+
+`docs/release.md` still documents the checkout install as the verified path and
+states that copying the tarball in leaves the fiber unstarted, with the evidence
+above - the phase's whole point is that a release document says what was measured.
