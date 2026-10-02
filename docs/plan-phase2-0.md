@@ -64,7 +64,9 @@ verify:privacy` scans `scripts/` too (extend `roots`); the guide is linked from
 
 **Write scope:** `native/macos/Sources/ComputerHistoryCollector/SupportedApps.swift`,
 `.../Collector.swift`, `native/macos/Tests/ComputerHistoryCollectorTests/SupportedAppsTests.swift`,
-`scripts/test-native.mjs`.
+`scripts/test-native.mjs`, `tests/repository.spec.ts` (amended during execution:
+the existing Host/native allowlist drift guard parsed the old `bundle ==` shape
+and had to learn the registry shape), `docs/adapters.md`.
 
 **Deliverables**
 
@@ -269,3 +271,13 @@ unprotected, proven by temporarily reverting the protection in a fixture.
 
 Browser companion (2.1), semantic summaries and work threads (2.2), UI/audit
 (2.3), Windows/Linux collectors, and any click/keystroke/content capture.
+
+## Progress
+
+| Task | Status | Evidence |
+|---|---|---|
+| T2.0-0 toolkit into the repo | done | commit `215e9e1`; `pnpm verify:tools` builds both helpers; `pnpm verify` green (204 tests); guard scans `scripts/` after excluding itself (self-reference caught by running it) |
+| T2.0-1 adapter registry | done | commit pending; `Phase1Adapter` registry replaces the `adapterName == "terminal"` test; XCTest invariants + preconditions; `pnpm native:test` green; the repo's own Host/native allowlist guard was updated to read `bundleIds` |
+| T2.0-1b surface-kind single source | open | native registry carries `surfaceKind`, `src/host/ingestion/normalize.ts` still maps adapter ids independently; decide generate-vs-validate and add a drift check |
+| T2.0-2 … T2.0-11 | open | — |
+

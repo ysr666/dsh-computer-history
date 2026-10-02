@@ -103,13 +103,38 @@ struct NativeTests {
             !globMatches("*.pem", "/tmp/readme.txt")
         )
         precondition(
-            phase1AdapterForBundle("com.microsoft.VSCode") == "vscode"
+            phase1AdapterForBundle("com.microsoft.VSCode")?.id == "vscode"
         )
         precondition(
             phase1AdapterForBundle("com.google.Chrome") == nil
         )
         precondition(
             phase1AdapterForBundle("org.mozilla.firefox") == nil
+        )
+
+        // The adapter registry is data: adding an adapter must not need a new
+        // branch in the collector. These invariants keep it that way, and keep
+        // the title policy attached to the adapter instead of a string test.
+        let adapterIds = phase1Adapters.map { $0.id }
+        precondition(Set(adapterIds).count == adapterIds.count)
+        let adapterBundles = phase1Adapters.flatMap { $0.bundleIds }
+        precondition(Set(adapterBundles).count == adapterBundles.count)
+        for adapter in phase1Adapters {
+            precondition(!adapter.id.isEmpty)
+            precondition(!adapter.bundleIds.isEmpty)
+            precondition(!adapter.surfaceKind.isEmpty)
+        }
+        precondition(
+            phase1AdapterForBundle("com.apple.Terminal")?
+                .suppressesWindowTitle == true
+        )
+        precondition(
+            phase1AdapterForBundle("com.googlecode.iterm2")?
+                .suppressesWindowTitle == true
+        )
+        precondition(
+            phase1AdapterForBundle("com.microsoft.VSCode")?
+                .suppressesWindowTitle == false
         )
 
         // Secure-field detection must fail closed: an unreadable

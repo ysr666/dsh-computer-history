@@ -351,7 +351,7 @@ final class Collector {
         let bundle = app.bundleIdentifier ?? "unknown"
         let protected = protectedBundles.contains(bundle)
             || policyProtectedBundles.contains(bundle)
-        guard let adapterName = phase1AdapterForBundle(bundle) else {
+        guard let adapter = phase1AdapterForBundle(bundle) else {
             lastObservationFingerprint = nil
             return
         }
@@ -432,7 +432,7 @@ final class Collector {
                 return
             }
 
-            let title = adapterName == "terminal"
+            let title = adapter.suppressesWindowTitle
                 ? nil
                 : safeString(
                     window,
@@ -483,7 +483,7 @@ final class Collector {
             pid: app.processIdentifier,
             bundleId: bundle,
             appName: app.localizedName,
-            adapter: adapterName,
+            adapter: adapter.id,
             windowTitle: windowInfo?.title,
             document: windowInfo?.document,
             url: windowInfo?.url,
@@ -523,7 +523,7 @@ final class Collector {
                         ? "unreadable-focused-element"
                         : nil
             ),
-            source: SourceInfo(adapter: adapterName)
+            source: SourceInfo(adapter: adapter.id)
         ))
     }
 }

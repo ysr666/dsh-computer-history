@@ -49,10 +49,16 @@ describe('repository scaffold', () => {
       ),
       'utf8',
     )
-    const nativeBundles = [...swift.matchAll(
-      /bundle == "([^"]+)"/g,
-    )].map(match => match[1]!).toSorted()
+    // The native side keeps adapters in one registry (`Phase1Adapter`
+    // entries with a `bundleIds` array), so the guard reads the arrays rather
+    // than per-bundle comparisons in code.
+    const nativeBundles = [
+      ...swift.matchAll(/bundleIds:\s*\[([^\]]*)\]/g),
+    ].flatMap(match =>
+      [...match[1]!.matchAll(/"([^"]+)"/g)].map(inner => inner[1]!),
+    ).toSorted()
 
+    expect(nativeBundles.length).toBeGreaterThan(0)
     expect(nativeBundles).toEqual(
       [...PHASE1_SUPPORTED_BUNDLE_IDS].toSorted(),
     )
