@@ -376,3 +376,50 @@ policy touched.
 
 Environment restored: VS Code quit, settings restored from the backup, scratch
 workspace removed; the extension remains installed.
+
+### T2.8-3, eighth attempt: **the extension works, and the evidence is in**
+
+The split was settled by one command - running the extension from source in an
+Extension Development Host, which bypasses installation and enablement:
+
+```text
+the extension's own trace
+  2026-10-02T18:05:12.071Z activated: appName=Visual Studio Code host=desktop
+
+the store
+  bundle=com.microsoft.VSCode | name=Visual Studio Code | provider=companion
+  session=vscode-mur9wrfw
+```
+
+A real VS Code window on this machine activated the extension, the extension sent
+its own observation, and the stored row carries the identity **it declared about
+itself** with companion provenance. The trace line is what makes this different from
+the earlier `probe-final` row: this one can only have come from the extension.
+
+**The split's answer:** the extension's code is correct. What does not work is the
+**installed copy activating** in a normally launched window - the same code activates
+from source. So the remaining defect is in install/enablement, not in the companion,
+and it is now a small, well-defined question rather than "the editor side is broken".
+
+### Phase 2.8 exit gate
+
+| gate item | evidence |
+|---|---|
+| `pnpm verify` / `verify:p1` green with the new rules inside | 316 tests, lint 0, seven guards; native privacy and protocol tests |
+| a declared identity is validated | five malformed claims refused, one accepted |
+| it is recorded as a claim, visible in panel/audit | `source.provider === 'companion'` with the claimed id; `docs/audit.md` says where |
+| an unallowed claim stores nothing | `ingest` false, store count 0 |
+| a protected claim is dropped even when allowed | 1Password claim refused |
+| the extension declares itself; one package, any VS Code editor | `declaredIdentity`; 8 extension tests including the exact Cursor payload |
+| **live evidence: a VS Code row with the declared identity** | `session=vscode-mur9wrfw`, `name=Visual Studio Code`, from the extension's own send |
+| the wire format is written for another editor | `docs/editor-companion.md`: endpoint, shape, statuses, claims, and what a client must never send |
+| the pre-existing 307 tests still pass | 316 now, the additions being the phase's own |
+
+Two things are **not** claimed: that the installed `.vsix` activates in a normally
+launched window (it does not, and the reason is the next phase's first item), and
+that any editor other than VS Code has been run (the mapping and the protocol are
+tested; another editor is new work).
+
+Environment restored: the development host and VS Code closed, the user's settings
+restored from the backup, the scratch workspace removed; the extension remains
+installed and the evidence database is at `/tmp/dsh-ch-28d`.
