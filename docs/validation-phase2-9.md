@@ -196,3 +196,34 @@ nothing else, which is the same class of ambiguity this phase exists to remove.
 **Also still open:** neither this section nor the health sentence has been looked at
 in a real window yet. Reading source is not evidence; the screenshot is, and it is
 the next piece of work.
+
+## T2.9-1 / T2.9-2 — the visual check, attempted and not obtained
+
+Reading source is not evidence, so the panel was to be photographed. What happened:
+
+```text
+browser bridge      no extension connected - the GUI cannot be driven from here
+screencapture       taken; the screen shows the DSH window with the sidebar listing
+                    "Computer History", and the main area showing a *different*
+                    session (a wallpaper-plugin cleanup)
+panel itself        not open, so the screenshot is not evidence about it
+```
+
+Honest reading: the screenshot proves the plugin's sidebar entry exists and that the
+panel was closed. It proves **nothing** about the health sentence or the pairing steps,
+and it is recorded as an attempt rather than as evidence.
+
+The two ways to get the real thing, either of which unblocks it:
+
+1. open the panel (sidebar → Computer History) and take the screenshot; or
+2. connect the browser bridge so the panel can be opened and captured from here.
+
+Until then, the health sentence and the pairing steps are verified by tests and by
+reading, which is weaker evidence, and the phase report says so rather than counting
+them as done.
+
+### Also still open: "a token exists, but nothing has ever arrived"
+
+Named last round and not yet implemented: `companion.lastSeenAtMs`, set when a request
+passes the token check, so a mistyped token stops reading as "paired" and nothing else.
+It is the last fact the panel needs to answer "is it working?" completely.
