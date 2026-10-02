@@ -235,6 +235,31 @@ files were open. The alternative (label episodes from the weak workspace) is
 recorded rather than taken, because it also changes resume scoring, which keys
 on the episode workspace.
 
+## T2.0-7 — live end-to-end verification (and a trap worth recording)
+
+The pure-builder test and the real-store replay were not enough: a live run
+with the plugin injected produced **three episodes for three observations of the
+same file**, which looked like the fix failing. Two checks settled it:
+
+1. the running instance predated the fix. The plugin was loaded at 19:17, the
+   fixed bundle was written at 19:21:57, and Node's module cache keeps the
+   already-imported copy. Verifying that the *file on disk* contains the fix
+   says nothing about the *process that is running*;
+2. an integration test driving the real `IngestionService` (a filesystem
+   workspace, three observations of one resource, 5.9s and 9.1s apart) passes
+   with one episode and three observation ids, so the service path was fine.
+
+After `dev_reload_package dsh-computer-history` (cache cleared, fiber rebuilt),
+the same live cycle produced the before/after pair inside one store:
+
+```text
+pre-reload   session C6C5A1F5…  episodes :3  :4  :5   each with 1 observation
+post-reload  session 6E5B6072…  episode  :1          with observations 1,2,3
+```
+
+Lesson for the next live verification: a plugin code change needs a hot reload
+before any live measurement means anything.
+
 ## Pending in 2.0
 
 `T2.0-2` is the only task without a completed deliverable, and it is blocked on

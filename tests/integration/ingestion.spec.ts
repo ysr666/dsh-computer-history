@@ -576,3 +576,70 @@ describe('live ingestion', () => {
     history.close()
   })
 })
+
+describe('repeated work on one file outside a DSH workspace', () => {
+  // The live Phase 2.0 run produced this: three observations of the same file,
+  // seconds apart, each in its own episode with the previous one closed as
+  // "workspace-switch", although no workspace was ever observed. A workspace
+  // resolved from the filesystem is deliberately not a strong workspace, so
+  // those observations take the non-owned resource path.
+  it('keeps one episode for repeated observations of the same resource', async () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'dsh-ch-live-fs-'))
+    roots.push(root)
+    const history = openHistoryDatabase({
+      dataDirectory: path.join(root, 'history'),
+      nowMs: 1,
+    })
+    const policies = new PolicyStore(history.db)
+    policies.ensureInitial(1)
+    policies.replace('include-only', [{
+      id: PolicyRuleId('allow-code-fs'),
+      dimension: 'app',
+      action: 'allow',
+      matcher: 'exact',
+      pattern: 'com.microsoft.VSCode',
+      builtIn: false,
+      createdAtMs: 1,
+      updatedAtMs: 1,
+    }], 2)
+
+    const ingestion = new IngestionService(
+      history.db,
+      {
+        // A filesystem workspace: not `dsh`/`git`, so the episode is not owned
+        // by it.
+        resolve: async () => ({
+          root: '/private/tmp/dsh-live-fixtures',
+          title: 'dsh-live-fixtures',
+          source: 'filesystem',
+          confidence: 0.4,
+        }),
+      },
+      () => policies.get(),
+      () => 100_000,
+    )
+
+    const base = native()
+    expect(await ingestion.ingest({
+      ...base,
+      seq: 1,
+      observedAtMs: 10_000,
+    })).toBe(true)
+    expect(await ingestion.ingest({
+      ...base,
+      seq: 2,
+      observedAtMs: 15_900,
+    })).toBe(true)
+    expect(await ingestion.ingest({
+      ...base,
+      seq: 3,
+      observedAtMs: 25_000,
+    })).toBe(true)
+
+    const episodes = new EpisodeStore(history.db).listRecent()
+    expect(episodes).toHaveLength(1)
+    const detail = new EpisodeStore(history.db).get(String(episodes[0]!.id))
+    expect(detail?.observationIds).toHaveLength(3)
+    history.close()
+  })
+})
