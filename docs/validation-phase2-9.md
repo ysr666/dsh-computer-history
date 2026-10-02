@@ -360,3 +360,28 @@ Two things follow from this and neither is done: the refusal counter can now be 
 down by reason (the product can say "12 observations were refused because nothing is
 allowed", which is what a new user needs), and every future test of a refusal can
 assert the reason instead of the bare fact.
+
+## T2.9-3 — the refusal breakdown, attempted and reverted to keep the tree green
+
+I tried to turn the counter into a breakdown by reason and stopped when it was not
+green, rather than leaving a half-finished change in place. What the attempt taught,
+and what the next one starts from:
+
+```text
+counting at the canonical normalize only   → the count stayed 0
+the test that refused a message            → "expected +0 to be 1"
+```
+
+The reason is the useful part: **an application the user has not allowed is refused
+before the canonical path**, in one of the two preliminary checks, so a counter that
+watches only the canonical normalize misses exactly the case the product cares about
+most - "nothing is allowed, so nothing is being stored".
+
+So the next attempt counts at every refusal path, not one of them, and the vocabulary
+needs a reason for the preliminary ones (`'policy-preliminary'` or similar) rather
+than lumping them under "unknown". The one-helper shape from the previous round is
+right; it was placed on one path instead of all of them.
+
+Reverted: `ingestion-service.ts` and `normalize.ts` are back to the committed state,
+`pnpm typecheck` is clean, and the refusal-reason vocabulary from the previous round
+still stands.
