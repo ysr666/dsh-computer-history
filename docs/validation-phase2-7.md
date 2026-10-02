@@ -116,3 +116,49 @@ green  both restored
 
 `pnpm verify` → 306 tests unchanged, lint 0 warnings, and six guards that each
 state what they scanned.
+
+## T2.7-3 — migration invariants
+
+`scripts/verify-migrations.mjs` is the seventh guard. Its rules are **derived from
+the sources**, not kept in a list somebody has to remember:
+
+```text
+migration invariants hold: 7 migrations, versions 1..7, 2 rebuilds behind an integrity check
+```
+
+| rule | why it is derivable |
+|---|---|
+| versions contiguous from 1, names and checksums unique | read from the migration files themselves |
+| every file registered in the runner, nothing registered that does not exist | the runner text is compared with the directory |
+| **a migration that drops or renames a table must set `rebuildsReferencedTable`** | that flag is what turns foreign keys off around the rebuild and runs `PRAGMA foreign_key_check` before the commit |
+| the frozen-v1 upgrade test must **assert** the latest version | otherwise a new migration can be added without that path covering it |
+
+The third rule is the one worth having: a rebuild that forgets the flag is
+committed **without** an integrity check, and a cascade that eats linked rows is
+exactly what 2.4 found the hard way. Nobody has to remember it now.
+
+```text
+red    a migration that drops a table without the flag
+       → 0005-retention-settings.ts drops or renames a table without
+         rebuildsReferencedTable, so the runner would commit it without a
+         foreign_key_check
+green  restored
+       → migration invariants hold: 7 migrations, versions 1..7
+```
+
+### Two of my own checks were too weak, and the calibrations found them
+
+- **Rule 4 accepted a mention as an assertion.** The upgrade test contained
+  `PRAGMA user_version = 1` - a line that *sets* the version - and my regex was
+  happy with it. The rule now requires the version inside an expectation, the
+  guard went red as it should, and the test gained a real assertion computed from
+  the migrations directory so a new migration cannot slip past it.
+- **My first calibration of rule 3 was not a calibration.** I disabled the
+  detector instead of creating a violation, and the guard passed - because a rule
+  that only reports what it finds says nothing when it finds nothing. The valid
+  calibration inserts an actual `DROP TABLE` into a migration without the flag,
+  which is what now produces the red line above.
+
+A third, smaller one: the guard's own self-check helpers tripped the repository's
+lint rule about functions that capture nothing, which is the linter asking for the
+right thing - they are module-scope probes.

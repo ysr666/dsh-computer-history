@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
@@ -249,6 +249,16 @@ describe('v1 database upgrade compatibility', () => {
 
     const upgraded = openHistoryDatabase({ dataDirectory, nowMs: 999 })
     expect(new ObservationStore(upgraded.db).count()).toBe(1)
+
+    // Coverage of the *latest* schema, computed from the migrations themselves:
+    // a hardcoded number here would let a new migration slip past this path.
+    const versions = readdirSync(path.join(process.cwd(), 'src', 'host', 'store', 'migrations'))
+      .filter(name => name.endsWith('.ts'))
+      .map(name => Number(name.slice(0, 4)))
+    const latest = Math.max(...versions)
+    expect(
+      (upgraded.db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version,
+    ).toBe(latest)
     expect(new EpisodeStore(upgraded.db).get(episodeId)).toMatchObject({
       id: episodeId,
       summary: 'Worked in alpha.',
