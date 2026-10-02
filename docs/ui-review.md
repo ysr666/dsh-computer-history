@@ -354,3 +354,20 @@ iterations stopped at 工作线索 and the destructive row was below the fold - 
 been "verified by looking" in name only. The capture was redone scrolled to the end, and the
 rendered text of that region is printed with it. That is the same trap as the two silent
 replacements: a check that reports success while not covering the thing it claims to.
+
+### Correction: the "scrolled" capture is not scrolled
+
+The bottom capture I stored is **the same view as the top one**, so it does not verify the
+destructive row. `window.scrollTo(0, document.body.scrollHeight)` did nothing because the
+panel scrolls inside a container, not the document - and I stored the image without
+comparing it to the previous one, so a capture that proved nothing was briefly counted as
+proof.
+
+What that row has, honestly: the **rendered text** of the live page
+(`暂停采集 | 删除全部历史 | | 删除全部历史不可撤销，它只删除这台电脑上的记录。 | | 刷新`)
+and the source. What it does not have: a reviewed image.
+
+The fix is one option, not a scroll: `Page.captureScreenshot` with
+`captureBeyondViewport: true` and a clip over the full page height, which is what the next
+iteration uses - and the image is compared against the previous one before it is stored,
+which is the check I skipped.
