@@ -29,11 +29,19 @@ export class SemanticOptInStore {
         created_at_ms: number
       }>
     ).map((row): SemanticOptIn => {
-      const model = row.model
+      // Built without a spread: oxlint flags spreading inside `map`, and an
+      // explicit branch says the same thing without the allocation.
+      if (row.model === null) {
+        return {
+          scopeKey: row.scope_key,
+          providerKind: row.provider_kind === 'remote' ? 'remote' : 'local',
+          createdAtMs: Number(row.created_at_ms),
+        }
+      }
       return {
         scopeKey: row.scope_key,
         providerKind: row.provider_kind === 'remote' ? 'remote' : 'local',
-        ...(model === null ? {} : { model }),
+        model: row.model,
         createdAtMs: Number(row.created_at_ms),
       }
     })
