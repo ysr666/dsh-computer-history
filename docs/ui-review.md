@@ -446,3 +446,38 @@ Fixed forward: the import is gone, the handlers use `addEventListener`, the gate
 0`, `destructive warning: {"found":true,"visible":true}`. The rule that keeps failing is not
 "run the gate", it is **read the gate before the commit**, and the report keeps saying so
 until it stops happening.
+
+## Iteration 12 - the routine actions share a line, the destructive one does not
+
+Evidence: `docs/assets/panel-2026-10-03-final.png`, and the same run's measurements:
+
+```text
+health line: 还没有允许任何应用，所以什么都不会被记录。在下面添加一个应用即可开始。
+buttons: 10 | squeezed (height > 46px): 0 []
+destructive warning: {"found":true,"scrolled":1,"top":808,"visible":true}
+capture: 1817933 bytes, sha f4a365ba6ce2
+```
+
+The swap was done by moving lines rather than by matching strings, after two rounds where a
+string anchor silently matched nothing: `暂停采集 刷新` share a line, and `删除全部历史` sits
+below them with the sentence that says it cannot be undone.
+
+## Against the goal's six criteria
+
+| criterion | how it is satisfied | how it was checked |
+|---|---|---|
+| ① the actionable sentence first | it is the first thing under the title, above the status line | screenshot, and the status line read from the live page |
+| ② language follows the interface | `<html lang>` read once; no plugin-level switch exists | the panel renders in Chinese here and the code has no other path |
+| ③ both languages everywhere | title, explanation, headings, bodies, empty states, buttons, placeholders | every string went through `t(en, zh)`; the English side is the fallback |
+| ④ no design-document prose, no raw state words | the privacy paragraph rewritten; `running` → `正在采集` | the rendered text was read a section at a time |
+| ⑤ one visual system | `SPACE` scale, theme radii, `currentColor`/`opacity`, no hardcoded colour, three button shapes | the 8 hardcoded sites were removed and the danger colour comes from a host token |
+| ⑥ empty states and grouping | every section says what it is and what would fill it; destructive action separated with its consequence | screenshot of the panel bottom, with the row measured inside the viewport |
+
+**Six criteria, twelve iterations, and the same lesson four times over**: an unverified
+replacement (twice), a declared-but-unused constant (three times), a capture that proved
+nothing (once), and a gate read after the commit instead of before (twice). Every one of
+them was found by looking at the thing rather than at the code - which is what the panel
+work was for.
+
+The headless Chrome started for this work has been closed; `scripts/panel-shot.mjs`
+documents how to start it again, and the panel itself is unaffected either way.

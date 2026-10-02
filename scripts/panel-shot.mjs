@@ -3,8 +3,14 @@
 //
 //   node scripts/panel-shot.mjs
 //
-// Needs a running Host and a Chrome started with --remote-debugging-port=19222, plus the
-// auth cookie in /tmp/dsh-ch-cookie.txt. It exists because writing panel code without
+// Needs a running Host and a Chrome of its own, so the owner's window is never touched:
+//
+//   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new \
+//     --remote-debugging-port=19222 --user-data-dir=/tmp/dch-ui/chrome-profile \
+//     --no-first-run "http://127.0.0.1:19387/"
+//
+// plus the auth cookie in /tmp/dsh-ch-cookie.txt (the page shows "authentication required"
+// without it, and then every measurement below is a measurement of the error page). It exists because writing panel code without
 // looking at the panel produced an invisible health line, dim unreadable text and buttons
 // squeezed into two-character columns.
 //

@@ -844,6 +844,11 @@ function HistoryPage(): React.ReactElement {
               ? t('Pause capture', '暂停采集')
               : t('Capture unavailable', '采集暂不可用'),
       ),
+      React.createElement(
+        'button',
+        { type: 'button', style: BUTTON, onClick: () => { runAction(refresh) } },
+        t('Refresh', '刷新'),
+      ),
       // The destructive action gets its own line, separated and explained: it used to
       // sit between 暂停采集 and 刷新 as if it were routine.
       React.createElement(
@@ -881,11 +886,6 @@ function HistoryPage(): React.ReactElement {
           t('Deleting all history cannot be undone. It removes the record from this machine.',
             '删除全部历史不可撤销，它只删除这台电脑上的记录。'),
         ),
-      ),
-      React.createElement(
-        'button',
-        { type: 'button', style: BUTTON, onClick: () => { runAction(refresh) } },
-        t('Refresh', '刷新'),
       ),
     ),
     React.createElement('h2', null, t('Privacy & app access', '隐私与应用权限')),
