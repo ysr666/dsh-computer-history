@@ -60,3 +60,45 @@ of the contract now and the extension must declare it.
 Still open in this task: the vouched workspace root does not yet reach the stored
 observation. That needs the `workspace_source` widening (migration) and the
 observation-level workspace override, and it is the next round's work.
+
+### T2.5-2, finished: the vouched root reaches the store
+
+`observations.workspace_source` gains `'companion'` (migration 0006, which
+rebuilds `observations` for the widened CHECK through the runner's
+`rebuildsReferencedTable` path; the frozen-v1 upgrade test exercises it), the
+store's validator accepts the value, `NativeObservation` gains an optional
+`workspace`, and ingestion honours that field **only** when
+`source.provider === 'companion'`.
+
+```text
+pnpm test tests/integration/companion-workspace.spec.ts → 3 passed
+
+a vouched root is stored as { source: 'companion', confidence: 1, root }
+an Accessibility observation claiming a workspace is ignored: the resolver's
+  inference ('filesystem', '/inferred') is what gets stored
+two editor observations produce an episode and leave
+  workspace_source='companion' with the vouched root
+```
+
+The second case is the one that matters directionally: the vouch is a
+*capability* of the paired companion, not a field any observation may fill in.
+
+**A design decision taken while writing it.** The editor observation carries VS
+Code's **real** bundle id, not the synthetic `companion.browser` the browser path
+uses. The extension runs inside the editor, so that is the truthful answer, and
+it means the rule the user already has for "allow VS Code" governs it instead of
+a second thing to allow. A future editor-agnostic companion whose extension
+declares its own identity is a boundary decision for its own ADR; ADR 0009 now
+records the distinction.
+
+**Two of my own mistakes, both found by running the tests:**
+
+- the fixture dated its observations one second in the future
+  (`observedAtMs: now + seq * 1000`), and ingestion refuses a future observation
+  by design. The pure-function probe accepted the same message because it does
+  not consult a clock, which is what pointed at the fixture rather than the code;
+- the store's validator never got the new value: a `str.replace` in an earlier
+  edit targeted a string that did not match (the line begins with `||`), and it
+  failed **silently** because that particular patch had no assertion. It has one
+  now, and the failure then read `invalid workspace source: companion` - the
+  error doing its job.

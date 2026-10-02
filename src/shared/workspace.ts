@@ -2,6 +2,8 @@ export type WorkspaceSource =
   | 'dsh'
   | 'git'
   | 'filesystem'
+  /** Vouched for by a paired companion, not inferred (ADR 0009). */
+  | 'companion'
   | 'none'
 
 export interface WorkspaceRef {

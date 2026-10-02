@@ -45,6 +45,15 @@ export interface NativeObservation {
     readonly protected: boolean
     readonly reason?: string
   }
+  /**
+   * A workspace a **paired companion** vouched for (ADR 0009). The Accessibility
+   * path cannot make this claim - it can only guess from a document path - so
+   * ingestion honours this field only when `source.provider === 'companion'`.
+   */
+  readonly workspace?: {
+    readonly root: string
+    readonly title?: string
+  }
   readonly source: {
     readonly adapter: string
     /**

@@ -78,6 +78,7 @@ function workspaceSource(value: string): WorkspaceSource {
     value === 'dsh'
     || value === 'git'
     || value === 'filesystem'
+    || value === 'companion'
     || value === 'none'
   ) return value
   throw new Error(`invalid workspace source: ${value}`)

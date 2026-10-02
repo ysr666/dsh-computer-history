@@ -4,6 +4,7 @@ import { migration0002 } from './migrations/0002-companion-pairing.js'
 import { migration0003 } from './migrations/0003-semantic-citations.js'
 import { migration0004 } from './migrations/0004-semantic-opt-ins.js'
 import { migration0005 } from './migrations/0005-retention-settings.js'
+import { migration0006 } from './migrations/0006-companion-workspace-source.js'
 
 export interface Migration {
   readonly version: number
@@ -26,6 +27,7 @@ const MIGRATIONS: readonly Migration[] = [
   migration0003,
   migration0004,
   migration0005,
+  migration0006,
 ]
 
 function schemaVersion(db: DatabaseSync): number {

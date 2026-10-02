@@ -175,9 +175,24 @@ export class IngestionService {
     )
     if (!canonicalPreliminary) return false
 
-    const workspace = await this.workspaceResolver.resolve(
-      canonicalPreliminary.resource,
-    )
+    // A paired companion's answer beats an inference: the editor says where the
+    // work is, the resolver can only guess from a path (ADR 0009). Nothing else
+    // may make this claim - an Accessibility observation carrying a workspace is
+    // ignored, not believed.
+    const vouched = message.source.provider === 'companion'
+      ? message.workspace
+      : undefined
+    const workspace: WorkspaceRef = vouched
+      ? {
+          id: vouched.root,
+          root: vouched.root,
+          ...(vouched.title === undefined ? {} : { title: vouched.title }),
+          source: 'companion',
+          confidence: 1,
+        }
+      : await this.workspaceResolver.resolve(
+          canonicalPreliminary.resource,
+        )
 
     this.db.exec('BEGIN IMMEDIATE')
     try {

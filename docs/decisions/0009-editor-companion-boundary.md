@@ -52,6 +52,14 @@ document path (`filesystem`) nor the Host's own workspace (`dsh`), and recording
 it as either would misstate how the Host knows. Widening the vocabulary costs one
 migration for a CHECK constraint; misstating provenance costs the audit.
 
+**The editor's observation claims the editor's own identity.** The browser path
+uses a synthetic bundle id (`companion.browser`) because an Accessibility window
+may not name a specific browser. An editor extension runs *inside* the editor, so
+its observation carries VS Code's real bundle id: the truth, and the rule the
+user already has for "allow VS Code" then governs it instead of a second thing to
+allow. A future editor-agnostic companion that lets the extension declare its own
+identity is a boundary decision for its own ADR.
+
 ## Consequences
 
 - Episodes recorded with the companion in play are anchored, get real
