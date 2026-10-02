@@ -8,6 +8,7 @@ import {
   type ActivityObservation,
   type DeleteHistoryRequest,
 } from '../../src/shared/index.js'
+import { buildWorkThreads } from '../../src/host/episodes/threads.js'
 import { DeletionService, RetentionService } from '../../src/host/retention/index.js'
 import { EpisodeStore, ObservationStore, openHistoryDatabase, ResourceStore } from '../../src/host/store/index.js'
 
@@ -329,5 +330,70 @@ describe('provenance-aware deletion', () => {
     expect(seeded.observations.count()).toBe(3)
     expect(seeded.episodes.get(seeded.episodeId)?.observationIds).toHaveLength(3)
     history.close()
+  })
+})
+
+describe('deletion coherence for summary citations (ADR 0004 §5)', () => {
+  function citations(db: ReturnType<typeof openTempDatabase>['db'], episodeId: EpisodeId) {
+    return (db.prepare(`
+      SELECT observation_id FROM episode_summary_citations
+      WHERE episode_id = ? ORDER BY observation_id
+    `).all(episodeId) as Array<{ observation_id: number }>)
+      .map(row => row.observation_id)
+  }
+
+  it('keeps foreign keys enforced, which is what makes the cascade work', () => {
+    // Migration 0003 rebuilds `episodes` with `PRAGMA foreign_keys = OFF`
+    // (SQLite's documented procedure) and the runner turns it back on. If that
+    // restore ever failed, deleted observations would silently leave their
+    // citations behind, so the state is asserted rather than assumed.
+    const history = openTempDatabase()
+    const pragma = history.db.prepare('PRAGMA foreign_keys').get() as {
+      foreign_keys: number
+    }
+    expect(pragma.foreign_keys).toBe(1)
+  })
+
+  it('takes the citations of deleted evidence with it', () => {
+    const history = openTempDatabase()
+    const seeded = seedEpisode(history)
+    const deletion = new DeletionService(history.db)
+
+    // The seeded episode cites its three observations (the store defaults the
+    // citations to them), so the summary is checkable to begin with.
+    expect(citations(history.db, seeded.episodeId)).toHaveLength(3)
+
+    deletion.delete({ scope: { kind: 'app', bundleId: 'com.google.Chrome' } }, 10_000)
+
+    const surviving = citations(history.db, seeded.episodeId)
+    expect(surviving).toHaveLength(2)
+    const rebuilt = seeded.episodes.get(seeded.episodeId)
+    expect(rebuilt?.observationIds).toHaveLength(2)
+    // The rebuilt summary cites exactly the evidence that still exists: no
+    // citation may outlive the observation behind it.
+    expect(rebuilt?.summaryObservationIds).toEqual(surviving)
+    expect(surviving).not.toContain(2)
+
+    // A thread computed afterwards inherits only the surviving citations.
+    const threads = buildWorkThreads(rebuilt ? [rebuilt] : [])
+    expect(threads[0]?.summaryObservationIds).toEqual(surviving)
+  })
+
+  it('leaves nothing behind when everything is deleted', () => {
+    const history = openTempDatabase()
+    seedEpisode(history)
+    const deletion = new DeletionService(history.db)
+    deletion.delete({ scope: { kind: 'all' } }, 10_000)
+
+    const left = history.db.prepare(
+      'SELECT COUNT(*) AS count FROM episode_summary_citations',
+    ).get() as { count: number }
+    expect(left.count).toBe(0)
+    const episodes = history.db.prepare(
+      'SELECT COUNT(*) AS count FROM episodes',
+    ).get() as { count: number }
+    expect(episodes.count).toBe(0)
+    // Nothing to build a thread from, so nothing can claim support.
+    expect(buildWorkThreads([])).toEqual([])
   })
 })

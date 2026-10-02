@@ -213,3 +213,22 @@ fresh, its default policy is `include-only` with no rules, so the seeded
 the two `ON DELETE CASCADE` links took the episode's observation links and its
 citation rows with them. That is exactly the deletion contract T2.2-6 must prove,
 seen once in the wild before its test exists.
+
+## T2.2-6 — deletion coherence
+
+Three tests in `tests/integration/deletion.spec.ts` pin the contract instead of
+promising it:
+
+| case | expectation |
+|---|---|
+| foreign keys after the migration | `PRAGMA foreign_keys` is 1 |
+| delete one app's evidence | the episode's citations drop from 3 to 2, the rebuilt episode cites exactly its surviving observations, and a thread computed afterwards inherits only those |
+| delete everything | zero citation rows, zero episodes, and `buildWorkThreads([])` is empty |
+
+The first case is the one that makes the other two mean something. Migration
+0003 rebuilds `episodes` with `PRAGMA foreign_keys = OFF` — SQLite's documented
+procedure, which this project needed because dropping a referenced table cascades
+its children — and the runner turns it back on. If that restore ever failed,
+deleted observations would quietly leave their citation rows behind and every
+"deletion removes derived text" claim would be false while the tests kept
+passing. So the state is asserted, not assumed.
