@@ -36,6 +36,16 @@ const INTERFACE_LANG = (document.documentElement.lang || navigator.language || '
 const CHINESE = INTERFACE_LANG.startsWith('zh')
 const t = (en: string, zh: string): string => (CHINESE ? zh : en)
 
+// The collector's state words are for a log, not for a person.
+const CAPTURE_WORD: Record<string, string> = {
+  running: 'recording', paused: 'paused', stopped: 'stopped',
+  degraded: 'having trouble', 'permission-required': 'needs permission',
+}
+const CAPTURE_WORD_ZH: Record<string, string> = {
+  running: '正在采集', paused: '已暂停', stopped: '已停止',
+  degraded: '运行不稳定', 'permission-required': '需要授权',
+}
+
 const HEALTH_TEXT: Record<string, string> = {
   paused: t('Collection is paused, so nothing new is being recorded.',
     '采集已暂停，所以不会记录新的内容。'),
@@ -292,7 +302,7 @@ function HistoryPage(): React.ReactElement {
       { style: { display: 'flex', gap: 8 } },
       React.createElement('input', {
         type: 'text',
-        placeholder: 'e.g. continue the billing work',
+        placeholder: t('e.g. continue the billing work', '例如：继续计费那件事'),
         value: resumeQuery,
         onChange: (event: { target: { value: string } }) => {
           setResumeQuery(event.target.value)
@@ -356,7 +366,7 @@ function HistoryPage(): React.ReactElement {
       ? React.createElement(
           'p',
           { style: { opacity: 0.75 } },
-          'No scope uses a model, so every summary here was computed locally.',
+          t('No scope uses a model, so every summary here was computed locally.', '没有范围使用模型，所以这里的摘要都是在本地算出来的。'),
         )
       : React.createElement(
           'ul',
@@ -482,7 +492,7 @@ function HistoryPage(): React.ReactElement {
       ? React.createElement(
           'p',
           { style: { opacity: 0.75 } },
-          'Nothing recorded in the last seven days.',
+          t('Nothing recorded in the last seven days yet.', '最近七天还没有记录。'),
         )
       : React.createElement(
           'div',
@@ -612,7 +622,10 @@ function HistoryPage(): React.ReactElement {
       !companion
         ? 'Companion state unavailable on this Host.'
         : companion.listening
-          ? `Listening on 127.0.0.1:${companion.port} · ${companion.paired ? (companion.lastSeenAtMs === undefined ? 'token created, but no client has ever used it' : `paired · last used ${new Date(companion.lastSeenAtMs).toLocaleString()}`) : 'not paired yet'}`
+          ? t(
+              `Listening on 127.0.0.1:${companion.port} · ${companion.paired ? (companion.lastSeenAtMs === undefined ? 'a token exists, but no client has ever used it' : `paired · last used ${new Date(companion.lastSeenAtMs).toLocaleString()}`) : 'not paired yet'}`,
+              `正在监听 127.0.0.1:${companion.port} · ${companion.paired ? (companion.lastSeenAtMs === undefined ? '令牌已生成，但还没有任何客户端用过它' : `已配对 · 最近使用 ${new Date(companion.lastSeenAtMs).toLocaleString()}`) : '还没有配对'}`,
+            )
           : `Companion unavailable${companion.reason ? ': ' + companion.reason : ''}`,
     ),
     React.createElement(
@@ -692,7 +705,7 @@ function HistoryPage(): React.ReactElement {
       { style: { display: 'flex', gap: 8, alignItems: 'center', marginTop: 12 } },
       React.createElement('input', {
         type: 'text',
-        placeholder: 'https://example.com',
+        placeholder: t('https://example.com', '例如 https://example.com'),
         value: siteOrigin,
         onChange: (event: { target: { value: string } }) => {
           setSiteOrigin(event.target.value)
@@ -720,7 +733,7 @@ function HistoryPage(): React.ReactElement {
       ? React.createElement(
           'p',
           { style: { opacity: 0.75 } },
-          'No threaded work yet: episodes need a workspace the Host can vouch for.',
+          t('No threaded work yet: episodes need a workspace the Host can vouch for.', '还没有成线索的工作：需要宿主能确认的工作区才会成线索。'),
         )
       : React.createElement(
           'ul',
@@ -754,7 +767,7 @@ function HistoryPage(): React.ReactElement {
       'p',
       null,
       state
-        ? t(`Capture: ${state.capture} · Accessibility: ${state.accessibilityTrusted ? 'granted' : 'required'} · retention: ${state.observationRetentionHours}h`, `采集：${state.capture} · 辅助功能：${state.accessibilityTrusted ? '已授权' : '未授权'} · 保留：${state.observationRetentionHours} 小时`)
+        ? t(`Capture: ${CAPTURE_WORD[state.capture] ?? state.capture} · Accessibility: ${state.accessibilityTrusted ? 'granted' : 'required'} · retention: ${state.observationRetentionHours}h`, `采集：${CAPTURE_WORD_ZH[state.capture] ?? state.capture} · 辅助功能：${state.accessibilityTrusted ? '已授权' : '未授权'} · 保留：${state.observationRetentionHours} 小时`)
         : 'Loading…',
     ),
     error
@@ -826,10 +839,10 @@ function HistoryPage(): React.ReactElement {
     ),
     React.createElement('h2', null, t('Privacy & app access', '隐私与应用权限')),
     React.createElement('p', null,
-      'Capture is include-only. Phase 1 accepts only supported metadata adapters (VS Code/Cursor, Terminal/iTerm, Preview, Finder); browsers and unknown apps fail closed before storage.'),
+      t('Only what you allow below is recorded, and only as metadata: which application, which file, for how long - never the contents of the screen, a document or a selection.', '只有你下面允许的应用会被记录，而且只记元数据：哪个应用、哪个文件、用了多久——绝不记录屏幕内容、文档内容或选中文字。')),
     React.createElement('input', {
       value: bundleId,
-      placeholder: 'com.example.App',
+      placeholder: t('com.example.App', '例如 com.apple.Safari'),
       onChange: (event: React.ChangeEvent<HTMLInputElement>) => setBundleId(event.target.value),
     }),
     React.createElement(

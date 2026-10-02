@@ -140,3 +140,37 @@ After the prose and the raw state, what remains of this work is the visual syste
 spacing scale, inputs with labels, actions grouped, one accent - which is worth doing
 after the words, because the words are what makes it usable and the polish is what makes
 it pleasant.
+
+## Iteration 3 - the words, and the two anchors that taught me to verify before writing
+
+Evidence: `docs/assets/panel-2026-10-03-after3.png`.
+
+Now Chinese, following the interface: 采集：正在采集 · 辅助功能：已授权 · 保留：24 小时;
+正在监听 127.0.0.1:19388 · 令牌已生成，但还没有任何客户端用过它; 最近七天还没有记录。
+还没有成线索的工作：需要宿主能确认的工作区才会成线索。 Placeholders too
+(例如：继续计费那件事, 例如 com.apple.Safari).
+
+The privacy paragraph stopped being a design document:
+
+```text
+before  Capture is include-only. Phase 1 accepts only supported metadata adapters
+        (VS Code/Cursor, Terminal/iTerm, Preview, Finder); browsers and unknown apps
+        fail closed before storage.
+after   只有你下面允许的应用会被记录，而且只记元数据：哪个应用、哪个文件、用了多久——
+        绝不记录屏幕内容、文档内容或选中文字。
+```
+
+The collector's internal state word is gone from the interface as well: `running` is now
+`正在采集` (with `paused`/`stopped`/`degraded`/`permission-required` translated too).
+
+**Two of my edits silently did nothing, and the assertions are why I know.** One anchor
+was written with the wrong indentation, another as a single-quoted string when the source
+has a backtick template; both matched zero times, so the script aborted before writing
+instead of half-applying. That is the fourth time this session a replacement looked like
+success - and the first time the guards caught it *before* the file changed, which is the
+whole reason to assert on the count instead of trusting `replace`.
+
+**Still English, and next:** the retention explanation and its two labels
+(`Raw observations are kept for 24 hours…`, `Observation hours`, `Episode days`) and the
+first line of Summaries. After those, the visual system: spacing, inputs with labels,
+grouped actions, and one accent for emphasis.
