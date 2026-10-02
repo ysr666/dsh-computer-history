@@ -237,3 +237,17 @@ tests/integration/plugin-multi-host.spec.ts 同上
 ```
 
 验证期间的环境改动已全部还原：profile `package.json` / `cordis.patch.yml` 由备份恢复并 diff 通过；junction、`~/.dsh/computer-history` 软链、loader entry、staged 工具均已移除；helper 进程已停止。一次性目录仅保留证据 DB。
+
+## 10. 下一阶段（重启后按序执行）
+
+本阶段已收口：真机验证、三个 blocker 修复（client bundle 格式 / cordis inject 门禁 / Terminal fail-closed）、环境还原、两次 forward commit（`62cb5a1` → `ef8d4bc`）。下一阶段每完成一步就更新本报告：
+
+| # | 动作 | 前置 | 验收 |
+|---|---|---|---|
+| N1 | 重启 DSH Host 后验证注入器补丁：`dev_plugin_status` 确认 injector active → `dev_inject_plugin {dir}` 应直接放行（不再报 `main`/`sidebar.panellist` 不在白名单）→ live client Slots 里 `computer-history` occupant 仍 active | DSH 重启 | 标准 §5 注入路径可用；UI 半 active；`pnpm verify:p1` 全绿 |
+| N2 | 安装真实可启动的 VS Code 或 Cursor → 原生探针复测编辑器 adapter 的 kAXDocument 与资源映射 | 可用编辑器 | 回填 §5 A2 的 VS Code 行 |
+| N3 | 在 AXURL 有值的场景复测 `safeURL` 的 CFURL 解码 | 可触发场景 | 回填 §5 A3 |
+| N4 | 故障注入"helper 退出无法确认" | 可选 | 回填 C10 剩余分支 |
+| N5 | 修注入器自重载 `selfEntry 无官方 _dispose（loader 契约缺失）`（F8） | 可选，改注入器源码 | 补丁免重启生效 |
+
+每阶段收尾固定动作：关闭本阶段打开的应用/窗口/后台进程；更新报告与 todo；forward commit；确认 worktree clean。
