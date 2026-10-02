@@ -116,7 +116,7 @@ Error: cannot get property "computerHistory" without inject
 | Finder | `{"title":"dsh-live-fixtures"}`，**无 document / url** | kAXDocument 为 nil；Host 侧 `resource_id` 为空（库里 7 条 Finder 全为空） |
 | Preview（合成 PDF） | `{"document":"file:///private/tmp/dsh-live-fixtures/preview-fixture.pdf","title":"preview-fixture.pdf – 1页"}`，两次可复现 | 文档型应用可拿到 **file:// URL**，资源识别成立 |
 | Terminal | **无 window / element 字段**，`privacy.secure=true, reason=unreadable-focused-element`（3/3） | focused element 不可读 → fail-closed，见 §6 F4 |
-| VS Code | 未能实测 | `/Applications/Visual Studio Code.app` 是本机一个**不可启动的假壳**（`Contents/MacOS/Code` 实为 Node 脚本，直接执行报 `SyntaxError: Unexpected token '<'`；`open` 后无进程）。本机无 Cursor |
+| VS Code | 未能实测（真 app 不可启动） | `/Applications/Visual Studio Code.app` 是本机一个**不可启动的假壳**（`Contents/MacOS/Code` 实为 Node 脚本，直接执行报 `SyntaxError: Unexpected token '<'`；`open` 后无进程）。本机无 Cursor。**adapter 契约已用合成 app 单独验证**，见 §5.5 |
 
 **A3 — kAXURL CFURL 解码：真机场景不存在，解码逻辑已单测锁定。**
 用 native 构建同一套 swiftc 编了一个现场探针（`/tmp/dsh-ax-url`，直接编译 `Privacy.swift`/`SupportedApps.swift` 并调用其中的 `safeURL`/`safeString`），对真实运行的应用窗口逐个读属性：
@@ -151,6 +151,23 @@ Terminal:      axurl err=-25205，document=file:///Users/ysradmin/
 
 **部分确认。** Terminal 的 `unreadable-focused-element` 路径本身就是一次"读不到就放弃、不阻塞"的实证：collector 在该次读失败后继续正常产出其他 app 的 observation，Host 全程无 `configure-ack-timeout` / `paused-ack-timeout`，`/state` 无 degraded。对支持应用做 SIGSTOP 的人为无响应实验**未能观察到新状态**（指纹未变化被抑制），故"卡死防护"缺少人为最坏用例证据，列为部分确认（条件见 §8）。
 
+### 5.5 编辑器 adapter 契约（合成 app，答案分层）
+
+真 VS Code 不可用，于是把"adapter 映射 + AXDocument 管线"从"真实 VS Code 语义"里拆出来单独验证：临时造了一个最小 AppKit app（bundle id **`com.microsoft.VSCode`**，`NSWindow.representedURL` 指向合成文件），用真 collector 观察：
+
+```json
+{"seq":1,"source":{"adapter":"vscode"},"app":{"bundleId":"com.microsoft.VSCode"},
+ "window":{"title":"normal-text.html","document":"file:///tmp/dsh-live-fixtures/normal-text.html"},
+ "element":{"subrole":"AXStandardWindow","role":"AXWindow"},
+ "privacy":{"secure":false}}
+```
+
+结论分层：
+- ✅ **已验证**：bundle-id → adapter 映射（`vscode`）、`NSWindow.representedURL → kAXDocument(file://…)` → observation 的管线成立；文件型应用的 resource 有值。
+- ❓ **仍未确认**：真实 VS Code 的 AXDocument 究竟是文件路径、`file://` URL 还是 vscode 自己的 URI scheme —— 需要可启动的真 VS Code/Cursor（N2）。
+
+fixture 用完即删（app bundle 已移除，进程已退出），不留在系统里冒用真实 bundle id。
+
 ### 5.6 F4 修复的真机复验
 
 ```text
@@ -171,7 +188,7 @@ window document(err=0 value=file:///tmp/dsh-live-fixtures/)
 window axurl(err=-25205 value=nil)   ← kAXURL 属性不被 Terminal 支持
 ```
 
-### 5.5 C10 — helper 退出未确认仍释放锁
+### 5.7 C10 — helper 退出未确认仍释放锁
 
 - **崩溃路径**：`kill -9` helper（PID 82077）→ 3s 内自动拉起新 helper（PID 83920），`/state` 仍 `running`，采集继续落库（计数 +1）。
 - **dispose 路径**：摘除 loader entry 后 helper 停止、`capture-owner.lock` **被删除**（释放成功）、DB WAL/SHM 收拢后关闭。
@@ -199,7 +216,7 @@ window axurl(err=-25205 value=nil)   ← kAXURL 属性不被 Terminal 支持
 [x] UI 面板在真实客户端注册成功（Slots occupant active）；空状态由路由 200 [] 佐证
 [x] capture 开启后采集到真实 observation 并落库（一次性目录，7 条）
 [x] 记录真实 observation 字段（app/adapter/window/privacy/resource 实际情况见 §5）
-[~] §6 八问：A1 ✅ / A2 部分（Finder、Preview ✅；Terminal 修复后 ✅ 真机复验；VS Code 未确认）
+[~] §6 八问：A1 ✅ / A2 部分（Finder、Preview、Terminal 修复后 ✅ 真机复验；编辑器 adapter 契约 ✅ 合成 app，真实 VS Code 语义未确认）
      A3 未确认 / A4 误杀已修复并真机复验（阳性路径仍不可达）/ A5 部分 / A6 ✅
      B7 ✅ / B8 ✅ / C9 ✅ / C10 部分
 [x] 缺陷：修 blocker #1/#2/#3（Terminal fail-closed）+ 补回归护栏（client 契约、ctx.get 语义、secure 分类分支）+ 本报告
@@ -212,7 +229,7 @@ window axurl(err=-25205 value=nil)   ← kAXURL 属性不被 Terminal 支持
 | 项 | 原因 | 需要什么条件 |
 |---|---|---|
 | kAXURL CFURL 解码是否生效 | 真机探测的所有应用（Chrome/Finder/Terminal）都返回 `kAXErrorAttributeUnsupported`，没有可触发场景 | 已单测锁定解码逻辑；若将来出现 AXURL 有值的应用，可直接用 `/tmp/dsh-ax-url` 样式探针复测 |
-| VS Code 的 kAXDocument | 本机 VS Code 是不可启动假壳 | 安装可启动的 VS Code 或 Cursor 后重跑探针 |
+| 真实 VS Code 的 kAXDocument 语义 | 本机 VS Code 是不可启动假壳；bundle-id→adapter 映射与 AXDocument 管线已用合成 app 验证（§5.5） | 安装可启动的 VS Code 或 Cursor，用 `/tmp/dsh-ch-probe.mjs` + 编辑器前台复测 |
 | secure 三态在"真实密码框"的阳性路径 | 支持应用里没有 secure 字段；浏览器无 adapter | 支持应用中出现真实 secure 字段，或加一个测试专用 adapter；fail-closed 误杀（Terminal）已定位并修复、真机复验 8/8 |
 | 0.5s timeout 对真正卡死应用 | SIGSTOP 实验未产生可观察状态变化 | 可复现的 AX 无响应场景（如 AX 层阻塞的 app / 注入故障） |
 | `collector-exit-unconfirmed` 分支 | 未触发 | 单测已覆盖该分支（释放锁 + 记 degraded）；真机触发需 helper 存活 SIGKILL，不可构造，故不再作为真机待办 |
@@ -231,9 +248,9 @@ src/host/service/computer-history-service.ts   新增 ctx.get() 访问器 helper
 src/host/api/routes.ts                  改用 helper（8 条路由）
 src/agent/tools.ts                      改用 helper（3 个工具）
 src/agent/resume-hint.ts                改用 helper
-native/macos/Sources/ComputerHistoryCollector/Privacy.swift  secure 三态分类抽成纯函数 + 缺失/不支持 subrole 的角色守卫
-native/macos/Tests/ComputerHistoryCollectorTests/PrivacyTests.swift  secure 分类分支测试
-scripts/test-native.mjs                 secure 分类分支 native 回归断言
+native/macos/Sources/ComputerHistoryCollector/Privacy.swift  secure 三态分类纯函数 + subrole 角色守卫；kAXURL 解码抽成 decodeURLAttribute 纯函数
+native/macos/Tests/ComputerHistoryCollectorTests/PrivacyTests.swift  secure 分类 + URL 解码分支测试
+scripts/test-native.mjs                 secure 分类 + URL 解码分支 native 回归断言
 tests/unit/host-api.spec.ts             harness 改为 ctx.get() 语义
 tests/unit/agent-tools.spec.ts          同上
 tests/unit/resume-hint-lifecycle.spec.ts 同上
@@ -252,12 +269,12 @@ tests/integration/plugin-multi-host.spec.ts 同上
 
 ## 10. 下一阶段（重启后按序执行）
 
-本阶段已收口：真机验证、三个 blocker 修复（client bundle 格式 / cordis inject 门禁 / Terminal fail-closed）、环境还原、两次 forward commit（`62cb5a1` → `ef8d4bc`）。下一阶段每完成一步就更新本报告：
+本阶段已收口：真机验证、三个 blocker 修复（client bundle 格式 / cordis inject 门禁 / Terminal fail-closed）、环境还原、forward commit 链 `62cb5a1 → ef8d4bc → 551f4bc → d34a823 → 6e426e6`。下一阶段每完成一步就更新本报告：
 
 | # | 动作 | 前置 | 验收 |
 |---|---|---|---|
-| N1 | 重启 DSH Host 后验证注入器补丁：`dev_plugin_status` 确认 injector active → `dev_inject_plugin {dir}` 应直接放行（不再报 `main`/`sidebar.panellist` 不在白名单）→ live client Slots 里 `computer-history` occupant 仍 active | DSH 重启 | 标准 §5 注入路径可用；UI 半 active；`pnpm verify:p1` 全绿 |
-| N2 | 安装真实可启动的 VS Code 或 Cursor → 原生探针复测编辑器 adapter 的 kAXDocument 与资源映射 | 可用编辑器 | 回填 §5 A2 的 VS Code 行 |
+| N1 | 重启 DSH Host 后验证注入器补丁：`dev_plugin_status` 确认 injector active → `dev_inject_plugin {dir}` 应直接放行（不再报 `main`/`sidebar.panellist` 不在白名单）→ live client Slots 里 `computer-history` occupant 仍 active | DSH 重启 | 启动前已离线复演注入器两条校验（`/tmp/dsh-verify-injector-patch.mjs`，用 patched 白名单跑其自身 regex）：`lib/client.js` 与 `src/client/index.ts` 的 register 均被接受 ✓、`__ModuleLoader__` ✓、inject 声明 ✓、built/src 白名单一致 ✓；重启后验收标准 §5 注入路径可用 + UI 半 active + `pnpm verify:p1` 全绿 |
+| N2 | 安装真实可启动的 VS Code 或 Cursor → 复测真实 editor 的 kAXDocument 语义 | 可用编辑器 | ✅ 契约部分完成（§5.5 合成 app：adapter 映射 + AXDocument 管线）；真实 VS Code 语义仍待真机 |
 | N3 | 在 AXURL 有值的场景复测 `safeURL` 的 CFURL 解码 | 可触发场景 | ✅ 已完成可行部分：真机探针证明 AXURL 无触发场景（F9），解码逻辑改为纯函数 `decodeURLAttribute` + native/XCTest 覆盖 |
 | N4 | 故障注入"helper 退出无法确认" | 可选 | 逻辑已有单测覆盖（`tests/unit/collector-hardening.spec.ts:847` "releases ownership but records an unconfirmed exit"）；真机触发需要 helper 能存活 SIGKILL（不可构造），故真机项保持未触发 |
 | N5 | 修注入器自重载 `selfEntry 无官方 _dispose（loader 契约缺失）`（F8） | 可选，改注入器源码 | 补丁免重启生效 |
