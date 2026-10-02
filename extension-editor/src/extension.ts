@@ -36,7 +36,14 @@ function config(): { port: number, token: string } {
     appendFileSync: (file: string, data: string) => void
   }
   const channel = vscode.window.createOutputChannel('Computer History')
-  const traceFile = (settings.get<string>('traceFile') ?? '').trim()
+  // A fixed location by default: a decision that is only recorded when a setting
+  // says so is a decision nobody can find later. The setting overrides it.
+  const configuredTrace = (settings.get<string>('traceFile') ?? '').trim()
+  const traceFile = configuredTrace !== ''
+    ? configuredTrace
+    : `${
+      (require('node:os') as { homedir: () => string }).homedir()
+    }/.dsh/computer-history-editor.log`
   // Every decision is reported. A guard that returns in silence looks exactly like
   // an extension that never started - which is what made an earlier run of this
   // companion impossible to diagnose from outside.

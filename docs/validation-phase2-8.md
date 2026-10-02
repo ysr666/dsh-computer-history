@@ -423,3 +423,46 @@ tested; another editor is new work).
 Environment restored: the development host and VS Code closed, the user's settings
 restored from the backup, the scratch workspace removed; the extension remains
 installed and the evidence database is at `/tmp/dsh-ch-28d`.
+
+## The install defect, found: the registry entry has no identity
+
+The whole editor-side thread - "installed, listed, never activates" - ends with one
+comparison. Every working extension in VS Code's registry carries an identity:
+
+```text
+cschlosser.doxdocgen   metadata: {id: "da7e26d5-…", publisherId: "45f11b45-…",
+                                  publisherDisplayName: "Christoph Schlosser", …}
+                       identifier: {id: "cschlosser.doxdocgen", uuid: "da7e26d5-…"}
+
+dsh-local.dsh-computer-history-editor
+                       metadata: {isApplicationScoped:false, isMachineScoped:false,
+                                  isBuiltin:false, installedTimestamp:…,
+                                  pinned:true, source:"vsix"}
+                       identifier: {id: "dsh-local.dsh-computer-history-editor"}
+```
+
+Mine has **no `uuid` and no publisher identity**. The registry is what the extension
+host resolves against, which is exactly why the CLI lists the extension (it reads the
+folder) while a window never loads it (it reads the registry) - and why the same
+bytes activate under `--extensionDevelopmentPath`, which bypasses the registry
+entirely.
+
+The cause is the packer: `scripts/build-editor-extension.mjs` writes the vsix by
+hand, and a hand-written `extension.vsixmanifest` produces an install that VS Code
+accepts but cannot identify the way it identifies a packaged extension.
+
+**This is the next phase's first item, and it is small:** package with the standard
+tool (`@vscode/vsce`) or make the hand-rolled packer produce the same identity data,
+then confirm a normally launched window activates the extension - which the fixed
+trace path (`~/.dsh/computer-history-editor.log`, no configuration needed) will show
+immediately.
+
+## What 2.8 verified, and what it did not
+
+Verified: the declared identity is validated, stored as a claim with companion
+provenance, subject to the allow-list and the protected set; one package serves any
+VS Code-based editor; the protocol is documented for other editors; the live row
+from a real VS Code session carries the identity the extension declared.
+
+Not verified, and now precisely explained: that an extension installed from this
+repository's hand-built vsix activates in a normally launched window.
