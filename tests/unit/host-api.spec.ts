@@ -80,6 +80,17 @@ function harness(overrides: Record<string, unknown> = {}) {
     connection: {
       fetch: {
         register(route: RegisteredRoute) {
+          // Faithful to the real registry: it keys Fetch routes by **exact
+          // path**, so a second register() for the same path throws during
+          // setup and takes the whole plugin fiber down with it. A fake that
+          // silently overwrites cannot fail, and a guard that cannot fail is
+          // not a guard - the duplicate /retention registration in 2.3 got past
+          // this test for exactly that reason.
+          if (routes.has(route.path)) {
+            throw new Error(
+              `connection: exact Fetch route "${route.path}" is already registered`,
+            )
+          }
           routes.set(route.path, route)
           return () => { routes.delete(route.path) }
         },
