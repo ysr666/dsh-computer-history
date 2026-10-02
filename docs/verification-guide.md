@@ -80,3 +80,37 @@ yourself while doing it. Everything in `scripts/verify/` exists for this page.
    long the collector stalls.
 3. Expect the control queue to answer within roughly one messaging timeout, not
    the freeze duration.
+
+## Recipe: the browser companion on real Chrome
+
+The companion's promises are only meaningful on a real browser, so the matrix
+runs there instead of against a fixture.
+
+```bash
+pnpm build:extension                       # packages dist/extension/
+# inject the plugin, pair a token, then:
+node scripts/verify/chrome-companion.mjs \
+  --token "$(curl -sS -X POST -H "$COOKIE" \
+    http://127.0.0.1:19387/api/computer-history/pairing/rotate \
+    | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>process.stdout.write(JSON.parse(d).token))')" \
+  --db <data directory>/history.sqlite \
+  --cookie /tmp/dsh-ch-cookie.txt --extension dist/extension
+```
+
+The script launches a throwaway profile, serves a local site, loads the
+extension, pairs it, and then measures each cell by counting stored companion
+rows before and after an action: allowed origin (the control), query and
+fragment, denied origin, an incognito browser context, a rotated token, and an
+unloaded extension. **It fails the whole matrix when the control cell fails**,
+because every other cell would otherwise pass vacuously — the failure mode that
+made three earlier attempts look green.
+
+Two environment facts this recipe depends on (Chrome 154, 2026-10-02):
+
+- `--load-extension` is ignored; the extension is loaded over CDP with
+  `Extensions.loadUnpacked` (the browser must run with
+  `--enable-unsafe-extension-debugging`).
+- Chrome ships built-in component extensions whose targets also start with
+  `chrome-extension://` and whose contexts have no `chrome.storage`. Select
+  targets by the id `loadUnpacked` returned, never by "the first extension
+  target".
