@@ -53,6 +53,22 @@ functions is what makes that visible. Writing the preview exposed one such
 disagreement immediately: the first version omitted the secure-path screen, so a
 `.env` resource looked safe in the audit while ingestion drops it.
 
+## Observed versus declared
+
+Two things in this store can look alike and are not: an application the
+**operating system observed** (an Accessibility observation) and an application a
+**companion declared** it was (ADR 0011). The difference is recorded, not implied:
+
+| | where it shows |
+|---|---|
+| `observations.source_provider` | `'macos-ax'` for what the system saw, `'companion'` for what a paired companion claimed |
+| the audit export | every observation row carries `source_provider`, so a reader can tell them apart without trusting the panel |
+| the allow-list | applies identically to both: a declared identity the user has not allowed stores nothing |
+
+A claim is validated before it is stored (an application-id-shaped bundle id, a
+non-empty name, no extra fields) and it cannot unlock anything: an application the
+built-in protected list covers is dropped whether the user allowed it or not.
+
 ## Timeline and provenance
 
 ```text
