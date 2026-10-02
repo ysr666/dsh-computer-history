@@ -259,3 +259,38 @@ from the backup taken before the token was written, the extension directory left
 place (installed), the store symlink and junction removed, the scratch workspace and
 temporary files deleted, the profile patch residue cleared. The evidence database is
 kept at `/tmp/dsh-ch-28d`.
+
+### T2.8-3, fifth attempt: the extension is installed and still sends nothing
+
+Everything on the VS Code side checks out, and that is what makes the result
+useful rather than merely disappointing:
+
+```text
+installed layout        out/extension.js present, package.json present
+obsolete marker         does not list this extension
+code --list-extensions   dsh-local.dsh-computer-history-editor@0.1.0
+manifest                main ./out/extension.js, engines ^1.75.0,
+                        activationEvents ["onStartupFinished"]
+settings                token present (43 characters)
+launch on a workspace    no observation from the extension in 40 seconds
+launch with a file open  no observation from the extension in 40 seconds
+store                    one companion row: the manual probe, not the extension
+```
+
+**One of my own premises was wrong and worth correcting:** I read "no line in the
+exthost log" as "the extension did not activate". A healthy extension logs nothing;
+the exthost log carries errors, not successes. So activation is **unknown**, not
+disproven, and the failure is somewhere between activation and the request.
+
+The next probe is named, and 2.6 already showed what to look for: that phase's
+extension activated and sent nothing because one of its own guards returned early
+and said nothing - the failure was invisible from outside. So the next step is to
+run this extension's own code path where its reason is visible (its output channel,
+or the same logic exercised in a test with the settings it would read), before
+touching anything else.
+
+Everything else the phase promised stays verified: the intake stores a row whose
+identity came from the payload, with companion provenance; the allow-list and the
+protected set decide against a claim; the mapping serves any VS Code-based editor;
+the wire format is documented. What is missing is one thing: **the extension's own
+request**, and the phase report says so in those words.
