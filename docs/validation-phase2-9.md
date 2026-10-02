@@ -605,3 +605,34 @@ that, for every accessibility read site in the native sources, requires an
 `applyMessagingTimeout` call in the same function, with a self-check that it recognises
 a read it should catch. That is the next piece of work for this item, and it is named
 rather than implied.
+
+## T2.9-4 — the guard, and the two ways my calibration lied
+
+`verify:native-timeouts` is the eighth guard. Rule: **every Swift file that reads an
+accessibility attribute must also call the timeout helper** - deliberately the
+strongest property a text check can prove.
+
+Why not "the read's own function must call it": that was the first rule, it flagged
+three sites in `Privacy.swift`, and reading them showed **the code was right**. They
+are small helpers (`safeURL`, `safeString`) that receive an element from a caller which
+bounded it, and `AXUIElementSetMessagingTimeout` sets the bound **on the element
+object** - so any later read of that element inherits it. Whether a read is bounded is
+a **data flow**, not a line, and a guard that insists otherwise fails on correct code.
+
+```text
+native accessibility reads are bounded: 6 read(s) across 5 Swift file(s);
+every file that reads also calls applyMessagingTimeout (2 of them)
+```
+
+Two calibrations failed before one worked, both by the same mistake:
+
+1. I renamed only the **first** occurrence, and the file still contained other calls;
+2. I renamed it to `applyMessagingTimeoutGone` - which **still contains**
+   `applyMessagingTimeout`, so a substring check cannot tell the difference.
+
+Renaming it to something that does not contain the original (`boundedRead`) goes red,
+and restoring goes green. That is the **third time this session** a prefix relationship
+made a check or a calibration look like it worked: a class name that was the prefix of
+`CompanionIntakeError`, a spec helper whose indentation differed, and now this. The
+lesson is written down because it keeps being true: **a name that contains another name
+is not a different name to a substring check.**
