@@ -114,3 +114,29 @@ Two environment facts this recipe depends on (Chrome 154, 2026-10-02):
   `chrome-extension://` and whose contexts have no `chrome.storage`. Select
   targets by the id `loadUnpacked` returned, never by "the first extension
   target".
+
+## Audit export round-trip, by hand
+
+```bash
+R=$(cat /tmp/dsh-ch-cookie.txt); C="Cookie: ${R#cookie=}"
+BASE=http://127.0.0.1:19387/api/computer-history
+curl -sS -H "$C" "$BASE/export" -o /tmp/history-export.json
+node -e 'const d=require("/tmp/history-export.json"); console.log(d.schema, Object.keys(d.tables).join(","))'
+# the credential and the deletion log must not be in there
+grep -c "companion_pairing\|deletion_log" /tmp/history-export.json   # → 0
+curl -sS -X POST -H "$C" -H 'content-type: application/json' \
+  --data @/tmp/history-export.json "$BASE/import"
+```
+
+The import answers `{"imported":{...}}` with a count per table, and is idempotent:
+running it twice leaves the counts unchanged. An unknown schema or an unknown
+column answers 400 with the reason.
+
+## Redaction preview
+
+```bash
+curl -sS -H "$C" "$BASE/audit/preview?scope=app:com.microsoft.VSCode"
+```
+
+Counts what the current policy would not keep, with one reason per excluded row,
+computed by the ingestion predicates themselves.
