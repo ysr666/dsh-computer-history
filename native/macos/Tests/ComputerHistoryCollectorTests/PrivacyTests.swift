@@ -51,22 +51,26 @@ final class PrivacyTests: XCTestCase {
             ),
             .notSecure
         )
-        // A text field without a readable subrole stays fail-closed.
-        XCTAssertEqual(
-            classifySecureFieldState(
-                subroleStatus: .noValue,
-                subrole: nil,
-                roleStatus: .success,
-                role: kAXTextFieldRole as NSString
-            ),
-            .unreadable
-        )
+        // Contrast measured on real AppKit elements: NSSecureTextField
+        // answers AXSecureTextField, a plain NSTextField answers
+        // kAXErrorAttributeUnsupported for the same role. So a readable
+        // role without a subrole is not a secure field.
         XCTAssertEqual(
             classifySecureFieldState(
                 subroleStatus: .attributeUnsupported,
                 subrole: nil,
                 roleStatus: .success,
                 role: kAXTextFieldRole as NSString
+            ),
+            .notSecure
+        )
+        // Only a failed read stays fail-closed.
+        XCTAssertEqual(
+            classifySecureFieldState(
+                subroleStatus: .attributeUnsupported,
+                subrole: nil,
+                roleStatus: .cannotComplete,
+                role: nil
             ),
             .unreadable
         )

@@ -58,23 +58,22 @@ func classifySecureFieldState(
     }
 
     // `kAXErrorAttributeUnsupported` and `kAXErrorNoValue` both mean the
-    // element has no subrole attribute at all, which is normal for many
-    // focused elements (AXTextArea in Terminal, AXGroup in other apps). A
-    // secure text field is *defined* by the AXSecureTextField subrole, so
-    // an element without one cannot be a secure field — but keep failing
-    // closed for the one role that can carry that subrole, so a hidden or
-    // dropped subrole on a text field never unlocks window metadata.
+    // element has no subrole attribute at all. Measured on real AppKit
+    // elements: a secure field answers `AXSecureTextField`, while plain
+    // `NSTextField`s and Terminal's `AXTextArea` have no subrole and answer
+    // exactly these two errors. The absence of the attribute is therefore
+    // positive evidence that the element is not a secure field — but the
+    // role read must itself succeed, so an element we cannot classify at
+    // all still fails closed.
     if
         subroleStatus == .attributeUnsupported
         || subroleStatus == .noValue
     {
         guard
             roleStatus == .success,
-            let value = role as? String
+            role as? String != nil
         else { return .unreadable }
-        return value == kAXTextFieldRole as String
-            ? .unreadable
-            : .notSecure
+        return .notSecure
     }
 
     // Timeouts, invalid elements, and every other failure remain

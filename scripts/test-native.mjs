@@ -147,6 +147,19 @@ struct NativeTests {
                 role: kAXTextAreaRole as NSString
             ) == .notSecure
         )
+        // Measured contrast on real AppKit elements: NSSecureTextField
+        // answers AXSecureTextField while a plain NSTextField answers
+        // kAXErrorAttributeUnsupported for the same role. Absence of the
+        // attribute is the discriminator, so a readable role without a
+        // subrole is not a secure field.
+        precondition(
+            classifySecureFieldState(
+                subroleStatus: .attributeUnsupported,
+                subrole: nil,
+                roleStatus: .success,
+                role: kAXTextFieldRole as NSString
+            ) == .notSecure
+        )
         precondition(
             classifySecureFieldState(
                 subroleStatus: .attributeUnsupported,
@@ -155,14 +168,7 @@ struct NativeTests {
                 role: kAXTextAreaRole as NSString
             ) == .notSecure
         )
-        precondition(
-            classifySecureFieldState(
-                subroleStatus: .attributeUnsupported,
-                subrole: nil,
-                roleStatus: .success,
-                role: kAXTextFieldRole as NSString
-            ) == .unreadable
-        )
+        // Only a failed read stays fail-closed.
         precondition(
             classifySecureFieldState(
                 subroleStatus: .attributeUnsupported,
@@ -177,7 +183,7 @@ struct NativeTests {
                 subrole: nil,
                 roleStatus: .success,
                 role: kAXTextFieldRole as NSString
-            ) == .unreadable
+            ) == .notSecure
         )
         precondition(
             classifySecureFieldState(

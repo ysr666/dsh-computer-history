@@ -147,9 +147,18 @@ Terminal:      axurl err=-25205，document=file:///Users/ysradmin/
 - paused 期间主动把 Finder 切到前台并等待 12s → **observation 计数不变（4）**。
 - `POST /resume` → `200 {"capture":"running"}`；随后同一 Finder 窗口产生**新** observation（seq 5）→ observer 确实重新挂上。
 
-### 5.4 A5 — 0.5s AX timeout
+### 5.4 A5 — 0.5s AX timeout（已用受控卡死 fixture 验证）
 
-**部分确认。** Terminal 的 `unreadable-focused-element` 路径本身就是一次"读不到就放弃、不阻塞"的实证：collector 在该次读失败后继续正常产出其他 app 的 observation，Host 全程无 `configure-ack-timeout` / `paused-ack-timeout`，`/state` 无 degraded。对支持应用做 SIGSTOP 的人为无响应实验**未能观察到新状态**（指纹未变化被抑制），故"卡死防护"缺少人为最坏用例证据，列为部分确认（条件见 §8）。
+用合成 fixture 造出**真正的主线程卡死**（`mode=hung`：窗口显示后阻塞主线程 6s），再用 ack 计时探针在冻结期间发 `pause`，测 native 侧 `paused` ack 的延迟：
+
+```text
+control（app 响应正常）:            pauseDelay 3000ms -> pausedAckMs 0
+hung（冻结 6s 期间，三个时点）:     pauseDelay 3500ms -> pausedAckMs 566
+                                  pauseDelay 5500ms -> pausedAckMs 975
+                                  pauseDelay 1500ms -> pausedAckMs 0（冻结尚未开始）
+```
+
+结论：**0.5s per-element messaging timeout 确实兜住了**——前台应用冻结 6s，helper 的同步 AX 工作最多把控制 ack 推迟约 0.6–1.0s，而不是被冻结时长拖住。Host 全程无 `configure-ack-timeout` / `paused-ack-timeout`，`/state` 无 degraded；Terminal 的 `unreadable-focused-element` 也印证了"读不到就放弃、继续跑"。
 
 ### 5.5 编辑器 adapter 契约（合成 app，答案分层）
 
@@ -188,6 +197,23 @@ window document(err=0 value=file:///tmp/dsh-live-fixtures/)
 window axurl(err=-25205 value=nil)   ← kAXURL 属性不被 Terminal 支持
 ```
 
+**规则二次修正（同一 fixture 逼出来的）**：第一版修复对"`AXTextField` 且无 subrole"仍 fail-closed。合成 app 量出 secure 与 plain 的唯一差别正在 subrole：
+
+```text
+NSSecureTextField（secure）: role=AXTextField  subrole=AXSecureTextField   -> secure ✅
+NSTextField      （plain） : role=AXTextField  subrole=-25205(unsupported) -> 第一版误杀 ❌
+AXTextArea（Terminal）     : role=AXTextArea   subrole=-25205(unsupported) -> 第一版已修 ✅
+```
+
+即"属性不存在/不支持"是**正向证据**（不是 secure 字段），只有**读取失败**才该 fail-closed。修正后真机复验：
+
+```text
+secure fixture: {"privacy":{"secure":true,"reason":"secure-field"}} ×4/4，window/element 全被扣留
+plain  fixture: {"privacy":{"secure":false},"window":{"document":"file:///…"},"element":{"role":"AXTextField"}} ×9/9
+```
+
+→ A4 的三态在**真实 AX 元素**上双向验证：真实 secure 字段被识别并丢元数据；普通文本框不再被误杀。
+
 ### 5.7 C10 — helper 退出未确认仍释放锁
 
 - **崩溃路径**：`kill -9` helper（PID 82077）→ 3s 内自动拉起新 helper（PID 83920），`/state` 仍 `running`，采集继续落库（计数 +1）。
@@ -201,7 +227,7 @@ window axurl(err=-25205 value=nil)   ← kAXURL 属性不被 Terminal 支持
 | F1 | **blocker** | **已修复** | client bundle 缺 `__ModuleLoader__` 包装、且 import 了 loader 不注册的 `.../client` 子路径 id → UI 半根本加载不了。修复后 live Slots occupant 为 active。 |
 | F2 | **blocker** | **已修复** | 插件用 `ctx.computerHistory` 访问自己提供的服务 → cordis 抛 `without inject`，8 条路由全 500/503、agent 工具不可用；204 个既有测试因"假 ctx"未覆盖。改用 `ctx.get()`；测试 harness 同步改为真语义。 |
 | F3 | 中（工具链） | **已报告未修** | `dsh-super-injector` v0.3.3 的 `KNOWN_SLOTS` 白名单过时：`main`、`sidebar.panellist` 等 live 槽位被误判为坏骨架，阻断合法插件注入。建议白名单补全 live slots，或改为查询运行中 client Slots 拓扑。证据：live `Slots.listSubTree`。 |
-| F4 | **blocker（已修复）** | 已修复 + 真机复验 | Terminal adapter 曾 3/3 判 `unreadable-focused-element` → `privacy.secure=true` → Host drop，**Terminal 观测事实性归零**。根因（AX 探针实测）：Terminal 的 focused element 是 `AXTextArea`，`kAXSubroleAttribute` 返回 `-25205 = kAXErrorAttributeUnsupported`；原 `isSecureElement` 把所有非 success 一律当 `.unreadable`，触发 fail-closed。修复：把"属性不存在/不支持"与"读取失败/超时"分开——前者的角色不是 `AXTextField` 时判 `.notSecure`（secure 字段由 `AXSecureTextField` subrole 定义），是 `AXTextField` 或读取失败/超时仍 fail-closed；分类逻辑抽成纯函数 `classifySecureFieldState`。修复后真机 8/8 条 `secure:false`，并带 `document:file:///tmp/dsh-live-fixtures/`。 |
+| F4 | **blocker（已修复，规则经二次修正）** | 已修复 + 真机双向复验 | Terminal adapter 曾 3/3 判 `unreadable-focused-element` → `privacy.secure=true` → Host drop，**Terminal 观测事实性归零**。根因（AX 探针实测）：focused element 的 `kAXSubroleAttribute` 返回 `-25205 = kAXErrorAttributeUnsupported`，原 `isSecureElement` 把所有非 success 一律当 `.unreadable`。修复分两步：(1) 把"属性不存在/不支持"与"读取失败/超时"分开，分类抽成纯函数 `classifySecureFieldState`；(2) 合成 fixture 量出 secure 与 plain 的唯一差别就是 subrole 是否存在（`NSSecureTextField` → `AXSecureTextField`；`NSTextField`/`AXTextArea` → `attributeUnsupported`），于是去掉"`AXTextField` 无 subrole 仍 fail-closed"这条会误杀**普通文本框**的守卫，只保留**读取失败**才 fail-closed。真机复验：Terminal `secure:false` 8/8（含 document）、plain 文本框 `secure:false` 9/9、真实 secure 字段 `secure:true/secure-field` 4/4 且 window/element 全扣留。 |
 | F5 | 记录 | — | Finder 的 kAXDocument 为 nil → `resource_id` 空；Preview 的 document 为 file:// URL → 资源可用。resource 识别能力随 app 不同而分裂，产品假设需按 app 记账。 |
 | F6 | 环境 | — | 本机 VS Code 为不可启动的假壳；编辑器 adapter（`vscode`）无法真机验证。 |
 | F7 | 范围 | — | 浏览器类 app 无 adapter：交接文档 §4.1 建议的"本地 HTML 假密码框"测法在当前 Phase 1 适配器集下**不可达**；同理 kAXURL 也缺少可触发场景。 |
@@ -217,8 +243,8 @@ window axurl(err=-25205 value=nil)   ← kAXURL 属性不被 Terminal 支持
 [x] capture 开启后采集到真实 observation 并落库（一次性目录，7 条）
 [x] 记录真实 observation 字段（app/adapter/window/privacy/resource 实际情况见 §5）
 [~] §6 八问：A1 ✅ / A2 部分（Finder、Preview、Terminal 修复后 ✅ 真机复验；编辑器 adapter 契约 ✅ 合成 app，真实 VS Code 语义未确认）
-     A3 未确认 / A4 误杀已修复并真机复验（阳性路径仍不可达）/ A5 部分 / A6 ✅
-     B7 ✅ / B8 ✅ / C9 ✅ / C10 部分
+     A3 场景不存在+解码已单测锁定 / A4 ✅ 双向真机复验（secure 4/4 识别、plain 9/9 不误杀、Terminal 8/8 恢复）/ A5 ✅ 受控卡死实测 / A6 ✅
+     B7 ✅ / B8 ✅ / C9 ✅ / C10 部分（分支已有单测，真机不可构造）
 [x] 缺陷：修 blocker #1/#2/#3（Terminal fail-closed）+ 补回归护栏（client 契约、ctx.get 语义、secure 分类分支）+ 本报告
 [x] 验证报告落盘（本文件）
 [ ] worktree clean + forward commit（见 §9）
@@ -230,8 +256,8 @@ window axurl(err=-25205 value=nil)   ← kAXURL 属性不被 Terminal 支持
 |---|---|---|
 | kAXURL CFURL 解码是否生效 | 真机探测的所有应用（Chrome/Finder/Terminal）都返回 `kAXErrorAttributeUnsupported`，没有可触发场景 | 已单测锁定解码逻辑；若将来出现 AXURL 有值的应用，可直接用 `/tmp/dsh-ax-url` 样式探针复测 |
 | 真实 VS Code 的 kAXDocument 语义 | 本机 VS Code 是不可启动假壳；bundle-id→adapter 映射与 AXDocument 管线已用合成 app 验证（§5.5） | 安装可启动的 VS Code 或 Cursor，用 `/tmp/dsh-ch-probe.mjs` + 编辑器前台复测 |
-| secure 三态在"真实密码框"的阳性路径 | 支持应用里没有 secure 字段；浏览器无 adapter | 支持应用中出现真实 secure 字段，或加一个测试专用 adapter；fail-closed 误杀（Terminal）已定位并修复、真机复验 8/8 |
-| 0.5s timeout 对真正卡死应用 | SIGSTOP 实验未产生可观察状态变化 | 可复现的 AX 无响应场景（如 AX 层阻塞的 app / 注入故障） |
+| secure 三态在"真实密码框"的阳性路径 | ✅ 已用合成 fixture 关闭：真实 `NSSecureTextField`（空值、非真实凭据）被识别为 `secure-field` 且元数据扣留；plain 文本框对照不误杀 | 若要覆盖"真实应用自身的密码框"，需支持应用中出现 secure 字段（浏览器无 adapter）；fixture 源码 `/tmp/dsh-fixture-app/main.swift` 可复用 |
+| 0.5s timeout 对真正卡死应用 | ✅ 已用合成 fixture 关闭：冻结 6s 期间 `paused` ack 最大 975ms（对照 0ms） | — |
 | `collector-exit-unconfirmed` 分支 | 未触发 | 单测已覆盖该分支（释放锁 + 记 degraded）；真机触发需 helper 存活 SIGKILL，不可构造，故不再作为真机待办 |
 | 子路径挂载下的 public mount | 本环境根挂载 | 一个子路径部署的 DSH web 实例 |
 | 注入器白名单补丁在运行中生效 | 注入器自重载路径失败（F8），运行实例仍是旧代码 | 重启 DSH Host 后 profile 从 patched lib 装配；restart 后 `dev_inject_plugin` 应直接放行 `main`/`sidebar.panellist` |
@@ -248,7 +274,7 @@ src/host/service/computer-history-service.ts   新增 ctx.get() 访问器 helper
 src/host/api/routes.ts                  改用 helper（8 条路由）
 src/agent/tools.ts                      改用 helper（3 个工具）
 src/agent/resume-hint.ts                改用 helper
-native/macos/Sources/ComputerHistoryCollector/Privacy.swift  secure 三态分类纯函数 + subrole 角色守卫；kAXURL 解码抽成 decodeURLAttribute 纯函数
+native/macos/Sources/ComputerHistoryCollector/Privacy.swift  secure 分类纯函数（缺失/不支持 subrole = 非 secure；仅读取失败 fail-closed）；kAXURL 解码抽成 decodeURLAttribute
 native/macos/Tests/ComputerHistoryCollectorTests/PrivacyTests.swift  secure 分类 + URL 解码分支测试
 scripts/test-native.mjs                 secure 分类 + URL 解码分支 native 回归断言
 tests/unit/host-api.spec.ts             harness 改为 ctx.get() 语义
@@ -266,6 +292,17 @@ tests/integration/plugin-multi-host.spec.ts 同上
 ```
 
 验证期间的环境改动已全部还原：profile `package.json` / `cordis.patch.yml` 由备份恢复并 diff 通过；junction、`~/.dsh/computer-history` 软链、loader entry、staged 工具均已移除；helper 进程已停止。一次性目录仅保留证据 DB。
+
+真机验证用的临时探针/夹具（均不入仓库，用完即删或留在 /tmp）：
+
+```text
+/tmp/dsh-ch-probe.mjs        原生直驱探针（原始 NDJSON）
+/tmp/dsh-ch-ack-probe.mjs    pause ack 计时探针（A5）
+/tmp/dsh-ax-probe.swift      AX 属性探针（secure 字段 / subrole / AXURL 诊断）
+/tmp/dsh-ax-url-src/main.swift  AXURL 探测（链接仓库 Privacy.swift）
+/tmp/dsh-fixture-app/main.swift 合成 fixture app 源码（secure/plain/hung 三模式；app bundle 用完即删）
+/tmp/dsh-verify-injector-patch.mjs  注入器补丁离线复演
+```
 
 ## 10. 下一阶段（重启后按序执行）
 
