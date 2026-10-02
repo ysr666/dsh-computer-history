@@ -61,8 +61,6 @@ export interface PersistEpisodeInput {
   readonly updatedAtMs: number
   readonly expiresAtMs?: number
   readonly observationIds: readonly ObservationId[]
-  readonly resources: readonly PersistedEpisodeResource[]
-  readonly surfaces: readonly PersistedEpisodeSurface[]
 }
 
 function numberValue(
@@ -175,13 +173,74 @@ function resourceKind(value: string): ResourceKind {
 export class EpisodeStore {
   public constructor(private readonly db: DatabaseSync) {}
 
+  /**
+   * Incremental provenance is only sound when the Episode already links
+   * the evidence it was derived from. Appending to a re-derived Episode
+   * whose links were lost (for example after a conservative forget left
+   * raw rows behind) would claim content while linking none of the raw
+   * evidence behind it, leaving the resource/surface aggregates empty
+   * while `hasCompleteProvenance` still certified it complete.
+   *
+   * The check is deliberately conservative and never materializes the
+   * link set. Given the stored links' count, oldest and newest
+   * identities *before* this call added anything, it requires the count
+   * to fit inside the caller's list and both stored ends to sit exactly
+   * where the caller's list puts them. The aggregate runs over the
+   * `(episode_id, observation_id)` index, so it is a range scan whose
+   * cost grows with the Episode's link count — the same order as the
+   * link count the caller's delta already needs, not a full row read.
+   * That rejects every state a writer in this process can reach — a
+   * re-derived Episode starts from a *later* leftover, so it either has
+   * no links or its oldest link is not the caller's first identity, and
+   * an Episode whose tail moved has a newest link that does not sit
+   * where the caller's list puts it. Failing the check is safe: the
+   * Episode is rewritten in full.
+   *
+   * What it does not do is compare every stored link against the
+   * caller's list, so an Episode whose links were corrupted into an
+   * interior gap with both endpoints still matching could pass. No
+   * writer here can produce that: every link insert uses an identity
+   * drawn from the caller's own list, and every same-process mutation
+   * reseeds the builder. Comparing the sets exactly would mean reading
+   * every link row on each append, which is strictly more work than the
+   * aggregate above and buys nothing for an unreachable state.
+   */
+  private appendIsProven(
+    observationIds: readonly ObservationId[],
+    stored: {
+      readonly count: number
+      readonly oldest: number | null
+      readonly newest: number | null
+    },
+  ): boolean {
+    if (observationIds.length === 0) return false
+    if (stored.count > observationIds.length) return false
+    if (stored.count === 0) return false
+    if (stored.oldest === null || stored.newest === null) return false
+
+    return Number(stored.oldest) === Number(observationIds[0])
+      && Number(stored.newest)
+        === Number(observationIds[stored.count - 1])
+  }
+
   public replace(
     input: PersistEpisodeInput,
     options: PersistEpisodeOptions = {},
   ): void {
     const ownsTransaction = !this.db.isTransaction
     if (ownsTransaction) this.db.exec('BEGIN IMMEDIATE')
+    const commit = (): void => {
+      if (ownsTransaction) this.db.exec('COMMIT')
+    }
     try {
+      // Optimistic append: insert the new links, then verify against the
+      // pre-insert boundary that the Episode already linked the
+      // preceding evidence. A failure means this Episode was re-derived
+      // from raw rows it no longer links, so the inserted links are
+      // discarded and the Episode is rewritten with full provenance.
+      let append = options.provenance === 'append'
+        && input.observationIds.length > 0
+
       this.db.prepare(`
         INSERT INTO episodes(
           id,
@@ -238,9 +297,6 @@ export class EpisodeStore {
         input.expiresAtMs ?? null,
       )
 
-      const append =
-        options.provenance === 'append'
-
       if (!append) {
         this.db.prepare(
           'DELETE FROM episode_observations WHERE episode_id = ?',
@@ -259,171 +315,217 @@ export class EpisodeStore {
           observation_id
         ) VALUES (?, ?)
       `)
-      const observationStart =
-        append && options.appendObservationIds === undefined
-          ? Number(
-              (
-                this.db.prepare(`
-                  SELECT COUNT(*) AS count
-                  FROM episode_observations
-                  WHERE episode_id = ?
-                `).get(input.id) as { count: number }
-              ).count,
-            )
-          : 0
-
-      if (
-        options.appendObservationIds === undefined
-        && observationStart > input.observationIds.length
-      ) {
-        throw new Error(
-          `episode provenance regressed for ${input.id}`,
-        )
-      }
 
       if (append) {
-        const appendResource = this.db.prepare(`
-          INSERT INTO episode_resources(
-            episode_id,
-            resource_id,
-            first_seen_at_ms,
-            last_seen_at_ms,
-            observation_count
-          )
-          SELECT ?, o.resource_id, o.observed_at_ms, o.observed_at_ms, 1
-          FROM observations o
-          WHERE o.id = ?
-            AND o.resource_id IS NOT NULL
-          ON CONFLICT(episode_id, resource_id)
-          DO UPDATE SET
-            first_seen_at_ms = MIN(
-              episode_resources.first_seen_at_ms,
-              excluded.first_seen_at_ms
-            ),
-            last_seen_at_ms = MAX(
-              episode_resources.last_seen_at_ms,
-              excluded.last_seen_at_ms
-            ),
-            observation_count =
-              episode_resources.observation_count + 1
-        `)
-        const appendSurface = this.db.prepare(`
-          INSERT INTO episode_surfaces(
-            episode_id,
-            bundle_id,
-            surface_kind,
-            first_seen_at_ms,
-            last_seen_at_ms,
-            observation_count
-          )
-          SELECT ?, o.bundle_id, o.surface_kind,
-            o.observed_at_ms, o.observed_at_ms, 1
-          FROM observations o
-          WHERE o.id = ?
-          ON CONFLICT(
-            episode_id,
-            bundle_id,
-            surface_kind
-          )
-          DO UPDATE SET
-            first_seen_at_ms = MIN(
-              episode_surfaces.first_seen_at_ms,
-              excluded.first_seen_at_ms
-            ),
-            last_seen_at_ms = MAX(
-              episode_surfaces.last_seen_at_ms,
-              excluded.last_seen_at_ms
-            ),
-            observation_count =
-              episode_surfaces.observation_count + 1
-        `)
+        // Sampled BEFORE the insert below: these are the links that
+        // already existed, which is what the proof must reason about.
+        const stored = this.db.prepare(`
+          SELECT
+            COUNT(*) AS count,
+            MIN(observation_id) AS oldest,
+            MAX(observation_id) AS newest
+          FROM episode_observations
+          WHERE episode_id = ?
+        `).get(input.id) as {
+          count: number
+          oldest: number | null
+          newest: number | null
+        }
+        const linkCount = Number(stored.count)
 
-        const observationIds =
-          options.appendObservationIds
-          ?? input.observationIds.slice(observationStart)
-        for (const observationId of observationIds) {
+        if (linkCount > input.observationIds.length) {
+          throw new Error(
+            `episode provenance regressed for ${input.id}`,
+          )
+        }
+        const requested = options.appendObservationIds
+          ?? input.observationIds.slice(linkCount)
+
+        // Only links this call actually created may contribute to the
+        // aggregate counters. Counting a requested id that was already
+        // linked would inflate `episode_surfaces` past the link count,
+        // permanently marking the Episode as incompletely provenanced
+        // and causing a later targeted forget to delete it wholesale.
+        const appended: ObservationId[] = []
+        for (const observationId of requested) {
           const inserted = insertObservation.run(
             input.id,
             observationId,
           )
           if (inserted.changes === 0) continue
-          appendResource.run(
-            input.id,
-            observationId,
-          )
-          appendSurface.run(
-            input.id,
-            observationId,
-          )
+          appended.push(observationId)
         }
-      } else {
+
+        if (
+          this.appendIsProven(input.observationIds, stored)
+        ) {
+          this.applyAppendedAggregates(input.id, appended)
+          commit()
+          return
+        }
+
+        // This Episode lost the provenance it was derived from. Discard
+        // the optimistic link insert and rewrite in full: appending here
+        // would claim the re-derived content while linking none of the
+        // evidence behind it.
+        append = false
+        this.db.prepare(
+          'DELETE FROM episode_observations WHERE episode_id = ?',
+        ).run(input.id)
+        this.db.prepare(
+          'DELETE FROM episode_resources WHERE episode_id = ?',
+        ).run(input.id)
+        this.db.prepare(
+          'DELETE FROM episode_surfaces WHERE episode_id = ?',
+        ).run(input.id)
+      }
+
+      {
         for (const observationId of input.observationIds) {
           insertObservation.run(
             input.id,
             observationId,
           )
         }
-
-        const insertResource = this.db.prepare(`
-          INSERT INTO episode_resources(
-            episode_id,
-            resource_id,
-            first_seen_at_ms,
-            last_seen_at_ms,
-            observation_count
-          ) VALUES (?, ?, ?, ?, ?)
-          ON CONFLICT(episode_id, resource_id)
-          DO UPDATE SET
-            first_seen_at_ms = excluded.first_seen_at_ms,
-            last_seen_at_ms = excluded.last_seen_at_ms,
-            observation_count = excluded.observation_count
-        `)
-        for (const resource of input.resources) {
-          insertResource.run(
-            input.id,
-            resource.resourceId,
-            resource.firstSeenAtMs,
-            resource.lastSeenAtMs,
-            resource.observationCount,
-          )
-        }
-
-        const insertSurface = this.db.prepare(`
-          INSERT INTO episode_surfaces(
-            episode_id,
-            bundle_id,
-            surface_kind,
-            first_seen_at_ms,
-            last_seen_at_ms,
-            observation_count
-          ) VALUES (?, ?, ?, ?, ?, ?)
-          ON CONFLICT(
-            episode_id,
-            bundle_id,
-            surface_kind
-          )
-          DO UPDATE SET
-            first_seen_at_ms = excluded.first_seen_at_ms,
-            last_seen_at_ms = excluded.last_seen_at_ms,
-            observation_count = excluded.observation_count
-        `)
-        for (const surface of input.surfaces) {
-          insertSurface.run(
-            input.id,
-            surface.bundleId,
-            surface.surfaceKind,
-            surface.firstSeenAtMs,
-            surface.lastSeenAtMs,
-            surface.observationCount,
-          )
-        }
+        // Derive the aggregate provenance rows from the links this call
+        // just wrote rather than trusting caller-supplied counters.
+        // `hasCompleteProvenance` certifies completeness by comparing
+        // the link count against these counters, so the two must never
+        // be able to drift apart.
+        this.reconcileAggregates(input.id)
       }
 
-      if (ownsTransaction) this.db.exec('COMMIT')
+      commit()
     } catch (error) {
-      if (ownsTransaction) this.db.exec('ROLLBACK')
+      if (ownsTransaction && this.db.isTransaction) {
+        this.db.exec('ROLLBACK')
+      }
       throw error
     }
+  }
+
+  /**
+   * Increment an Episode's resource/surface aggregates for the links an
+   * append just added. Only called once the append has been proven to
+   * extend existing provenance, so each new link contributes exactly
+   * one to its aggregate counters.
+   */
+  private applyAppendedAggregates(
+    id: EpisodeId,
+    appended: readonly ObservationId[],
+  ): void {
+    const appendResource = this.db.prepare(`
+      INSERT INTO episode_resources(
+        episode_id,
+        resource_id,
+        first_seen_at_ms,
+        last_seen_at_ms,
+        observation_count
+      )
+      SELECT ?, o.resource_id, o.observed_at_ms, o.observed_at_ms, 1
+      FROM observations o
+      WHERE o.id = ?
+        AND o.resource_id IS NOT NULL
+      ON CONFLICT(episode_id, resource_id)
+      DO UPDATE SET
+        first_seen_at_ms = MIN(
+          episode_resources.first_seen_at_ms,
+          excluded.first_seen_at_ms
+        ),
+        last_seen_at_ms = MAX(
+          episode_resources.last_seen_at_ms,
+          excluded.last_seen_at_ms
+        ),
+        observation_count =
+          episode_resources.observation_count + 1
+    `)
+    const appendSurface = this.db.prepare(`
+      INSERT INTO episode_surfaces(
+        episode_id,
+        bundle_id,
+        surface_kind,
+        first_seen_at_ms,
+        last_seen_at_ms,
+        observation_count
+      )
+      SELECT ?, o.bundle_id, o.surface_kind,
+        o.observed_at_ms, o.observed_at_ms, 1
+      FROM observations o
+      WHERE o.id = ?
+      ON CONFLICT(
+        episode_id,
+        bundle_id,
+        surface_kind
+      )
+      DO UPDATE SET
+        first_seen_at_ms = MIN(
+          episode_surfaces.first_seen_at_ms,
+          excluded.first_seen_at_ms
+        ),
+        last_seen_at_ms = MAX(
+          episode_surfaces.last_seen_at_ms,
+          excluded.last_seen_at_ms
+        ),
+        observation_count =
+          episode_surfaces.observation_count + 1
+    `)
+
+    for (const observationId of appended) {
+      appendResource.run(id, observationId)
+      appendSurface.run(id, observationId)
+    }
+  }
+
+  /**
+   * Rebuild an Episode's resource/surface aggregates from the raw
+   * observations currently linked to it. The full-replace path uses
+   * this so the counters can never disagree with the link set, which is
+   * what `DeletionService.hasCompleteProvenance` relies on to decide
+   * whether an Episode is safe to rebuild or must be dropped whole.
+   */
+  private reconcileAggregates(id: EpisodeId): void {
+    this.db.prepare(`
+      INSERT INTO episode_resources(
+        episode_id,
+        resource_id,
+        first_seen_at_ms,
+        last_seen_at_ms,
+        observation_count
+      )
+      SELECT
+        eo.episode_id,
+        o.resource_id,
+        MIN(o.observed_at_ms),
+        MAX(o.observed_at_ms),
+        COUNT(*)
+      FROM episode_observations eo
+      JOIN observations o ON o.id = eo.observation_id
+      WHERE eo.episode_id = ?
+        AND o.resource_id IS NOT NULL
+      GROUP BY eo.episode_id, o.resource_id
+    `).run(id)
+
+    this.db.prepare(`
+      INSERT INTO episode_surfaces(
+        episode_id,
+        bundle_id,
+        surface_kind,
+        first_seen_at_ms,
+        last_seen_at_ms,
+        observation_count
+      )
+      SELECT
+        eo.episode_id,
+        o.bundle_id,
+        o.surface_kind,
+        MIN(o.observed_at_ms),
+        MAX(o.observed_at_ms),
+        COUNT(*)
+      FROM episode_observations eo
+      JOIN observations o ON o.id = eo.observation_id
+      WHERE eo.episode_id = ?
+      GROUP BY eo.episode_id, o.bundle_id, o.surface_kind
+    `).run(id)
   }
 
   public get(id: EpisodeId): EpisodeDetail | undefined {

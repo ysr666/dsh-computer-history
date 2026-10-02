@@ -47,4 +47,49 @@ describe('capture ownership lock', () => {
       await CaptureOwnershipLock.acquire(target)
     await second.release()
   })
+
+  it('keeps cross-process ownership until local policy leases drain', async () => {
+    const root = mkdtempSync(
+      path.join(os.tmpdir(), 'dsh-ch-lock-lease-'),
+    )
+    roots.push(root)
+    const target = path.join(root, 'capture-owner')
+
+    const owner = await CaptureOwnershipLock.acquire(target)
+    const releaseLease = owner.acquireLease()
+    let ownershipReleased = false
+    const releasing = owner.release().then(() => {
+      ownershipReleased = true
+    })
+
+    await Promise.resolve()
+    expect(ownershipReleased).toBe(false)
+    await expect(
+      CaptureOwnershipLock.acquire(target),
+    ).rejects.toThrow(/timed out waiting/)
+
+    await releaseLease()
+    await releasing
+    expect(ownershipReleased).toBe(true)
+
+    const successor = await CaptureOwnershipLock.acquire(target)
+    await successor.release()
+  })
+
+  it('refuses new local leases once ownership release begins', async () => {
+    const root = mkdtempSync(
+      path.join(os.tmpdir(), 'dsh-ch-lock-release-'),
+    )
+    roots.push(root)
+    const target = path.join(root, 'capture-owner')
+
+    const owner = await CaptureOwnershipLock.acquire(target)
+    const releaseLease = owner.acquireLease()
+    const releasing = owner.release()
+
+    expect(() => owner.acquireLease()).toThrow(/releasing/)
+    await releaseLease()
+    await releasing
+  })
+
 })

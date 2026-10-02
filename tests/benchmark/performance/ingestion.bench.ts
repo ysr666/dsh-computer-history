@@ -32,7 +32,7 @@ afterAll(() => {
 })
 
 describe('ingestion performance gate', () => {
-  it('ingests 10k observations without quadratic rebuild', async () => {
+  it("ingests 10k observations without quadratic rebuild", async () => {
     const history = openHistoryDatabase({
       dataDirectory: path.join(root, 'history'),
       nowMs: 1,
@@ -102,6 +102,16 @@ describe('ingestion performance gate', () => {
     expect(
       new ObservationStore(history.db).count(),
     ).toBe(10_000)
+    expect(history.db.prepare(`
+      SELECT COUNT(*) AS count
+      FROM episode_resources
+    `).get()).toEqual({ count: 10_000 })
+    expect(history.db.prepare(`
+      SELECT observation_count AS count
+      FROM episode_surfaces
+      WHERE bundle_id = 'com.microsoft.VSCode'
+        AND surface_kind = 'editor'
+    `).get()).toEqual({ count: 10_000 })
     expect(durationMs).toBeLessThan(30_000)
 
     console.log(

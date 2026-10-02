@@ -230,6 +230,93 @@ class NoopCapture implements CaptureController {
   }
 }
 
+describe('post-forget re-derivation safety', () => {
+  it('never re-derives an episode from evidence a forget already removed', async () => {
+    const { primary, secondary } = openPair()
+    const policy = new PolicyStore(primary.db)
+    allowCode(policy, 10)
+    let now = 1_000_000
+    const ingestion = new IngestionService(
+      primary.db,
+      {
+        resolve: async () => ({
+          id: 'alpha',
+          root: '/alpha',
+          title: 'alpha',
+          source: 'dsh' as const,
+          confidence: 1,
+        }),
+      },
+      () => policy.get(),
+      () => now,
+    )
+
+    await ingestion.ingest(native(now - 1_000))
+    await ingestion.ingest({
+      ...native(now),
+      seq: 2,
+      window: {
+        title: 'secret-a.ts',
+        document: '/alpha/src/secret-a.ts',
+      },
+    })
+
+    // Raw TTL expiry compacts the newest observation; a conservative
+    // app-scope forget then removes the app's remaining raw evidence
+    // and the derived episodes it can no longer prove complete.
+    primary.db.prepare(
+      'DELETE FROM observations WHERE collector_seq = 2',
+    ).run()
+    new DeletionService(secondary.db).delete({
+      scope: { kind: 'app', bundleId: 'com.microsoft.VSCode' },
+    }, now)
+
+    ingestion.reseed()
+    now += 5_000
+    await ingestion.ingest({
+      ...native(now),
+      seq: 3,
+      window: {
+        title: 'plain-b.ts',
+        document: '/alpha/src/plain-b.ts',
+      },
+    })
+
+    const episodes = new EpisodeStore(primary.db).listRecent()
+    expect(episodes).toHaveLength(1)
+
+    for (const episode of episodes) {
+      const linked = primary.db.prepare(`
+        SELECT COUNT(*) AS count
+        FROM episode_observations
+        WHERE episode_id = ?
+      `).get(episode.id) as { count: number }
+      const expected = primary.db.prepare(`
+        SELECT COALESCE(SUM(observation_count), 0) AS count
+        FROM episode_surfaces
+        WHERE episode_id = ?
+      `).get(episode.id) as { count: number }
+
+      // Provenance must still be internally consistent, otherwise a
+      // later targeted delete would trust a row it cannot rebuild.
+      expect(Number(linked.count)).toBeGreaterThan(0)
+      expect(Number(expected.count)).toBe(Number(linked.count))
+    }
+
+    // The forgotten resource must not survive in any derived artifact
+    // the fresh, legitimate observation did not itself report.
+    expect(JSON.stringify(episodes)).not.toContain('secret-a')
+    expect(JSON.stringify(
+      primary.db.prepare(
+        'SELECT canonical_uri FROM resources',
+      ).all(),
+    )).not.toContain('secret-a')
+
+    secondary.close()
+    primary.close()
+  })
+})
+
 describe('policy mutation ownership', () => {
   it('holds the capture lease until policy propagation finishes', async () => {
     const { primary, secondary } = openPair()
@@ -266,6 +353,59 @@ describe('policy mutation ownership', () => {
       'propagate',
       'release',
     ])
+    primary.close()
+  })
+})
+
+describe('teardown versus in-flight ingestion', () => {
+  it('reports an in-flight ingest as not idle until it settles', async () => {
+    const { primary, secondary } = openPair()
+    const policy = new PolicyStore(primary.db)
+    allowCode(policy, 10)
+
+    let releaseResolve!: () => void
+    const gate = new Promise<void>(resolve => {
+      releaseResolve = resolve
+    })
+    let enteredResolve!: () => void
+    const entered = new Promise<void>(resolve => {
+      enteredResolve = resolve
+    })
+
+    const ingestion = new IngestionService(
+      primary.db,
+      {
+        resolve: async () => {
+          enteredResolve()
+          await gate
+          return { source: 'none' as const, confidence: 0 }
+        },
+      },
+      () => policy.get(),
+      () => 4_000,
+    )
+
+    expect(await ingestion.whenIdle().then(() => 'idle'))
+      .toBe('idle')
+
+    const ingesting = ingestion.ingest(native(4_000))
+    await entered
+
+    // Teardown must be able to see that a write is still running: the
+    // database is never closed underneath it.
+    let settled = false
+    void ingestion.whenIdle().then(() => {
+      settled = true
+    })
+    await Promise.resolve()
+    expect(settled).toBe(false)
+
+    releaseResolve()
+    expect(await ingesting).toBe(true)
+    await ingestion.whenIdle()
+    expect(settled).toBe(true)
+
+    secondary.close()
     primary.close()
   })
 })

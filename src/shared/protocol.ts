@@ -1,5 +1,3 @@
-import type { PolicyMode } from './policy.js'
-
 export type CollectorCapability =
   | 'app-focus'
   | 'window-metadata'
@@ -62,6 +60,12 @@ export interface CollectorState {
   readonly reason?: string
 }
 
+export interface CollectorConfigured {
+  readonly v: 1
+  readonly type: 'configured'
+  readonly revision: number
+}
+
 export interface CollectorDiagnostic {
   readonly v: 1
   readonly type: 'diagnostic'
@@ -81,6 +85,7 @@ export type CollectorToHost =
   | CollectorHello
   | NativeObservation
   | CollectorState
+  | CollectorConfigured
   | CollectorDiagnostic
   | CollectorFatal
 
@@ -89,7 +94,7 @@ export interface ConfigureMessage {
   readonly type: 'configure'
   readonly revision: number
   readonly policy: {
-    readonly mode: PolicyMode
+    readonly mode: 'include-only'
     readonly allowedBundleIds: readonly string[]
     readonly blockedBundleIds: readonly string[]
     readonly protectedBundleIds: readonly string[]

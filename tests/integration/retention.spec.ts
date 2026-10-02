@@ -143,28 +143,7 @@ describe('retention service', () => {
       updatedAtMs: 3_000,
       expiresAtMs: 100_000,
       observationIds: [firstId, secondId],
-      resources: [
-        {
-          resourceId: firstResource,
-          firstSeenAtMs: 1_000,
-          lastSeenAtMs: 1_000,
-          observationCount: 1,
-        },
-        {
-          resourceId: secondResource,
-          firstSeenAtMs: 2_000,
-          lastSeenAtMs: 2_000,
-          observationCount: 1,
-        },
-      ],
-      surfaces: [{
-        bundleId: 'com.microsoft.VSCode',
-        surfaceKind: 'editor',
-        firstSeenAtMs: 1_000,
-        lastSeenAtMs: 2_000,
-        observationCount: 2,
-      }],
-    })
+            })
 
     const result =
       new RetentionService(history.db)
@@ -238,20 +217,7 @@ describe('retention service', () => {
       updatedAtMs: 2_000,
       expiresAtMs: 100_000,
       observationIds: [observationId],
-      resources: [{
-        resourceId,
-        firstSeenAtMs: 1_000,
-        lastSeenAtMs: 1_000,
-        observationCount: 1,
-      }],
-      surfaces: [{
-        bundleId: 'com.microsoft.VSCode',
-        surfaceKind: 'editor',
-        firstSeenAtMs: 1_000,
-        lastSeenAtMs: 1_000,
-        observationCount: 1,
-      }],
-    })
+            })
 
     expect(
       new RetentionService(history.db)
@@ -310,20 +276,7 @@ describe('retention service', () => {
       updatedAtMs: 2_000,
       expiresAtMs: 5_000,
       observationIds: [observationId],
-      resources: [{
-        resourceId,
-        firstSeenAtMs: 1_000,
-        lastSeenAtMs: 1_000,
-        observationCount: 1,
-      }],
-      surfaces: [{
-        bundleId: 'com.microsoft.VSCode',
-        surfaceKind: 'editor',
-        firstSeenAtMs: 1_000,
-        lastSeenAtMs: 1_000,
-        observationCount: 1,
-      }],
-    })
+            })
 
     const result =
       new RetentionService(history.db)

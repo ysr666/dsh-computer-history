@@ -2,7 +2,12 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { CollectorSessionId, EpisodeId, type ActivityObservation } from '../../src/shared/index.js'
+import {
+  CollectorSessionId,
+  EpisodeId,
+  type ActivityObservation,
+  type DeleteHistoryRequest,
+} from '../../src/shared/index.js'
 import { DeletionService, RetentionService } from '../../src/host/retention/index.js'
 import { EpisodeStore, ObservationStore, openHistoryDatabase, ResourceStore } from '../../src/host/store/index.js'
 
@@ -60,15 +65,7 @@ function seedEpisode(history: ReturnType<typeof openTempDatabase>) {
     summary: 'Worked in alpha with provider.ts, retry.html, and Terminal.',
     confidence: 1, state: 'closed', createdAtMs: 4_000, updatedAtMs: 4_000, expiresAtMs: 100_000,
     observationIds,
-    resources: values.map((value, index) => ({
-      resourceId: resourceIds[index]!, firstSeenAtMs: value.observedAtMs,
-      lastSeenAtMs: value.observedAtMs, observationCount: 1,
-    })),
-    surfaces: values.map((value) => ({
-      bundleId: value.app.bundleId, surfaceKind: value.surface.kind,
-      firstSeenAtMs: value.observedAtMs, lastSeenAtMs: value.observedAtMs, observationCount: 1,
-    })),
-  })
+          })
   return { episodeId, observations, episodes }
 }
 
@@ -220,6 +217,106 @@ describe('provenance-aware deletion', () => {
       seeded.episodes.get(seeded.episodeId),
     ).toBeUndefined()
     history.close()
+  })
+
+  it('covers every delete scope across complete, partial, and expired provenance', () => {
+    const provenanceStates = ['complete', 'partial', 'expired'] as const
+    const scopes = ['app', 'time-range', 'episode', 'all'] as const
+
+    for (const provenance of provenanceStates) {
+      for (const scope of scopes) {
+        const history = openTempDatabase()
+        const seeded = seedEpisode(history)
+
+        if (provenance === 'partial') {
+          history.db.prepare(`
+            UPDATE observations
+            SET expires_at_ms = 5000
+            WHERE observed_at_ms = 2000
+          `).run()
+          new RetentionService(history.db).sweep(10_000)
+        } else if (provenance === 'expired') {
+          history.db.prepare(
+            'UPDATE observations SET expires_at_ms = 5000',
+          ).run()
+          new RetentionService(history.db).sweep(10_000)
+        }
+
+        let request: DeleteHistoryRequest
+        switch (scope) {
+          case 'app':
+            request = {
+              scope: {
+                kind: 'app',
+                bundleId: 'com.google.Chrome',
+              },
+            }
+            break
+          case 'time-range':
+            request = {
+              scope: {
+                kind: 'time-range',
+                startMs: 1_500,
+                endMs: 2_500,
+              },
+            }
+            break
+          case 'episode':
+            request = {
+              scope: {
+                kind: 'episode',
+                episodeId: seeded.episodeId,
+              },
+            }
+            break
+          case 'all':
+            request = { scope: { kind: 'all' } }
+            break
+        }
+
+        const result = new DeletionService(history.db).delete(
+          request,
+          20_000,
+        )
+        const forceWholeEpisode =
+          scope === 'episode'
+          || scope === 'all'
+          || provenance !== 'complete'
+
+        if (forceWholeEpisode) {
+          expect(
+            result.episodesDeleted,
+            `${scope}/${provenance}`,
+          ).toBe(1)
+          expect(result.episodesRebuilt).toBe(0)
+          expect(
+            seeded.episodes.get(seeded.episodeId),
+            `${scope}/${provenance}`,
+          ).toBeUndefined()
+        } else {
+          expect(result).toMatchObject({
+            observationsDeleted: 1,
+            episodesDeleted: 0,
+            episodesRebuilt: 1,
+          })
+          expect(
+            seeded.episodes.get(seeded.episodeId),
+            `${scope}/${provenance}`,
+          ).toBeDefined()
+        }
+
+        const expectedRaw = provenance === 'complete'
+          ? (scope === 'episode' || scope === 'all' ? 0 : 2)
+          : provenance === 'partial'
+            ? (scope === 'episode' || scope === 'all' ? 0 : 2)
+            : 0
+        expect(
+          seeded.observations.count(),
+          `${scope}/${provenance}`,
+        ).toBe(expectedRaw)
+        history.close()
+      }
+    }
   })
 
   it('rolls back the whole operation when the request is invalid', () => {

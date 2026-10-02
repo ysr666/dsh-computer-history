@@ -415,8 +415,16 @@ export class DeletionService {
       expected: number
     }
 
-    return Number(row.linked)
-      === Number(row.expected)
+    const linked = Number(row.linked)
+    const expected = Number(row.expected)
+
+    // Zero links is not evidence of completeness. A row with no linked
+    // observations can happen after a conservative forget leaves an
+    // Episode whose raw evidence has gone, and certifying it as
+    // "complete" would let a later targeted deletion rebuild or retain
+    // derived content that can no longer be proven free of the
+    // forgotten evidence. `0 === 0` must count as incomplete.
+    return linked > 0 && linked === expected
   }
 
   private episodeRetentionMeta(
@@ -510,28 +518,6 @@ export class DeletionService {
           }),
       observationIds:
         episode.observationIds,
-      resources: episode.resources.map(
-        resource => {
-          const id = resourceIds.get(
-            resourceKey(resource),
-          )
-          if (!id) {
-            throw new Error(
-              `missing resource id while rebuilding episode ${episode.id}`,
-            )
-          }
-          return {
-            resourceId: id,
-            firstSeenAtMs:
-              resource.firstSeenAtMs,
-            lastSeenAtMs:
-              resource.lastSeenAtMs,
-            observationCount:
-              resource.observationCount,
-          }
-        },
-      ),
-      surfaces: episode.surfaces,
     })
   }
 

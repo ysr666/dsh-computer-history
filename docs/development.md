@@ -15,7 +15,7 @@
     pnpm test
     pnpm verify
 
-Native commands are introduced when the SwiftPM package is added:
+Native verification commands:
 
     pnpm native:build
     pnpm native:test

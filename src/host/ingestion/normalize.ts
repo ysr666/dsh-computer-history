@@ -37,6 +37,78 @@ export function phase1AdapterForBundle(
 
 const SECURE_PATH = /(?:^|\/)(?:\.env(?:\.|$)|\.ssh(?:\/|$))|\.(?:pem|key)$|(?:credentials|secrets)/i
 
+/**
+ * Defence in depth for the Host's own store. The native helper already
+ * screens every metadata field it emits, but a malformed or hostile
+ * helper could skip that and send a protected title or identifier
+ * directly.
+ */
+function isProtectedText(
+  value: string,
+  policy: PolicySnapshot,
+): boolean {
+  let decoded: string
+  try {
+    decoded = decodeURIComponent(value)
+  } catch {
+    // A malformed escape sequence is not evidence of safety.
+    return true
+  }
+
+  if (SECURE_PATH.test(decoded)) return true
+
+  return policy.rules.some(rule =>
+    rule.dimension === 'resource'
+    && rule.action !== 'allow'
+    && (
+        policyRuleMatches(rule, value)
+        || policyRuleMatches(rule, decoded)
+      )
+  )
+}
+
+/**
+ * A window title can itself be a bare sensitive location: editors often
+ * title a window with just the file name, so a `.env` or `id_rsa` can
+ * appear as the title even when no document attribute is exposed.
+ * Titles that contain whitespace are treated as descriptive text and
+ * only screened against explicit user rules, because the blunt path
+ * heuristic would otherwise drop legitimate titles.
+ */
+function isProtectedTitle(
+  title: string,
+  policy: PolicySnapshot,
+): boolean {
+  if (/\s/.test(title)) {
+    return policy.rules.some(rule =>
+      rule.dimension === 'resource'
+      && rule.action !== 'allow'
+      && policyRuleMatches(rule, title)
+    )
+  }
+  return isProtectedText(title, policy)
+}
+
+function isProtectedMetadata(
+  message: NativeObservation,
+  policy: PolicySnapshot,
+): boolean {
+  for (
+    const value of [
+      message.window?.document,
+      message.window?.url,
+      message.element?.identifier,
+    ]
+  ) {
+    if (value && isProtectedText(value, policy)) return true
+  }
+
+  return Boolean(
+    message.window?.title
+    && isProtectedTitle(message.window.title, policy),
+  )
+}
+
 function resourceOf(
   message: NativeObservation,
   adapter: ObservationAdapter,
@@ -91,6 +163,7 @@ export function normalizeObservation(
 ): ActivityObservation | undefined {
   if (message.privacy.secure || message.privacy.protected) return undefined
   if (PROTECTED_BUNDLES.has(message.app.bundleId)) return undefined
+  if (isProtectedMetadata(message, policy)) return undefined
   const safeAdapter = phase1AdapterForBundle(message.app.bundleId)
   if (!safeAdapter) return undefined
   const resource = resourceOverride

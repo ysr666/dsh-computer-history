@@ -91,6 +91,23 @@ describe('collector protocol', () => {
     )).toThrow(/non-negative/)
   })
 
+  it('accepts configured acknowledgements with bounded revisions', () => {
+    expect(parseCollectorLine(JSON.stringify({
+      v: 1,
+      type: 'configured',
+      revision: 7,
+    }))).toEqual({
+      v: 1,
+      type: 'configured',
+      revision: 7,
+    })
+    expect(() => parseCollectorLine(JSON.stringify({
+      v: 1,
+      type: 'configured',
+      revision: -1,
+    }))).toThrow(/non-negative/)
+  })
+
   it('accepts the versioned hello envelope', () => {
     expect(parseCollectorLine(JSON.stringify({
       v: 1,
@@ -227,6 +244,100 @@ describe('live privacy normalization', () => {
         canonicalUri: 'file:///repo/src/provider.ts',
       },
       policyRevision: 1,
+    })
+  })
+})
+
+describe('host-side metadata defence in depth', () => {
+  const protectedRule = {
+    ...policy.rules[0]!,
+    id: PolicyRuleId('protect-notes'),
+    dimension: 'resource' as const,
+    action: 'protect' as const,
+    matcher: 'glob' as const,
+    pattern: '*secret-notes*',
+  }
+  const withRule: PolicySnapshot = {
+    ...policy,
+    rules: [policy.rules[0]!, protectedRule],
+  }
+
+  it('drops a protected identifier even when the resource itself is safe', () => {
+    expect(normalizeObservation(native({
+      element: { role: 'AXTextField', identifier: '/repo/.env' },
+    }), policy, 2_000)).toBeUndefined()
+  })
+
+  it('drops a protected document regardless of the window title', () => {
+    expect(normalizeObservation(native({
+      window: { title: 'harmless.ts', document: '/repo/.ssh/id_rsa' },
+    }), policy, 2_000)).toBeUndefined()
+  })
+
+  it('drops a title matching an explicit user rule', () => {
+    expect(normalizeObservation(native({
+      window: { title: 'secret-notes.txt', document: '/repo/plain.ts' },
+    }), withRule, 2_000)).toBeUndefined()
+  })
+
+  it('keeps an ordinary title that only mentions a path-like word', () => {
+    expect(normalizeObservation(native({
+      window: { title: '.env notes.md', document: '/repo/plain.ts' },
+    }), policy, 2_000)).toMatchObject({
+      surface: { title: '.env notes.md' },
+    })
+  })
+
+  it('fails closed on percent-encoded protected paths', () => {
+    expect(normalizeObservation(native({
+      window: { title: 'x', document: '/repo/%2eenv' },
+    }), policy, 2_000)).toBeUndefined()
+  })
+
+  it('fails closed when an escape sequence cannot be decoded', () => {
+    expect(normalizeObservation(native({
+      element: { role: 'AXTextField', identifier: '%zz' },
+    }), policy, 2_000)).toBeUndefined()
+  })
+
+  it('still accepts a normal identifier and document', () => {
+    expect(normalizeObservation(native({
+      element: { role: 'AXTextField', identifier: 'editor-input' },
+    }), policy, 2_000)).toMatchObject({
+      element: { identifier: 'editor-input' },
+    })
+  })
+})
+
+describe('bare-filename window titles', () => {
+  it('drops a title that is itself a protected location', () => {
+    expect(normalizeObservation(native({
+      window: { title: '.env' },
+    }), policy, 2_000)).toBeUndefined()
+    expect(normalizeObservation(native({
+      window: { title: 'aws-credentials.json' },
+    }), policy, 2_000)).toBeUndefined()
+    expect(normalizeObservation(native({
+      window: { title: '/Users/demo/.ssh/id_rsa' },
+    }), policy, 2_000)).toBeUndefined()
+  })
+
+  it('keeps descriptive titles that merely mention a sensitive word', () => {
+    expect(normalizeObservation(native({
+      window: {
+        title: '.env notes.md',
+        document: '/repo/plain.ts',
+      },
+    }), policy, 2_000)).toMatchObject({
+      surface: { title: '.env notes.md' },
+    })
+    expect(normalizeObservation(native({
+      window: {
+        title: 'Managing secrets safely',
+        document: '/repo/plain.ts',
+      },
+    }), policy, 2_000)).toMatchObject({
+      surface: { title: 'Managing secrets safely' },
     })
   })
 })

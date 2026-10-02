@@ -6,7 +6,9 @@ DSH Computer History handles highly sensitive contextual metadata about local co
 
 The collector must not capture screenshots or screen recordings; microphone or system audio; raw keyboard input or mouse coordinates; clipboard data; Accessibility text values or selected text; terminal buffer/output or shell history; source-file bodies; or browser page bodies.
 
-Secure fields are a hard boundary and cannot be enabled by configuration.
+Secure fields are a hard boundary and cannot be enabled by configuration. Secure detection is three-valued and fails closed: when the focused element or its accessibility subrole cannot be read, the surface is treated as secure and its window title, document, and URL are withheld rather than recorded as ordinary metadata. Accessibility reads carry a short messaging timeout so an unresponsive target application cannot stall the collector's control channel.
+
+The same protection applies to every metadata field an observation can carry, not only the resource path: document, URL, element identifier, and window title are each screened. A title that is itself a bare protected location (for example `.env`) is treated as protected, while descriptive titles are screened only against explicit user rules. The Host re-screens these fields independently, so a malformed or hostile helper cannot bypass the native check.
 
 ## Local data
 
@@ -22,7 +24,11 @@ Protected applications are excluded before AX observation is attached. Sensitive
 
 ## Process and distribution boundary
 
-Only one DSH Host may own ambient capture for a Computer History data directory at a time. Other Hosts may inspect or delete history but cannot run another collector or mutate capture policy while an owner is active. If a pause transition cannot be acknowledged by the native helper, the Host fails closed by stopping the helper rather than assuming capture paused.
+Only one DSH Host may own ambient capture for a Computer History data directory at a time. Other Hosts may inspect or delete history but cannot run another collector or mutate capture policy while an owner is active. Ownership release waits for in-process policy leases, so a helper failure cannot hand capture to another Host while the old owner is still committing or propagating policy.
+
+Pause is acknowledged only after the native helper has detached its AX observer. Policy changes are applied while paused and must receive a matching native `configured` revision acknowledgement before capture can resume. Missing, mismatched, unexpected, or timed-out acknowledgements fail closed by stopping the helper and relinquishing ownership. Phase 1 native policy is always include-only.
+
+The five-second native heartbeat only reconciles foreground app, Accessibility trust, and observer attachment. It does not emit periodic activity records: unchanged metadata is suppressed. Sleep detaches observation and wake reconciles before capture resumes.
 
 The Phase 1 build produces and verifies a universal arm64/x86_64 helper with a stable code-signing identifier. Local/ad-hoc signing and `codesign --verify` are alpha build gates, not a claim that the helper has completed a production Apple Developer ID, hardened-runtime, notarization, and Desktop distribution pipeline.
 

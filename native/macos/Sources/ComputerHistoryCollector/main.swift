@@ -30,7 +30,7 @@ emit(StateMessage(
     accessibilityTrusted: trusted,
     reason: trusted ? nil : "accessibility"
 ))
-collector.start()
+collector.start(initialAccessibilityTrusted: trusted)
 
 DispatchQueue.global(qos: .utility).async {
     let decoder = JSONDecoder()
@@ -47,8 +47,9 @@ DispatchQueue.global(qos: .utility).async {
 
         DispatchQueue.main.async {
             switch command {
-            case .configure(let policy):
+            case .configure(let revision, let policy):
                 collector.configure(policy)
+                emit(ConfiguredMessage(revision: revision))
             case .pause:
                 collector.setPaused(true)
             case .resume:

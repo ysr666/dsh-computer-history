@@ -1,5 +1,6 @@
 import {
   mkdtempSync,
+  readFileSync,
   rmSync,
   writeFileSync,
 } from 'node:fs'
@@ -32,7 +33,54 @@ const root = mkdtempSync(
 const testSource = path.join(root, 'NativeTests.swift')
 const executable = path.join(root, 'native-tests')
 
+function requireSource(condition, message) {
+  if (!condition) throw new Error(message)
+}
+
+const collectorSource = readFileSync(
+  'native/macos/Sources/ComputerHistoryCollector/Collector.swift',
+  'utf8',
+)
+const mainSource = readFileSync(
+  'native/macos/Sources/ComputerHistoryCollector/main.swift',
+  'utf8',
+)
+requireSource(
+  collectorSource.includes('heartbeatInterval: TimeInterval = 5'),
+  'native collector must retain the 5s reconciliation heartbeat',
+)
+requireSource(
+  collectorSource.includes('NSWorkspace.willSleepNotification')
+    && collectorSource.includes('NSWorkspace.didWakeNotification'),
+  'native collector must reconcile sleep/wake lifecycle',
+)
+requireSource(
+  collectorSource.includes('guard fingerprint != lastObservationFingerprint'),
+  'native heartbeat must suppress unchanged metadata',
+)
+const pauseSource = collectorSource.slice(
+  collectorSource.indexOf('func setPaused'),
+  collectorSource.indexOf('private func capture'),
+)
+requireSource(
+  pauseSource.indexOf('detachAXObserver()') >= 0
+    && pauseSource.indexOf('detachAXObserver()')
+      < pauseSource.indexOf('state: "paused"'),
+  'pause must detach AX observation before acknowledging paused',
+)
+const configureCase = mainSource.slice(
+  mainSource.indexOf('case .configure'),
+  mainSource.indexOf('case .pause'),
+)
+requireSource(
+  configureCase.indexOf('collector.configure(policy)') >= 0
+    && configureCase.indexOf('collector.configure(policy)')
+      < configureCase.indexOf('ConfiguredMessage(revision: revision)'),
+  'configured acknowledgement must follow policy application',
+)
+
 writeFileSync(testSource, `
+import ApplicationServices
 import Foundation
 
 @main
@@ -64,10 +112,89 @@ struct NativeTests {
             phase1AdapterForBundle("org.mozilla.firefox") == nil
         )
 
+        // Secure-field detection must fail closed: an unreadable
+        // focused element is not evidence that the surface is safe.
+        precondition(isSecureElement(nil) == .unreadable)
+        precondition(windowElement(from: nil) == nil)
+
+        // Accessibility reads are bounded per element object, and the
+        // URL helper must reject a value it cannot interpret rather
+        // than silently yielding nil-string confusion.
+        precondition(
+            safeURL(
+                AXUIElementCreateApplication(
+                    ProcessInfo.processInfo.processIdentifier
+                ),
+                "AXURL"
+            ) == nil
+        )
+
+        // Protected-path screening must cover every metadata field the
+        // helper emits, not only the resource URI.
+        precondition(
+            looksLikeSensitiveResourcePath("/Users/demo/.env")
+        )
+        precondition(
+            looksLikeSensitiveResourcePath(
+                "file:///Users/demo/.ssh/id_rsa"
+            )
+        )
+        precondition(
+            looksLikeSensitiveResourcePath(
+                "file:///Users/demo/credentials.json"
+            )
+        )
+        precondition(
+            !looksLikeSensitiveResourcePath("/Users/demo/notes.md")
+        )
+        precondition(
+            isProtectedMetadata(
+                "file:///Users/demo/.env",
+                patterns: [],
+                isResource: true
+            )
+        )
+        precondition(
+            isProtectedMetadata(
+                ".env",
+                patterns: [],
+                isResource: false
+            ) == false
+        )
+        precondition(
+            isProtectedMetadata(
+                "secret.pem",
+                patterns: ["*.pem"],
+                isResource: false
+            )
+        )
+        precondition(
+            isProtectedMetadata(
+                "%2eenv",
+                patterns: ["*.env"],
+                isResource: false
+            )
+        )
+        precondition(
+            isProtectedMetadata(
+                "/Users/demo/notes.md",
+                patterns: ["*.pem"],
+                isResource: false
+            ) == false
+        )
+        precondition(
+            isProtectedMetadata(
+                nil,
+                patterns: ["*.pem"],
+                isResource: true
+            ) == false
+        )
+
         let json = """
         {
           "v": 1,
           "type": "configure",
+          "revision": 7,
           "policy": {
             "mode": "include-only",
             "allowedBundleIds": ["com.microsoft.VSCode"],
@@ -82,7 +209,8 @@ struct NativeTests {
             from: Data(json.utf8)
         )
         switch command {
-        case .configure(let policy):
+        case .configure(let revision, let policy):
+            precondition(revision == 7)
             precondition(policy.mode == "include-only")
             precondition(
                 policy.allowedBundleIds
@@ -93,6 +221,27 @@ struct NativeTests {
                 "configure command decoded incorrectly"
             )
         }
+
+        let invalidMode = """
+        {
+          "v": 1,
+          "type": "configure",
+          "revision": 8,
+          "policy": {
+            "mode": "exclude",
+            "allowedBundleIds": [],
+            "blockedBundleIds": [],
+            "protectedBundleIds": [],
+            "protectedPathPatterns": []
+          }
+        }
+        """
+        precondition(
+            (try? JSONDecoder().decode(
+                Command.self,
+                from: Data(invalidMode.utf8)
+            )) == nil
+        )
 
         print("native privacy/protocol tests passed")
     }

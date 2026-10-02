@@ -34,6 +34,7 @@ export class IngestionService {
   private readonly deletions: DeletionLogStore
   private builder: IncrementalEpisodeBuilder
   private dataVersion: number
+  private inFlight: Promise<void> = Promise.resolve()
 
   public constructor(
     private readonly db: DatabaseSync,
@@ -105,7 +106,31 @@ export class IngestionService {
     }
   }
 
+  /**
+   * Resolves once no `ingest` call is still in flight. Teardown uses
+   * this so the database is never closed underneath a write: closing
+   * during an open transaction silently discards it.
+   */
+  public whenIdle(): Promise<void> {
+    return this.inFlight
+  }
+
   public async ingest(
+    message: NativeObservation,
+  ): Promise<boolean> {
+    const running = this.ingestNow(message)
+    const idle: Promise<void> = running
+      .then(() => undefined, () => undefined)
+    this.inFlight = idle
+    void idle.then(() => {
+      if (this.inFlight === idle) {
+        this.inFlight = Promise.resolve()
+      }
+    })
+    return running
+  }
+
+  private async ingestNow(
     message: NativeObservation,
   ): Promise<boolean> {
     if (this.readDataVersion() !== this.dataVersion) {
@@ -225,10 +250,24 @@ export class IngestionService {
       this.db.exec('COMMIT')
       return true
     } catch (error) {
-      if (this.db.isTransaction) {
-        this.db.exec('ROLLBACK')
+      // Recovery is best-effort and must never replace the original
+      // failure. During host teardown the database can already be
+      // closed, in which case `isTransaction` itself throws; letting
+      // that escape from inside this catch would mask the real error
+      // and skip the reseed entirely.
+      try {
+        if (this.db.isTransaction) {
+          this.db.exec('ROLLBACK')
+        }
+      } catch {
+        // The transaction is already gone with the connection.
       }
-      this.reseed()
+      try {
+        this.reseed()
+      } catch {
+        // A reseed failure is surfaced by the next successful ingest,
+        // which re-reads data_version before writing.
+      }
       throw error
     }
   }
@@ -293,7 +332,7 @@ export class IngestionService {
         this.db.exec('COMMIT')
       }
     } catch (error) {
-      if (ownsTransaction) {
+      if (ownsTransaction && this.db.isTransaction) {
         this.db.exec('ROLLBACK')
       }
       throw error
@@ -347,11 +386,11 @@ export class IngestionService {
         episode.endedAtMs + EPISODE_RETENTION_MS,
       ),
       observationIds: episode.observationIds,
-      // Append-mode provenance is derived directly from newly linked
-      // observations in EpisodeStore, so the hot path never rewrites
-      // the Episode's full resource/surface aggregate.
-      resources: [],
-      surfaces: [],
+      // Aggregate provenance is derived by EpisodeStore from whatever
+      // ends up linked: incrementally on the append fast path, and
+      // recomputed from the links on a full replace. Passing counters
+      // from here would let them drift from the link set, which is the
+      // exact comparison deletion uses to decide completeness.
     }, {
       provenance: 'append',
       ...(appendObservationIds === undefined

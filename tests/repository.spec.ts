@@ -12,6 +12,7 @@ import {
   name,
   resolveHistoryDataDirectory,
 } from '../src/index.js'
+import { PHASE1_SUPPORTED_BUNDLE_IDS } from '../src/shared/index.js'
 
 const originalDshHome = process.env.DSH_HOME
 
@@ -38,6 +39,25 @@ describe('repository scaffold', () => {
     expect(resolveHistoryDataDirectory({
       dataDirectory: '/tmp/explicit-history',
     })).toBe('/tmp/explicit-history')
+  })
+
+  it('keeps Host and native Phase 1 bundle allowlists identical', () => {
+    const swift = readFileSync(
+      new URL(
+        '../native/macos/Sources/ComputerHistoryCollector/SupportedApps.swift',
+        import.meta.url,
+      ),
+      'utf8',
+    )
+    const nativeBundles = [...swift.matchAll(
+      /bundle == "([^"]+)"/g,
+    )].map(match => match[1]!).toSorted()
+
+    expect(nativeBundles).toEqual(
+      [...PHASE1_SUPPORTED_BUNDLE_IDS].toSorted(),
+    )
+    expect(nativeBundles).not.toContain('com.google.Chrome')
+    expect(nativeBundles).not.toContain('com.apple.Safari')
   })
 
   it('uses document-relative browser API routes', () => {

@@ -57,27 +57,44 @@ export function openHistoryDatabase(
   assertModeAtMost(dataDirectory, 0o700)
 
   const db = new DatabaseSync(databasePath)
-  hardenMode(databasePath, 0o600)
+  try {
+    hardenMode(databasePath, 0o600)
 
-  // Install the lock wait before WAL initialization/migration:
-  // multiple DSH profiles may open the shared history database
-  // concurrently on first boot.
-  db.exec('PRAGMA busy_timeout = 5000')
-  db.exec('PRAGMA journal_mode = WAL')
-  db.exec('PRAGMA foreign_keys = ON')
-  db.exec('PRAGMA secure_delete = ON')
-  db.exec('PRAGMA synchronous = NORMAL')
+    // Install the lock wait before WAL initialization/migration:
+    // multiple DSH profiles may open the shared history database
+    // concurrently on first boot.
+    db.exec('PRAGMA busy_timeout = 5000')
+    db.exec('PRAGMA journal_mode = WAL')
+    db.exec('PRAGMA foreign_keys = ON')
+    db.exec('PRAGMA secure_delete = ON')
+    db.exec('PRAGMA synchronous = NORMAL')
 
-  migrate(db, options.nowMs)
-  hardenDatabaseSidecars(databasePath)
+    migrate(db, options.nowMs)
+    hardenDatabaseSidecars(databasePath)
+  } catch (error) {
+    try {
+      db.close()
+    } catch {
+      // Initialization failure is authoritative.
+    }
+    try {
+      hardenDatabaseSidecars(databasePath)
+    } catch {
+      // Do not obscure the initialization failure.
+    }
+    throw error
+  }
 
   return {
     db,
     dataDirectory,
     databasePath,
     close(): void {
-      db.close()
-      hardenDatabaseSidecars(databasePath)
+      try {
+        db.close()
+      } finally {
+        hardenDatabaseSidecars(databasePath)
+      }
     },
   }
 }

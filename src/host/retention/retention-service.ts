@@ -53,7 +53,9 @@ export class RetentionService {
         episodesDeleted,
       }
     } catch (error) {
-      this.db.exec('ROLLBACK')
+      if (this.db.isTransaction) {
+        this.db.exec('ROLLBACK')
+      }
       throw error
     }
   }

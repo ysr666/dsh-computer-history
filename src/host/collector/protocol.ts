@@ -301,6 +301,19 @@ function parseState(message: RecordValue): CollectorToHost {
   }
 }
 
+function parseConfigured(
+  message: RecordValue,
+): CollectorToHost {
+  return {
+    v: 1,
+    type: 'configured',
+    revision: nonNegativeInteger(
+      message.revision,
+      'configured.revision',
+    ),
+  }
+}
+
 function parseDiagnostic(
   message: RecordValue,
 ): CollectorToHost {
@@ -367,6 +380,8 @@ export function parseCollectorLine(
       return parseObservation(message)
     case 'state':
       return parseState(message)
+    case 'configured':
+      return parseConfigured(message)
     case 'diagnostic':
       return parseDiagnostic(message)
     case 'fatal':

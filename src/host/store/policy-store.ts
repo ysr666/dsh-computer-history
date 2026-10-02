@@ -162,7 +162,9 @@ export class PolicyStore {
       if (ownsTransaction) this.db.exec('COMMIT')
       return this.get()
     } catch (error) {
-      if (ownsTransaction) this.db.exec('ROLLBACK')
+      if (ownsTransaction && this.db.isTransaction) {
+        this.db.exec('ROLLBACK')
+      }
       throw error
     }
   }

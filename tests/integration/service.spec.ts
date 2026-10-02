@@ -110,20 +110,7 @@ function seedEpisode(history: ReturnType<typeof openTempDatabase>): EpisodeId {
     updatedAtMs: 2_000,
     expiresAtMs: 100_000,
     observationIds: [observationId],
-    resources: [{
-      resourceId,
-      firstSeenAtMs: 1_000,
-      lastSeenAtMs: 1_000,
-      observationCount: 1,
-    }],
-    surfaces: [{
-      bundleId: 'com.microsoft.VSCode',
-      surfaceKind: 'editor',
-      firstSeenAtMs: 1_000,
-      lastSeenAtMs: 1_000,
-      observationCount: 1,
-    }],
-  })
+          })
 
   return id
 }
@@ -217,6 +204,37 @@ describe('local computer history backend', () => {
     })
     expect(policy.revision).toBe(2)
     expect(backend.listPolicyRules().some(rule => rule.id === PolicyRuleId('rule-1'))).toBe(true)
+
+    const builtIn = backend.listPolicyRules().find(rule => rule.builtIn)!
+    await expect(backend.replacePolicy({
+      mode: 'include-only',
+      rules: [{
+        ...builtIn,
+        pattern: 'com.example.Tampered',
+      }],
+    })).rejects.toThrow(/invalid built-in rule/)
+    await expect(backend.replacePolicy({
+      mode: 'include-only',
+      rules: [{
+        ...builtIn,
+        builtIn: false,
+      }],
+    })).rejects.toThrow(/reserved/)
+    const duplicate = {
+      id: PolicyRuleId('duplicate'),
+      dimension: 'app' as const,
+      action: 'deny' as const,
+      matcher: 'exact' as const,
+      pattern: 'com.example.Private',
+      builtIn: false,
+      createdAtMs: 100,
+      updatedAtMs: 100,
+    }
+    await expect(backend.replacePolicy({
+      mode: 'include-only',
+      rules: [duplicate, duplicate],
+    })).rejects.toThrow(/duplicate rule id/)
+    expect(backend.getPolicy().revision).toBe(2)
 
     expect(await backend.delete({
       scope: {

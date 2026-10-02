@@ -10,6 +10,12 @@ struct Hello: Encodable {
     let capabilities = ["app-focus", "window-metadata", "resource-uri", "secure-field-detection"]
 }
 
+struct ConfiguredMessage: Encodable {
+    let v = 1
+    let type = "configured"
+    let revision: Int
+}
+
 struct Privacy: Encodable { let secure: Bool; let protected: Bool; let reason: String? }
 struct AppInfo: Encodable { let pid: Int32; let bundleId: String; let name: String? }
 struct WindowInfo: Encodable { let title: String?; let document: String?; let url: String? }
@@ -48,11 +54,12 @@ struct ConfigurePayload: Decodable {
 }
 
 struct ConfigureEnvelope: Decodable {
+    let revision: Int
     let policy: ConfigurePayload
 }
 
 enum Command: Decodable {
-    case configure(ConfigurePayload), pause, resume, shutdown
+    case configure(Int, ConfigurePayload), pause, resume, shutdown
     private enum Keys: String, CodingKey { case v, type }
     init(from decoder: Decoder) throws {
         let box = try decoder.container(keyedBy: Keys.self)
@@ -65,7 +72,23 @@ enum Command: Decodable {
             )
         }
         switch try box.decode(String.self, forKey: .type) {
-        case "configure": self = .configure(try ConfigureEnvelope(from: decoder).policy)
+        case "configure":
+            let envelope = try ConfigureEnvelope(from: decoder)
+            guard envelope.revision >= 0 else {
+                throw DecodingError.dataCorruptedError(
+                    forKey: .type,
+                    in: box,
+                    debugDescription: "invalid policy revision"
+                )
+            }
+            guard envelope.policy.mode == "include-only" else {
+                throw DecodingError.dataCorruptedError(
+                    forKey: .type,
+                    in: box,
+                    debugDescription: "unsupported policy mode"
+                )
+            }
+            self = .configure(envelope.revision, envelope.policy)
         case "pause": self = .pause
         case "resume": self = .resume
         case "shutdown": self = .shutdown

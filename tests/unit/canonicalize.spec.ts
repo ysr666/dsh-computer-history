@@ -45,6 +45,22 @@ describe('resource canonicalization', () => {
     })
   })
 
+  it('fails closed when a missing target is hidden behind a symlink', async () => {
+    const created = mkdtempSync(
+      path.join(os.tmpdir(), 'dsh-ch-canonical-'),
+    )
+    roots.push(created)
+    const root = realpathSync(created)
+    const target = path.join(root, 'missing-secret')
+    const alias = path.join(root, 'alias')
+    symlinkSync(target, alias)
+
+    await expect(canonicalizeResource({
+      kind: 'file',
+      canonicalUri: pathToFileURL(alias).href,
+    })).resolves.toBeUndefined()
+  })
+
   it('keeps a normalized absolute identity for a missing file', async () => {
     const created = mkdtempSync(
       path.join(os.tmpdir(), 'dsh-ch-canonical-'),

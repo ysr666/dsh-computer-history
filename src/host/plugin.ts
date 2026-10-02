@@ -15,9 +15,9 @@ import {
 } from '../shared/index.js'
 import { registerHistoryApi } from './api/index.js'
 import {
+  CAPTURE_LOCK_PROBE_WAIT_MS,
   CaptureOwnershipLock,
   CollectorManager,
-  isCaptureOwnershipContention,
 } from './collector/index.js'
 import { IngestionService } from './ingestion/index.js'
 import { DeletionService, RetentionService } from './retention/index.js'
@@ -45,6 +45,7 @@ export interface Config {
   readonly collectorExecutable?: string
   readonly autoResume?: boolean
   readonly collectorRestart?: boolean
+  readonly captureLockProbeWaitMs?: number
 }
 
 export function resolveHistoryDataDirectory(
@@ -58,6 +59,7 @@ class ManagedCapture implements CaptureController {
   public constructor(
     private readonly manager: CollectorManager | undefined,
     private readonly enabled: boolean,
+    private readonly ownsCapture: () => boolean,
   ) {}
 
   private requireOwnedManager(): CollectorManager {
@@ -69,15 +71,20 @@ class ManagedCapture implements CaptureController {
         'computer history capture is owned by another DSH Host',
       )
     }
+    if (!this.ownsCapture()) {
+      throw new Error(
+        'computer history capture is unavailable on this DSH Host',
+      )
+    }
     return this.manager
   }
 
-  public pause(): Promise<void> {
-    return this.requireOwnedManager().pause()
+  public async pause(): Promise<void> {
+    await this.requireOwnedManager().pause()
   }
 
-  public resume(): Promise<void> {
-    return this.requireOwnedManager().resume()
+  public async resume(): Promise<void> {
+    await this.requireOwnedManager().resume()
   }
   public getState(): Pick<
     ComputerHistoryState,
@@ -114,7 +121,6 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
   const enabled = config.enabled ?? false
   const dataDirectory = resolveHistoryDataDirectory(config)
   const history = openHistoryDatabase({ dataDirectory })
-  ctx.effect(() => () => history.close())
 
   const policies = new PolicyStore(history.db)
   const policyNow = Date.now()
@@ -162,21 +168,55 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
     CaptureOwnershipLock | undefined
   let ownsCapture = false
   let manager: CollectorManager | undefined
+  let ownedCapture:
+    | {
+        readonly manager: CollectorManager
+        readonly lock: CaptureOwnershipLock
+      }
+    | undefined
+
+  /** `true` once in-flight ingestion settles, `false` if it does not. */
+  const ingestedIdle = async (): Promise<boolean> => {
+    let timer: NodeJS.Timeout | undefined
+    try {
+      return await Promise.race([
+        ingestion.whenIdle().then(() => true),
+        new Promise<false>(resolve => {
+          timer = setTimeout(() => resolve(false), 15_000)
+          timer.unref()
+        }),
+      ])
+    } finally {
+      if (timer) clearTimeout(timer)
+    }
+  }
+
+  const releaseCaptureOwnership = async (): Promise<void> => {
+    if (!ownedCapture) return
+    try {
+      await ownedCapture.manager.stop('plugin-dispose')
+    } catch {
+      // A failed stop still releases ownership in its own body.
+    }
+    ownsCapture = false
+    try {
+      await ownedCapture.lock.release()
+    } catch {
+      // Ownership release is idempotent; disposal continues.
+    }
+  }
 
   if (enabled) {
-    try {
-      captureLock =
-        await CaptureOwnershipLock.acquire(
-          captureLockPath,
-        )
-      ownsCapture = true
-    } catch (error) {
-      if (!isCaptureOwnershipContention(error)) {
-        throw error
-      }
-      // Another DSH Host owns ambient capture. This
-      // instance remains a read/delete client.
-    }
+    // Bounded probe rather than a zero-wait acquire: an outgoing owner
+    // hands the lock back asynchronously, and losing that race would
+    // wrongly downgrade this Host to a read-only client. A genuinely
+    // long-lived owner still wins and this Host stays read/delete only.
+    captureLock = await CaptureOwnershipLock.tryAcquire(
+      captureLockPath,
+      config.captureLockProbeWaitMs
+        ?? CAPTURE_LOCK_PROBE_WAIT_MS,
+    )
+    ownsCapture = captureLock !== undefined
 
     if (captureLock) {
       const collectorExecutable =
@@ -198,15 +238,10 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
             message: CollectorToHost,
           ) => {
             if (message.type === 'hello') {
-              manager?.configure(policies.get())
+              await manager?.initialize(policies.get())
             }
             if (message.type === 'observation') {
               await ingestion.ingest(message)
-            }
-            if (message.type === 'fatal') {
-              throw new Error(
-                'collector fatal: ' + message.code,
-              )
             }
           },
           onUnexpectedExit: async () => {
@@ -222,36 +257,35 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
         throw error
       }
 
-      const ownedManager = manager
-      const ownedLock = captureLock
-      ctx.effect(() => async () => {
-        await ownedManager.stop(
-          'plugin-dispose',
-        )
-        ownsCapture = false
-        await ownedLock.release()
-      })
+      ownedCapture = {
+        manager,
+        lock: captureLock,
+      }
     }
   }
 
   const acquirePolicyChangeLease =
     async (): Promise<() => Promise<void>> => {
-      if (ownsCapture) return async () => {}
-
-      let probe: CaptureOwnershipLock
-      try {
-        probe =
-          await CaptureOwnershipLock.acquire(
-            captureLockPath,
-          )
-      } catch (error) {
-        if (isCaptureOwnershipContention(error)) {
+      if (ownsCapture) {
+        if (!captureLock) {
           throw new Error(
-            'capture policy is owned by another DSH Host',
-            { cause: error },
+            'capture ownership invariant violated',
           )
         }
-        throw error
+        return captureLock.acquireLease()
+      }
+
+      // A policy mutation from a non-owner must not disturb the live
+      // owner's capture. Probe with zero wait: if the lock is held at
+      // all, another DSH Host is mid-mutation or owns capture.
+      const probe = await CaptureOwnershipLock.tryAcquire(
+        captureLockPath,
+        0,
+      )
+      if (!probe) {
+        throw new Error(
+          'capture policy is owned by another DSH Host',
+        )
       }
       return async () => { await probe.release() }
     }
@@ -260,7 +294,7 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
     episodes,
     policies,
     deletion,
-    new ManagedCapture(manager, enabled),
+    new ManagedCapture(manager, enabled, () => ownsCapture),
     {
       observationRetentionHours:
         OBSERVATION_RETENTION_MS / 3_600_000,
@@ -284,8 +318,52 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
     },
   )
 
-  await ctx.plugin(ComputerHistoryService, { backend })
-  registerHistoryApi(ctx)
+  // Teardown is registered immediately, before anything that can throw,
+  // so a failure while wiring the rest of the plugin still hands capture
+  // ownership back. Cordis disposes effects registered before a throw
+  // (concurrently, in reverse registration order), so relying on an
+  // effect registered later would leak the lock file held by a live PID
+  // and leave the helper running. Ordering *within* this single effect
+  // is what is load-bearing:
+  //   1. stop the helper, which also drains the ingestion queue it feeds;
+  //   2. release capture ownership so a successor Host can take over;
+  //   3. quiesce in-flight backend operations;
+  //   4. close the database last.
+  // Steps run concurrently *across* effects, so this must stay one
+  // effect: a separate close effect could close the database while the
+  // helper is still draining.
+  ctx.effect(() => async () => {
+    // Every step runs even if an earlier one throws.
+    await releaseCaptureOwnership()
+    try {
+      await backend.drain()
+    } catch {
+      // Quiescing is best-effort: the database still closes below.
+    }
+
+    // Ingestion writes are not part of the backend's operation tracker,
+    // and closing the database during an open transaction silently
+    // discards that write. Wait for in-flight ingestion, and if it will
+    // not settle, leave the database open: leaking a handle at process
+    // exit is strictly better than losing an observation.
+    if (!await ingestedIdle()) return
+    try {
+      history.close()
+    } catch {
+      // Closing is the last step; nothing remains to recover.
+    }
+  }, 'computer-history: teardown')
+
+  try {
+    await ctx.plugin(ComputerHistoryService, { backend })
+    registerHistoryApi(ctx)
+  } catch (error) {
+    // Roll back the capture ownership acquired above: this apply() is
+    // failing, so no teardown will run for a lock this call still holds.
+    await releaseCaptureOwnership()
+    throw error
+  }
+
   ctx.effect(
     () => registerAgentIntegration(ctx, config.autoResume ?? false),
     'computer-history: agent integration',

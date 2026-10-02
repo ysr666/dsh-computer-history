@@ -15,10 +15,67 @@ function json(value: unknown, status = 200): Response {
   })
 }
 
-function integer(value: string | null): number | undefined {
-  if (value === null || !/^\d+$/.test(value)) return undefined
-  const number = Number(value)
-  return Number.isSafeInteger(number) ? number : undefined
+class RequestValidationError extends Error {}
+
+function textResponse(message: string, status: number): Response {
+  return new Response(message, {
+    status,
+    headers: { 'cache-control': 'no-store' },
+  })
+}
+
+function optionalQueryInteger(
+  url: URL,
+  name: string,
+  min: number,
+  max: number,
+): number | undefined {
+  const raw = url.searchParams.get(name)
+  if (raw === null) return undefined
+  if (!/^\d+$/.test(raw)) {
+    throw new RequestValidationError(`${name} must be an integer`)
+  }
+  const value = Number(raw)
+  if (!Number.isSafeInteger(value) || value < min || value > max) {
+    throw new RequestValidationError(
+      `${name} must be between ${min} and ${max}`,
+    )
+  }
+  return value
+}
+
+function optionalQueryText(
+  url: URL,
+  name: string,
+  maxLength: number,
+): string | undefined {
+  const value = url.searchParams.get(name)
+  if (value === null) return undefined
+  if (value.length === 0 || value.length > maxLength) {
+    throw new RequestValidationError(
+      `${name} must contain 1..${maxLength} characters`,
+    )
+  }
+  return value
+}
+
+function requiredQueryText(
+  url: URL,
+  name: string,
+  maxLength: number,
+): string {
+  const value = optionalQueryText(url, name, maxLength)?.trim()
+  if (!value) {
+    throw new RequestValidationError(`Missing ${name}.`)
+  }
+  return value
+}
+
+function requestFailure(error: unknown): Response {
+  if (error instanceof RequestValidationError) {
+    return textResponse(error.message, 400)
+  }
+  return textResponse('Request failed.', 500)
 }
 
 export function registerHistoryApi(ctx: Context): void {
@@ -26,7 +83,13 @@ export function registerHistoryApi(ctx: Context): void {
     path: HISTORY_API_PREFIX + '/state',
     methods: ['GET'],
     requestBody: 'buffered',
-    fetch: () => Promise.resolve(json(ctx.computerHistory.getState())),
+    fetch: () => {
+      try {
+        return Promise.resolve(json(ctx.computerHistory.getState()))
+      } catch {
+        return Promise.resolve(textResponse('Request failed.', 500))
+      }
+    },
   }))
 
   ctx.effect(() => ctx.connection.fetch.register({
@@ -34,16 +97,24 @@ export function registerHistoryApi(ctx: Context): void {
     methods: ['GET'],
     requestBody: 'buffered',
     fetch: async (request: Request) => {
-      const url = new URL(request.url)
-      const sinceMs = integer(url.searchParams.get('sinceMs'))
-      const limit = integer(url.searchParams.get('limit'))
-      return json(await ctx.computerHistory.recent({
-        ...(sinceMs === undefined ? {} : { sinceMs }),
-        ...(url.searchParams.get('workspaceId')
-          ? { workspaceId: url.searchParams.get('workspaceId')! }
-          : {}),
-        ...(limit === undefined ? {} : { limit }),
-      }, request.signal))
+      try {
+        const url = new URL(request.url)
+        const sinceMs = optionalQueryInteger(
+          url,
+          'sinceMs',
+          0,
+          Number.MAX_SAFE_INTEGER,
+        )
+        const limit = optionalQueryInteger(url, 'limit', 1, 100)
+        const workspaceId = optionalQueryText(url, 'workspaceId', 1_000)
+        return json(await ctx.computerHistory.recent({
+          ...(sinceMs === undefined ? {} : { sinceMs }),
+          ...(workspaceId === undefined ? {} : { workspaceId }),
+          ...(limit === undefined ? {} : { limit }),
+        }, request.signal))
+      } catch (error) {
+        return requestFailure(error)
+      }
     },
   }))
 
@@ -52,13 +123,22 @@ export function registerHistoryApi(ctx: Context): void {
     methods: ['GET'],
     requestBody: 'buffered',
     fetch: async (request: Request) => {
-      const id = new URL(request.url).searchParams.get('id')
-      if (!id) return new Response('Missing episode id.', { status: 400 })
-      const episode = await ctx.computerHistory.getEpisode(
-        EpisodeId(id),
-        request.signal,
-      )
-      return episode ? json(episode) : new Response('Not found.', { status: 404 })
+      try {
+        const id = requiredQueryText(
+          new URL(request.url),
+          'id',
+          1_000,
+        )
+        const episode = await ctx.computerHistory.getEpisode(
+          EpisodeId(id),
+          request.signal,
+        )
+        return episode
+          ? json(episode)
+          : textResponse('Not found.', 404)
+      } catch (error) {
+        return requestFailure(error)
+      }
     },
   }))
 
@@ -67,20 +147,44 @@ export function registerHistoryApi(ctx: Context): void {
     methods: ['GET'],
     requestBody: 'buffered',
     fetch: async (request: Request) => {
-      const url = new URL(request.url)
-      const query = url.searchParams.get('q')
-      if (!query) return new Response('Missing query.', { status: 400 })
-      const limit = integer(url.searchParams.get('limit'))
-      return json(await ctx.computerHistory.search({
-        query,
-        ...(url.searchParams.get('workspaceId')
-          ? { workspaceId: url.searchParams.get('workspaceId')! }
-          : {}),
-        ...(url.searchParams.get('bundleId')
-          ? { bundleId: url.searchParams.get('bundleId')! }
-          : {}),
-        ...(limit === undefined ? {} : { limit }),
-      }, request.signal))
+      try {
+        const url = new URL(request.url)
+        const query = requiredQueryText(url, 'q', 500)
+        const sinceMs = optionalQueryInteger(
+          url,
+          'sinceMs',
+          0,
+          Number.MAX_SAFE_INTEGER,
+        )
+        const untilMs = optionalQueryInteger(
+          url,
+          'untilMs',
+          0,
+          Number.MAX_SAFE_INTEGER,
+        )
+        if (
+          sinceMs !== undefined
+          && untilMs !== undefined
+          && untilMs <= sinceMs
+        ) {
+          throw new RequestValidationError(
+            'untilMs must be greater than sinceMs',
+          )
+        }
+        const limit = optionalQueryInteger(url, 'limit', 1, 100)
+        const workspaceId = optionalQueryText(url, 'workspaceId', 1_000)
+        const bundleId = optionalQueryText(url, 'bundleId', 512)
+        return json(await ctx.computerHistory.search({
+          query,
+          ...(sinceMs === undefined ? {} : { sinceMs }),
+          ...(untilMs === undefined ? {} : { untilMs }),
+          ...(workspaceId === undefined ? {} : { workspaceId }),
+          ...(bundleId === undefined ? {} : { bundleId }),
+          ...(limit === undefined ? {} : { limit }),
+        }, request.signal))
+      } catch (error) {
+        return requestFailure(error)
+      }
     },
   }))
 
@@ -93,8 +197,24 @@ export function registerHistoryApi(ctx: Context): void {
       methods: ['POST'],
       requestBody: 'buffered',
       fetch: async () => {
-        await action()
-        return json(ctx.computerHistory.getState())
+        try {
+          await action()
+          return json(ctx.computerHistory.getState())
+        } catch (error) {
+          const message = error instanceof Error ? error.message : ''
+          if (
+            message === 'computer history capture is disabled'
+            || message === 'computer history capture is owned by another DSH Host'
+          ) {
+            return textResponse(message, 409)
+          }
+          if (
+            message === 'computer history capture is unavailable on this DSH Host'
+          ) {
+            return textResponse(message, 503)
+          }
+          return textResponse('Capture control failed.', 503)
+        }
       },
     }))
   }
@@ -105,21 +225,25 @@ export function registerHistoryApi(ctx: Context): void {
     requestBody: 'buffered',
     fetch: async (request: Request) => {
       if (request.method === 'GET') {
-        return json(ctx.computerHistory.getPolicy())
+        try {
+          return json(ctx.computerHistory.getPolicy())
+        } catch {
+          return textResponse('Request failed.', 500)
+        }
       }
       let body: unknown
       try { body = await request.json() } catch {
-        return new Response('Invalid JSON.', { status: 400 })
+        return textResponse('Invalid JSON.', 400)
       }
       let update
       try {
         update = parsePolicyUpdate(body)
       } catch (error) {
-        return new Response(
+        return textResponse(
           error instanceof Error
             ? error.message
             : 'Invalid policy update.',
-          { status: 400 },
+          400,
         )
       }
       try {
@@ -130,16 +254,13 @@ export function registerHistoryApi(ctx: Context): void {
         const message = error instanceof Error
           ? error.message
           : 'Policy update failed.'
-        if (
-          message === 'Phase 1 requires include-only capture policy'
-          || message.startsWith('Phase 1 cannot capture unsupported app bundle:')
-        ) {
-          return new Response(message, { status: 400 })
+        if (message.startsWith('Phase 1')) {
+          return textResponse(message, 400)
         }
         if (message === 'capture policy is owned by another DSH Host') {
-          return new Response(message, { status: 409 })
+          return textResponse(message, 409)
         }
-        return new Response('Policy update failed.', { status: 500 })
+        return textResponse('Policy update failed.', 500)
       }
     },
   }))
@@ -151,17 +272,17 @@ export function registerHistoryApi(ctx: Context): void {
     fetch: async (request: Request) => {
       let body: unknown
       try { body = await request.json() } catch {
-        return new Response('Invalid JSON.', { status: 400 })
+        return textResponse('Invalid JSON.', 400)
       }
       let deletion
       try {
         deletion = parseDeleteRequest(body)
       } catch (error) {
-        return new Response(
+        return textResponse(
           error instanceof Error
             ? error.message
             : 'Invalid deletion request.',
-          { status: 400 },
+          400,
         )
       }
       try {
@@ -172,7 +293,7 @@ export function registerHistoryApi(ctx: Context): void {
           ),
         )
       } catch {
-        return new Response('Deletion failed.', { status: 500 })
+        return textResponse('Deletion failed.', 500)
       }
     },
   }))

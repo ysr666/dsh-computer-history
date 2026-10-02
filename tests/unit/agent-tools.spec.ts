@@ -8,6 +8,7 @@ import {
 describe('agent-scoped Computer History surfaces', () => {
   it('keeps canonical tool values structured while rendering an untrusted-data warning', async () => {
     const definitions = new Map<string, ToolDefinition>()
+    let recentRequest: { sinceMs?: number; limit?: number } | undefined
     const ctx = {
       tools: {
         register(definition: ToolDefinition) {
@@ -16,7 +17,10 @@ describe('agent-scoped Computer History surfaces', () => {
         },
       },
       computerHistory: {
-        recent: async () => [],
+        recent: async (request: { sinceMs?: number; limit?: number }) => {
+          recentRequest = request
+          return []
+        },
         search: async () => [],
         getEpisode: async () => undefined,
       },
@@ -24,10 +28,15 @@ describe('agent-scoped Computer History surfaces', () => {
 
     const dispose = registerComputerHistoryTools(ctx)
     const recent = definitions.get('computer_history_recent')!
+    const before = Date.now() - 10 * 60_000
     const value = await recent.execute(
-      {},
+      { since_minutes: 10, limit: 20 },
       { signal: new AbortController().signal } as never,
     )
+    const after = Date.now() - 10 * 60_000
+    expect(recentRequest?.limit).toBe(20)
+    expect(recentRequest?.sinceMs).toBeGreaterThanOrEqual(before)
+    expect(recentRequest?.sinceMs).toBeLessThanOrEqual(after)
     expect(value).toEqual([])
     expect(typeof value).not.toBe('string')
 
@@ -43,6 +52,14 @@ describe('agent-scoped Computer History surfaces', () => {
       type: 'text',
       text: '[]',
     })
+    await expect(recent.execute(
+      { limit: 21 },
+      { signal: new AbortController().signal } as never,
+    )).rejects.toThrow(/1 to 20/)
+    await expect(recent.execute(
+      { since_minutes: 10_081 },
+      { signal: new AbortController().signal } as never,
+    )).rejects.toThrow(/1 to 10080/)
     dispose()
   })
 })

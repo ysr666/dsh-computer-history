@@ -21,12 +21,14 @@ afterEach(() => {
 
 function fakeHost(spawned: { count: number }) {
   const disposers: Array<() => void | Promise<void>> = []
+  const stdouts: PassThrough[] = []
   const ctx = {
     subprocess: {
       spawn: () => {
         spawned.count += 1
         const stdin = new PassThrough()
         const stdout = new PassThrough()
+        stdouts.push(stdout)
         return {
           stdin,
           stdout,
@@ -75,6 +77,7 @@ function fakeHost(spawned: { count: number }) {
 
   return {
     ctx,
+    stdouts,
     async dispose() {
       for (const dispose of disposers.toReversed()) {
         // oxlint-disable-next-line no-await-in-loop -- lifecycle teardown must remain reverse-ordered
@@ -98,6 +101,7 @@ describe('plugin multi-Host capture composition', () => {
       dataDirectory,
       collectorExecutable: '/collector',
       collectorRestart: false,
+      captureLockProbeWaitMs: 250,
     })
     expect(spawned.count).toBe(1)
 
@@ -107,6 +111,7 @@ describe('plugin multi-Host capture composition', () => {
       dataDirectory,
       collectorExecutable: '/collector',
       collectorRestart: false,
+      captureLockProbeWaitMs: 250,
     })
     expect(spawned.count).toBe(1)
 
@@ -144,11 +149,79 @@ describe('plugin multi-Host capture composition', () => {
       dataDirectory,
       collectorExecutable: '/collector',
       collectorRestart: false,
+      captureLockProbeWaitMs: 250,
     })
     expect(spawned.count).toBe(2)
 
     await successor.dispose()
     await second.dispose()
+  })
+
+  it('releases fatal ownership and rejects stale owner controls', async () => {
+    const root = mkdtempSync(
+      path.join(os.tmpdir(), 'dsh-ch-plugin-fatal-'),
+    )
+    roots.push(root)
+    const dataDirectory = path.join(root, 'history')
+    const spawned = { count: 0 }
+
+    const first = fakeHost(spawned)
+    await apply(first.ctx, {
+      enabled: true,
+      dataDirectory,
+      collectorExecutable: '/collector',
+      collectorRestart: false,
+      captureLockProbeWaitMs: 250,
+    })
+    const firstHistory = (
+      first.ctx as unknown as {
+        computerHistory: { pause(): Promise<void> }
+      }
+    ).computerHistory
+
+    first.stdouts[0]!.write(JSON.stringify({
+      v: 1,
+      type: 'hello',
+      collectorSession: 'fatal-session',
+      collectorVersion: '0.1.0',
+      platform: 'darwin',
+      arch: 'arm64',
+      capabilities: [],
+    }) + '\n')
+    await Promise.resolve()
+    await Promise.resolve()
+    first.stdouts[0]!.write(JSON.stringify({
+      v: 1,
+      type: 'configured',
+      revision: 1,
+    }) + '\n')
+    await Promise.resolve()
+    await Promise.resolve()
+
+    first.stdouts[0]!.write(JSON.stringify({
+      v: 1,
+      type: 'fatal',
+      code: 'native-fatal',
+      message: 'cannot continue',
+    }) + '\n')
+    await new Promise(resolve => setTimeout(resolve, 0))
+
+    await expect(firstHistory.pause()).rejects.toThrow(
+      /unavailable on this DSH Host/,
+    )
+
+    const successor = fakeHost(spawned)
+    await apply(successor.ctx, {
+      enabled: true,
+      dataDirectory,
+      collectorExecutable: '/collector',
+      collectorRestart: false,
+      captureLockProbeWaitMs: 250,
+    })
+    expect(spawned.count).toBe(2)
+
+    await successor.dispose()
+    await first.dispose()
   })
 
   it('tightens a legacy exclude policy before any collector can start', async () => {

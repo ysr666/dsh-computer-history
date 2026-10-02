@@ -11,6 +11,9 @@ import {
   type PolicySnapshot,
 } from '../../shared/index.js'
 import {
+  DEFAULT_SHUTDOWN_GRACE_MS,
+} from './capture-lock.js'
+import {
   encodeCollectorCommand,
   parseCollectorLine,
 } from './protocol.js'
@@ -22,6 +25,56 @@ const DEFAULT_RESTART_DELAYS_MS = [
   15_000,
   30_000,
 ] as const
+/**
+ * Budget for a control acknowledgement. This is deliberately larger
+ * than the subprocess grace period: the helper only emits `configured`
+ * after synchronous Accessibility work on its main thread, so a briefly
+ * unresponsive target application must not be mistaken for a dead
+ * helper and cost this Host its capture ownership.
+ */
+const DEFAULT_ACK_TIMEOUT_MS = 5_000
+
+/**
+ * Bound for draining in-flight message handling. This is deliberately
+ * much larger than the process grace period: a message handler may be
+ * awaiting workspace canonicalization and ingestion, whose own failure
+ * modes surface within this window. Abandoning that work early would
+ * lose an observation, so the drain waits well past the point where
+ * well-behaved work has finished.
+ */
+const DEFAULT_DRAIN_TIMEOUT_MS = 15_000
+
+/**
+ * Absolute bound on the whole shutdown sequence. Each individual wait is
+ * bounded by `graceMs`, and a successor Host's ownership probe must be
+ * able to outlast their sum, so the total is what callers reason about.
+ */
+export function shutdownBudgetMs(graceMs: number): number {
+  return graceMs * 3
+}
+
+/**
+ * Await `work`, but never longer than `ms`. Used on the shutdown path
+ * so that a subprocess or handler which never settles cannot prevent
+ * capture ownership from being handed back.
+ */
+async function withTimeout<T>(
+  work: Promise<T>,
+  ms: number,
+): Promise<T | undefined> {
+  let timer: NodeJS.Timeout | undefined
+  try {
+    return await Promise.race([
+      work,
+      new Promise<undefined>(resolve => {
+        timer = setTimeout(() => resolve(undefined), ms)
+        timer.unref()
+      }),
+    ])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
 const DEFAULT_CRASH_WINDOW_MS = 10 * 60 * 1000
 const DEFAULT_MAX_CRASHES_IN_WINDOW = 5
 
@@ -29,6 +82,7 @@ export interface CollectorManagerOptions {
   readonly executable: string
   readonly cwd: string
   readonly graceMs?: number
+  readonly ackTimeoutMs?: number
   readonly helloTimeoutMs?: number
   readonly restartOnCrash?: boolean
   readonly restartDelaysMs?: readonly number[]
@@ -54,8 +108,17 @@ export class CollectorManager {
   private crashTimes: number[] = []
   private shutdownRequested = false
   private unexpectedExitNotified = false
+  private ownershipRelease: Promise<void> | undefined
+  private desiredCaptureState: 'running' | 'paused' = 'running'
+  private pendingPolicyAck: {
+    revision: number
+    resolve: () => void
+    reject: (error: Error) => void
+    timer: NodeJS.Timeout
+  } | undefined
   private readonly stateWaiters: Array<{
     expected: 'paused' | 'running'
+    accepts(state: CollectorState['state']): boolean
     resolve: () => void
     reject: (error: Error) => void
     timer: NodeJS.Timeout
@@ -91,7 +154,7 @@ export class CollectorManager {
         stdout: 'pipe',
         stderr: { maxBytes: 32 * 1024 },
       },
-      graceMs: this.options.graceMs ?? 1_500,
+      graceMs: this.options.graceMs ?? DEFAULT_SHUTDOWN_GRACE_MS,
     })
 
     if (!handle.stdin || !handle.stdout) {
@@ -117,9 +180,14 @@ export class CollectorManager {
 
       try {
         this.drainProtocolLines()
-      } catch {
+      } catch (error) {
+        const failure = error instanceof Error
+          ? error
+          : new Error(String(error))
         this.markDegraded('protocol-error')
-        void this.stop('protocol-error')
+        this.rejectStateWaiters(failure)
+        this.rejectPolicyAck(failure)
+        void this.stop('protocol-error').catch(() => {})
       }
     }
 
@@ -132,7 +200,7 @@ export class CollectorManager {
         && !this.stopping
       ) {
         this.markDegraded('hello-timeout')
-        void this.stop('protocol-error')
+        void this.stop('protocol-error').catch(() => {})
       }
     }, this.options.helloTimeoutMs ?? 5_000)
     this.helloTimer.unref()
@@ -141,9 +209,11 @@ export class CollectorManager {
       handle.stdout?.off('data', onData)
       this.clearHelloTimer()
       this.receiveBuffer = Buffer.alloc(0)
-      this.rejectStateWaiters(
-        new Error('collector exited before state acknowledgement'),
+      const exitError = new Error(
+        'collector exited before acknowledgement',
       )
+      this.rejectStateWaiters(exitError)
+      this.rejectPolicyAck(exitError)
 
       if (this.handle === handle) {
         this.handle = undefined
@@ -170,7 +240,7 @@ export class CollectorManager {
       ?? DEFAULT_MAX_CRASHES_IN_WINDOW
     if (
       this.options.restartOnCrash === false
-      || this.crashTimes.length > maxFailures
+      || this.crashTimes.length >= maxFailures
     ) {
       this.shutdownRequested = true
       this.notifyUnexpectedExit()
@@ -206,12 +276,13 @@ export class CollectorManager {
     this.restartTimer = undefined
   }
 
-  private notifyUnexpectedExit(): void {
-    if (this.unexpectedExitNotified) return
+  private notifyUnexpectedExit(): Promise<void> {
     this.unexpectedExitNotified = true
-    void Promise.resolve(
+    const release = Promise.resolve(
       this.options.onUnexpectedExit?.(),
-    ).catch(() => {})
+    )
+    this.ownershipRelease = release
+    return release
   }
 
   private drainProtocolLines(): void {
@@ -294,14 +365,20 @@ export class CollectorManager {
       this.state = message
       this.resolveStateWaiters(message.state)
     }
+    if (message.type === 'configured') {
+      this.resolvePolicyAck(message.revision)
+    }
     if (message.type === 'fatal') {
       this.markDegraded(message.code)
+      void this.stop('protocol-error').catch(() => {})
     }
 
     this.processing = this.processing
       .then(() => this.options.onMessage(message))
       .catch(() => {
-        this.markDegraded('host-message-handler-error')
+        if (this.state?.state !== 'degraded') {
+          this.markDegraded('host-message-handler-error')
+        }
         this.handle?.terminate()
       })
   }
@@ -323,10 +400,73 @@ export class CollectorManager {
     }
   }
 
+  private waitForPolicyAck(
+    revision: number,
+  ): Promise<void> {
+    if (this.pendingPolicyAck) {
+      throw new Error(
+        'collector policy acknowledgement already pending',
+      )
+    }
+
+    return new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        if (this.pendingPolicyAck?.revision !== revision) return
+        this.pendingPolicyAck = undefined
+        const error = new Error(
+          `collector did not acknowledge policy revision ${revision}`,
+        )
+        this.markDegraded('configure-ack-timeout')
+        reject(error)
+        void this.stop('protocol-error').catch(() => {})
+      }, this.options.ackTimeoutMs ?? DEFAULT_ACK_TIMEOUT_MS)
+      timer.unref()
+      this.pendingPolicyAck = {
+        revision,
+        resolve,
+        reject,
+        timer,
+      }
+    })
+  }
+
+  private resolvePolicyAck(revision: number): void {
+    const pending = this.pendingPolicyAck
+    if (!pending) {
+      throw new Error(
+        'collector sent unexpected policy acknowledgement',
+      )
+    }
+    if (pending.revision !== revision) {
+      throw new Error(
+        `collector policy acknowledgement mismatch: expected ${pending.revision}, received ${revision}`,
+      )
+    }
+
+    clearTimeout(pending.timer)
+    this.pendingPolicyAck = undefined
+    pending.resolve()
+  }
+
+  private rejectPolicyAck(error: Error): void {
+    const pending = this.pendingPolicyAck
+    if (!pending) return
+    clearTimeout(pending.timer)
+    this.pendingPolicyAck = undefined
+    pending.reject(error)
+  }
+
+  private cancelPolicyAck(): void {
+    const pending = this.pendingPolicyAck
+    if (!pending) return
+    clearTimeout(pending.timer)
+    this.pendingPolicyAck = undefined
+  }
+
   private resolveStateWaiters(state: CollectorState['state']): void {
     for (let index = this.stateWaiters.length - 1; index >= 0; index -= 1) {
       const waiter = this.stateWaiters[index]
-      if (!waiter || waiter.expected !== state) continue
+      if (!waiter || !waiter.accepts(state)) continue
       clearTimeout(waiter.timer)
       this.stateWaiters.splice(index, 1)
       waiter.resolve()
@@ -343,7 +483,18 @@ export class CollectorManager {
   private waitForState(
     expected: 'paused' | 'running',
   ): Promise<void> {
-    if (this.state?.state === expected) return Promise.resolve()
+    // A `resume` is satisfied by `permission-required` as well: native
+    // resumes collection but reports the accessibility gate instead of
+    // `running`. Treating that as a timeout would kill a healthy helper
+    // and release capture ownership, and every later pause/resume would
+    // then fail until the plugin reloaded.
+    const accepts = (state: CollectorState['state']): boolean =>
+      state === expected
+      || (expected === 'running' && state === 'permission-required')
+
+    if (this.state && accepts(this.state.state)) {
+      return Promise.resolve()
+    }
 
     return new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -359,10 +510,16 @@ export class CollectorManager {
         // A control transition whose outcome cannot be confirmed must
         // fail closed. In particular, a pause timeout must never leave
         // an uncertain helper collecting in the background.
-        void this.stop('protocol-error')
-      }, this.options.graceMs ?? 1_500)
+        void this.stop('protocol-error').catch(() => {})
+      }, this.options.ackTimeoutMs ?? DEFAULT_ACK_TIMEOUT_MS)
       timer.unref()
-      this.stateWaiters.push({ expected, resolve, reject, timer })
+      this.stateWaiters.push({
+        expected,
+        accepts,
+        resolve,
+        reject,
+        timer,
+      })
     })
   }
 
@@ -382,7 +539,7 @@ export class CollectorManager {
     )
   }
 
-  public configure(policy: PolicySnapshot): void {
+  private sendConfigure(policy: PolicySnapshot): void {
     const appRules = policy.rules.filter(
       rule => rule.dimension === 'app',
     )
@@ -398,30 +555,41 @@ export class CollectorManager {
       ),
     )
 
+    this.send({
+      v: 1,
+      type: 'configure',
+      revision: policy.revision,
+      policy: {
+        mode: 'include-only',
+        allowedBundleIds: bundleIdsFor('allow'),
+        blockedBundleIds: bundleIdsFor('deny'),
+        protectedBundleIds: bundleIdsFor('protect'),
+        protectedPathPatterns: resourceRules
+          .filter(rule => rule.action !== 'allow')
+          .map(rule =>
+            rule.matcher === 'prefix'
+              ? rule.pattern + '*'
+              : rule.pattern,
+          ),
+      },
+    })
+  }
+
+  private configureAndWait(
+    policy: PolicySnapshot,
+  ): Promise<void> {
+    const acknowledgement = this.waitForPolicyAck(
+      policy.revision,
+    )
     try {
-      this.send({
-        v: 1,
-        type: 'configure',
-        revision: policy.revision,
-        policy: {
-          mode: 'include-only',
-          allowedBundleIds: bundleIdsFor('allow'),
-          blockedBundleIds: bundleIdsFor('deny'),
-          protectedBundleIds: bundleIdsFor('protect'),
-          protectedPathPatterns: resourceRules
-            .filter(rule => rule.action !== 'allow')
-            .map(rule =>
-              rule.matcher === 'prefix'
-                ? rule.pattern + '*'
-                : rule.pattern,
-            ),
-        },
-      })
+      this.sendConfigure(policy)
     } catch (error) {
+      this.cancelPolicyAck()
       this.markDegraded('configure-send-failed')
-      void this.stop('protocol-error')
+      void this.stop('protocol-error').catch(() => {})
       throw error
     }
+    return acknowledgement
   }
 
   private enqueueControl(
@@ -433,6 +601,17 @@ export class CollectorManager {
     )
     this.controlQueue = next.catch(() => {})
     return next
+  }
+
+  public initialize(
+    policy: PolicySnapshot,
+  ): Promise<void> {
+    return this.enqueueControl(async () => {
+      if (this.desiredCaptureState === 'paused') {
+        await this.pauseNow()
+      }
+      await this.configureAndWait(policy)
+    })
   }
 
   public applyPolicy(
@@ -448,19 +627,29 @@ export class CollectorManager {
   ): Promise<void> {
     const priorState = this.state?.state
 
-    if (priorState === 'paused') {
-      this.configure(policy)
+    // A user-requested pause always wins, and only a positively-running
+    // helper can be quiesced by the pause/configure/resume dance. Any
+    // other state (paused, permission-required, degraded, or not yet
+    // handshaken) is already fail-closed for collection, and pausing it
+    // would be actively harmful: a paused helper emits no state
+    // transitions, so the Host would either wedge capture or time out
+    // waiting for a resume that can never be acknowledged while
+    // Accessibility is untrusted.
+    if (
+      priorState !== 'running'
+      || this.desiredCaptureState === 'paused'
+    ) {
+      await this.configureAndWait(policy)
       return
     }
 
     await this.pauseNow()
-    this.configure(policy)
-    if (priorState === 'running') {
-      await this.resumeNow()
-    }
+    await this.configureAndWait(policy)
+    await this.resumeNow()
   }
 
   public pause(): Promise<void> {
+    this.desiredCaptureState = 'paused'
     return this.enqueueControl(() => this.pauseNow())
   }
 
@@ -473,13 +662,14 @@ export class CollectorManager {
         error instanceof Error ? error : new Error(String(error)),
       )
       this.markDegraded('pause-send-failed')
-      void this.stop('protocol-error')
+      void this.stop('protocol-error').catch(() => {})
       throw error
     }
     return acknowledgement
   }
 
   public resume(): Promise<void> {
+    this.desiredCaptureState = 'running'
     return this.enqueueControl(() => this.resumeNow())
   }
 
@@ -492,7 +682,7 @@ export class CollectorManager {
         error instanceof Error ? error : new Error(String(error)),
       )
       this.markDegraded('resume-send-failed')
-      void this.stop('protocol-error')
+      void this.stop('protocol-error').catch(() => {})
       throw error
     }
     return acknowledgement
@@ -519,16 +709,25 @@ export class CollectorManager {
     this.shutdownRequested = true
     this.clearRestartTimer()
     this.clearHelloTimer()
+    const stopError = new Error(
+      'collector stopped before acknowledgement',
+    )
+    this.rejectStateWaiters(stopError)
+    this.rejectPolicyAck(stopError)
 
     const handle = this.handle
     if (!handle) {
-      if (reason === 'protocol-error') {
-        this.notifyUnexpectedExit()
-      }
-      return this.processing.catch(() => {})
+      // No live process: the only remaining obligation is that the
+      // caller can observe ownership having been handed back.
+      // `releaseOwnership` is idempotent, so every reason takes it.
+      const release = this.releaseOwnership()
+      this.stopping = release
+      return release.finally(() => {
+        this.stopping = undefined
+      })
     }
 
-    this.stopping = (async () => {
+    const stopping = (async () => {
       try {
         this.send({
           v: 1,
@@ -546,29 +745,92 @@ export class CollectorManager {
       }
 
       const bound = AbortSignal.timeout(
-        this.options.graceMs ?? 1_500,
+        this.options.graceMs ?? DEFAULT_SHUTDOWN_GRACE_MS,
       )
       let exited = false
       try {
-        exited = await handle.waitForExit(bound)
+        // The signal is advisory: a provider that ignores it would
+        // otherwise hold the ownership handover open indefinitely.
+        exited = await withTimeout(
+          handle.waitForExit(bound),
+          this.options.graceMs ?? DEFAULT_SHUTDOWN_GRACE_MS,
+        ) === true
       } catch {
         exited = false
       }
 
       if (!exited) {
-        handle.terminate()
-        await handle.waitForExit()
+        // The subprocess contract permits both of these to throw, and
+        // an exit wait that never settles would block the ownership
+        // handover below. Every step is bounded.
+        try {
+          handle.terminate()
+        } catch {
+          // Best-effort signal; the ownership release still runs.
+        }
+        // `waitForExit()` reports true only once the managed range is
+        // empty, so its result is the confirmation that no helper is
+        // left behind when ownership moves to a successor.
+        try {
+          exited = await withTimeout(
+            handle.waitForExit(),
+            this.options.graceMs ?? DEFAULT_SHUTDOWN_GRACE_MS,
+          ) === true
+        } catch {
+          exited = false
+        }
+        if (!exited) {
+          this.markDegraded('collector-exit-unconfirmed')
+        }
       }
 
-      await this.processing.catch(() => {})
       this.handle = undefined
-      if (reason === 'protocol-error') {
-        this.notifyUnexpectedExit()
+
+      // Ownership is released as soon as no helper is left behind, and
+      // deliberately BEFORE the message drain below. The lock serializes
+      // *collectors*; it does not guard database writers, and the drain
+      // can take much longer than the exit waits. Releasing first keeps
+      // a successor Host's probe budget tied to the exit sequence rather
+      // than to how long an in-flight write happens to take.
+      //
+      // A successor may start its own collector while this Host is still
+      // draining a message. That is safe: both Hosts write to the same
+      // store through the same uniqueness and tombstone rules, so a
+      // message this Host is still finishing cannot duplicate or
+      // resurrect anything the successor persists.
+      //
+      // When the helper could not be confirmed gone the lock is still
+      // released. The alternative — holding it indefinitely — would make
+      // ambient capture permanently unavailable for this data directory,
+      // and the helper has already received `shutdown` plus `terminate`.
+      // The degraded state above records that the exit was unconfirmed.
+      await this.releaseOwnership()
+
+      // In-flight message handling (including ingestion) must not be
+      // able to hold ownership hostage, but a genuinely in-flight write
+      // gets a much larger budget than the process grace period so that
+      // legitimate work is not lost.
+      try {
+        await withTimeout(
+          this.processing,
+          DEFAULT_DRAIN_TIMEOUT_MS,
+        )
+      } catch {
+        // stop() resolving is not conditional on the drain.
       }
-    })().finally(() => {
+    })()
+    this.stopping = stopping
+
+    return stopping.finally(() => {
       this.stopping = undefined
     })
+  }
 
-    return this.stopping
+  private releaseOwnership(): Promise<void> {
+    if (this.unexpectedExitNotified) {
+      return this.ownershipRelease ?? Promise.resolve()
+    }
+    this.unexpectedExitNotified = true
+    return this.notifyUnexpectedExit()
   }
 }
