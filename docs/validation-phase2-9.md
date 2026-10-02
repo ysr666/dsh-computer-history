@@ -316,3 +316,47 @@ The next attempt starts by asking the observation **why** it was refused - the
 normalizer decides in several places and today none of them say which one fired -
 which is the same complaint this phase keeps finding: a decision that is not
 reported cannot be checked.
+
+## T2.9-3 — a decision that is not reported cannot be checked
+
+The deadlock from the previous round had one cause: `normalizeObservation` returned
+`undefined` for seven different reasons, so "the lock screen is not an adapter", "the
+policy refused it" and "it is a password manager" were indistinguishable - in tests
+and in the product alike. Every refusal now says why, through one helper:
+
+```ts
+export type RefusalReason =
+  | 'secure-field' | 'protected-app' | 'protected-metadata'
+  | 'not-an-adapter' | 'unknown-adapter' | 'unlocatable-name'
+  | 'secure-path' | 'policy'
+```
+
+The reason is passed out through a `refusal?: RefusalReport` parameter appended last,
+so no existing call site moved (the pattern used once before for `IngestionService`),
+and one `refuse()` helper is the single place that records it.
+
+The payoff is immediate and it is the whole point:
+
+```text
+pnpm test tests/unit/collector-ingestion.spec.ts → 22 passed
+  "says why the lock screen is not recorded"
+    observes the refusal, and asserts reason === 'not-an-adapter'
+
+calibration (adapter lookup made permissive):
+  × says why the lock screen is not recorded          ← this test, for the right reason
+  × fails closed for browsers and protected applications even if allowed
+  × fails closed for unsupported app families
+restored → 22 passed
+```
+
+Three attempts failed to calibrate the behaviour; naming the reason calibrated it on
+the first try. That is the argument for this change in one line.
+
+**One site is not labelled yet**: the unqueryable-focused-element refusal (ADR 0006)
+sits on a `return undefined` whose anchor was not unique, so it was left alone rather
+than patched by guesswork. Named here so it is not mistaken for done.
+
+Two things follow from this and neither is done: the refusal counter can now be broken
+down by reason (the product can say "12 observations were refused because nothing is
+allowed", which is what a new user needs), and every future test of a refusal can
+assert the reason instead of the bare fact.

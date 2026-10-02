@@ -180,6 +180,26 @@ export function looksLikeBareFileName(title: string): boolean {
 }
 
 /**
+ * Why an observation was not stored. Silently returning `undefined` made several
+ * different decisions look identical, which cost a round: a test asserting "the
+ * lock screen is not recorded" passed whether or not the mechanism it named was
+ * working.
+ */
+export type RefusalReason =
+  | 'secure-field'
+  | 'protected-app'
+  | 'protected-metadata'
+  | 'not-an-adapter'
+  | 'unknown-adapter'
+  | 'unlocatable-name'
+  | 'secure-path'
+  | 'policy'
+
+export interface RefusalReport {
+  reason?: RefusalReason
+}
+
+/**
  * F13 (ADR 0008). When the user has declared protected paths and a window
  * offers only a bare file name, the Host cannot tell whether that file lives
  * under one of them, so the name is not stored. This only ever drops an
@@ -207,17 +227,28 @@ export function normalizeObservation(
   // Stamped at insert time, so a later change of the setting governs what is
   // recorded from then on rather than reaching back into stored history.
   observationRetentionMs: number = OBSERVATION_RETENTION_MS,
+  /**
+   * Where to record why an observation was refused. A decision that is not
+   * reported cannot be checked: "the policy refused it", "it is a password
+   * manager" and "that bundle is not an adapter" are different facts (T2.9-3).
+   */
+  refusal?: RefusalReport,
 ): ActivityObservation | undefined {
-  if (message.privacy.secure || message.privacy.protected) return undefined
-  if (PROTECTED_BUNDLES.has(message.app.bundleId)) return undefined
-  if (isProtectedMetadata(message, policy)) return undefined
+  const refuse = (reason: RefusalReason): undefined => {
+    if (refusal) refusal.reason = reason
+    return undefined
+  }
+
+  if (message.privacy.secure || message.privacy.protected) return refuse('secure-field')
+  if (PROTECTED_BUNDLES.has(message.app.bundleId)) return refuse('protected-app')
+  if (isProtectedMetadata(message, policy)) return refuse('protected-metadata')
   const safeAdapter = phase1AdapterForBundle(message.app.bundleId)
-  if (!safeAdapter) return undefined
+  if (!safeAdapter) return refuse('not-an-adapter')
   const adapter = phase1AdapterDefinition(safeAdapter)
-  if (!adapter) return undefined
+  if (!adapter) return refuse('unknown-adapter')
   const resource = resourceOverride
     ?? resourceOf(message, adapter)
-  if (isUnlocatableFileName(message, resource, policy)) return undefined
+  if (isUnlocatableFileName(message, resource, policy)) return refuse('unlocatable-name')
   // A URL resource is accepted only from the paired companion (ADR 0007). The
   // Accessibility path still cannot tell a private window from a normal one, so
   // a browser seen through AX keeps contributing nothing.
@@ -231,10 +262,10 @@ export function normalizeObservation(
     || resource?.kind === 'directory'
   ) {
     try {
-      if (SECURE_PATH.test(decodeURIComponent(new URL(resource.canonicalUri).pathname))) return undefined
+      if (SECURE_PATH.test(decodeURIComponent(new URL(resource.canonicalUri).pathname))) return refuse('secure-path')
     } catch { return undefined }
   }
-  if (!policyAllows(message.app.bundleId, resource, policy)) return undefined
+  if (!policyAllows(message.app.bundleId, resource, policy)) return refuse('policy')
 
   if (message.observedAtMs > nowMs) {
     return undefined

@@ -6,6 +6,7 @@ import {
 } from '../../src/shared/index.js'
 import {
   normalizeObservation,
+  type RefusalReport,
   policyAllows,
 } from '../../src/host/ingestion/index.js'
 import { parseCollectorLine } from '../../src/host/collector/index.js'
@@ -133,6 +134,25 @@ describe('live privacy normalization', () => {
       undefined,
       { ...policy, mode: 'exclude' },
     )).toBe(false)
+  })
+
+  it('says why the lock screen is not recorded', () => {
+    // The behaviour alone was not checkable: three attempts passed for reasons
+    // other than the one they named. The reason is what makes it checkable.
+    const refusal: RefusalReport = {}
+    const result = normalizeObservation(
+      native({
+        app: { pid: 0, bundleId: 'com.apple.loginwindow', name: 'loginwindow' },
+      }),
+      policy,
+      2_000,
+      undefined,
+      undefined,
+      undefined,
+      refusal,
+    )
+    expect(result).toBeUndefined()
+    expect(refusal.reason).toBe('not-an-adapter')
   })
 
   it('rejects secure and protected observations before persistence', () => {
