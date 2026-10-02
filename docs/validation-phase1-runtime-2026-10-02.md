@@ -246,7 +246,7 @@ secure 阶段（前台 10s）: rows before 1 -> after 1（delta 0）| secure_row
 | F5 | 记录 | — | Finder 的 kAXDocument 为 nil → `resource_id` 空；Preview 的 document 为 file:// URL → 资源可用。resource 识别能力随 app 不同而分裂，产品假设需按 app 记账。 |
 | F6 | 环境 | — | 本机 VS Code 为不可启动的假壳；编辑器 adapter（`vscode`）无法真机验证。 |
 | F7 | 范围 | — | 浏览器类 app 无 adapter：交接文档 §4.1 建议的"本地 HTML 假密码框"测法在当前 Phase 1 适配器集下**不可达**；同理 kAXURL 也缺少可触发场景。 |
-| F8 | 中（工具链） | 已修文件 / 需重启激活 | `dsh-super-injector` 自重载路径自身有缺陷：`dev_reload_package dsh-super-injector` 会自毁并排程重建，但重建失败——`self-heal.log`：`reboot-failed: Error: selfEntry 无官方 _dispose（loader 契约缺失）`。后果：运行中实例继续用旧代码，磁盘上的修复要等 **DSH Host 重启**才生效（profile 从 patched lib 重新装配）。补充实测：随后自愈日志有 `heal-ok: 第 1 次 touch patch 官方重装配成功`，但再调 `dev_inject_plugin` 仍报**旧的 11 条白名单** —— 说明那次重装配复用了已缓存的模块命名空间，运行实例确实没换代码。 |
+| F8 | 中（工具链） | 已打补丁 / 运行中仍未激活 | `dsh-super-injector` 自重载路径有三处缺陷，本轮全部定位：(A) 复工器硬要求 `entry._dispose`，而 DSH 0.2.0-rc.2 的 loader entry **没有该 API**（实测 dump：`_dispose: undefined`，但 `fiber.dispose` / `entry.update` / `entry.refresh` / `parent.remove` 均为 function）→ `reboot-failed: selfEntry 无官方 _dispose`；(B) reload 的"磁盘降级"路径 import 后只在注入器**私有 loadCache** 里找 URL，而裸 `ctx.loader.import` 不写该缓存，且首次自毁已把缓存删空 → 永远匹配不到；(C) 更深一层：即使补 (B)，`dev_reload_package dsh-super-injector` 仍返回 `缓存中无匹配且磁盘降级失败`（失败点在 entry/URL 匹配更早处，未继续深挖）。已对 (A)(B) 打补丁（built lib + source 双份，备份 `/tmp/dsh-injector-rebuilder-*.bak-*`、`/tmp/dsh-injector-fallback-*.bak-*`），但**本会话无法验证**——它们只在一次成功的自重载里才会执行，而 (C) 挡住了触发。后果不变：**注入器代码改动必须重启 DSH Host 才生效**。附：首次失败后自愈日志有 `heal-ok: 第 1 次 touch patch 官方重装配成功`，但运行实例仍是旧代码（再调 `dev_inject_plugin` 报旧的 11 条白名单）。 |
 | F9 | 记录 | — | 需要位置信息的应用把 URL 放在 **`kAXDocument`**（Chrome 实测 `https://chatgpt.com/...`，Preview/Terminal 为 `file://...`），`kAXURL` 在这些应用上返回 `kAXErrorAttributeUnsupported`。若将来加 browser adapter，位置应读 AXDocument；`safeURL` 的 CFURL 分支仍保留防御。 |
 
 ## 7. §7 验收清单
@@ -301,9 +301,9 @@ tests/integration/plugin-multi-host.spec.ts 同上
 仓库外（不进 git，运行中生效需重启 Host，见 F8）：
 
 ```text
-~/.dsh/external/dsh-super-injector/lib/index.js         KNOWN_SLOTS 11 → 91（同步 live client 拓扑）
-~/.dsh/dsh-routing-suite/injector/src/index.ts          同上（源码副本）
-备份: /tmp/dsh-super-injector-lib-index.js.bak-*、/tmp/dsh-super-injector-src-index.ts.bak-*
+~/.dsh/external/dsh-super-injector/lib/index.js         KNOWN_SLOTS 11 → 91（同步 live client 拓扑）；复工器改用 fiber.dispose（本轮）；reload 磁盘降级 URL 兜底（本轮）
+~/.dsh/dsh-routing-suite/injector/src/index.ts          同上（源码副本，三处同步）
+备份: /tmp/dsh-super-injector-lib-index.js.bak-*、/tmp/dsh-super-injector-src-index.ts.bak-*、/tmp/dsh-injector-rebuilder-*.bak-*、/tmp/dsh-injector-fallback-*.bak-*
 ```
 
 验证期间的环境改动已全部还原：profile `package.json` / `cordis.patch.yml` 由备份恢复并 diff 通过；junction、`~/.dsh/computer-history` 软链、loader entry、staged 工具均已移除；helper 进程已停止。一次性目录仅保留证据 DB。
@@ -330,6 +330,6 @@ tests/integration/plugin-multi-host.spec.ts 同上
 | N2 | 安装真实可启动的 VS Code 或 Cursor → 复测真实 editor 的 kAXDocument 语义 | 可用编辑器 | ✅ 契约部分完成（§5.5 合成 app：adapter 映射 + AXDocument 管线）；真实 VS Code 语义仍待真机 |
 | N3 | 在 AXURL 有值的场景复测 `safeURL` 的 CFURL 解码 | 可触发场景 | ✅ 已完成可行部分：真机探针证明 AXURL 无触发场景（F9），解码逻辑改为纯函数 `decodeURLAttribute` + native/XCTest 覆盖 |
 | N4 | 故障注入"helper 退出无法确认" | 可选 | 逻辑已有单测覆盖（`tests/unit/collector-hardening.spec.ts:847` "releases ownership but records an unconfirmed exit"）；真机触发需要 helper 能存活 SIGKILL（不可构造），故真机项保持未触发 |
-| N5 | 修注入器自重载 `selfEntry 无官方 _dispose（loader 契约缺失）`（F8） | 可选，改注入器源码 | 补丁免重启生效 |
+| N5 | 修注入器自重载 `selfEntry 无官方 _dispose`（F8） | 可选，改注入器源码 | 已定位三处缺陷并对 (A)(B) 打补丁（built+source，见 F8/§9）；(C) 未解，故补丁**未验证**——post-restart 验证点：自重载能跑完并加载新代码 |
 
 每阶段收尾固定动作：关闭本阶段打开的应用/窗口/后台进程；更新报告与 todo；forward commit；确认 worktree clean。
