@@ -43,8 +43,9 @@ Normal turns receive no Computer History payload. Agent scopes receive three que
 
 ## Phase 2 — Daily-driver alpha (planned)
 
-Draft plan: `docs/plan-phase2.md`. Boundary decisions: ADR 0002 stays
-(metadata-only); ADR 0004 (proposed) governs semantic summaries.
+Draft plan: `docs/plan-phase2.md`; executable 2.0 task list:
+`docs/plan-phase2-0.md`. Boundary decisions: ADR 0002 stays (metadata-only);
+ADR 0004 (accepted) governs semantic summaries.
 
 1. **2.0 Quality and trust base** — adapter coverage and resource attribution
    (JetBrains/Xcode/Notes/Obsidian/Word, Cursor Agents window, unanchored

@@ -1,7 +1,8 @@
 # ADR 0004: Semantic enrichment boundary
 
-Status: Proposed
+Status: Accepted
 Date: 2026-10-02
+Accepted by: project owner (explicit approval of the local-on / remote-opt-in policy)
 
 ## Context
 
