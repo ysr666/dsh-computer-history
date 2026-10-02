@@ -31,8 +31,7 @@ export interface ComputerHistoryServiceOptions {
 
 export class ComputerHistoryService
   extends Service
-  implements ComputerHistoryServiceContract {
-  private readonly backend: ComputerHistoryServiceContract
+  implements ComputerHistoryServiceContract {  private readonly backend: ComputerHistoryServiceContract
 
   public constructor(
     ctx: Context,
@@ -102,4 +101,28 @@ export class ComputerHistoryService
   ): Promise<PolicySnapshot> {
     return this.backend.replacePolicy(update)
   }
+}
+
+/**
+ * Read this plugin's own `computerHistory` service without the cordis inject
+ * gate.
+ *
+ * The service is provided by a child fiber mounted inside the plugin, so the
+ * plugin's own consumers cannot declare it in `inject` — waiting for a service
+ * the same apply() provides would deadlock the provider. Accessing
+ * `ctx.computerHistory` therefore throws
+ * `cannot get property "computerHistory" without inject` at runtime, which is
+ * invisible to tests that pass a plain context stub. `ctx.get()` is cordis's
+ * documented inject-free accessor; use this helper instead of the property.
+ */
+export function computerHistoryService(
+  ctx: Context,
+): ComputerHistoryService {
+  const service = ctx.get('computerHistory') as
+    | ComputerHistoryService
+    | undefined
+  if (!service) {
+    throw new Error('computerHistory service is not available')
+  }
+  return service
 }

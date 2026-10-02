@@ -5,6 +5,7 @@ import {
   parseDeleteRequest,
   parsePolicyUpdate,
 } from './validation.js'
+import { computerHistoryService } from '../service/index.js'
 
 export const HISTORY_API_PREFIX = '/api/computer-history'
 
@@ -79,13 +80,15 @@ function requestFailure(error: unknown): Response {
 }
 
 export function registerHistoryApi(ctx: Context): void {
+  const history = computerHistoryService(ctx)
+
   ctx.effect(() => ctx.connection.fetch.register({
     path: HISTORY_API_PREFIX + '/state',
     methods: ['GET'],
     requestBody: 'buffered',
     fetch: () => {
       try {
-        return Promise.resolve(json(ctx.computerHistory.getState()))
+        return Promise.resolve(json(history.getState()))
       } catch {
         return Promise.resolve(textResponse('Request failed.', 500))
       }
@@ -107,7 +110,7 @@ export function registerHistoryApi(ctx: Context): void {
         )
         const limit = optionalQueryInteger(url, 'limit', 1, 100)
         const workspaceId = optionalQueryText(url, 'workspaceId', 1_000)
-        return json(await ctx.computerHistory.recent({
+        return json(await history.recent({
           ...(sinceMs === undefined ? {} : { sinceMs }),
           ...(workspaceId === undefined ? {} : { workspaceId }),
           ...(limit === undefined ? {} : { limit }),
@@ -129,7 +132,7 @@ export function registerHistoryApi(ctx: Context): void {
           'id',
           1_000,
         )
-        const episode = await ctx.computerHistory.getEpisode(
+        const episode = await history.getEpisode(
           EpisodeId(id),
           request.signal,
         )
@@ -174,7 +177,7 @@ export function registerHistoryApi(ctx: Context): void {
         const limit = optionalQueryInteger(url, 'limit', 1, 100)
         const workspaceId = optionalQueryText(url, 'workspaceId', 1_000)
         const bundleId = optionalQueryText(url, 'bundleId', 512)
-        return json(await ctx.computerHistory.search({
+        return json(await history.search({
           query,
           ...(sinceMs === undefined ? {} : { sinceMs }),
           ...(untilMs === undefined ? {} : { untilMs }),
@@ -189,8 +192,8 @@ export function registerHistoryApi(ctx: Context): void {
   }))
 
   for (const [suffix, action] of [
-    ['/pause', () => ctx.computerHistory.pause()],
-    ['/resume', () => ctx.computerHistory.resume()],
+    ['/pause', () => history.pause()],
+    ['/resume', () => history.resume()],
   ] as const) {
     ctx.effect(() => ctx.connection.fetch.register({
       path: HISTORY_API_PREFIX + suffix,
@@ -199,7 +202,7 @@ export function registerHistoryApi(ctx: Context): void {
       fetch: async () => {
         try {
           await action()
-          return json(ctx.computerHistory.getState())
+          return json(history.getState())
         } catch (error) {
           const message = error instanceof Error ? error.message : ''
           if (
@@ -226,7 +229,7 @@ export function registerHistoryApi(ctx: Context): void {
     fetch: async (request: Request) => {
       if (request.method === 'GET') {
         try {
-          return json(ctx.computerHistory.getPolicy())
+          return json(history.getPolicy())
         } catch {
           return textResponse('Request failed.', 500)
         }
@@ -248,7 +251,7 @@ export function registerHistoryApi(ctx: Context): void {
       }
       try {
         return json(
-          await ctx.computerHistory.replacePolicy(update),
+          await history.replacePolicy(update),
         )
       } catch (error) {
         const message = error instanceof Error
@@ -287,7 +290,7 @@ export function registerHistoryApi(ctx: Context): void {
       }
       try {
         return json(
-          await ctx.computerHistory.delete(
+          await history.delete(
             deletion,
             request.signal,
           ),

@@ -70,7 +70,13 @@ function harness(overrides: Record<string, unknown> = {}) {
   }
 
   const ctx = {
-    computerHistory,
+    // Services are read through the inject-free accessor, exactly like the
+    // real plugin: `ctx.computerHistory` throws in cordis ("cannot get
+    // property ... without inject") because the plugin provides the service
+    // itself and cannot declare it in `inject`.
+    get(name: string) {
+      return name === 'computerHistory' ? computerHistory : undefined
+    },
     connection: {
       fetch: {
         register(route: RegisteredRoute) {

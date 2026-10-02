@@ -22,6 +22,7 @@ afterEach(() => {
 function fakeHost(spawned: { count: number }) {
   const disposers: Array<() => void | Promise<void>> = []
   const stdouts: PassThrough[] = []
+  const services = new Map<string, unknown>()
   const ctx = {
     subprocess: {
       spawn: () => {
@@ -68,10 +69,13 @@ function fakeHost(spawned: { count: number }) {
       _plugin: unknown,
       options: { backend: unknown },
     ) {
-      ;(ctx as unknown as {
-        computerHistory: unknown
-      }).computerHistory = options.backend
+      services.set('computerHistory', options.backend)
       return { dispose: async () => {} }
+    },
+    // cordis inject-free accessor — the only sanctioned way for the plugin to
+    // read the service it provides itself.
+    get(name: string) {
+      return services.get(name)
     },
   } as unknown as Context
 
@@ -117,14 +121,14 @@ describe('plugin multi-Host capture composition', () => {
 
     const secondHistory = (
       second.ctx as unknown as {
-        computerHistory: {
+        get(name: 'computerHistory'): {
           recent(): Promise<readonly unknown[]>
           delete(request: unknown): Promise<unknown>
           replacePolicy(update: unknown): Promise<unknown>
           getState(): { reason?: string }
         }
       }
-    ).computerHistory
+    ).get('computerHistory')
 
     expect(secondHistory.getState().reason)
       .toBe('capture-owned-by-another-host')
@@ -175,9 +179,9 @@ describe('plugin multi-Host capture composition', () => {
     })
     const firstHistory = (
       first.ctx as unknown as {
-        computerHistory: { pause(): Promise<void> }
+        get(name: 'computerHistory'): { pause(): Promise<void> }
       }
-    ).computerHistory
+    ).get('computerHistory')
 
     first.stdouts[0]!.write(JSON.stringify({
       v: 1,
@@ -244,11 +248,11 @@ describe('plugin multi-Host capture composition', () => {
 
     const current = (
       host.ctx as unknown as {
-        computerHistory: {
+        get(name: 'computerHistory'): {
           getPolicy(): { mode: string }
         }
       }
-    ).computerHistory.getPolicy()
+    ).get('computerHistory').getPolicy()
     expect(current.mode).toBe('include-only')
     await host.dispose()
   })

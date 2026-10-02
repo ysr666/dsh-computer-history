@@ -1,6 +1,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import '@deepseek-ai/dsh-system-prompt'
+import { computerHistoryService } from '../host/service/index.js'
 import { detectResumeIntent } from '../host/resume/index.js'
 import type { EpisodeSummary } from '../shared/index.js'
 
@@ -110,7 +111,7 @@ export function registerExperimentalResumeHint(
 
           try {
             const resolution =
-              await ctx.computerHistory.resolveResume({
+              await computerHistoryService(ctx).resolveResume({
                 query,
                 nowMs: Date.now(),
                 turn,

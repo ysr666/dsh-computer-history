@@ -1,7 +1,15 @@
 import type { Context } from '@deepseek-ai/cordis'
-import '@deepseek-ai/dsh-client-ui-renderer/client'
-import '@deepseek-ai/dsh-client-ui-sidebar/client'
+// Runtime module ids are the sibling client *package* ids (the ids the DSH
+// client module loader registers and the ids our `dsh.client.inject` declares).
+// Subpath ids such as `.../client` are not in the loader's require table.
+import '@deepseek-ai/dsh-client-ui-renderer'
+import '@deepseek-ai/dsh-client-ui-sidebar'
 import '@deepseek-ai/dsh-client-ui-slots'
+// Type-only imports carry the client-side contract augmentations (`ctx.slots`,
+// sidebar/panel slot props, `MainPanelId`). They are erased at runtime, so the
+// wrapped bundle never requires the unregistered `.../client` subpath ids.
+import type * as _rendererClientTypes from '@deepseek-ai/dsh-client-ui-renderer/client'
+import type * as _sidebarClientTypes from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client'
 import React, { useCallback, useEffect, useState } from 'react'
 import type { ComputerHistoryState, EpisodeSummary, PolicySnapshot } from '../shared/index.js'

@@ -1,5 +1,6 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
+import { computerHistoryService } from '../host/service/index.js'
 import { EpisodeId } from '../shared/index.js'
 
 type JsonValue =
@@ -79,7 +80,7 @@ export function registerComputerHistoryTools(ctx: Context): () => void {
         const cutoff = sinceMs(args.since_minutes)
         const limit = toolLimit(args.limit)
         return canonicalJson(
-          await ctx.computerHistory.recent({
+          await computerHistoryService(ctx).recent({
             ...(cutoff === undefined ? {} : { sinceMs: cutoff }),
             ...(args.workspace_id
               ? { workspaceId: args.workspace_id }
@@ -104,7 +105,7 @@ export function registerComputerHistoryTools(ctx: Context): () => void {
         const cutoff = sinceMs(args.since_minutes)
         const limit = toolLimit(args.limit)
         return canonicalJson(
-          await ctx.computerHistory.search({
+          await computerHistoryService(ctx).search({
             query: args.query,
             ...(cutoff === undefined ? {} : { sinceMs: cutoff }),
             ...(args.workspace_id
@@ -126,7 +127,7 @@ export function registerComputerHistoryTools(ctx: Context): () => void {
       },
       output: jsonOutput,
       execute: async (args, exec) => canonicalJson(
-        await ctx.computerHistory.getEpisode(
+        await computerHistoryService(ctx).getEpisode(
           EpisodeId(args.id),
           exec.signal,
         ) ?? null,

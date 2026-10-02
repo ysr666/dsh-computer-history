@@ -9,20 +9,26 @@ describe('agent-scoped Computer History surfaces', () => {
   it('keeps canonical tool values structured while rendering an untrusted-data warning', async () => {
     const definitions = new Map<string, ToolDefinition>()
     let recentRequest: { sinceMs?: number; limit?: number } | undefined
+    const history = {
+      recent: async (request: { sinceMs?: number; limit?: number }) => {
+        recentRequest = request
+        return []
+      },
+      search: async () => [],
+      getEpisode: async () => undefined,
+    }
     const ctx = {
+      // Mirrors cordis: the plugin reads its own service through the
+      // inject-free `get()` accessor; a `computerHistory` property would make
+      // these tests pass while the real host throws.
+      get(name: string) {
+        return name === 'computerHistory' ? history : undefined
+      },
       tools: {
         register(definition: ToolDefinition) {
           definitions.set(definition.name, definition)
           return () => { definitions.delete(definition.name) }
         },
-      },
-      computerHistory: {
-        recent: async (request: { sinceMs?: number; limit?: number }) => {
-          recentRequest = request
-          return []
-        },
-        search: async () => [],
-        getEpisode: async () => undefined,
       },
     } as unknown as Context
 

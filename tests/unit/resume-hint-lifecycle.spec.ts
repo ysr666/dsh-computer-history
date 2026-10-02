@@ -37,23 +37,28 @@ describe('experimental ResumeHint lifecycle', () => {
     const rootEvents = new Events()
     const agentEvents = new Events()
     const requests: Array<{ query: string; turn: number }> = []
+    const history = {
+      resolveResume: async (request: {
+        query: string
+        turn: number
+      }) => {
+        requests.push({
+          query: request.query,
+          turn: request.turn,
+        })
+        return { status: 'none', reason: 'test' }
+      },
+    }
 
     const ctx = {
       on: rootEvents.on.bind(rootEvents),
       workspaceRegistry: {
         resolveByPath: async () => undefined,
       },
-      computerHistory: {
-        resolveResume: async (request: {
-          query: string
-          turn: number
-        }) => {
-          requests.push({
-            query: request.query,
-            turn: request.turn,
-          })
-          return { status: 'none', reason: 'test' }
-        },
+      // cordis inject-free accessor: the plugin provides computerHistory
+      // itself, so `ctx.computerHistory` would throw on a real host.
+      get(name: string) {
+        return name === 'computerHistory' ? history : undefined
       },
     } as unknown as Context
 
