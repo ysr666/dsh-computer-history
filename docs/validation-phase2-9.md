@@ -415,3 +415,37 @@ refused because nothing is allowed" - rather than a bare count, which is what
 Not yet done, and named: `/state` does not carry the breakdown yet, so the panel
 cannot show it. That is the wiring step, and it is the last piece of T2.9-1/2 before
 the screenshot.
+
+## T2.9-1/2/3 — the last wiring step, located rather than guessed
+
+The refusal breakdown exists and is tested; the panel cannot see it yet. The chain was
+traced so the next attempt does not guess at anchors again (guessing has cost this
+phase two mangled files):
+
+```text
+route        src/host/api/routes.ts:94         json(history.getState())
+service      service/computer-history-service.ts:97   delegates to backend.getState()
+backend      service/local-backend.ts          composes it; holds episodes, policies,
+                                               deletion, capture, config, pairingTokens,
+                                               semanticOptIns, db
+plugin       host/plugin.ts:108                getState(): capture, accessibilityTrusted,
+                                               collector, companion
+shared       shared/api.ts                     ComputerHistoryState
+ingestion    ingestion/ingestion-service.ts    refusalCounts(): ReadonlyMap<reason, number>
+```
+
+The gap is one link: **the backend does not hold the ingestion service**, so the
+breakdown has nowhere to travel from the counter to `/state`. Two ways, both small and
+both honest:
+
+1. pass the ingestion service into `LocalComputerHistoryBackend` as an **appended
+   optional constructor parameter** (the pattern used once before for
+   `IngestionService`'s `now`), or
+2. have the plugin's `getState()` carry it, since `apply()` holds both the ingestion
+   service and the plugin - but `getState()` is deliberately store-free, so this would
+   put a dependency there that the class does not otherwise have.
+
+Option 1 is the one that matches the existing shape, and it is the next change. Until
+then the sentence the panel can say stops at "nothing is allowed yet"; it cannot yet
+add "and 12 observations have been refused because of it", which is the same fact with
+the evidence attached.
