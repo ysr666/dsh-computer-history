@@ -126,3 +126,22 @@ side cannot be recalled.
 
 **The claim "nothing leaves this machine" is now conditional** on the scope, and
 every document that made it unconditionally has been updated.
+
+## Phase 2.8 — One editor companion for every editor
+
+Plan `docs/plan-phase2-8.md`, boundary ADR 0011, operating notes
+`docs/editor-companion.md`, evidence `docs/validation-phase2-8.md`.
+
+The Host used to hardcode VS Code's identity, which meant one Host release per
+editor. Now an editor payload declares `app: { bundleId, name }` and the Host treats
+it as a **claim**: validated, recorded as coming from a companion rather than from
+the operating system, subject to the same allow-list, and unable to unlock an
+application the built-in protected list covers. One extension therefore serves any
+VS Code-based editor, and another editor needs a client rather than a Host release -
+the wire format is documented for exactly that.
+
+Proven on this machine: a real VS Code window activated the extension, the extension
+sent its own observation, and the stored row carries the identity it declared about
+itself. Not proven: that the **installed** `.vsix` activates in a normally launched
+window (it does not; the same code does from source), which is the first item of the
+next phase.
