@@ -90,7 +90,29 @@ for (const [file, text] of extensionSources) {
   }
 }
 
+// The denylist is only worth anything if the comparison against it still works:
+// a scan that finds nothing looks exactly like a clean codebase.
+{
+  const catches = sample => forbidden.some(token => sample.includes(token))
+  if (!catches('const value = element.AXValue')) {
+    violations.push('the denylist no longer catches a forbidden API - this guard proves nothing')
+  }
+  if (catches('const value = element.AXTitle')) {
+    violations.push('the denylist catches a token it should not')
+  }
+  if (contents.length === 0) {
+    violations.push('no source files were read - this guard proves nothing')
+  }
+}
+
 if (violations.length) {
   console.error(violations.join('\n'))
   process.exit(1)
 }
+
+// Say so when it passes: a guard that is silent on success is indistinguishable
+// from a guard that never ran.
+console.log(
+  `privacy boundary holds: ${contents.length} source files scanned, `
+  + `${forbidden.length} forbidden APIs and ${contentApis.length} content APIs denied`,
+)

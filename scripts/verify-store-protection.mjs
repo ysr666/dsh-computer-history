@@ -17,6 +17,7 @@ import { existsSync, readdirSync, statSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import os from 'node:os'
 import path from 'node:path'
+import { chmodSync, mkdtempSync, rmSync } from 'node:fs'
 
 const SYNC_SEGMENTS = [
   'Library/Mobile Documents', // iCloud Drive
@@ -104,6 +105,34 @@ if (process.platform === 'darwin') {
     `${process.platform}: FileVault check unavailable; at-rest protection `
     + 'must be provided by the platform',
   )
+}
+
+// Two predicates here decide whether a store is safe, and both would look
+// perfectly happy if they stopped discriminating. Prove each still does, against
+// paths and a directory the test controls.
+{
+  const isSynced = target =>
+    SYNC_SEGMENTS.some(segment => target.split(path.sep).join('/').includes(`/${segment}/`))
+  if (!isSynced('/Users/someone/Dropbox/computer-history')) {
+    problems.push('the sync-folder check no longer recognises a synced path')
+  }
+  if (isSynced('/Users/someone/.dsh/computer-history')) {
+    problems.push('the sync-folder check flags a path that is not synced')
+  }
+
+  const probe = mkdtempSync(path.join(os.tmpdir(), 'dsh-store-mode-'))
+  try {
+    chmodSync(probe, 0o755)
+    if (modeOf(probe) === undefined || (modeOf(probe) & 0o077) === 0) {
+      problems.push('the permission check cannot see a world-readable directory')
+    }
+    chmodSync(probe, 0o700)
+    if ((modeOf(probe) ?? 0) & 0o077) {
+      problems.push('the permission check flags a directory that is already private')
+    }
+  } finally {
+    rmSync(probe, { recursive: true, force: true })
+  }
 }
 
 if (problems.length > 0) {

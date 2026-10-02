@@ -52,6 +52,21 @@ for (const bundle of bundleIds) {
   }
 }
 
+// A predicate that matches everything and one that matches nothing both look
+// like a clean document, so prove this one discriminates before trusting it.
+const rowFor = id => new RegExp(`^\\|\\s*\`${id}\`\\s*\\|`, 'm')
+{
+  if (!rowFor('vscode').test('| `vscode` | notes |')) {
+    problems.push('the adapter-row predicate no longer matches a row that exists')
+  }
+  if (rowFor('vscode').test('| `xcode` | notes |')) {
+    problems.push('the adapter-row predicate matches the wrong adapter')
+  }
+  if (adapterIds.length === 0) {
+    problems.push('no adapter ids were read from the table - this guard proves nothing')
+  }
+}
+
 if (problems.length > 0) {
   console.error(problems.join('\n'))
   process.exit(1)
