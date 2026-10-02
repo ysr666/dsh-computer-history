@@ -51,6 +51,21 @@ const CAPTURE_WORD_ZH: Record<string, string> = {
 // of drift, so only the ones the panel actually reads live here.
 const SPACE = { xs: 4, sm: 8, md: 12, lg: 18, xl: 26 }
 const MUTED = { opacity: 0.72, margin: `0 0 ${SPACE.sm}px`, lineHeight: 1.55 }
+const HAIRLINE = '1px solid rgba(127,127,127,0.22)'
+const SECTION = {
+  marginBottom: SPACE.xl,
+  paddingTop: SPACE.lg,
+  borderTop: HAIRLINE,
+}
+const BUTTON = {
+  font: 'inherit',
+  padding: '5px 10px',
+  borderRadius: 'var(--dsw-radius-sm, 8px)',
+  border: HAIRLINE,
+  background: 'transparent',
+  color: 'inherit',
+  cursor: 'pointer',
+}
 const FIELD_LABEL = {
   display: 'inline-flex', gap: 6, alignItems: 'center', marginRight: SPACE.md,
 }
@@ -360,7 +375,7 @@ function HistoryPage(): React.ReactElement {
 
   const semanticSection = React.createElement(
     'section',
-    { style: { marginBottom: SPACE.xl } },
+    { style: SECTION },
     React.createElement('h2', { style: { margin: `0 0 ${SPACE.sm}px` } }, t('Summaries', '摘要')),
     React.createElement(
       'p',
@@ -437,7 +452,7 @@ function HistoryPage(): React.ReactElement {
 
   const retentionSection = React.createElement(
     'section',
-    { style: { marginBottom: SPACE.xl } },
+    { style: SECTION },
     React.createElement('h2', { style: { margin: `0 0 ${SPACE.sm}px` } }, t('Retention', '保留策略')),
     retention
       ? React.createElement(
@@ -487,7 +502,7 @@ function HistoryPage(): React.ReactElement {
           ' ',
           React.createElement(
             'button',
-            { type: 'button', onClick: () => { runAction(saveRetention) } },
+            { type: 'button', style: BUTTON, onClick: () => { runAction(saveRetention) } },
             t('Save retention', '保存'),
           ),
         )
@@ -500,7 +515,7 @@ function HistoryPage(): React.ReactElement {
 
   const timelineSection = React.createElement(
     'section',
-    { style: { marginBottom: SPACE.xl } },
+    { style: SECTION },
     React.createElement('h2', { style: { margin: `0 0 ${SPACE.sm}px` } }, t('Timeline', '时间线')),
     timeline.length === 0
       ? React.createElement(
@@ -647,7 +662,7 @@ function HistoryPage(): React.ReactElement {
       { style: { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' } },
       React.createElement(
         'button',
-        { type: 'button', onClick: () => { runAction(rotateCompanionToken) } },
+        { type: 'button', style: BUTTON, onClick: () => { runAction(rotateCompanionToken) } },
         companion?.paired ? t('Rotate pairing token', '重新生成配对令牌') : 'Create pairing token',
       ),
       companionToken
@@ -728,12 +743,12 @@ function HistoryPage(): React.ReactElement {
       }),
       React.createElement(
         'button',
-        { type: 'button', onClick: () => { runAction(() => setSiteRule('allow')) } },
+        { type: 'button', style: BUTTON, onClick: () => { runAction(() => setSiteRule('allow')) } },
         t('Allow site', '允许该网站'),
       ),
       React.createElement(
         'button',
-        { type: 'button', onClick: () => { runAction(() => setSiteRule('deny')) } },
+        { type: 'button', style: BUTTON, onClick: () => { runAction(() => setSiteRule('deny')) } },
         t('Deny site', '拒绝该网站'),
       ),
     ),
@@ -741,7 +756,7 @@ function HistoryPage(): React.ReactElement {
 
   const threadSection = React.createElement(
     'section',
-    { style: { marginBottom: SPACE.xl } },
+    { style: SECTION },
     React.createElement('h2', { style: { margin: `0 0 ${SPACE.sm}px` } }, t('Work threads', '工作线索')),
     threads.length === 0
       ? React.createElement(
@@ -847,7 +862,7 @@ function HistoryPage(): React.ReactElement {
         : null,
       React.createElement(
         'button',
-        { type: 'button', onClick: () => { runAction(refresh) } },
+        { type: 'button', style: BUTTON, onClick: () => { runAction(refresh) } },
         t('Refresh', '刷新'),
       ),
     ),

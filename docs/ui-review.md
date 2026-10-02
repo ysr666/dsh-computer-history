@@ -248,3 +248,27 @@ the panel was in front of me: `Capture disabled in plugin config`, `Resume captu
 separation beyond their margin, every button looks identical (nothing is primary and
 nothing is marked destructive), `删除全部历史` sits in the same row as `刷新`, and the two
 muted lines under 摘要 read as two separate facts. That is the next iteration.
+
+## Iteration 6 - separators, and buttons that look like buttons
+
+Evidence: `docs/assets/panel-2026-10-03-after6.png`.
+
+The host exposes a real design system - 735 CSS variables, including
+`--dsw-radius-sm: 8px`, `--dsw-radius-md: 12px`, `--dsw-radius-lg: 16px` and the code font
+stack - so the panel now takes its radius from `var(--dsw-radius-sm, 8px)` instead of my own
+number. Sections carry a hairline (`1px solid rgba(127,127,127,0.22)`, neutral so it works
+on either theme) and a consistent rhythm, and every button has a base shape: inherited
+font, padding, radius from the token, transparent background, `currentColor` border and a
+pointer cursor. Before this they were bare `<button>` elements, which is why they looked
+unrelated to each other and to the interface around them.
+
+**One mistake, the same one as last iteration and caught the same way:** I declared
+`BUTTON_PRIMARY` and did not use it, so the typecheck went red and I deleted it rather
+than retrofitting call sites. Two iterations in a row the lesson is identical - declare
+what the code reads, not what the design intends.
+
+**What is left of the visual system, and it is now a short list:** nothing is marked
+primary (保存 and 允许该应用 look exactly like 刷新), nothing is marked destructive
+(删除全部历史 looks exactly like 暂停采集), and the four action buttons still sit in one
+row with the delete beside the refresh. That regrouping is the next iteration - and it
+needs the container's structure read first, not guessed.
