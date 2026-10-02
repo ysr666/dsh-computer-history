@@ -1,7 +1,8 @@
 # ADR 0006: Applications whose focused element is not queryable
 
-Status: Proposed (blocks JetBrains-family coverage until decided)
+Status: Accepted
 Date: 2026-10-02
+Accepted by: project owner (chose option 3, the per-adapter declaration)
 
 ## Context
 
@@ -52,24 +53,51 @@ even though ADR 0002 allows their window metadata.
 
 ## Decision
 
-Not yet taken. The conservative default (option 1) stays in force until the
-project owner decides, because option 3 changes what the collector accepts as
-evidence for a privacy conclusion.
+Option 3, with the three conditions:
 
-## Recommendation
+1. `window-only` adapters record **no** element fields when the element is not
+   queryable; a *readable* element still gets full classification, so a native
+   secure field always withholds the observation.
+2. The privacy matrix gains a case per `window-only` adapter: a native secure
+   dialog in that application must still drop the observation.
+3. `docs/adapters.md` and the adapter table state that the application is
+   recorded window-only, so the reduced evidence is visible rather than
+   implied.
 
-Option 3, with three conditions:
+## Implementation
 
-- `window-only` adapters record **no** element fields at all (no role, no
-  identifier), so the missing evidence cannot be mistaken for a clean read.
-- The privacy test matrix gains a case per `window-only` adapter: a native
-  secure dialog in that application must still drop the observation.
-- The panel and `docs/adapters.md` state that these applications are recorded
-  window-only, so the reduced evidence is visible rather than implied.
+- `SecureFieldState` gains `.unqueryable`: `kAXErrorIllegalArgument` from the
+  subrole read is its own state, distinct from a failed element fetch, which
+  stays `.unreadable`.
+- `Phase1Adapter.focusedElementPolicy` (`.require` / `.windowOnly`) is part of
+  the adapter table on both sides, and the repository guard compares it.
+- The collector accepts `.unqueryable` only for a `.windowOnly` adapter, emits
+  the observation with **no element fields** and
+  `privacy.reason = "focused-element-unqueryable"`, and keeps withholding
+  metadata for `.secure` and `.unreadable` exactly as before.
+- The `jetbrains` adapter covers the IntelliJ family; only `windowOnly`
+  adapters may use the tolerance.
 
-## Consequences if accepted
+## Evidence
 
-- JetBrains-family adapters (and other Swing/AWT applications) become
-  coverable, with a documented reduction in evidence granularity.
-- The classifier itself does not change: `-25202` keeps meaning "unreadable",
-  and the exception lives in data that a reviewer can see.
+- Collector level, real machine: the plain and secure fixtures claimed
+  `com.google.android.studio`. Plain → one observation with a title and
+  `element.role = AXTextField`; secure → `privacy.secure = true`,
+  `reason = "secure-field"`, no title and no element.
+- Host level, same fixtures: plain added **2 stored rows**, secure added
+  **0 rows**. The control is what makes the second number mean anything.
+- Real application: Android Studio produced four stored observations
+  (`Welcome to Android Studio`, `element_role = AXButton`, no resource).
+- Not reproduced later: the unqueryable state itself. It was measured twice
+  during Android Studio's startup phase (`role`, `subrole`, the attribute list
+  and the parent all failing), but twelve samples across a later cold start
+  read a normal `AXButton` with 23 attributes. No stored row carries
+  `focused-element-unqueryable` yet, so the tolerance is proven by the fixture
+  pair and by the preconditions, not by a live row.
+
+## Consequences
+
+- The IntelliJ family is coverable, with window metadata only when the
+  application exposes no queryable element.
+- The classifier still fails closed for every failure it cannot identify, and
+  the one exception lives in data a reviewer can see.

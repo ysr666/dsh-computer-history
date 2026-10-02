@@ -8,7 +8,13 @@
 // for. A fixture that claims a real bundle id shadows nothing while it lives
 // in bin/fixtures, but it MUST NOT be left around — LaunchServices would see
 // two bundles with the same identifier. Always finish with --clean.
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import path from 'node:path'
 import {
   requireMacOS,
@@ -19,14 +25,17 @@ import {
 
 requireMacOS('fixture build')
 
+// Derived from the shared adapter table instead of a copy: the first version
+// of this script kept its own list, went stale when adapters were added, and
+// refused to build a fixture for a bundle the collector actually supports —
+// which silently turned a privacy test into "the fixture never ran".
 const SUPPORTED = [
-  'com.microsoft.VSCode',
-  'com.todesktop.230313mzl4w4u92',
-  'com.apple.Terminal',
-  'com.googlecode.iterm2',
-  'com.apple.Preview',
-  'com.apple.finder',
-]
+  ...readFileSync('src/shared/constants.ts', 'utf8').matchAll(
+    /bundleIds: \[([\s\S]*?)\]/g,
+  ),
+].flatMap(match =>
+  [...match[1].matchAll(/'([^']+)'/g)].map(inner => inner[1]),
+)
 
 function argument(name) {
   const index = process.argv.indexOf(name)

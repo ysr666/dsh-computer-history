@@ -14,6 +14,7 @@ synthetic fixtures — never a real private file or a real credential.
 | `xcode` | `com.apple.dt.Xcode` | editor | `file://…` on the editor window | unsupported (`-25205`) | readable (`AXGroup` / `AXHostingView`) | file |
 | `word` | `com.microsoft.Word` | document | `file://…` for the open document | unsupported (`-25205`) | readable (`AXSplitGroup`, no subrole) | file |
 | `wps` | `com.kingsoft.wpsoffice.mac` | window | nil (`-25212`) | unsupported (`-25205`) | readable (`AXSplitGroup`) | none |
+| `jetbrains` | `com.google.android.studio`, `com.jetbrains.*` (10 ids) | editor | nil (`-25212`) | unsupported (`-25205`) | readable in the welcome window (`AXButton`, 23 attributes); an unqueryable element (`-25202`) is tolerated per ADR 0006 | none |
 | `terminal` | `com.apple.Terminal`, `com.googlecode.iterm2` | terminal | working directory (`file://…` / path) | unsupported (`-25205`) | readable on iTerm2; `-25212` inside Terminal | directory |
 | `preview` | `com.apple.Preview` | document | `file://…` for the open document | unsupported | readable | file |
 | `finder` | `com.apple.finder` | window | nil for plain windows; folder path in folder windows | unsupported (`-25205` / `-25212`) | readable (`AXGroup`) | none or file |
@@ -86,6 +87,37 @@ title and no resource; the surface stays `window`. Two observations were
 produced and both matched this shape. This is the same class as Finder's plain
 windows and Cursor's Agents window, and it is the case the aggregation rule in
 T2.0-7 exists for.
+
+### `jetbrains` — the IntelliJ platform (Android Studio)
+
+```json
+{"adapter":"jetbrains","app":"com.google.android.studio","privacy":{"secure":false},
+ "window":{"title":"Welcome to Android Studio"}}
+```
+
+Measured 2026-10-02 with the injected plugin (allow rule for
+`com.google.android.studio`) and with `bin/verify/ax-probe --attributes`:
+Android Studio stored four observations (title present, `element_role`
+`AXButton`, no resource). The IntelliJ family reports **no document**, so these
+observations carry titles only; the aggregation rule treats them as window-level
+activity, and the panel shows them without a resource.
+
+The adapter declares `focusedElementPolicy: window-only` (ADR 0006): during its
+startup phase the application twice handed out a focused-element reference that
+rejected every read (`-25202` on role, subrole, the attribute list and the
+parent). That state did not reproduce afterwards (twelve samples across a cold
+start read a normal `AXButton`), so the tolerance is proven by the fixture pair
+in `docs/validation-phase2-0.md`, not by a stored row. A readable secure field
+still withholds the observation, which the same section shows at both the
+collector and the host level.
+
+The nine other bundle ids share the platform but were not installed on the
+validation machine; their rows are unmeasured:
+
+- `com.jetbrains.intellij`, `com.jetbrains.intellij.ce`
+- `com.jetbrains.pycharm`, `com.jetbrains.pycharm.ce`
+- `com.jetbrains.goland`, `com.jetbrains.webstorm`, `com.jetbrains.clion`
+- `com.jetbrains.rustrover`, `com.jetbrains.datagrip`
 
 ### `terminal` — Terminal.app and iTerm2 3.7.3
 

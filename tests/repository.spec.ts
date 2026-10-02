@@ -63,6 +63,10 @@ describe('repository scaffold', () => {
             match => match[1]!,
           ),
           surfaceKind: /surfaceKind:\s*"([^"]+)"/.exec(chunk)?.[1] ?? '',
+          focusedElementPolicy:
+            /focusedElementPolicy:\s*\.(\w+)/.exec(chunk)?.[1] === 'windowOnly'
+              ? 'window-only'
+              : 'require',
           suppressesWindowTitle:
             /suppressesWindowTitle:\s*(true|false)/.exec(chunk)?.[1] === 'true',
         }
@@ -93,6 +97,9 @@ describe('repository scaffold', () => {
       expect(native!.surfaceKind).toBe(adapter.surfaceKind)
       expect(native!.suppressesWindowTitle).toBe(
         adapter.suppressesWindowTitle,
+      )
+      expect(native!.focusedElementPolicy).toBe(
+        adapter.focusedElementPolicy,
       )
     }
   })

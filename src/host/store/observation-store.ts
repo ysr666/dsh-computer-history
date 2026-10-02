@@ -1,5 +1,6 @@
 import type { DatabaseSync, SQLOutputValue } from 'node:sqlite'
 import {
+  PHASE1_ADAPTERS,
   CollectorSessionId,
   type ActivityObservation,
   type EpisodeId,
@@ -81,14 +82,20 @@ function workspaceSource(value: string): WorkspaceSource {
   throw new Error(`invalid workspace source: ${value}`)
 }
 
+/**
+ * Adapter ids this store accepts.
+ *
+ * The list is the shared adapter table plus the generic bucket, never a copy:
+ * a copied list silently rejected every observation from adapters added later
+ * (xcode, word, wps, jetbrains) with `invalid observation adapter`, which the
+ * collector-side probes could not reveal. `tests/integration/ingestion.spec.ts`
+ * now ingests one observation per table entry, so the two cannot drift again.
+ */
 function adapter(value: string): ObservationAdapter {
-  if (
-    value === 'generic'
-    || value === 'vscode'
-    || value === 'terminal'
-    || value === 'preview'
-    || value === 'finder'
-  ) return value
+  if (value === 'generic') return value
+  if (PHASE1_ADAPTERS.some(entry => entry.id === value)) {
+    return value as ObservationAdapter
+  }
   throw new Error(`invalid observation adapter: ${value}`)
 }
 

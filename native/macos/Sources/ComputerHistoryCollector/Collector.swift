@@ -406,7 +406,19 @@ final class Collector {
         // attribute at all (Chromium/Electron). A failed read still withholds
         // the title/document/URL rather than risk persisting a secure
         // field's surface.
-        let metadataAllowed = secureState == .notSecure
+        //
+        // An adapter may declare itself window-only (ADR 0006): its
+        // Accessibility bridge hands out an element reference that rejects
+        // every read, so no element evidence exists at all. That application's
+        // own UI renders text fields itself, and a genuinely secure field is
+        // always readable — which the secure-field fixtures keep proving — so
+        // window metadata is recorded and element fields are omitted. A
+        // readable secure element still withholds everything.
+        let elementEvidenceUnavailable =
+            secureState == .unqueryable
+            && adapter.focusedElementPolicy == .windowOnly
+        let metadataAllowed =
+            secureState == .notSecure || elementEvidenceUnavailable
         observeWindow(metadataAllowed ? window : nil)
 
         var windowInfo: WindowInfo?
@@ -454,8 +466,10 @@ final class Collector {
             )
         }
 
+        // Element fields require a readable element: a window-only adapter's
+        // unqueryable reference contributes none of them.
         var elementInfo: ElementInfo?
-        if metadataAllowed, let element {
+        if secureState == .notSecure, let element {
             let identifier = safeString(
                 element,
                 kAXIdentifierAttribute as String
@@ -490,7 +504,7 @@ final class Collector {
             role: elementInfo?.role,
             subrole: elementInfo?.subrole,
             identifier: elementInfo?.identifier,
-            secure: secureState != .notSecure,
+            secure: !metadataAllowed,
             protected: false,
             idleBoundary: idle >= idleBoundarySeconds
         )
@@ -515,13 +529,15 @@ final class Collector {
             element: elementInfo,
             activity: Activity(idleSeconds: idle),
             privacy: Privacy(
-                secure: secureState != .notSecure,
+                secure: !metadataAllowed,
                 protected: false,
                 reason: secureState == .secure
                     ? "secure-field"
-                    : secureState == .unreadable
-                        ? "unreadable-focused-element"
-                        : nil
+                    : elementEvidenceUnavailable
+                        ? "focused-element-unqueryable"
+                        : secureState == .unreadable
+                            ? "unreadable-focused-element"
+                            : nil
             ),
             source: SourceInfo(adapter: adapter.id)
         ))

@@ -288,6 +288,71 @@ Residual risks the review did not remove (recorded, not hidden):
   demand with the repository toolchain; it is a verification tool, not part of
   the gate, so a toolchain change can break it without breaking the build.
 
+## T2.0-2 — JetBrains family, option C (ADR 0006 accepted)
+
+Implemented the per-adapter declaration: `.unqueryable` is its own secure-field
+state, `Phase1Adapter.focusedElementPolicy` is part of the table on both sides
+and compared by the repository guard, and the collector tolerates an
+unqueryable element **only** for a `windowOnly` adapter, recording window
+metadata without element fields. The `jetbrains` adapter covers the IntelliJ
+family (10 bundle ids).
+
+**Collector level** (fixtures claiming `com.google.android.studio`):
+
+```text
+plain  → {"adapter":"jetbrains","privacy":{"secure":false},"title":"dsh-fixture-plain","element":{"role":"AXTextField"}}
+secure → {"adapter":"jetbrains","privacy":{"secure":true,"reason":"secure-field"}}   (no title, no element)
+```
+
+**Host level**, the condition ADR 0006 requires:
+
+```text
+control (plain field)  → jetbrains rows 0 → 2
+required (secure field) → jetbrains rows 2 → 2   (0 new rows)
+```
+
+The control is what makes the second number evidence: without it, "0 rows"
+could equally mean the fixture never ran — which is exactly what happened on
+the first attempt.
+
+**Real application:** Android Studio stored four observations
+(`Welcome to Android Studio`, `element_role = AXButton`, no resource), i.e. the
+adapter works end to end for the real platform. The *unqueryable* state that
+motivated the policy did not reproduce (12 samples over a cold start all read a
+normal `AXButton` with 23 attributes), so no stored row carries
+`reason = focused-element-unqueryable`; that is recorded rather than papered
+over.
+
+### Two real defects this task found
+
+1. **A copied adapter list in the store validator.**
+   `src/host/store/observation-store.ts` validated `source.adapter` against a
+   hardcoded `generic|vscode|terminal|preview|finder`, so every observation
+   from `xcode`, `word`, `wps` and `jetbrains` was rejected with
+   `invalid observation adapter` — invisible to collector-side probes, which
+   never reach the store. The list now derives from `PHASE1_ADAPTERS`, and
+   `tests/integration/ingestion.spec.ts` ingests one observation per table
+   entry. Calibrated: restoring the copied list makes that test fail with
+   `invalid observation adapter: xcode`.
+2. **A copied bundle list in the fixture builder.**
+   `scripts/verify/fixtures/build-fixture.mjs` refused to build a fixture for
+   `com.google.android.studio` because its own list was stale, which silently
+   turned a privacy test into "the fixture never ran". It now derives the list
+   from the shared table.
+
+### Three traps worth naming
+
+- `POST /policy` answered 400 `cannot capture unsupported app bundle` because
+  the *running* plugin still had the previous build: `pnpm build` had not been
+  run after the table change. The policy validator was right; the process was
+  stale.
+- The live run only becomes meaningful after `pnpm build` **and**
+  `dev_reload_package` — the module cache otherwise keeps executing the old
+  plugin, as an earlier section already recorded.
+- Both of this section's false starts (stale fixture builder, stale plugin)
+  produced "0 rows", which is indistinguishable from a passing privacy result
+  unless a control runs beside it.
+
 ## Pending in 2.0
 
 `T2.0-2` is the only task without a completed deliverable, and it is blocked on

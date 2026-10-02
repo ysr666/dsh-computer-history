@@ -13,6 +13,15 @@ enum SecureFieldState: Equatable {
     /// must treat this exactly like `.secure`: an unreadable element is
     /// not evidence that the surface is safe to record.
     case unreadable
+    /// The application handed out an element reference that rejects every
+    /// attribute read (`kAXErrorIllegalArgument`). Measured on the IntelliJ
+    /// platform (Android Studio, 2026-10-02): role, subrole and even the
+    /// attribute list answer -25202 while the window reads normally. This is
+    /// "the application exposes no queryable element", not "we could not
+    /// ask", so an adapter that declares itself window-only (ADR 0006) may
+    /// record window metadata without element fields. Every other caller
+    /// keeps treating it as unreadable.
+    case unqueryable
 }
 
 let sensitiveResourceMarker = try! NSRegularExpression(
@@ -74,6 +83,13 @@ func classifySecureFieldState(
             role as? String != nil
         else { return .unreadable }
         return .notSecure
+    }
+
+    // The element reference exists but the API rejects reads on it. Only a
+    // declared window-only adapter may use this as evidence, and only because
+    // a genuinely secure field is always readable — see ADR 0006.
+    if subroleStatus == .illegalArgument {
+        return .unqueryable
     }
 
     // Timeouts, invalid elements, and every other failure remain

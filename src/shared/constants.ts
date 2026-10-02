@@ -27,6 +27,13 @@ export interface Phase1AdapterDefinition {
   readonly suppressesWindowTitle: boolean
   /** A terminal's document is its working directory, not a file. */
   readonly documentResourceKind: 'file' | 'directory'
+  /**
+   * `window-only` means the application's Accessibility bridge exposes no
+   * queryable focused element, so window metadata is recorded without element
+   * fields (ADR 0006). A readable secure field still withholds the
+   * observation.
+   */
+  readonly focusedElementPolicy: 'require' | 'window-only'
 }
 
 export const PHASE1_ADAPTERS: readonly Phase1AdapterDefinition[] = [
@@ -39,6 +46,7 @@ export const PHASE1_ADAPTERS: readonly Phase1AdapterDefinition[] = [
     surfaceKind: 'editor',
     suppressesWindowTitle: false,
     documentResourceKind: 'file',
+    focusedElementPolicy: 'require',
   },
   {
     id: 'xcode',
@@ -46,6 +54,7 @@ export const PHASE1_ADAPTERS: readonly Phase1AdapterDefinition[] = [
     surfaceKind: 'editor',
     suppressesWindowTitle: false,
     documentResourceKind: 'file',
+    focusedElementPolicy: 'require',
   },
   {
     id: 'word',
@@ -53,6 +62,7 @@ export const PHASE1_ADAPTERS: readonly Phase1AdapterDefinition[] = [
     surfaceKind: 'document',
     suppressesWindowTitle: false,
     documentResourceKind: 'file',
+    focusedElementPolicy: 'require',
   },
   {
     id: 'wps',
@@ -62,6 +72,31 @@ export const PHASE1_ADAPTERS: readonly Phase1AdapterDefinition[] = [
     surfaceKind: 'window',
     suppressesWindowTitle: false,
     documentResourceKind: 'file',
+    focusedElementPolicy: 'require',
+  },
+  {
+    id: 'jetbrains',
+    // IntelliJ-platform applications. Measured on Android Studio 2026-10-02:
+    // the focused element reference rejects every read (-25202) while the
+    // window reads normally, which is why this adapter is window-only under
+    // ADR 0006. The other bundle ids share the platform and were not installed
+    // on the validation machine.
+    bundleIds: [
+      'com.google.android.studio',
+      'com.jetbrains.intellij',
+      'com.jetbrains.intellij.ce',
+      'com.jetbrains.pycharm',
+      'com.jetbrains.pycharm.ce',
+      'com.jetbrains.goland',
+      'com.jetbrains.webstorm',
+      'com.jetbrains.clion',
+      'com.jetbrains.rustrover',
+      'com.jetbrains.datagrip',
+    ],
+    surfaceKind: 'editor',
+    suppressesWindowTitle: false,
+    documentResourceKind: 'file',
+    focusedElementPolicy: 'window-only',
   },
   {
     id: 'terminal',
@@ -72,6 +107,7 @@ export const PHASE1_ADAPTERS: readonly Phase1AdapterDefinition[] = [
     surfaceKind: 'terminal',
     suppressesWindowTitle: true,
     documentResourceKind: 'directory',
+    focusedElementPolicy: 'require',
   },
   {
     id: 'preview',
@@ -79,6 +115,7 @@ export const PHASE1_ADAPTERS: readonly Phase1AdapterDefinition[] = [
     surfaceKind: 'document',
     suppressesWindowTitle: false,
     documentResourceKind: 'file',
+    focusedElementPolicy: 'require',
   },
   {
     id: 'finder',
@@ -86,6 +123,7 @@ export const PHASE1_ADAPTERS: readonly Phase1AdapterDefinition[] = [
     surfaceKind: 'window',
     suppressesWindowTitle: false,
     documentResourceKind: 'file',
+    focusedElementPolicy: 'require',
   },
 ]
 

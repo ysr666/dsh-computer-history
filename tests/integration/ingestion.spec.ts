@@ -8,6 +8,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
+  PHASE1_ADAPTERS,
   PolicyRuleId,
   type NativeObservation,
 } from '../../src/shared/index.js'
@@ -640,6 +641,60 @@ describe('repeated work on one file outside a DSH workspace', () => {
     expect(episodes).toHaveLength(1)
     const detail = new EpisodeStore(history.db).get(episodes[0]!.id)
     expect(detail?.observationIds).toHaveLength(3)
+    history.close()
+  })
+})
+
+describe('every adapter in the table can be stored', () => {
+  // A copied adapter list in the store's payload validator silently rejected
+  // observations from adapters added after it was written (xcode, word, wps,
+  // jetbrains). Collector-side probes cannot see that: they never reach the
+  // store. This walks the shared table instead, so a new adapter has to work
+  // end to end.
+  it('ingests one observation per shared adapter entry', async () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'dsh-ch-all-adapters-'))
+    roots.push(root)
+    const history = openHistoryDatabase({
+      dataDirectory: path.join(root, 'history'),
+      nowMs: 1,
+    })
+    const policies = new PolicyStore(history.db)
+    policies.ensureInitial(1)
+    policies.replace('include-only', PHASE1_ADAPTERS.map((entry, index) => ({
+      id: PolicyRuleId(`allow-${entry.id}`),
+      dimension: 'app' as const,
+      action: 'allow' as const,
+      matcher: 'exact' as const,
+      pattern: entry.bundleIds[0]!,
+      builtIn: false,
+      createdAtMs: 1,
+      updatedAtMs: 1 + index,
+    })), 2)
+
+    const ingestion = new IngestionService(
+      history.db,
+      { resolve: async () => ({ source: 'none' as const, confidence: 0 }) },
+      () => policies.get(),
+      () => 100_000,
+    )
+
+    let seq = 0
+    for (const entry of PHASE1_ADAPTERS) {
+      seq += 1
+      // Sequential on purpose: ingestion is stateful (collector sequence
+      // ordering, incremental episode builder), so the adapters must be
+      // exercised one after another rather than in parallel.
+      // eslint-disable-next-line no-await-in-loop
+      const stored = await ingestion.ingest({
+        ...native(entry.bundleIds[0]!),
+        seq,
+        observedAtMs: 10_000 + seq * 1_000,
+        source: { adapter: entry.id },
+      })
+      expect(stored, `adapter ${entry.id} (${entry.bundleIds[0]})`).toBe(true)
+    }
+
+    expect(new ObservationStore(history.db).count()).toBe(PHASE1_ADAPTERS.length)
     history.close()
   })
 })

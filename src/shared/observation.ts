@@ -16,6 +16,7 @@ export type ObservationAdapter =
   | 'xcode'
   | 'word'
   | 'wps'
+  | 'jetbrains'
   | 'terminal'
   | 'preview'
   | 'finder'

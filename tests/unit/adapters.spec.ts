@@ -41,6 +41,28 @@ describe('Phase 1 adapter table', () => {
     expect(phase1AdapterForBundle('generic')).toBeUndefined()
   })
 
+  it('declares a focus policy per adapter and keeps JetBrains window-only', () => {
+    for (const adapter of PHASE1_ADAPTERS) {
+      expect(['require', 'window-only']).toContain(
+        adapter.focusedElementPolicy,
+      )
+    }
+    // ADR 0006: the IntelliJ platform hands out an element reference that
+    // rejects every read, so its adapter accepts window metadata without
+    // element fields. Everything else keeps the default.
+    expect(phase1AdapterForBundle('com.google.android.studio')).toBe(
+      'jetbrains',
+    )
+    expect(
+      phase1AdapterDefinition('jetbrains')?.focusedElementPolicy,
+    ).toBe('window-only')
+    expect(
+      PHASE1_ADAPTERS
+        .filter(adapter => adapter.focusedElementPolicy === 'window-only')
+        .map(adapter => adapter.id),
+    ).toEqual(['jetbrains'])
+  })
+
   it('keeps terminal surfaces free of titles', () => {
     const terminal = phase1AdapterForBundle('com.apple.Terminal')
     expect(terminal).toBe('terminal')
