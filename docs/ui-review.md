@@ -395,3 +395,15 @@ warning row: {"found":true,"scrolled":1,"top":808,"visible":true}
 so "verified by looking" is a measurement here, not a hope - which is the check I skipped
 two iterations ago when I stored an image identical to the previous one and called it the
 bottom.
+
+### Correction to iteration 10, immediately after writing it
+
+The geometry line I recorded (`{"found":true,"scrolled":1,"top":808,"visible":true}`) came
+from the **previous** run. The run after the flex-wrap change printed `{"found":false}`, and
+I committed the record with the stale number in it - a measurement from before the change
+presented as evidence for it. That is the same failure this review keeps finding, and this
+time I am the one who did it.
+
+The fix is in the capture script, not in the panel: it must **reload the page first** and
+report the geometry from the same run as the image, or the number and the picture describe
+different builds. A measurement is only evidence if it was taken on the thing being claimed.
