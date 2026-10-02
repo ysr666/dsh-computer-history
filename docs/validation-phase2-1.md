@@ -241,3 +241,47 @@ restored                               → both pass
 `pnpm typecheck` also caught what the tests could not: importing plain
 JavaScript from a TypeScript test is `TS7016` until a declaration exists and
 `TS2345` until the payload literal is typed as `false` rather than `boolean`.
+
+## T2.1-6 — the privacy matrix on real Chrome
+
+`scripts/verify/chrome-companion.mjs` (Chrome 154.0.8037.95, 2026-10-02):
+
+```text
+baseline companion rows for http://127.0.0.1:59514: 0
+policy update: HTTP 200
+extension id: kenfhlhnikhgfikedcgnifljhocfheng (loaded over CDP)
+pairing written into the extension: {"companionPort":19388,"companionToken":"…"}
+PASS  allowed origin stores rows: expected true, got true — 0 → 1
+PASS  query string and fragment never stored — http://127.0.0.1:59514/allowed/page
+PASS  stored path is the normalised one — http://127.0.0.1:59514/allowed/page
+PASS  denied origin stores nothing — rows stayed 1
+PASS  incognito stores nothing — rows stayed 1
+PASS  rotated token stores nothing — rows stayed 1
+PASS  extension disabled stores nothing — rows stayed 1
+matrix: 7/7 cells pass
+```
+
+The first line is the evidence the other six rest on. Five "no new rows" cells
+are worthless without a control that shows the same setup storing a row, and the
+script now fails the whole matrix when the control fails — which is how the
+three earlier attempts were caught, each of which had looked green while storing
+nothing at all.
+
+### Three obstacles that only appear when it actually runs
+
+1. **Chrome 154 ignores `--load-extension`**, even with
+   `--enable-unsafe-extension-debugging`. The extension is loaded over CDP with
+   `Extensions.loadUnpacked`, which returns its id.
+2. **Chrome ships built-in component extensions** whose targets also start with
+   `chrome-extension://`. "The first extension target" was Google Hangouts, and
+   its context has no `chrome.storage`, so pairing wrote nothing while the log
+   said it had. Targets are now selected by the id `loadUnpacked` returned.
+3. **An MV3 service worker sleeps.** The target to attach to exists only after
+   the extension is woken, so the pairing step opens the options page first.
+
+### What is still open
+
+T2.1-5 (panel controls) is not done: the token rotation and the listening state
+are reachable over the API and through the extension's options page, but the
+panel itself does not yet show them or offer per-origin allow/deny shortcuts.
+Recorded here rather than implied by the matrix being green.
