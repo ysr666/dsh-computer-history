@@ -15,6 +15,7 @@ synthetic fixtures — never a real private file or a real credential.
 | `word` | `com.microsoft.Word` | document | `file://…` for the open document | unsupported (`-25205`) | readable (`AXSplitGroup`, no subrole) | file |
 | `wps` | `com.kingsoft.wpsoffice.mac` | window | nil (`-25212`) | unsupported (`-25205`) | readable (`AXSplitGroup`) | none |
 | `jetbrains` | `com.google.android.studio`, `com.jetbrains.*` (10 ids) | editor | nil (`-25212`) | unsupported (`-25205`) | readable in the welcome window (`AXButton`, 23 attributes); an unqueryable element (`-25202`) is tolerated per ADR 0006 | none |
+| `notes` | `com.apple.Notes` | window | nil (`-25212`) | unsupported (`-25205`) | readable (`AXTextArea`) | none |
 | `terminal` | `com.apple.Terminal`, `com.googlecode.iterm2` | terminal | working directory (`file://…` / path) | unsupported (`-25205`) | readable on iTerm2; `-25212` inside Terminal | directory |
 | `preview` | `com.apple.Preview` | document | `file://…` for the open document | unsupported | readable | file |
 | `finder` | `com.apple.finder` | window | nil for plain windows; folder path in folder windows | unsupported (`-25205` / `-25212`) | readable (`AXGroup`) | none or file |
@@ -118,6 +119,20 @@ validation machine; their rows are unmeasured:
 - `com.jetbrains.pycharm`, `com.jetbrains.pycharm.ce`
 - `com.jetbrains.goland`, `com.jetbrains.webstorm`, `com.jetbrains.clion`
 - `com.jetbrains.rustrover`, `com.jetbrains.datagrip`
+
+### `notes` — Apple Notes
+
+```json
+{"adapter":"notes","app":"com.apple.Notes","privacy":{"secure":false},
+ "titlePresent":true,"elementRole":"AXTextArea"}
+```
+
+Measured 2026-10-02 on the owner's running instance, with the title value
+deliberately **not** recorded: Notes exposes a readable focused element
+(`AXTextArea`), no window document (`-25212`) and no `kAXURL` (`-25205`), so a
+note is a title-only surface and the observation carries no resource. The
+adapter document says nothing about note content, and none was read or stored
+during the measurement.
 
 ### `terminal` — Terminal.app and iTerm2 3.7.3
 

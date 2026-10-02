@@ -85,6 +85,16 @@ let phase1Adapters: [Phase1Adapter] = [
         focusedElementPolicy: .windowOnly
     ),
     Phase1Adapter(
+        id: "notes",
+        // Measured 2026-10-02: the focused element is readable (subrole absent,
+        // like other AppKit text surfaces), the window document is nil and
+        // kAXURL is unsupported, so a note is a title-only surface.
+        bundleIds: ["com.apple.Notes"],
+        surfaceKind: "window",
+        suppressesWindowTitle: false,
+        focusedElementPolicy: .require
+    ),
+    Phase1Adapter(
         id: "terminal",
         bundleIds: [
             "com.apple.Terminal",

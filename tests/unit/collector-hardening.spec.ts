@@ -266,6 +266,7 @@ describe('collector protocol lifecycle hardening', () => {
       // joins this list while the third-party adapters (Word, WPS) stay
       // unmatched: adding an adapter does not add policy rules.
       'com.apple.dt.Xcode',
+      'com.apple.Notes',
       'com.apple.Terminal',
       'com.apple.Preview',
       'com.apple.finder',

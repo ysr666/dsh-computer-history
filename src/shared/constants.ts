@@ -99,6 +99,16 @@ export const PHASE1_ADAPTERS: readonly Phase1AdapterDefinition[] = [
     focusedElementPolicy: 'window-only',
   },
   {
+    id: 'notes',
+    // Measured 2026-10-02: readable focused element, no window document, no
+    // kAXURL, so a note is a title-only surface.
+    bundleIds: ['com.apple.Notes'],
+    surfaceKind: 'window',
+    suppressesWindowTitle: false,
+    documentResourceKind: 'file',
+    focusedElementPolicy: 'require',
+  },
+  {
     id: 'terminal',
     bundleIds: [
       'com.apple.Terminal',
