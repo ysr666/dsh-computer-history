@@ -89,3 +89,33 @@ reported by `/state` and therefore not visible in the panel, and the "nothing is
 allowed" state - `include-only` with zero allow rules - is still something the user
 has to infer from the policy rules. The remaining work is the state payload and the
 panel sentence, both of which are small.
+
+### T2.9-1 — where the facts have to be assembled, decided before writing them
+
+Reading the wiring changed the plan for the better. `getState()` lives on the plugin
+class, which holds only the collector manager, `enabled`, `ownsCapture` and
+`companion()` - it has **no access to the policy, the stores or the ingestion
+service**. So "health" cannot simply be added there without handing the plugin three
+more dependencies it otherwise does not need.
+
+What the panel needs is already reachable, split across two endpoints it already
+calls:
+
+| fact | where it comes from |
+|---|---|
+| collection running, and why not | `/state`: `capture`, `reason` |
+| Accessibility granted | `/state`: `accessibilityTrusted` |
+| collector version and arch | `/state`: `collector` |
+| companion listening / paired | `/state`: `companion`, `/pairing` |
+| **nothing is allowed, so nothing will be recorded** | `/policy`: zero rules with `action: "allow"` |
+| newest observation and its age | `/recent` / `/timeline` |
+| messages the policy refused | **not yet exposed** - the counter exists in the ingestion service, and surfacing it needs the service wired to whoever composes `/state` |
+
+So the sentence a new user needs - "collection is running, macOS permission is
+granted, **nothing is allowed yet, so nothing will be recorded**" - needs **no new
+backend field**: the panel can derive it from what it already fetches. That is the
+next change, and it is a client change only.
+
+The refusal counter is worth exposing, but it belongs with the wiring work: the
+honest place is wherever `/state` is composed with access to the stores, not smuggled
+into a plugin that has none.
