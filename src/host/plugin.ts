@@ -167,6 +167,7 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
     history.db,
     new DshWorkspaceResolver(ctx),
     () => policies.get(),
+    undefined,
     () => retentionSettings.observationRetentionMs(),
   )
 
