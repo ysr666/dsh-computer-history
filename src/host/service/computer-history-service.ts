@@ -13,6 +13,7 @@ import type {
   HistoryExport,
   MinimisedSummaryPayload,
   PairingRotation,
+  RedactionPreview,
   PairingState,
   SemanticOptIn,
   SemanticSummaryState,
@@ -109,6 +110,12 @@ export class ComputerHistoryService
     document: unknown,
   ): { readonly imported: Record<string, number> } {
     return this.backend.importAll(document)
+  }
+
+  public redactionPreview(request: {
+    readonly scopeKey: string
+  }): RedactionPreview {
+    return this.backend.redactionPreview(request)
   }
 
   public semanticState(): SemanticSummaryState {

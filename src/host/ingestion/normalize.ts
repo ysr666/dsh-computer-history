@@ -15,7 +15,7 @@ import {
   type WorkspaceRef,
 } from '../../shared/index.js'
 
-const PROTECTED_BUNDLES = new Set([
+export const PROTECTED_BUNDLES = new Set([
   'com.1password.1password', 'com.bitwarden.desktop',
   'com.apple.keychainaccess', 'com.dashlane.Dashlane',
   'com.lastpass.LastPass',
@@ -35,7 +35,7 @@ export function phase1AdapterForBundle(
 }
 
 
-const SECURE_PATH = /(?:^|\/)(?:\.env(?:\.|$)|\.ssh(?:\/|$))|\.(?:pem|key)$|(?:credentials|secrets)/i
+export const SECURE_PATH = /(?:^|\/)(?:\.env(?:\.|$)|\.ssh(?:\/|$))|\.(?:pem|key)$|(?:credentials|secrets)/i
 
 /**
  * Defence in depth for the Host's own store. The native helper already
@@ -43,7 +43,7 @@ const SECURE_PATH = /(?:^|\/)(?:\.env(?:\.|$)|\.ssh(?:\/|$))|\.(?:pem|key)$|(?:c
  * helper could skip that and send a protected title or identifier
  * directly.
  */
-function isProtectedText(
+export function isProtectedText(
   value: string,
   policy: PolicySnapshot,
 ): boolean {
@@ -75,7 +75,7 @@ function isProtectedText(
  * only screened against explicit user rules, because the blunt path
  * heuristic would otherwise drop legitimate titles.
  */
-function isProtectedTitle(
+export function isProtectedTitle(
   title: string,
   policy: PolicySnapshot,
 ): boolean {
@@ -173,7 +173,7 @@ export function policyAllows(bundleId: string, resource: ResourceIdentity | unde
  * separator, and a short extension. Editors title a window this way when they
  * have no document to offer.
  */
-function looksLikeBareFileName(title: string): boolean {
+export function looksLikeBareFileName(title: string): boolean {
   if (/\s/.test(title)) return false
   if (title.includes('/')) return false
   return /^[^\s/]+\.[A-Za-z0-9]{1,8}$/.test(title)
@@ -185,7 +185,7 @@ function looksLikeBareFileName(title: string): boolean {
  * under one of them, so the name is not stored. This only ever drops an
  * observation: nothing becomes storable that was not storable before.
  */
-function isUnlocatableFileName(
+export function isUnlocatableFileName(
   message: NativeObservation,
   resource: ResourceIdentity | undefined,
   policy: PolicySnapshot,

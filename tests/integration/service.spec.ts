@@ -281,6 +281,19 @@ describe('Cordis computer history service', () => {
       async resume() {},
       getState() { return state },
       async threads() { return [] },
+      redactionPreview() {
+        return {
+          scopeKey: 'app:x',
+          policyRevision: 1,
+          rulesInForce: { protectedBundleIds: [], protectedPatterns: [], hasProtectRule: false },
+          checked: 0,
+          excluded: [],
+        }
+      },
+      exportAll() {
+        return { schema: 'dsh-computer-history/v1', exportedAtMs: 1, schemaVersion: 1, tables: {} }
+      },
+      importAll() { return { imported: {} } },
       semanticState() {
         return { active: 'deterministic', localProviderConfigured: false, scopes: [] }
       },

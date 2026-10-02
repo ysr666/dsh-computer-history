@@ -98,6 +98,27 @@ export function registerHistoryApi(ctx: Context): void {
   }))
 
   ctx.effect(() => ctx.connection.fetch.register({
+    // "What would you not keep?": the same predicates ingestion uses, run over
+    // rows that are already stored.
+    path: HISTORY_API_PREFIX + '/audit/preview',
+    methods: ['GET'],
+    requestBody: 'buffered',
+    fetch: (request: Request) => {
+      const scopeKey = new URL(request.url).searchParams.get('scope') ?? ''
+      if (!/^(app|workspace):.+/.test(scopeKey)) {
+        return Promise.resolve(
+          textResponse('scope must be app:<bundleId> or workspace:<id>', 400),
+        )
+      }
+      try {
+        return Promise.resolve(json(history.redactionPreview({ scopeKey })))
+      } catch {
+        return Promise.resolve(textResponse('Request failed.', 500))
+      }
+    },
+  }))
+
+  ctx.effect(() => ctx.connection.fetch.register({
     // "What do you know about me": one JSON document that this Host can read
     // back. The pairing token digest is not part of it (see audit/export.ts).
     path: HISTORY_API_PREFIX + '/export',

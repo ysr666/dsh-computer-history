@@ -76,3 +76,36 @@ Three of these tests failed first, each naming a column my seed got wrong
 (`policy_state.id`, `episode_observations.observed_at_ms`) — the export itself
 was fine, and the failures came from the fixture, which is the useful direction
 for a fixture to fail in.
+
+## T2.3-3 — redaction preview
+
+`GET /audit/preview?scope=app:<bundleId>` (or `workspace:<id>`) answers "what
+would this policy not have kept", computed by **running the ingestion
+predicates over stored rows** rather than by writing a second version of them:
+`PROTECTED_BUNDLES`, `policyAllows`, `isProtectedText`, the secure-path screen
+and `isUnlocatableFileName` are imported from the normaliser for exactly this.
+If the preview and ingestion ever disagree, one of them is a bug and the shared
+functions make it visible.
+
+`pnpm test` → four cases:
+
+| case | expectation |
+|---|---|
+| one app allowed, `.env` and an unlisted app stored | the Terminal row and the `.env` row are both excluded, with reasons |
+| a protect rule in force | the rule appears in `rulesInForce` and the title-only `notes.txt` row counts as one the Host would not keep (F13, visible in the audit) |
+| both stored apps allowed | only the `.env` row is excluded — the secure-path rule does not care about the allow-list |
+| an `include-only` policy with no allow rule | **all four rows** are excluded, and the test says so |
+
+The first run of this suite failed three times, and two of the failures were
+real:
+
+- the preview was missing the **secure-path screen** ingestion applies to a
+  resource, so `.env` would have looked safe in the audit while ingestion drops
+  it. `SECURE_PATH` is now shared and the preview calls it;
+- an excluded row's label fell back to the bundle id, which made a title-only
+  row read as "com.apple.Terminal" instead of "zsh". The label now prefers the
+  resource, then the window title, then the application.
+
+The third failure was my premise, not the code: I had written "an empty policy
+excludes nothing", but an `include-only` policy with no allow rule excludes
+everything. The test now asserts both directions.

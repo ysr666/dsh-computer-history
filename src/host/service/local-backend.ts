@@ -13,6 +13,7 @@ import type {
   PolicySnapshot,
   PolicyUpdate,
   RecentEpisodesRequest,
+  RedactionPreview,
   SemanticOptIn,
   SemanticSummaryState,
   ResumeRequest,
@@ -31,10 +32,12 @@ import {
   parseScopeKey,
   type SemanticOptInStore,
 } from '../semantic/opt-in.js'
+import { buildRedactionPreview } from '../audit/preview.js'
 import { buildWorkThreads } from '../episodes/threads.js'
 import { resolveResume } from '../resume/index.js'
 import { phase1AdapterForBundle } from '../ingestion/index.js'
 import { DeletionService } from '../retention/index.js'
+import { ObservationStore } from '../store/observation-store.js'
 import {
   EpisodeStore,
   PolicyStore,
@@ -322,6 +325,26 @@ implements ComputerHistoryServiceContract {
   private requireDb(): DatabaseSync {
     if (!this.db) throw new Error('the audit export is unavailable')
     return this.db
+  }
+
+  /**
+   * What the current policy would not have kept for this scope, computed by the
+   * ingestion predicates themselves (see audit/preview.ts).
+   */
+  public redactionPreview(request: {
+    readonly scopeKey: string
+  }): RedactionPreview {
+    const [kind, ...rest] = request.scopeKey.split(':')
+    const id = rest.join(':')
+    const observations = new ObservationStore(this.requireDb()).listAll()
+    const scoped = kind === 'app'
+      ? observations.filter(item => item.app.bundleId === id)
+      : observations.filter(item => item.workspace.id === id)
+    return buildRedactionPreview({
+      scopeKey: request.scopeKey,
+      policy: this.policies.get(),
+      observations: scoped,
+    })
   }
 
   public listPolicyRules(): readonly PolicyRule[] {

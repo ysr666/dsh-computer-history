@@ -3,7 +3,7 @@ import type {
   EpisodeSummary,
   WorkThread,
 } from './episode.js'
-import type { HistoryExport } from './audit.js'
+import type { HistoryExport, RedactionPreview } from './audit.js'
 import type { EpisodeId } from './ids.js'
 import type {
   MinimisedSummaryPayload,
@@ -116,6 +116,11 @@ export interface ComputerHistoryServiceContract {
 
   /** Read an export back. Throws HistoryImportError-shaped failures as messages. */
   importAll(document: unknown): { readonly imported: Record<string, number> }
+
+  /** What the policy would not keep for a scope, using ingestion's own rules. */
+  redactionPreview(request: {
+    readonly scopeKey: string
+  }): RedactionPreview
 
   /** Who produces summaries, per scope (ADR 0004 §4). */
   semanticState(): SemanticSummaryState

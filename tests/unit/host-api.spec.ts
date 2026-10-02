@@ -112,6 +112,7 @@ describe('Computer History Host API', () => {
   it('registers the stable route set and preserves no-store responses', async () => {
     const { request, routes } = harness()
     expect([...routes.keys()].toSorted()).toEqual([
+      '/api/computer-history/audit/preview',
       '/api/computer-history/delete',
       '/api/computer-history/episode',
       '/api/computer-history/export',
