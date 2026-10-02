@@ -80,6 +80,23 @@ final class SupportedAppsTests: XCTestCase {
         )
     }
 
+    func testFocusPolicyIsDeclaredPerAdapter() {
+        // ADR 0006: only the IntelliJ platform is window-only, and it must say
+        // so explicitly rather than inheriting a default.
+        XCTAssertEqual(
+            phase1AdapterForBundle("com.google.android.studio")?
+                .focusedElementPolicy,
+            .windowOnly
+        )
+        for adapter in phase1Adapters where adapter.id != "jetbrains" {
+            XCTAssertEqual(
+                adapter.focusedElementPolicy,
+                .require,
+                "\(adapter.id) should require a queryable focused element"
+            )
+        }
+    }
+
     func testSurfaceKindsAreTheHostVocabulary() {
         // src/host/ingestion/normalize.ts maps adapter ids to these surface
         // kinds; the registry must not invent a new one silently.

@@ -137,6 +137,38 @@ struct NativeTests {
                 .suppressesWindowTitle == false
         )
 
+        // ADR 0006: an element reference that rejects every read is its own
+        // state, and only an adapter that declares itself window-only may
+        // accept it. A fetch failure stays unreadable.
+        precondition(
+            classifySecureFieldState(
+                subroleStatus: .illegalArgument,
+                subrole: nil,
+                roleStatus: .success,
+                role: nil
+            ) == .unqueryable
+        )
+        precondition(
+            isSecureElement(nil, readStatus: .illegalArgument)
+                == .unreadable
+        )
+        precondition(
+            classifySecureFieldState(
+                subroleStatus: .cannotComplete,
+                subrole: nil,
+                roleStatus: .success,
+                role: nil
+            ) == .unreadable
+        )
+        precondition(
+            phase1AdapterForBundle("com.google.android.studio")?
+                .focusedElementPolicy == .windowOnly
+        )
+        precondition(
+            phase1AdapterForBundle("com.microsoft.VSCode")?
+                .focusedElementPolicy == .require
+        )
+
         // Secure-field detection must fail closed: an unreadable
         // focused element is not evidence that the surface is safe.
         precondition(isSecureElement(nil) == .unreadable)
