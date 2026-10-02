@@ -117,6 +117,93 @@ struct NativeTests {
         precondition(isSecureElement(nil) == .unreadable)
         precondition(windowElement(from: nil) == nil)
 
+        // A *missing* subrole is not a failed read. Secure fields are
+        // defined by the AXSecureTextField subrole, while AXTextArea and
+        // AXGroup commonly have none (real-host regression: Terminal's
+        // focused AXTextArea was dropped as unreadable). Keep failing
+        // closed for AXTextField, which is the role that can carry the
+        // secure subrole.
+        precondition(
+            classifySecureFieldState(
+                subroleStatus: .success,
+                subrole: kAXSecureTextFieldSubrole as NSString,
+                roleStatus: .success,
+                role: nil
+            ) == .secure
+        )
+        precondition(
+            classifySecureFieldState(
+                subroleStatus: .success,
+                subrole: "AXStandardWindow" as NSString,
+                roleStatus: .success,
+                role: nil
+            ) == .notSecure
+        )
+        precondition(
+            classifySecureFieldState(
+                subroleStatus: .noValue,
+                subrole: nil,
+                roleStatus: .success,
+                role: kAXTextAreaRole as NSString
+            ) == .notSecure
+        )
+        precondition(
+            classifySecureFieldState(
+                subroleStatus: .attributeUnsupported,
+                subrole: nil,
+                roleStatus: .success,
+                role: kAXTextAreaRole as NSString
+            ) == .notSecure
+        )
+        precondition(
+            classifySecureFieldState(
+                subroleStatus: .attributeUnsupported,
+                subrole: nil,
+                roleStatus: .success,
+                role: kAXTextFieldRole as NSString
+            ) == .unreadable
+        )
+        precondition(
+            classifySecureFieldState(
+                subroleStatus: .attributeUnsupported,
+                subrole: nil,
+                roleStatus: .cannotComplete,
+                role: nil
+            ) == .unreadable
+        )
+        precondition(
+            classifySecureFieldState(
+                subroleStatus: .noValue,
+                subrole: nil,
+                roleStatus: .success,
+                role: kAXTextFieldRole as NSString
+            ) == .unreadable
+        )
+        precondition(
+            classifySecureFieldState(
+                subroleStatus: .noValue,
+                subrole: nil,
+                roleStatus: .cannotComplete,
+                role: nil
+            ) == .unreadable
+        )
+        precondition(
+            classifySecureFieldState(
+                subroleStatus: .cannotComplete,
+                subrole: nil,
+                roleStatus: .success,
+                role: nil
+            ) == .unreadable
+        )
+        precondition(
+            classifySecureFieldState(
+                subroleStatus: .success,
+                subrole: 42 as NSNumber,
+                roleStatus: .success,
+                role: nil
+            ) == .unreadable
+        )
+
         // Accessibility reads are bounded per element object, and the
         // URL helper must reject a value it cannot interpret rather
         // than silently yielding nil-string confusion.

@@ -4,7 +4,7 @@
 **验证者：** DSH 会话 `session-afe69e7c`（desktop profile）
 **项目目录：** `/Users/ysradmin/Projects/dsh-computer-history`
 **起点 commit：** `9034c6e`（交接文档）
-**结论一句话：** 插件第一次真正在 DSH Host 里跑了起来。**两个从未被静态审查发现的 blocker 被真机暴露并已修复**（client bundle 格式、cordis 服务访问门禁）；采集链路 A1 类问题在真机上跑通，另有 1 个 should-fix 缺陷（Terminal 全量 fail-closed）与若干"未确认"项，均已逐条记录。
+**结论一句话：** 插件第一次真正在 DSH Host 里跑了起来。**两个从未被静态审查发现的 blocker 被真机暴露并已修复**（client bundle 格式、cordis 服务访问门禁）；采集链路 A1 类问题在真机上跑通。真机还暴露并修复了第三个缺陷：**Terminal adapter 因 `AXSubrole` 属性不被支持而被全量 fail-closed 丢弃**（修复后真机 8/8 条恢复落库）。此外有 1 个注入器工具链缺陷、若干"未确认"项，均已逐条记录。
 
 ---
 
@@ -140,6 +140,26 @@ Error: cannot get property "computerHistory" without inject
 
 **部分确认。** Terminal 的 `unreadable-focused-element` 路径本身就是一次"读不到就放弃、不阻塞"的实证：collector 在该次读失败后继续正常产出其他 app 的 observation，Host 全程无 `configure-ack-timeout` / `paused-ack-timeout`，`/state` 无 degraded。对支持应用做 SIGSTOP 的人为无响应实验**未能观察到新状态**（指纹未变化被抑制），故"卡死防护"缺少人为最坏用例证据，列为部分确认（条件见 §8）。
 
+### 5.6 F4 修复的真机复验
+
+```text
+修复前（probe4/5，Terminal 前台）:
+  {"adapter":"terminal","privacy":{"secure":true,"reason":"unreadable-focused-element"}}   ×3/3，无 window/element
+修复后（probe7，Terminal 前台）:
+  {"adapter":"terminal","privacy":{"secure":false},"element":{"role":"AXTextArea"}}
+  {"adapter":"terminal","privacy":{"secure":false},"window":{"document":"file:///tmp/dsh-live-fixtures/"}}
+  … 共 8/8 条不再被丢
+```
+
+AX 探针（`/tmp/dsh-ax-probe`，用 native 构建同一 swiftc 编译）对 Terminal/PID 2041 的原始读取：
+
+```text
+focusedElement role(err=0 value=AXTextArea) subrole(err=-25205 value=nil)
+focusedWindow  role(err=0 value=AXWindow)  subrole(err=0 value=AXStandardWindow)
+window document(err=0 value=file:///tmp/dsh-live-fixtures/)
+window axurl(err=-25205 value=nil)   ← kAXURL 属性不被 Terminal 支持
+```
+
 ### 5.5 C10 — helper 退出未确认仍释放锁
 
 - **崩溃路径**：`kill -9` helper（PID 82077）→ 3s 内自动拉起新 helper（PID 83920），`/state` 仍 `running`，采集继续落库（计数 +1）。
@@ -153,10 +173,11 @@ Error: cannot get property "computerHistory" without inject
 | F1 | **blocker** | **已修复** | client bundle 缺 `__ModuleLoader__` 包装、且 import 了 loader 不注册的 `.../client` 子路径 id → UI 半根本加载不了。修复后 live Slots occupant 为 active。 |
 | F2 | **blocker** | **已修复** | 插件用 `ctx.computerHistory` 访问自己提供的服务 → cordis 抛 `without inject`，8 条路由全 500/503、agent 工具不可用；204 个既有测试因"假 ctx"未覆盖。改用 `ctx.get()`；测试 harness 同步改为真语义。 |
 | F3 | 中（工具链） | **已报告未修** | `dsh-super-injector` v0.3.3 的 `KNOWN_SLOTS` 白名单过时：`main`、`sidebar.panellist` 等 live 槽位被误判为坏骨架，阻断合法插件注入。建议白名单补全 live slots，或改为查询运行中 client Slots 拓扑。证据：live `Slots.listSubTree`。 |
-| F4 | **should-fix（未修）** | 待跟进 | Terminal adapter 在真实前台 3/3 次都判 `unreadable-focused-element` → `privacy.secure=true` → Host drop，**Terminal 观测事实性归零**。需要 AX 层诊断（Terminal focused element 读取为何失败）后决定修法。 |
+| F4 | **blocker（已修复）** | 已修复 + 真机复验 | Terminal adapter 曾 3/3 判 `unreadable-focused-element` → `privacy.secure=true` → Host drop，**Terminal 观测事实性归零**。根因（AX 探针实测）：Terminal 的 focused element 是 `AXTextArea`，`kAXSubroleAttribute` 返回 `-25205 = kAXErrorAttributeUnsupported`；原 `isSecureElement` 把所有非 success 一律当 `.unreadable`，触发 fail-closed。修复：把"属性不存在/不支持"与"读取失败/超时"分开——前者的角色不是 `AXTextField` 时判 `.notSecure`（secure 字段由 `AXSecureTextField` subrole 定义），是 `AXTextField` 或读取失败/超时仍 fail-closed；分类逻辑抽成纯函数 `classifySecureFieldState`。修复后真机 8/8 条 `secure:false`，并带 `document:file:///tmp/dsh-live-fixtures/`。 |
 | F5 | 记录 | — | Finder 的 kAXDocument 为 nil → `resource_id` 空；Preview 的 document 为 file:// URL → 资源可用。resource 识别能力随 app 不同而分裂，产品假设需按 app 记账。 |
 | F6 | 环境 | — | 本机 VS Code 为不可启动的假壳；编辑器 adapter（`vscode`）无法真机验证。 |
 | F7 | 范围 | — | 浏览器类 app 无 adapter：交接文档 §4.1 建议的"本地 HTML 假密码框"测法在当前 Phase 1 适配器集下**不可达**；同理 kAXURL 也缺少可触发场景。 |
+| F8 | 中（工具链） | 已修文件 / 需重启激活 | `dsh-super-injector` 自重载路径自身有缺陷：`dev_reload_package dsh-super-injector` 会自毁并排程重建，但重建失败——`self-heal.log`：`reboot-failed: Error: selfEntry 无官方 _dispose（loader 契约缺失）`。后果：运行中实例继续用旧代码，磁盘上的修复要等 **DSH Host 重启**才生效（profile 从 patched lib 重新装配）。 |
 
 ## 7. §7 验收清单
 
@@ -166,9 +187,10 @@ Error: cannot get property "computerHistory" without inject
 [x] UI 面板在真实客户端注册成功（Slots occupant active）；空状态由路由 200 [] 佐证
 [x] capture 开启后采集到真实 observation 并落库（一次性目录，7 条）
 [x] 记录真实 observation 字段（app/adapter/window/privacy/resource 实际情况见 §5）
-[~] §6 八问：A1 ✅ / A2 部分（Finder、Preview ✅；Terminal fail-closed；VS Code 未确认）
-     A3 未确认 / A4 部分 / A5 部分 / A6 ✅ / B7 ✅ / B8 ✅ / C9 ✅ / C10 部分
-[x] 缺陷：修 blocker #1/#2 + 补回归护栏（测试 harness 改为真 ctx.get 语义）+ 本报告
+[~] §6 八问：A1 ✅ / A2 部分（Finder、Preview ✅；Terminal 修复后 ✅ 真机复验；VS Code 未确认）
+     A3 未确认 / A4 误杀已修复并真机复验（阳性路径仍不可达）/ A5 部分 / A6 ✅
+     B7 ✅ / B8 ✅ / C9 ✅ / C10 部分
+[x] 缺陷：修 blocker #1/#2/#3（Terminal fail-closed）+ 补回归护栏（client 契约、ctx.get 语义、secure 分类分支）+ 本报告
 [x] 验证报告落盘（本文件）
 [ ] worktree clean + forward commit（见 §9）
 ```
@@ -179,10 +201,11 @@ Error: cannot get property "computerHistory" without inject
 |---|---|---|
 | kAXURL CFURL 解码是否生效 | 支持应用（Finder/Terminal/Preview）AXURL 实测均为 nil；浏览器无 adapter | 一个 AXURL 有值的应用/场景（如接入 browser adapter，或支持应用出现该属性） |
 | VS Code 的 kAXDocument | 本机 VS Code 是不可启动假壳 | 安装可启动的 VS Code 或 Cursor 后重跑探针 |
-| secure 三态在"真实密码框"的阳性路径 | 支持应用里没有 secure 字段；浏览器无 adapter | 支持应用中出现真实 secure 字段，或加一个测试专用 adapter；本轮的 fail-closed 误杀已实测（Terminal 3/3） |
+| secure 三态在"真实密码框"的阳性路径 | 支持应用里没有 secure 字段；浏览器无 adapter | 支持应用中出现真实 secure 字段，或加一个测试专用 adapter；fail-closed 误杀（Terminal）已定位并修复、真机复验 8/8 |
 | 0.5s timeout 对真正卡死应用 | SIGSTOP 实验未产生可观察状态变化 | 可复现的 AX 无响应场景（如 AX 层阻塞的 app / 注入故障） |
 | `collector-exit-unconfirmed` 分支 | 未触发 | 构造"helper 退出无法确认"的故障注入 |
 | 子路径挂载下的 public mount | 本环境根挂载 | 一个子路径部署的 DSH web 实例 |
+| 注入器白名单补丁在运行中生效 | 注入器自重载路径失败（F8），运行实例仍是旧代码 | 重启 DSH Host 后 profile 从 patched lib 装配；restart 后 `dev_inject_plugin` 应直接放行 `main`/`sidebar.panellist` |
 
 ## 9. 变更与提交
 
@@ -196,10 +219,21 @@ src/host/service/computer-history-service.ts   新增 ctx.get() 访问器 helper
 src/host/api/routes.ts                  改用 helper（8 条路由）
 src/agent/tools.ts                      改用 helper（3 个工具）
 src/agent/resume-hint.ts                改用 helper
+native/macos/Sources/ComputerHistoryCollector/Privacy.swift  secure 三态分类抽成纯函数 + 缺失/不支持 subrole 的角色守卫
+native/macos/Tests/ComputerHistoryCollectorTests/PrivacyTests.swift  secure 分类分支测试
+scripts/test-native.mjs                 secure 分类分支 native 回归断言
 tests/unit/host-api.spec.ts             harness 改为 ctx.get() 语义
 tests/unit/agent-tools.spec.ts          同上
 tests/unit/resume-hint-lifecycle.spec.ts 同上
 tests/integration/plugin-multi-host.spec.ts 同上
+```
+
+仓库外（不进 git，运行中生效需重启 Host，见 F8）：
+
+```text
+~/.dsh/external/dsh-super-injector/lib/index.js         KNOWN_SLOTS 11 → 91（同步 live client 拓扑）
+~/.dsh/dsh-routing-suite/injector/src/index.ts          同上（源码副本）
+备份: /tmp/dsh-super-injector-lib-index.js.bak-*、/tmp/dsh-super-injector-src-index.ts.bak-*
 ```
 
 验证期间的环境改动已全部还原：profile `package.json` / `cordis.patch.yml` 由备份恢复并 diff 通过；junction、`~/.dsh/computer-history` 软链、loader entry、staged 工具均已移除；helper 进程已停止。一次性目录仅保留证据 DB。

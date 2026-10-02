@@ -38,6 +38,50 @@ func applyMessagingTimeout(_ element: AXUIElement) {
     AXUIElementSetMessagingTimeout(element, 0.5)
 }
 
+/// Classify the focused element from its already-read subrole/role
+/// attribute results. Split from the accessibility reads so every branch —
+/// including "the attribute does not exist" — is unit-testable without a
+/// GUI session.
+func classifySecureFieldState(
+    subroleStatus: AXError,
+    subrole: CFTypeRef?,
+    roleStatus: AXError,
+    role: CFTypeRef?
+) -> SecureFieldState {
+    if subroleStatus == .success {
+        // A successful copy that yields a non-string subrole is not
+        // usable evidence that the surface is safe.
+        guard let value = subrole as? String else { return .unreadable }
+        return value == kAXSecureTextFieldSubrole as String
+            ? .secure
+            : .notSecure
+    }
+
+    // `kAXErrorAttributeUnsupported` and `kAXErrorNoValue` both mean the
+    // element has no subrole attribute at all, which is normal for many
+    // focused elements (AXTextArea in Terminal, AXGroup in other apps). A
+    // secure text field is *defined* by the AXSecureTextField subrole, so
+    // an element without one cannot be a secure field — but keep failing
+    // closed for the one role that can carry that subrole, so a hidden or
+    // dropped subrole on a text field never unlocks window metadata.
+    if
+        subroleStatus == .attributeUnsupported
+        || subroleStatus == .noValue
+    {
+        guard
+            roleStatus == .success,
+            let value = role as? String
+        else { return .unreadable }
+        return value == kAXTextFieldRole as String
+            ? .unreadable
+            : .notSecure
+    }
+
+    // Timeouts, invalid elements, and every other failure remain
+    // indistinguishable from a secure surface: fail closed.
+    return .unreadable
+}
+
 func isSecureElement(_ element: AXUIElement?) -> SecureFieldState {
     // A nil focused element means the read failed or the application
     // exposes no focused element. The two are indistinguishable from
@@ -46,20 +90,31 @@ func isSecureElement(_ element: AXUIElement?) -> SecureFieldState {
     guard let element else { return .unreadable }
 
     var subrole: CFTypeRef?
-    let status = AXUIElementCopyAttributeValue(
+    let subroleStatus = AXUIElementCopyAttributeValue(
         element,
         kAXSubroleAttribute as CFString,
         &subrole
     )
-    if status != .success { return .unreadable }
 
-    // A successful copy that yields a non-string subrole is not usable
-    // evidence that the surface is safe.
-    guard let value = subrole as? String else { return .unreadable }
+    var role: CFTypeRef?
+    var roleStatus: AXError = .success
+    if
+        subroleStatus == .attributeUnsupported
+        || subroleStatus == .noValue
+    {
+        roleStatus = AXUIElementCopyAttributeValue(
+            element,
+            kAXRoleAttribute as CFString,
+            &role
+        )
+    }
 
-    return value == kAXSecureTextFieldSubrole as String
-        ? .secure
-        : .notSecure
+    return classifySecureFieldState(
+        subroleStatus: subroleStatus,
+        subrole: subrole,
+        roleStatus: roleStatus,
+        role: role
+    )
 }
 
 func looksLikeSensitiveResourcePath(_ value: String) -> Bool {
