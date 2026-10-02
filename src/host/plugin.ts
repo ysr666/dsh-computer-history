@@ -325,9 +325,10 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
   // effect registered later would leak the lock file held by a live PID
   // and leave the helper running. Ordering *within* this single effect
   // is what is load-bearing:
-  //   1. stop the helper, which also drains the ingestion queue it feeds;
-  //   2. release capture ownership so a successor Host can take over;
-  //   3. quiesce in-flight backend operations;
+  //   1. stop the helper, which bounds its exit and hands capture
+  //      ownership back before it returns;
+  //   2. quiesce in-flight backend operations;
+  //   3. wait for any in-flight ingestion write to settle;
   //   4. close the database last.
   // Steps run concurrently *across* effects, so this must stay one
   // effect: a separate close effect could close the database while the

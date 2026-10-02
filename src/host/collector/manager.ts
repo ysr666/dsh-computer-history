@@ -784,6 +784,9 @@ export class CollectorManager {
         }
       }
 
+      // Cleared before the drain: the process is already gone at this
+      // point, so a handler failure during the drain has nothing left to
+      // terminate and must not reach for a replacement handle.
       this.handle = undefined
 
       // Ownership is released as soon as no helper is left behind, and

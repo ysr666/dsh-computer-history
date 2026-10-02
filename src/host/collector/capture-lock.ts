@@ -9,11 +9,11 @@ import { withFileLock } from '@deepseek-ai/dsh-atomic-write'
  * spuriously report "owned by another DSH Host" and remain a read-only
  * client even though capture is actually free.
  *
- * The bound must outlast a normal handover: shutdown performs a bounded
- * helper-exit wait, a bounded forced-exit wait, and a bounded message
- * drain, then releases ownership — so the budget is derived from those
- * waits rather than hard-coded. A genuinely long-lived owner still wins
- * once the wait expires.
+ * The bound must outlast a normal handover, and shutdown releases
+ * ownership as soon as it has bounded proof the helper is gone rather
+ * than after its message drain. So the budget is derived from the two
+ * exit waits that actually precede the release, not hard-coded. A
+ * genuinely long-lived owner still wins once the wait expires.
  */
 /**
  * How long the shutdown sequence waits for each boundary. Shared so the
@@ -23,11 +23,12 @@ import { withFileLock } from '@deepseek-ai/dsh-atomic-write'
 export const DEFAULT_SHUTDOWN_GRACE_MS = 1_500
 
 /**
- * Exit waits shutdown performs before ownership moves on. Ownership is
- * released immediately after them, so this is the handover budget a
- * probing successor must outlast, plus a margin for the release itself.
+ * Exit waits shutdown performs before it releases ownership: the
+ * graceful wait, then the forced wait after `terminate()`. The message
+ * drain runs afterwards and is deliberately not part of this budget.
+ * The probe allows 1.5x their total as margin for the release itself.
  */
-const SHUTDOWN_EXIT_WAITS = 3
+const SHUTDOWN_EXIT_WAITS = 2
 
 export const CAPTURE_LOCK_PROBE_WAIT_MS =
   DEFAULT_SHUTDOWN_GRACE_MS * SHUTDOWN_EXIT_WAITS * 1.5
