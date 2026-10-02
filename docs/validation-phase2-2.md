@@ -254,3 +254,30 @@ The purge rule is the one worth stating plainly: **turning a scope off deletes
 model-written text and nothing else.** Deterministic text never left the
 machine, so there is nothing to withdraw, and deleting *evidence* is a different
 contract that `episode_summary_citations` enforces with `ON DELETE CASCADE`.
+
+### Live evidence for T2.2-7
+
+```text
+GET  /semantic                {"active":"deterministic","localProviderConfigured":false,"scopes":[]}
+POST /semantic/opt-in         {"scopeKey":"workspace:w1","providerKind":"local","createdAtMs":…}
+GET  /semantic/preview?scope=workspace:w1     HTTP 404   (no episode in that scope yet)
+POST /semantic/revoke         {"revoked":true,"purged":0}
+GET  /semantic                {"active":"deterministic","localProviderConfigured":false,"scopes":[]}
+```
+
+The panel, read from the real GUI (`/tmp/dsh-panel-21.png`, reviewed):
+
+```text
+Browser companion | Listening on 127.0.0.1:19388 · not paired yet |
+Summaries | Deterministic summaries are on (nothing leaves this machine).
+Local model: not configured; remote: never without a scope opting in. |
+workspace:w1 — local  [Preview payload] [Turn off and purge] |
+Resume | Find where I left off |
+Work threads | No threaded work yet: episodes need a workspace the Host can vouch for.
+```
+
+The screenshot shows the same in the shell: the Computer History panel with the
+companion box, the Summaries heading and its scope row, the Resume action and the
+thread list, above the existing privacy controls. The 404 on the preview is the
+honest answer for a scope with no stored episode, and it is what the panel would
+show rather than a fabricated payload.
