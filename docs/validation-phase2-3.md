@@ -194,3 +194,42 @@ the environment) rather than from a newer idea.
 
 Retention controls are also not done: they need a stored override and a sweep
 that reads it, which is a migration rather than a panel edit.
+
+### T2.3-5, second attempt: the click is still unverified, and a real lead
+
+The recipe that works (allow rule first, cookie through the header, a seed script
+that is not edited by regex) got further: the timeline listed the seeded episode
+and clicking it rendered the provenance sentence. The per-application **Allow**
+and **Forget** buttons did not appear, and the detail read `0 observations cited;
+1 resource; 0 applications`.
+
+My first explanation — "the sweep took the seeded observations, as in 2.2" — is
+**wrong**, and one query says so:
+
+```text
+observations            2
+episode_observations    2
+episode_summary_citations 0     ← mine, gone
+episode_surfaces          0     ← mine, gone
+episodes                  1
+deletion_log              (empty)
+```
+
+Nothing was deleted. The observations and the episode's links to them are still
+there, and no deletion was recorded. What vanished is exactly what I had written
+into the two *derived* tables, which is the signature of the plugin's periodic
+episode rebuild calling `episodes.replace()` for an episode it did not build
+itself: that path rewrites the citations (wholesale) and the surfaces (by
+replacement) from what its own builder state knows, which for a seeded episode is
+nothing.
+
+That is a **defect lead, not a harness problem**, and it is the same class the
+2.2 deletion tests cover — except those seed through the store and never run the
+plugin's timer, so they cannot see it. The next round investigates it as a
+defect first (a rebuild that empties a summary's citations makes the summary
+look unsupported while its evidence is intact), and only then finishes the click
+evidence for T2.3-5.
+
+Net state of T2.3-5: the controls are implemented and type-checked; the click
+that changes the policy is still **not** verified; retention controls are still
+**not** implemented.
