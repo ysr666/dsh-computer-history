@@ -405,10 +405,15 @@ export class EpisodeStore {
         this.reconcileAggregates(input.id)
       }
 
-      commit()
       // Citations are replaced wholesale: a summary's evidence is whatever the
       // builder says it is now, and a stale citation would claim support the
       // summary no longer has (ADR 0004 §5).
+      //
+      // This rewrite belongs **inside** the transaction, before the commit. It
+      // used to sit after it, which meant a failure here left the episode's
+      // links and aggregates committed and its citations deleted - a summary
+      // that had lost its evidence with nothing recording that it had, and no
+      // way to roll back. The test forces exactly that failure.
       this.db.prepare(
         'DELETE FROM episode_summary_citations WHERE episode_id = ?',
       ).run(input.id)
@@ -423,6 +428,8 @@ export class EpisodeStore {
       for (const observationId of citations) {
         cite.run(input.id, Number(observationId))
       }
+
+      commit()
 
     } catch (error) {
       if (ownsTransaction && this.db.isTransaction) {

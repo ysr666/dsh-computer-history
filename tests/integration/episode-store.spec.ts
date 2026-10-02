@@ -574,3 +574,63 @@ describe('episode store', () => {
     history.close()
   })
 })
+
+describe('an episode is rewritten atomically', () => {
+  it('rolls the links back when the citation rewrite fails', () => {
+    const { db, close } = openTempDatabase()
+    const observations = new ObservationStore(db)
+    const resources = new ResourceStore(db)
+    const episodes = new EpisodeStore(db)
+
+    const first = observation(1, 'file:///repo/a.ts')
+    const second = observation(2, 'file:///repo/b.ts')
+    const firstResource = resources.upsert(first.resource!, first.observedAtMs)
+    const secondResource = resources.upsert(second.resource!, second.observedAtMs)
+    const firstObservation = observations.insert(first, firstResource)
+    const secondObservation = observations.insert(second, secondResource)
+
+    const id = EpisodeId('atomic-episode')
+    const common = {
+      id,
+      startedAtMs: first.observedAtMs,
+      startReason: 'first-observation' as const,
+      endReason: 'timeout' as const,
+      workspace: { id: 'workspace-1' },
+      summaryKind: 'deterministic' as const,
+      summary: 'Worked in repo.',
+      confidence: 1,
+      state: 'closed' as const,
+      createdAtMs: 20_000,
+      updatedAtMs: 20_000,
+      expiresAtMs: 100_000,
+    }
+
+    episodes.replace({
+      ...common,
+      endedAtMs: first.observedAtMs,
+      observationIds: [firstObservation],
+      summaryObservationIds: [firstObservation],
+    })
+    expect(episodes.get(id)?.summaryObservationIds).toEqual([firstObservation])
+
+    // The citation rewrite points at an observation that does not exist, so it
+    // fails. Whatever the store committed before that failure is what a crash
+    // between the two writes would also leave behind - and the only acceptable
+    // outcome is the state from before the call.
+    expect(() => episodes.replace({
+      ...common,
+      endedAtMs: second.observedAtMs,
+      updatedAtMs: 30_000,
+      observationIds: [firstObservation, secondObservation],
+      summaryObservationIds: [999_999 as never],
+    })).toThrow()
+
+    const after = episodes.get(id)
+    expect(after?.summaryObservationIds).toEqual([firstObservation])
+    expect(
+      db.prepare('SELECT COUNT(*) AS n FROM episode_observations WHERE episode_id = ?')
+        .get(String(id)),
+    ).toEqual({ n: 1 })
+    close()
+  })
+})
