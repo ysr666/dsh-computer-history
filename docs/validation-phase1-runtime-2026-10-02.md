@@ -118,7 +118,18 @@ Error: cannot get property "computerHistory" without inject
 | Terminal | **无 window / element 字段**，`privacy.secure=true, reason=unreadable-focused-element`（3/3） | focused element 不可读 → fail-closed，见 §6 F4 |
 | VS Code | 未能实测 | `/Applications/Visual Studio Code.app` 是本机一个**不可启动的假壳**（`Contents/MacOS/Code` 实为 Node 脚本，直接执行报 `SyntaxError: Unexpected token '<'`；`open` 后无进程）。本机无 Cursor |
 
-**A3 — kAXURL CFURL 解码：未确认。** 在 Finder / Terminal / Preview 的真实 observation 中 `window.url` **从未出现**（即 AXURL 均为 nil）；浏览器类应用没有 adapter，无法构造 AXURL 场景。修复后的 `CFURLGetTypeID + absoluteString` 路径在真机上**未被触发**，需要"AXURL 会返回值的应用/场景"才能确认（条件见 §8）。
+**A3 — kAXURL CFURL 解码：真机场景不存在，解码逻辑已单测锁定。**
+用 native 构建同一套 swiftc 编了一个现场探针（`/tmp/dsh-ax-url`，直接编译 `Privacy.swift`/`SupportedApps.swift` 并调用其中的 `safeURL`/`safeString`），对真实运行的应用窗口逐个读属性：
+
+```text
+Google Chrome: axurl err=-25205(attributeUnsupported) typeID=nil
+               document=https://chatgpt.com/g/g-…/c/…      ← 浏览器把页面 URL 放在 AXDocument
+               title=桌面自动化测试经验 - Google Chrome
+Finder:        axurl err=-25205 / err=-25212(noValue)，document=nil（下载窗口）
+Terminal:      axurl err=-25205，document=file:///Users/ysradmin/
+```
+
+即：**本机所有被探测的应用（含浏览器）都不支持 `kAXURL`**；需要位置的应用把它放在 `kAXDocument`（字符串形式）。因此"修复后的 CFURL 分支是否真机拿到值"这个问题，在当前 Phase 1 适配器集（VSCode/Terminal/Preview/Finder）内**没有触发场景**——修复本身已按纯函数 `decodeURLAttribute` 锁定：CFURL 与字符串两种形式都解码，数字/空串/nil 一律 nil（native precondition + XCTest 覆盖，见 §9）。
 
 ### 5.2 真实 observation 落库（脱敏样例）
 
@@ -177,7 +188,8 @@ window axurl(err=-25205 value=nil)   ← kAXURL 属性不被 Terminal 支持
 | F5 | 记录 | — | Finder 的 kAXDocument 为 nil → `resource_id` 空；Preview 的 document 为 file:// URL → 资源可用。resource 识别能力随 app 不同而分裂，产品假设需按 app 记账。 |
 | F6 | 环境 | — | 本机 VS Code 为不可启动的假壳；编辑器 adapter（`vscode`）无法真机验证。 |
 | F7 | 范围 | — | 浏览器类 app 无 adapter：交接文档 §4.1 建议的"本地 HTML 假密码框"测法在当前 Phase 1 适配器集下**不可达**；同理 kAXURL 也缺少可触发场景。 |
-| F8 | 中（工具链） | 已修文件 / 需重启激活 | `dsh-super-injector` 自重载路径自身有缺陷：`dev_reload_package dsh-super-injector` 会自毁并排程重建，但重建失败——`self-heal.log`：`reboot-failed: Error: selfEntry 无官方 _dispose（loader 契约缺失）`。后果：运行中实例继续用旧代码，磁盘上的修复要等 **DSH Host 重启**才生效（profile 从 patched lib 重新装配）。 |
+| F8 | 中（工具链） | 已修文件 / 需重启激活 | `dsh-super-injector` 自重载路径自身有缺陷：`dev_reload_package dsh-super-injector` 会自毁并排程重建，但重建失败——`self-heal.log`：`reboot-failed: Error: selfEntry 无官方 _dispose（loader 契约缺失）`。后果：运行中实例继续用旧代码，磁盘上的修复要等 **DSH Host 重启**才生效（profile 从 patched lib 重新装配）。补充实测：随后自愈日志有 `heal-ok: 第 1 次 touch patch 官方重装配成功`，但再调 `dev_inject_plugin` 仍报**旧的 11 条白名单** —— 说明那次重装配复用了已缓存的模块命名空间，运行实例确实没换代码。 |
+| F9 | 记录 | — | 需要位置信息的应用把 URL 放在 **`kAXDocument`**（Chrome 实测 `https://chatgpt.com/...`，Preview/Terminal 为 `file://...`），`kAXURL` 在这些应用上返回 `kAXErrorAttributeUnsupported`。若将来加 browser adapter，位置应读 AXDocument；`safeURL` 的 CFURL 分支仍保留防御。 |
 
 ## 7. §7 验收清单
 
@@ -199,7 +211,7 @@ window axurl(err=-25205 value=nil)   ← kAXURL 属性不被 Terminal 支持
 
 | 项 | 原因 | 需要什么条件 |
 |---|---|---|
-| kAXURL CFURL 解码是否生效 | 支持应用（Finder/Terminal/Preview）AXURL 实测均为 nil；浏览器无 adapter | 一个 AXURL 有值的应用/场景（如接入 browser adapter，或支持应用出现该属性） |
+| kAXURL CFURL 解码是否生效 | 真机探测的所有应用（Chrome/Finder/Terminal）都返回 `kAXErrorAttributeUnsupported`，没有可触发场景 | 已单测锁定解码逻辑；若将来出现 AXURL 有值的应用，可直接用 `/tmp/dsh-ax-url` 样式探针复测 |
 | VS Code 的 kAXDocument | 本机 VS Code 是不可启动假壳 | 安装可启动的 VS Code 或 Cursor 后重跑探针 |
 | secure 三态在"真实密码框"的阳性路径 | 支持应用里没有 secure 字段；浏览器无 adapter | 支持应用中出现真实 secure 字段，或加一个测试专用 adapter；fail-closed 误杀（Terminal）已定位并修复、真机复验 8/8 |
 | 0.5s timeout 对真正卡死应用 | SIGSTOP 实验未产生可观察状态变化 | 可复现的 AX 无响应场景（如 AX 层阻塞的 app / 注入故障） |
@@ -246,7 +258,7 @@ tests/integration/plugin-multi-host.spec.ts 同上
 |---|---|---|---|
 | N1 | 重启 DSH Host 后验证注入器补丁：`dev_plugin_status` 确认 injector active → `dev_inject_plugin {dir}` 应直接放行（不再报 `main`/`sidebar.panellist` 不在白名单）→ live client Slots 里 `computer-history` occupant 仍 active | DSH 重启 | 标准 §5 注入路径可用；UI 半 active；`pnpm verify:p1` 全绿 |
 | N2 | 安装真实可启动的 VS Code 或 Cursor → 原生探针复测编辑器 adapter 的 kAXDocument 与资源映射 | 可用编辑器 | 回填 §5 A2 的 VS Code 行 |
-| N3 | 在 AXURL 有值的场景复测 `safeURL` 的 CFURL 解码 | 可触发场景 | 回填 §5 A3 |
+| N3 | 在 AXURL 有值的场景复测 `safeURL` 的 CFURL 解码 | 可触发场景 | ✅ 已完成可行部分：真机探针证明 AXURL 无触发场景（F9），解码逻辑改为纯函数 `decodeURLAttribute` + native/XCTest 覆盖 |
 | N4 | 故障注入"helper 退出无法确认" | 可选 | 回填 C10 剩余分支 |
 | N5 | 修注入器自重载 `selfEntry 无官方 _dispose（loader 契约缺失）`（F8） | 可选，改注入器源码 | 补丁免重启生效 |
 

@@ -83,4 +83,22 @@ final class PrivacyTests: XCTestCase {
             .secure
         )
     }
+
+    func testURLAttributeDecoding() {
+        // kAXURLAttribute is a CFURL; `value as? String` used to make URL
+        // screening inert. Both accepted forms must decode.
+        XCTAssertEqual(
+            decodeURLAttribute(
+                URL(string: "https://example.test/a?b=c")! as CFURL
+            ),
+            "https://example.test/a?b=c"
+        )
+        XCTAssertEqual(
+            decodeURLAttribute("file:///tmp/demo.txt" as NSString),
+            "file:///tmp/demo.txt"
+        )
+        XCTAssertNil(decodeURLAttribute(nil))
+        XCTAssertNil(decodeURLAttribute(42 as NSNumber))
+        XCTAssertNil(decodeURLAttribute("" as NSString))
+    }
 }

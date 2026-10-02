@@ -145,19 +145,14 @@ func isProtectedMetadata(
     return isResource && looksLikeSensitiveResourcePath(value)
 }
 
-/// `kAXURLAttribute` is documented as a CFURL, so `as? String` would
-/// silently produce nil and make URL screening inert. Accept either the
-/// URL form or the legacy string form, and reject anything else.
-func safeURL(_ element: AXUIElement, _ attribute: String) -> String? {
-    var value: CFTypeRef?
-    guard
-        AXUIElementCopyAttributeValue(
-            element,
-            attribute as CFString,
-            &value
-        ) == .success,
-        let value
-    else { return nil }
+/// Decode one accessibility attribute value that may carry a URL.
+///
+/// Split from the read so both accepted forms are unit-testable: a real
+/// CFURL (`kAXURLAttribute` is documented as CFURL, and `value as? String`
+/// silently produced nil for it, making URL screening inert) and the legacy
+/// string form. Anything else is not usable evidence and yields nil.
+func decodeURLAttribute(_ value: CFTypeRef?) -> String? {
+    guard let value else { return nil }
 
     if CFGetTypeID(value) == CFURLGetTypeID() {
         let url = unsafeBitCast(value, to: CFURL.self)
@@ -167,6 +162,19 @@ func safeURL(_ element: AXUIElement, _ attribute: String) -> String? {
         return text
     }
     return nil
+}
+
+func safeURL(_ element: AXUIElement, _ attribute: String) -> String? {
+    var value: CFTypeRef?
+    guard
+        AXUIElementCopyAttributeValue(
+            element,
+            attribute as CFString,
+            &value
+        ) == .success
+    else { return nil }
+
+    return decodeURLAttribute(value)
 }
 
 func safeString(_ element: AXUIElement, _ attribute: String) -> String? {

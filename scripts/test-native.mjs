@@ -216,6 +216,24 @@ struct NativeTests {
             ) == nil
         )
 
+        // Real-host evidence: every probed app answers kAXURLAttribute
+        // with kAXErrorAttributeUnsupported (-25205), so the CFURL branch
+        // has no live trigger. Lock the decoder itself down instead: both
+        // accepted forms decode, everything else is rejected.
+        precondition(
+            decodeURLAttribute(
+                URL(string: "https://example.test/a?b=c")! as CFURL
+            ) == "https://example.test/a?b=c"
+        )
+        precondition(
+            decodeURLAttribute(
+                "file:///tmp/demo.txt" as NSString
+            ) == "file:///tmp/demo.txt"
+        )
+        precondition(decodeURLAttribute(nil) == nil)
+        precondition(decodeURLAttribute(42 as NSNumber) == nil)
+        precondition(decodeURLAttribute("" as NSString) == nil)
+
         // Protected-path screening must cover every metadata field the
         // helper emits, not only the resource URI.
         precondition(
