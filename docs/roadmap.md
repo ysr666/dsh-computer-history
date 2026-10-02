@@ -77,3 +77,19 @@ Semantic/model enrichment beyond local-first summaries, Work Thread
 intelligence beyond 2.2, shell/editor companions, Windows/Linux collectors,
 and always-on background *remote* model processing stay outside Phase 2.
 
+## Phase 2.4 — Integrity and guard hardening
+
+Completed on 2026-10-02, plan `docs/plan-phase2-4.md`, evidence
+`docs/validation-phase2-4.md`.
+
+1. **A guard that could fail** - the route-set test compared paths against a fake
+   registry that silently overwrote a duplicate, which is why the duplicate
+   `/retention` registration in 2.3 passed it and only failed at runtime. The fake
+   now enforces the real rule, with the real message, and was calibrated red then
+   green.
+2. **A summary could lose its evidence with nothing recording it** - the citation
+   rewrite ran *after* `commit()`, so a failure there left links committed and
+   citations deleted with no rollback and no deletion record. Reproduced by a test,
+   root-fixed by moving the rewrite inside the transaction.
+3. **Two maintenance cycles against a reachable episode** - nothing moved, which
+   is what the fix and the isolation test predict.

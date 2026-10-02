@@ -101,9 +101,10 @@ be a deletion nobody requested.
 
 ## A known gap in the tests
 
-The route-set guard compares a sorted list of paths against a **stub** registry,
-which never rejects a duplicate. When `/retention` was registered twice — once
-for GET, once for POST — the stub stayed happy and the real registry threw during
-setup, taking the plugin's fiber down. The fix is one registration per path with
-`methods: ['GET','POST']` and dispatch inside; a guard that would catch the next
-one needs the real registration path, not the stub.
+**Closed in 2.4.** The route-set guard compared a sorted list of paths against a
+stub registry that silently overwrote a duplicate, so when `/retention` was
+registered twice — once for GET, once for POST — it stayed green while the real
+registry threw during setup and took the plugin's fiber down. The stub now
+enforces the rule the real registry enforces, with the same message, and the
+guard was calibrated both ways: a deliberate duplicate fails all seven tests, and
+removing it passes. See `docs/validation-phase2-4.md`.

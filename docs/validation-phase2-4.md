@@ -77,3 +77,50 @@ surfaces are rewritten inside the transaction and re-derived from the links by
 `reconcileAggregates`, so a committed link set should have left surfaces behind.
 That half is carried into T2.4-3, whose long run watches the derived rows across
 several sweeps - and the report will not claim it closed until it is.
+
+## T2.4-3 — two maintenance cycles against a reachable episode
+
+The sweep interval is **15 minutes** (`setInterval(…, 15 * 60 * 1000)`), so waiting
+for two periods means half an hour of idling. The maintenance work was therefore
+driven through the path that actually performs it: the plugin's **startup** runs
+`retention.sweep(Date.now())` followed by `ingestion.reseed()`, so restarting the
+entry twice *is* two real maintenance cycles, on the real store, with the real
+timers also running.
+
+The episode was seeded in a state the pipeline can produce: a resource whose file
+**exists on disk** at a path with no symlinked prefix, an allow rule in force
+before the seed, links, one surface row and two citations.
+
+```text
+T0  22:02:52  links=2 surfaces=1 citations=2 obs=2 del=0
+    (two startup cycles: sweep + reseed each)
+T2  22:03:06  links=2 surfaces=1 citations=2 obs=2 del=0
+wall clock, plugin timer running
+    +20s      links=2 surfaces=1 citations=2 obs=2
+    +40s      links=2 surfaces=1 citations=2 obs=2
+    +60s      links=2 surfaces=1 citations=2 obs=2
+final         links=2 surfaces=1 citations=2 obs=2
+episode       ep-24 state=closed
+```
+
+Nothing moved. The maintenance path does not disturb an episode it did not build,
+which is what the isolation test asserted in-process and this run confirms against
+the running plugin.
+
+### What is closed, and what is bounded by evidence
+
+- **Citations: closed.** The failure that produced the 2.3 state is reproduced by
+  a test, root-fixed by moving the rewrite into the transaction, and calibrated
+  red-then-green (T2.4-2). It cannot happen through that path again.
+- **Surfaces: bounded, not claimed.** The 2.3 seed was a state the ingestion path
+  would never produce - raw SQL rows pointing at a `file:///tmp/...` resource
+  whose file never existed, under a `/tmp` that macOS makes a symlink - and the
+  only writer of `episode_surfaces` rewrites it from the links inside the
+  transaction. Two reachable-state runs (the in-process isolation test and this
+  live run) show the rows stable, so the honest statement is: not reproduced, and
+  the remaining difference is named. I am not calling it closed on the strength of
+  not reproducing it.
+
+Environment restored: entry uninstalled, staged tools demoted, junction and
+`~/.dsh/computer-history` removed, the scratch file deleted, the profile patch
+residue the uninstaller writes into `profiles/web` cleared, port 19388 free.
