@@ -30,6 +30,28 @@ import { historyApiPath } from './api-route.js'
 
 const PANEL_ID = 'computer-history' as MainPanelId
 
+// The interface tells us its language; a plugin that invents its own language switch
+// asks the user to set the same thing twice (ADR: no plugin-level preference).
+const INTERFACE_LANG = (document.documentElement.lang || navigator.language || 'en').toLowerCase()
+const CHINESE = INTERFACE_LANG.startsWith('zh')
+const t = (en: string, zh: string): string => (CHINESE ? zh : en)
+
+const HEALTH_TEXT: Record<string, string> = {
+  paused: t('Collection is paused, so nothing new is being recorded.',
+    '采集已暂停，所以不会记录新的内容。'),
+  stopped: t('Collection is stopped, so nothing new is being recorded.',
+    '采集已停止，所以不会记录新的内容。'),
+  degraded: t('Collection is not running normally, so nothing new may be recorded.',
+    '采集运行不正常，可能不会记录新的内容。'),
+  permission: t('macOS has not granted Accessibility to the collector, so nothing can be recorded.',
+    'macOS 还没有授予辅助功能权限，所以现在什么都记录不了。'),
+  'nothing-allowed': t('Nothing is allowed yet, so nothing will be recorded. Add an application below to start.',
+    '还没有允许任何应用，所以什么都不会被记录。在下面添加一个应用即可开始。'),
+  idle: t('Collecting, and ready. Nothing has been recorded yet.',
+    '正在采集，一切就绪；目前还没有记录。'),
+  recording: t('Recording.', '正在记录。'),
+}
+
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(historyApiPath(path), init)
   if (!response.ok) throw new Error(await response.text())
@@ -232,23 +254,25 @@ function HistoryPage(): React.ReactElement {
     newestObservationAtMs: episodes[0]?.startedAtMs,
     nowMs: Date.now(),
   })
+  // Colours come from the interface, never from constants: the first version of this
+  // line hardcoded a cream background with inherited light text and rendered as an
+  // empty bar on the dark theme.
   const healthSection = React.createElement(
     'section',
-    { style: { margin: '0 0 16px' } },
+    { style: { margin: '0 0 18px' } },
     React.createElement(
       'p',
       {
         role: 'status',
         style: {
           margin: 0,
-          padding: '8px 10px',
-          borderRadius: 6,
-          border: '1px solid',
-          borderColor: health.level === 'blocked' ? '#d97706' : '#3f6212',
-          background: health.level === 'blocked' ? '#fffbeb' : '#f7fee7',
+          paddingLeft: 10,
+          borderLeft: `3px solid currentColor`,
+          opacity: health.level === 'blocked' ? 1 : 0.75,
+          fontWeight: health.level === 'blocked' ? 600 : 400,
         },
       },
-      health.text,
+      HEALTH_TEXT[health.code] ?? health.text,
     ),
   )
 
@@ -722,7 +746,7 @@ function HistoryPage(): React.ReactElement {
       'p',
       null,
       state
-        ? `Capture: ${state.capture} · Accessibility: ${state.accessibilityTrusted ? 'granted' : 'required'} · Raw retention: ${state.observationRetentionHours}h`
+        ? t(`Capture: ${state.capture} · Accessibility: ${state.accessibilityTrusted ? 'granted' : 'required'} · retention: ${state.observationRetentionHours}h`, `采集：${state.capture} · 辅助功能：${state.accessibilityTrusted ? '已授权' : '未授权'} · 保留：${state.observationRetentionHours} 小时`)
         : 'Loading…',
     ),
     error

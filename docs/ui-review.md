@@ -61,3 +61,33 @@ Recent work episodes
 
 Each step is verified the same way this review was: capture the panel, look at it, and
 compare with the previous capture.
+
+## Iteration 1, and what looking at it changed
+
+Evidence: `docs/assets/panel-2026-10-03-after1.png` against the before image.
+
+**Fixed:** the invisible health line. The DOM text was always there; the element was
+light-on-light because I had hardcoded a cream background for a light theme. It is now
+`border-left: 3px solid currentColor` with no colour of its own, so it is legible in
+either theme - and the theme decides, not me.
+
+**Fixed:** the language. The interface publishes `<html lang="zh-CN">`, so the panel
+follows it and needs no setting of its own. The status line now reads
+`采集：running · 辅助功能：已授权 · 保留：24 小时`, and the health sentence reads
+`还没有允许任何应用，所以什么都不会被记录。在下面添加一个应用即可开始。`
+
+**Not fixed, and now measured:** the health line is still **not first**. It renders
+between "Summaries" and "Resume" - the section list I edited is not the one that
+decides the visible order. The page still opens with a technical line, so the first
+thing a user reads is `采集：running · 辅助功能：已授权 · 保留：24 小时` rather than
+the one fact that requires an action.
+
+**Still English, section by section:** Browser companion, Retention, Timeline,
+Summaries, Resume, Work threads, Privacy & app access, and every button and prose
+sentence in them. Also still prose from a design document ("Capture is include-only.
+Phase 1 accepts only supported metadata adapters…").
+
+The order of work for the next iteration therefore does not change: fix the ordering,
+then translate what is left, then replace the engineering sentences with human ones,
+then the visual system. Each step ends with a capture and a comparison, which is how
+this iteration found both the bug and the thing it did not fix.
