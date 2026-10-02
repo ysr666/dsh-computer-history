@@ -551,6 +551,34 @@ export class IncrementalEpisodeBuilder {
     }
 
     if (observation.resource) {
+      // A resource-bearing observation without a strong workspace used to
+      // close and restart the episode unconditionally, so outside a DSH
+      // workspace (most real use) every observation became its own episode
+      // and the boundary was labelled "workspace-switch" although no
+      // workspace was ever observed. Measured, Cursor 3.23.12: two
+      // observations of one file 5.9s apart produced two episodes.
+      //
+      // The same resource continues the episode. A different resource still
+      // starts a new one: a missing workspace is not evidence that two
+      // resources belong to the same work, and per-resource episodes are the
+      // documented model.
+      const continuesSameResource =
+        this.active !== undefined
+        && observation.resource !== undefined
+        && this.active.resources.has(
+          resourceKey(observation.resource),
+        )
+        && (
+          this.active.workspace === undefined
+          || workspaceMatches(this.active, observation)
+        )
+
+      if (this.active && continuesSameResource) {
+        addObservation(this.active, observation, false)
+        emitActive()
+        return changed
+      }
+
       if (this.active) close('workspace-switch')
       this.active = startEpisode(
         observation,

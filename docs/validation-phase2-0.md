@@ -163,6 +163,49 @@ textual and covers documented locations). `SECURITY.md` links it and states
 that `pnpm verify:store-protection` enforces the permission, location and
 FileVault requirements.
 
+## T2.0-7 — workspace-less fragmentation (real defect found and fixed)
+
+The metric tool (`scripts/verify/episode-stats.mjs`) run against the real
+Cursor store showed the symptom before anything was changed:
+
+```text
+stored:             observations 2  episodes 2  unanchored 100%  fragmentation 100%
+replayed through the fixed builder:
+                    observations 2  episodes 1  unanchored 100%  fragmentation 0%
+```
+
+Root cause: for an observation that carries a resource but no *strong*
+workspace (`hasStrongWorkspace` requires `dsh`/`git`), the builder closed the
+active episode and started a new one unconditionally, with the boundary
+labelled `workspace-switch` although no workspace had ever been observed. The
+same file, 5.9 seconds apart, became two episodes. This is the common case:
+anything outside a DSH workspace (a file in `/tmp`, on the Desktop, in
+Downloads).
+
+The fix continues the episode when the resource is the same and the episode has
+no workspace to contradict it; a *different* resource still starts a new episode
+(per-resource episodes are the documented model, and the counter-case test pins
+it). 212 tests green, ingestion benchmark green, and the real-store replay above
+is the acceptance evidence.
+
+Two things this section deliberately does not claim:
+
+- **"Unanchored" means "no workspace on the episode", not "no resource"** — the
+  client renders `episode.workspace?.title ?? 'Unanchored activity'`. The real
+  Cursor observations *did* resolve a `filesystem` workspace
+  (`/private/tmp/dsh-live-fixtures`, confidence 0.4), but a non-strong
+  observation starts its episode with `owned=false`, so the episode keeps no
+  workspace. Whether to label such an episode with the weak workspace is the
+  remaining decision for T2.0-7; it changes what the panel shows, so it is
+  recorded rather than assumed.
+- The VS Code store shows `observations in episodes 1/3` because its two
+  document-less observations are evidence-only by design (see T2.0-5). That is
+  not a regression from this change.
+
+The first lint run after the change reported one warning
+(`unicorn/prefer-set-has` in the new metric script); it was fixed rather than
+left, since the repository's baseline is zero warnings.
+
 ## Pending in 2.0
 
 `T2.0-2` (owner decision on ADR 0006), `T2.0-6` (Cursor Agents metadata

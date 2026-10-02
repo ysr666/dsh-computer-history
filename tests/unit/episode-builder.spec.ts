@@ -398,6 +398,51 @@ describe('deterministic episode builder', () => {
   })
 })
 
+  it('keeps a workspace-less episode open across the same resource', () => {
+    // Real evidence, Cursor 3.23.12, 2026-10-02: two observations of the same
+    // file 5.9 seconds apart produced two episodes, the first closed with
+    // "workspace-switch" although no workspace was ever observed. Outside a
+    // DSH workspace this fragmented every resource-bearing observation.
+    const episodes = buildEpisodes([
+      observation({
+        id: 1,
+        atMs: 1_000,
+        resource: 'file:///tmp/fixture/normal-text.html',
+      }),
+      observation({
+        id: 2,
+        atMs: 6_900,
+        resource: 'file:///tmp/fixture/normal-text.html',
+      }),
+    ])
+
+    expect(episodes).toHaveLength(1)
+    expect(episodes[0]!.observationIds).toEqual([1, 2])
+    expect(episodes[0]!.boundary.endReason).not.toBe('workspace-switch')
+    expect(episodes[0]!.resources.map(item => item.canonicalUri)).toEqual([
+      'file:///tmp/fixture/normal-text.html',
+    ])
+  })
+
+  it('still splits a workspace-less episode when the resource changes', () => {
+    const episodes = buildEpisodes([
+      observation({
+        id: 1,
+        atMs: 1_000,
+        resource: 'file:///tmp/fixture/one.html',
+      }),
+      observation({
+        id: 2,
+        atMs: 2_000,
+        resource: 'file:///tmp/fixture/two.html',
+      }),
+    ])
+
+    expect(episodes).toHaveLength(2)
+    expect(episodes[0]!.observationIds).toEqual([1])
+    expect(episodes[1]!.observationIds).toEqual([2])
+  })
+
 describe('document-less observations (Phase 1 validation, seq 1-2)', () => {
   // The real-machine run that opened a file in VS Code produced:
   //   seq 1  "Visual Studio Code"  no resource, no workspace
