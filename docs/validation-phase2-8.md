@@ -82,3 +82,37 @@ the retry is the next attempt. Environment restored: VS Code quit, the user's
 settings restored from the backup taken before the token was written, the extension
 directory and the scratch workspace removed, the junction and the store symlink
 deleted, the profile patch residue cleared.
+
+### T2.8-3, retry: the harness is fixed, the plugin still has no fiber
+
+The loader probe now reports what it actually did instead of a constant:
+
+```text
+first attempt   {"removed":0,"created":"88c44f74","entries":1,"states":"88c44f74:fiber=none"}
+after pnpm build (lib rebuilt at 01:30, src last changed 01:25)
+second attempt  {"removed":0,"created":"eccd9bc9","entries":1,"states":"eccd9bc9:fiber=none"}
+```
+
+So the entry **is** created and it has **no fiber** - the same symptom the packaged
+install showed in 2.7, on the junction-to-checkout recipe that produced an active
+fiber in 2.5, 2.6 and 2.7. Two things follow, and both matter:
+
+- the **stale-build hypothesis is disproven**: rebuilding changed nothing, so this
+  is not the trap that bit earlier phases;
+- the earlier conclusion about the *packaged* artifact deserves the same suspicion
+  I applied to my own probes: if the junction-to-checkout recipe now also yields
+  `fiber=none`, then "the tarball does not start" was never a property of the
+  tarball. That reading is now the more likely one, and it is recorded as a
+  correction rather than left standing.
+
+What is not yet known: why this session's loader creates the entry without a
+fiber. The accumulated create/remove cycles (this entry has been created and
+removed roughly fifteen times) are the obvious suspect, and the named next probe
+is to create an entry under a **different name** - if that one starts, the state is
+per-name, and `docs/release.md`'s warning about the tarball path has to be
+rewritten.
+
+Environment restored: scratch workspace, store symlink, junction and the profile
+patch residue removed; the user's editor settings were restored from the backup
+taken before this round (VS Code was never launched this time, so nothing was left
+running).
