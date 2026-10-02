@@ -2,7 +2,8 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { CompanionTokenStore } from './token-store.js'
 
 /** What the extension reports for one tab event (metadata only, ADR 0002). */
-export interface CompanionPayload {
+export interface BrowserCompanionPayload {
+  readonly source: 'browser'
   readonly origin: string
   readonly path: string
   readonly title?: string
@@ -11,6 +12,31 @@ export interface CompanionPayload {
   readonly seq: number
   readonly observedAtMs: number
 }
+
+/**
+ * An editor's own answer about where work is happening (ADR 0009).
+ *
+ * There is deliberately no field for a document body, a selection, a
+ * decoration or a UI string: contents are unrepresentable here rather than
+ * merely unsent, and `validate` refuses unknown fields instead of ignoring
+ * them, so a payload that tries to carry text is rejected at the boundary.
+ */
+export interface EditorCompanionPayload {
+  readonly source: 'editor'
+  /** Absolute path. The editor vouches for it, verbatim. */
+  readonly workspaceRoot: string
+  readonly filePath?: string
+  readonly languageId?: string
+  readonly surfaceKind?: 'editor' | 'diff' | 'terminal' | 'output'
+  readonly title?: string
+  readonly editorSession: string
+  readonly seq: number
+  readonly observedAtMs: number
+}
+
+export type CompanionPayload =
+  | BrowserCompanionPayload
+  | EditorCompanionPayload
 
 export interface CompanionIntakeOptions {
   readonly tokens: CompanionTokenStore
@@ -25,6 +51,16 @@ export interface CompanionIntakeOptions {
 }
 
 export class CompanionIntakeError extends Error {}
+
+/** The fields each shape may carry. Anything else is refused, not ignored. */
+const BROWSER_FIELDS = new Set([
+  'source', 'origin', 'path', 'title', 'incognito', 'browserSession', 'seq',
+  'observedAtMs',
+])
+const EDITOR_FIELDS = new Set([
+  'source', 'workspaceRoot', 'filePath', 'languageId', 'surfaceKind', 'title',
+  'editorSession', 'seq', 'observedAtMs',
+])
 
 const DEFAULT_PORT = 19388
 const DEFAULT_MAX_BODY = 8 * 1024
@@ -167,8 +203,9 @@ export class CompanionIntake {
     }
 
     // Defence in depth: the extension refuses private windows itself, and the
-    // Host refuses them again rather than trusting the extension.
-    if (payload.incognito) {
+    // Host refuses them again rather than trusting the extension. A browser
+    // payload is the only shape that has the concept.
+    if (payload.source === 'browser' && payload.incognito) {
       return this.send(response, 403, { error: 'incognito tabs are never reported' })
     }
 
@@ -222,6 +259,17 @@ export class CompanionIntake {
     if (typeof value !== 'object' || value === null) return 'payload required'
     const record = value as Record<string, unknown>
 
+    const source = record.source
+    if (source === 'editor') return this.validateEditor(record)
+    if (source !== 'browser') {
+      return 'source must be "browser" or "editor"'
+    }
+    for (const key of Object.keys(record)) {
+      if (!BROWSER_FIELDS.has(key)) {
+        return `unknown field for a browser payload: ${key}`
+      }
+    }
+
     const origin = record.origin
     if (typeof origin !== 'string' || !/^https?:\/\/[^/?#]+$/.test(origin)) {
       return 'origin must be an http(s) origin without a path'
@@ -250,11 +298,88 @@ export class CompanionIntake {
       : undefined
 
     return {
+      source: 'browser',
       origin,
       path,
       ...(title === undefined ? {} : { title }),
       incognito: record.incognito,
       browserSession,
+      seq,
+      observedAtMs,
+    }
+  }
+
+  /**
+   * The editor shape (ADR 0009). Unknown fields are refused, `filePath` must
+   * live under the root it claims, and there is no field any document text
+   * could travel in.
+   */
+  private validateEditor(
+    record: Record<string, unknown>,
+  ): EditorCompanionPayload | string {
+    for (const key of Object.keys(record)) {
+      if (!EDITOR_FIELDS.has(key)) {
+        return `unknown field for an editor payload: ${key}`
+      }
+    }
+    const workspaceRoot = record.workspaceRoot
+    if (
+      typeof workspaceRoot !== 'string'
+      || !workspaceRoot.startsWith('/')
+      || workspaceRoot.includes('\0')
+    ) {
+      return 'workspaceRoot must be an absolute path'
+    }
+    const editorSession = record.editorSession
+    if (typeof editorSession !== 'string' || editorSession.length === 0) {
+      return 'editorSession required'
+    }
+    const seq = record.seq
+    if (typeof seq !== 'number' || !Number.isSafeInteger(seq) || seq < 1) {
+      return 'seq must be a positive integer'
+    }
+    const observedAtMs = record.observedAtMs
+    if (typeof observedAtMs !== 'number' || !Number.isFinite(observedAtMs)) {
+      return 'observedAtMs must be a number'
+    }
+    const rawFilePath = record.filePath
+    if (rawFilePath !== undefined && typeof rawFilePath !== 'string') {
+      return 'filePath must be a string'
+    }
+    const filePath = rawFilePath === undefined ? undefined : rawFilePath
+    if (filePath !== undefined) {
+      if (!filePath.startsWith('/')) return 'filePath must be absolute'
+      const root = workspaceRoot.endsWith('/') ? workspaceRoot : `${workspaceRoot}/`
+      if (!filePath.startsWith(root)) {
+        return 'filePath must live under workspaceRoot'
+      }
+    }
+    const languageId = record.languageId
+    if (languageId !== undefined && typeof languageId !== 'string') {
+      return 'languageId must be a string'
+    }
+    const surfaceKind = record.surfaceKind
+    if (
+      surfaceKind !== undefined
+      && surfaceKind !== 'editor'
+      && surfaceKind !== 'diff'
+      && surfaceKind !== 'terminal'
+      && surfaceKind !== 'output'
+    ) {
+      return 'surfaceKind must be editor, diff, terminal or output'
+    }
+    const title = typeof record.title === 'string'
+      ? record.title.slice(0, this.truncateTitleAt)
+      : undefined
+
+    return {
+      source: 'editor',
+      workspaceRoot,
+      ...(filePath === undefined ? {} : { filePath }),
+      ...(languageId === undefined ? {} : { languageId }),
+      ...(surfaceKind === undefined ? {} : { surfaceKind }),
+      ...(title === undefined ? {} : { title }),
+      editorSession,
       seq,
       observedAtMs,
     }

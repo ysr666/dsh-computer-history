@@ -61,8 +61,11 @@ function currentToken(): string {
   return (harness as unknown as { token?: string }).token ?? ''
 }
 
-function payload(overrides: Partial<CompanionPayload> = {}): CompanionPayload {
+function payload(
+  overrides: Partial<Extract<CompanionPayload, { source: 'browser' }>> = {},
+): CompanionPayload {
   return {
+    source: 'browser',
     origin: 'https://example.test',
     path: '/docs/guide',
     title: 'Example page',
@@ -238,5 +241,92 @@ describe('companion intake', () => {
     })
     await expect(second.start()).rejects.toThrow(/already in use/)
     await first.intake.stop()
+  })
+})
+
+describe('editor payloads (ADR 0009)', () => {
+  function editorPayload(
+    overrides: Record<string, unknown> = {},
+  ): Record<string, unknown> {
+    return {
+      source: 'editor',
+      workspaceRoot: '/Users/someone/Projects/demo',
+      filePath: '/Users/someone/Projects/demo/src/main.ts',
+      languageId: 'typescript',
+      surfaceKind: 'editor',
+      title: 'main.ts',
+      editorSession: 'editor-1',
+      seq: 1,
+      observedAtMs: 10_000,
+      ...overrides,
+    }
+  }
+
+  it('accepts an editor payload and reports it as stored', async () => {
+    const { intake, port, delivered } = await harness()
+    const response = await post(port, JSON.stringify(editorPayload()))
+    expect(response.status).toBe(201)
+    expect(response.json).toEqual({ stored: true })
+    expect(delivered[0]).toMatchObject({
+      source: 'editor',
+      workspaceRoot: '/Users/someone/Projects/demo',
+      filePath: '/Users/someone/Projects/demo/src/main.ts',
+    })
+    await intake.stop()
+  })
+
+  it('refuses a body it has no field for, rather than ignoring it', async () => {
+    const { intake, port, delivered } = await harness()
+    // The point of the boundary: document text cannot travel, because the shape
+    // has nowhere to put it and unknown fields are refused.
+    const response = await post(
+      port,
+      JSON.stringify(editorPayload({ text: 'secret document body' })),
+    )
+    expect(response.status).toBe(400)
+    expect(response.json).toMatchObject({
+      error: expect.stringContaining('unknown field for an editor payload: text'),
+    })
+    expect(delivered).toHaveLength(0)
+    await intake.stop()
+  })
+
+  it('refuses fields that belong to the other shape', async () => {
+    const { intake, port } = await harness()
+    const browserFieldOnEditor = await post(
+      port,
+      JSON.stringify(editorPayload({ origin: 'https://example.test' })),
+    )
+    expect(browserFieldOnEditor.status).toBe(400)
+    const editorFieldOnBrowser = await post(
+      port,
+      JSON.stringify({ ...payload(), workspaceRoot: '/tmp' }),
+    )
+    expect(editorFieldOnBrowser.status).toBe(400)
+    await intake.stop()
+  })
+
+  it('refuses a file outside the root it claims', async () => {
+    const { intake, port } = await harness()
+    const response = await post(
+      port,
+      JSON.stringify(editorPayload({ filePath: '/Users/someone/elsewhere/main.ts' })),
+    )
+    expect(response.status).toBe(400)
+    expect(response.json).toMatchObject({
+      error: expect.stringContaining('must live under workspaceRoot'),
+    })
+    await intake.stop()
+  })
+
+  it('refuses a payload with no source kind', async () => {
+    const { intake, port } = await harness()
+    const { source: _source, ...withoutSource } = editorPayload()
+    const response = await post(port, JSON.stringify(withoutSource))
+    expect(response.status).toBe(400)
+    expect(response.json).toMatchObject({
+      error: expect.stringContaining('source must be'),
+    })
+    await intake.stop()
   })
 })

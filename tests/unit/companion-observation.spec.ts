@@ -8,6 +8,7 @@ import { companionObservation } from '../../src/host/companion/observation.js'
 describe('companion observation', () => {
   it('carries companion provenance and the synthetic bundle id', () => {
     const observation = companionObservation({
+      source: 'browser',
       origin: 'https://example.test',
       path: '/docs/guide',
       title: 'Example page',
@@ -36,5 +37,26 @@ describe('companion observation', () => {
     // companion reports, the table is what the Host resolves.
     const browser = PHASE1_ADAPTERS.find(entry => entry.id === 'browser')
     expect(browser?.bundleIds).toContain(COMPANION_BUNDLE_ID)
+  })
+})
+
+describe('editor observations (ADR 0009)', () => {
+  it('maps the editor payload to a file resource with companion provenance', () => {
+    const observation = companionObservation({
+      source: 'editor',
+      workspaceRoot: '/Users/someone/Projects/demo',
+      filePath: '/Users/someone/Projects/demo/src/main.ts',
+      languageId: 'typescript',
+      surfaceKind: 'editor',
+      title: 'main.ts',
+      editorSession: 'editor-1',
+      seq: 3,
+      observedAtMs: 20_000,
+    })
+    expect(observation.window?.document).toBe(
+      '/Users/someone/Projects/demo/src/main.ts',
+    )
+    expect(observation.source).toEqual({ provider: 'companion', adapter: 'vscode' })
+    expect(JSON.stringify(observation)).not.toContain('secret')
   })
 })
