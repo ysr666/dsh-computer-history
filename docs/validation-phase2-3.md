@@ -163,3 +163,34 @@ Host's: surfaces come from `episode_surfaces`, which the fixture did not fill,
 so the episode legitimately reports none. And `policy revision 0` is the panel's
 placeholder — a stored episode does not carry the revision that was in force when
 it was written, and the sentence says so rather than inventing a number.
+
+## T2.3-5 — per-episode controls and the unanchored presentation (partial)
+
+The episode detail now offers one-click **Allow** and **Forget** for each
+application the episode saw, so a reader never has to type a bundle id, and an
+episode with no readable resource says what it does know:
+
+```text
+No resource was visible. This episode is unanchored, but the applications it saw
+were: com.microsoft.VSCode
+```
+
+**The live click evidence is not captured, and this section does not claim it.**
+Three attempts failed, all of them in my harness rather than in the panel:
+
+1. a regex edit to the panel script ate the rest of it, so every later
+   `Runtime.evaluate` returned `undefined`;
+2. the seeded episode vanished before the panel read it — a fresh store's
+   `include-only` policy had no allow rule, so the seeded observations were
+   inadmissible and the sweep took them, exactly as the 2.2 round recorded;
+3. the retry that added the allow rule first passed the session cookie as a
+   *command argument* instead of an environment variable, so every API call
+   answered `401 unauthorized`.
+
+What is verified: the code type-checks, the build succeeds, and `pnpm verify`
+stays green. What is not: that a click in the real GUI changes the policy. The
+next attempt starts from the working recipe (allow rule first, cookie through
+the environment) rather than from a newer idea.
+
+Retention controls are also not done: they need a stored override and a sweep
+that reads it, which is a migration rather than a panel edit.

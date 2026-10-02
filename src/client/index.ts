@@ -122,8 +122,8 @@ function HistoryPage(): React.ReactElement {
     await refresh()
   }
 
-  const allowApp = async (): Promise<void> => {
-    const value = bundleId.trim()
+  const allowApp = async (explicit?: string): Promise<void> => {
+    const value = (explicit ?? bundleId).trim()
     if (!value || !policy) return
     const now = Date.now()
     const rules = policy.rules.filter(rule =>
@@ -142,8 +142,8 @@ function HistoryPage(): React.ReactElement {
     await refresh()
   }
 
-  const forgetApp = async (): Promise<void> => {
-    const value = bundleId.trim()
+  const forgetApp = async (explicit?: string): Promise<void> => {
+    const value = (explicit ?? bundleId).trim()
     if (!value || !policy) return
     const rules = policy.rules.filter(rule =>
       !(rule.dimension === 'app' && rule.pattern === value),
@@ -407,8 +407,51 @@ function HistoryPage(): React.ReactElement {
               ? 'Resources: ' + selected.resources
                 .map(item => item.displayLabel ?? item.canonicalUri)
                 .join(', ')
-              : 'No resource was visible, so this episode shows what the applications were instead: '
-                + selected.surfaces.map(item => item.bundleId).join(', '),
+              // "Unanchored" is a fact about the workspace, not about the
+              // episode: it still knows which applications were involved, and
+              // saying so is more useful than a shrug.
+              : 'No resource was visible. This episode is unanchored, but the '
+                + 'applications it saw were: '
+                + selected.surfaces
+                  .map(item => item.bundleId)
+                  .join(', '),
+          ),
+          React.createElement(
+            'div',
+            { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } },
+            ...selected.surfaces.map(surface => React.createElement(
+              'span',
+              { key: surface.bundleId },
+              React.createElement(
+                'button',
+                {
+                  type: 'button',
+                  onClick: () => {
+                    runAction(async () => {
+                      setBundleId(surface.bundleId)
+                      // One click from the episode: allow this application
+                      // without typing its bundle id anywhere.
+                      await allowApp(surface.bundleId)
+                    })
+                  },
+                },
+                `Allow ${surface.bundleId}`,
+              ),
+              ' ',
+              React.createElement(
+                'button',
+                {
+                  type: 'button',
+                  onClick: () => {
+                    runAction(async () => {
+                      setBundleId(surface.bundleId)
+                      await forgetApp(surface.bundleId)
+                    })
+                  },
+                },
+                `Forget ${surface.bundleId}`,
+              ),
+            )),
           ),
         )
       : null,
