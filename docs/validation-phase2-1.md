@@ -87,3 +87,40 @@ Tests (`pnpm test` → 221):
   `canonicalUri = https://example.test/docs/guide`, the display label from the
   title, `source.provider = 'companion'`, and the stored URI contains neither
   `secret` nor the fragment.
+
+## T2.1-2a — companion intake (transport)
+
+`src/host/companion/intake.ts` implements the listener ADR 0007 describes:
+loopback bind (ephemeral in tests, `19388` by default), `POST
+/companion/observation` only, pairing-token check, a body cap, a per-token rate
+limit, and an incognito refusal host-side as well as in the extension.
+
+`pnpm test` → 231, ten of them for the intake:
+
+| case | result |
+|---|---|
+| paired observation | `201 {stored:true}`, payload delivered |
+| missing token, wrong token | `401`, nothing delivered |
+| incognito payload | `403`, nothing delivered |
+| body over the cap | `413`, nothing delivered |
+| third request with `rateLimitPerMinute: 2` | `429`, and delivery stopped at two |
+| malformed JSON, origin with a path, `seq: 0` | `400` with a reason, nothing delivered |
+| `Host: evil.test` (DNS rebinding) | `403`, nothing delivered |
+| wrong path | `404`, nothing delivered |
+| `stop()` then a request | connection refused — the port is really released |
+| second intake on a taken port | rejects with "port … is already in use" |
+
+Two defects were caught by running the checks rather than reading them:
+
+- the 413 path destroyed the socket before writing the response, so the client
+  saw a "socket hang up" instead of a status it could act on; the response is
+  now written first and the connection closed after;
+- the intake declared both a private `port` field and a public `port` getter.
+  `pnpm test` passed because vitest strips types; `pnpm typecheck` failed with
+  `TS2300 Duplicate identifier 'port'`. Same lesson as the branded id in 2.0:
+  the gate is the typecheck, not the test runner.
+
+**Remaining for T2.1-2:** wiring — start the listener with the plugin, stop it
+on dispose, refuse delivery while capture is paused, and surface
+"companion unavailable" in `/state`. Recorded here so the gap is visible rather
+than implied.
