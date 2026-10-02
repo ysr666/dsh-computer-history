@@ -11,6 +11,7 @@ import {
   PHASE1_ADAPTERS,
   PolicyRuleId,
   type NativeObservation,
+  type PolicySnapshot,
 } from '../../src/shared/index.js'
 import { IngestionService } from '../../src/host/ingestion/index.js'
 import {
