@@ -5,6 +5,7 @@ import {
   parseDeleteRequest,
   parsePolicyUpdate,
 } from './validation.js'
+import { HistoryImportError } from '../audit/export.js'
 import { SummaryProviderError } from '../semantic/provider.js'
 import { computerHistoryService } from '../service/index.js'
 
@@ -92,6 +93,37 @@ export function registerHistoryApi(ctx: Context): void {
         return Promise.resolve(json(history.getState()))
       } catch {
         return Promise.resolve(textResponse('Request failed.', 500))
+      }
+    },
+  }))
+
+  ctx.effect(() => ctx.connection.fetch.register({
+    // "What do you know about me": one JSON document that this Host can read
+    // back. The pairing token digest is not part of it (see audit/export.ts).
+    path: HISTORY_API_PREFIX + '/export',
+    methods: ['GET'],
+    requestBody: 'buffered',
+    fetch: () => Promise.resolve(json(history.exportAll())),
+  }))
+
+  ctx.effect(() => ctx.connection.fetch.register({
+    path: HISTORY_API_PREFIX + '/import',
+    methods: ['POST'],
+    requestBody: 'buffered',
+    fetch: async (request: Request) => {
+      let body: unknown
+      try {
+        body = await request.json()
+      } catch {
+        return textResponse('Invalid JSON.', 400)
+      }
+      try {
+        return json(history.importAll(body))
+      } catch (error) {
+        if (error instanceof HistoryImportError) {
+          return textResponse(error.message, 400)
+        }
+        return textResponse('Import failed.', 500)
       }
     },
   }))

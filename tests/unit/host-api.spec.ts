@@ -114,6 +114,8 @@ describe('Computer History Host API', () => {
     expect([...routes.keys()].toSorted()).toEqual([
       '/api/computer-history/delete',
       '/api/computer-history/episode',
+      '/api/computer-history/export',
+      '/api/computer-history/import',
       '/api/computer-history/pairing',
       '/api/computer-history/pairing/rotate',
       '/api/computer-history/pause',

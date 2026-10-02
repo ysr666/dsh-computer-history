@@ -10,6 +10,7 @@ import type {
   EpisodeDetail,
   EpisodeId,
   EpisodeSummary,
+  HistoryExport,
   MinimisedSummaryPayload,
   PairingRotation,
   PairingState,
@@ -98,6 +99,16 @@ export class ComputerHistoryService
     request: { readonly limit?: number } = {},
   ): Promise<readonly WorkThread[]> {
     return this.backend.threads(request)
+  }
+
+  public exportAll(): HistoryExport {
+    return this.backend.exportAll()
+  }
+
+  public importAll(
+    document: unknown,
+  ): { readonly imported: Record<string, number> } {
+    return this.backend.importAll(document)
   }
 
   public semanticState(): SemanticSummaryState {

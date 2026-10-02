@@ -19,6 +19,12 @@ import type {
   ResumeResolution,
   SearchEpisodesRequest,
 } from '../../shared/index.js'
+import type { DatabaseSync } from 'node:sqlite'
+import {
+  exportHistory,
+  importHistory,
+  type HistoryExport,
+} from '../audit/export.js'
 import type { CompanionTokenStore } from '../companion/token-store.js'
 import { minimiseEpisode, type MinimisedSummaryPayload } from '../semantic/minimise.js'
 import {
@@ -65,6 +71,7 @@ implements ComputerHistoryServiceContract {
     private readonly config: LocalBackendConfig,
     private readonly pairingTokens?: CompanionTokenStore,
     private readonly semanticOptIns?: SemanticOptInStore,
+    private readonly db?: DatabaseSync,
   ) {
     this.now = config.now ?? Date.now
   }
@@ -300,6 +307,22 @@ implements ComputerHistoryServiceContract {
     return { revoked, purged }
   }
 
+
+  /** The whole store as one document, for the audit export. */
+  public exportAll(): HistoryExport {
+    return exportHistory(this.requireDb(), this.now())
+  }
+
+  public importAll(
+    document: unknown,
+  ): { readonly imported: Record<string, number> } {
+    return importHistory(this.requireDb(), document)
+  }
+
+  private requireDb(): DatabaseSync {
+    if (!this.db) throw new Error('the audit export is unavailable')
+    return this.db
+  }
 
   public listPolicyRules(): readonly PolicyRule[] {
     return this.policies.get().rules

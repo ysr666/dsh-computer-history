@@ -397,6 +397,7 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
     },
      companionTokens,
     new SemanticOptInStore(history.db),
+    history.db,
   )
 
   // Teardown is registered immediately, before anything that can throw,

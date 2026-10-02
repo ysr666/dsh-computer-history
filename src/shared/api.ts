@@ -3,6 +3,7 @@ import type {
   EpisodeSummary,
   WorkThread,
 } from './episode.js'
+import type { HistoryExport } from './audit.js'
 import type { EpisodeId } from './ids.js'
 import type {
   MinimisedSummaryPayload,
@@ -109,6 +110,12 @@ export interface ComputerHistoryServiceContract {
 
   /** Rotate the pairing token; the token is returned once. */
   rotatePairing(): PairingRotation
+
+  /** The audit export: everything this Host knows, as one document. */
+  exportAll(): HistoryExport
+
+  /** Read an export back. Throws HistoryImportError-shaped failures as messages. */
+  importAll(document: unknown): { readonly imported: Record<string, number> }
 
   /** Who produces summaries, per scope (ADR 0004 §4). */
   semanticState(): SemanticSummaryState
