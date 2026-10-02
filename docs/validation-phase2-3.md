@@ -268,3 +268,38 @@ The next attempt starts there: find out why `ingest()` refused that message
 a canonicalisation failure, or a resource that looks protected), then let the
 same test answer the rebuild question. The finding is written down here so it is
 not rediscovered as a surprise.
+
+### The refusal question, answered — and my hypothesis disproved
+
+**Why `ingest()` refused that message.** Not the normaliser: calling
+`normalizeObservation` directly on the same message and policy returns a valid
+observation with `resource=file:///tmp/demo/report.md`. The service refused it one
+step later, in `canonicalizeResource`: the fixture's file **did not exist on
+disk**, `realpath` failed, and macOS makes both `/tmp` and `/var` symlinks — so
+the existing prefix *is* a symlink, the canonical target is unknown, and the
+ingestion path fails closed rather than persist a resource it cannot place under
+its real name. That is the behaviour 2.0 recorded, met by a fixture that pointed
+at a path nobody had created.
+
+**The hypothesis is disproved.** With a real file in a real directory, the
+isolation test runs to the end and **passes**:
+
+```text
+tests/integration/rebuild-isolation.spec.ts (1 test) ✓
+  a foreign episode keeps its 2 citations and its 1 surface
+  through one reseed() and one ingest() of another session's observation
+```
+
+So the ingest path does **not** disturb an episode it does not own, and the
+earlier "replace deleted rows for the wrong id" reading is wrong. The test stays:
+it pins a real invariant, and it is the reason not to go looking for that bug
+again.
+
+**What the live vanishing is, then.** The remaining difference between the test
+and the live case is the one the refusal question exposed: the live seed used a
+`file:///tmp/...` resource whose file never existed, so the row was written by raw
+SQL into a state the ingestion path would never produce — and something in the
+running plugin's periodic work reacted to an episode whose resource cannot be
+canonicalised. That is the lead for the next round, and it is now a question
+about the *sweep and repair path with an unresolvable resource*, not about
+`replace()`.
