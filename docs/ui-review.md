@@ -407,3 +407,28 @@ time I am the one who did it.
 The fix is in the capture script, not in the panel: it must **reload the page first** and
 report the geometry from the same run as the image, or the number and the picture describe
 different builds. A measurement is only evidence if it was taken on the thing being claimed.
+
+## Iteration 11 - the acceptance script, and what one run proved
+
+`scripts/panel-shot.mjs` is now part of the repository. It reloads the page, opens the
+panel, **measures**, and captures - in one run, because the number and the picture have to
+describe the same build, which is the mistake I made and corrected two iterations ago.
+
+```text
+opened: clicked
+health line: 还没有允许任何应用，所以什么都不会被记录。在下面添加一个应用即可开始。
+buttons: 10 | squeezed (height > 46px): 0 []
+destructive warning: {"found":true,"scrolled":1,"top":766,"visible":true}
+capture: 1818124 bytes, sha 50b143a94564
+```
+
+That is the whole method in five lines: the panel opens, the first thing on it is the
+sentence that needs an action, no button is squeezed (the check that caught the flex bug),
+and the destructive warning is measured inside the viewport rather than assumed - with the
+image from the same run.
+
+**One nit left, seen in the image and left for the next iteration rather than fixed blind:**
+the wrapping put each action on its own line, so 暂停采集, 删除全部历史 and 刷新 now stack
+vertically. The fix is to move the destructive block to the **end** of the row, so the
+routine actions share a line and the destructive one has the line below it. It is a small
+reorder and it needs the block read first - which is the rule this phase keeps teaching.
