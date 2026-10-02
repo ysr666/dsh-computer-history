@@ -203,3 +203,38 @@ Environment restored afterwards: VS Code quit (the instance this round launched)
 the user's `settings.json` restored from the backup taken before the token was
 written, the extension directory removed, the plugin uninstalled, the junction
 and `~/.dsh/computer-history` deleted, and the scratch workspace removed.
+
+## T2.5-5 — a packaging-boundary regression, and what it cost
+
+Fixing the last commit's gate failure is worth recording, because the failure was
+**mine** and the mechanism was not obvious:
+
+```text
+pnpm verify
+  extension-editor/src/payload.ts(27,1): error TS1287: A top-level 'export'
+  modifier cannot be used on value declarations in a CommonJS module when
+  'verbatimModuleSyntax' is enabled.
+```
+
+The root project does not `include` `extension-editor/`, but
+`tests/unit/editor-extension.spec.ts` **imports** that source, and TypeScript
+follows imports regardless of `include` - so the extension's files were being
+checked under the root project's stricter settings. The underlying question was
+never answered in the package itself: **which module system is this package?**
+The sources use ESM syntax, the build emitted CommonJS because nothing said
+otherwise, and the mismatch only surfaced through someone else's tsconfig.
+
+The fix is the declaration, not a workaround: `extension-editor/package.json` now
+says `"type": "module"`, the sources use an explicit `.js` extension on their
+relative import, and the build emits ESM. VS Code has loaded ESM extensions since
+1.94 and this environment runs 1.140.
+
+**Honest scope:** the live anchoring evidence above was produced with the
+**CommonJS** build. The ESM switch is a packaging-boundary fix, and the live
+re-check of the ESM artifact is outstanding - "VS Code supports ESM extensions"
+is documentation, and documentation is not a measurement.
+
+```text
+pnpm verify → 295 tests, lint 0 warnings, adapters 11/22, store protection,
+              semantic boundary
+```

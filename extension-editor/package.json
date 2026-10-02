@@ -5,9 +5,16 @@
   "version": "0.1.0",
   "publisher": "dsh-local",
   "private": true,
-  "engines": { "vscode": "^1.75.0" },
-  "categories": ["Other"],
-  "activationEvents": ["onStartupFinished"],
+  "type": "module",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "configuration": {
@@ -26,5 +33,7 @@
       }
     }
   },
-  "scripts": { "compile": "tsc -p ." }
+  "scripts": {
+    "compile": "tsc -p ."
+  }
 }

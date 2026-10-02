@@ -1,5 +1,5 @@
 import * as vscode from 'vscode'
-import { buildEditorPayload, surfaceKindOf, type EditorMetadata } from './payload'
+import { buildEditorPayload, surfaceKindOf, type EditorMetadata } from './payload.js'
 
 /**
  * The editor companion (ADR 0009).
