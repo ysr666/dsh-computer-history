@@ -255,3 +255,28 @@ unanchored replacement looked like success.
 Still open in this task: wiring `lastSeen()` through the plugin's companion state into
 `/state`, and the panel sentence that uses it. The fact is collected and tested; it is
 not yet visible.
+
+## T2.9-2 — the fact is now visible, and it says which of the two it is
+
+Wired end to end: the intake records it, the plugin reads it **per call from memory**
+(never from the database, because a listener callback can run after the store is
+closed - the same reason `paired` is snapshotted), the contract carries it, and the
+panel says one of three things instead of one:
+
+```text
+not paired                      "Listening on 127.0.0.1:19388 · not paired yet"
+token created, never used        "… · token created, but no client has ever used it"
+token used                       "… · paired · last used 03/10/2026, 02:41"
+```
+
+That is the ambiguity a mistyped token used to create, gone: a user who pasted the
+token into the wrong field, or into the wrong editor, is now told their client has
+never arrived rather than shown a green "paired".
+
+```text
+pnpm verify → 323 tests, lint 0 warnings
+```
+
+Still open, and unchanged from last round: **nobody has looked at this in a real
+window yet.** The sentence is verified by tests and by types; the screenshot is the
+evidence that counts, and it needs the panel opened (or the browser bridge connected).

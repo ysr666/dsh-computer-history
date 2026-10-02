@@ -374,7 +374,12 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
       manager,
       enabled,
       () => ownsCapture,
-      () => companionState,
+      () => ({
+        ...companionState,
+        // Read per call, from memory: the reason `paired` is snapshotted is that a
+        // listener callback can run after the store is closed.
+        lastSeenAtMs: companionIntake.lastSeen(),
+      }),
     ),
     {
       ...retentionSettings.get(),

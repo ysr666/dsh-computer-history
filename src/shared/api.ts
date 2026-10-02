@@ -98,6 +98,11 @@ export interface ComputerHistoryState {
     readonly listening: boolean
     readonly port?: number
     readonly paired: boolean
+    /**
+     * When a client last proved it holds the pairing token, if ever. A token can
+     * exist while nothing uses it, and "paired" alone cannot tell those apart.
+     */
+    readonly lastSeenAtMs?: number | undefined
     readonly reason?: string
   }
   readonly observationRetentionHours: number

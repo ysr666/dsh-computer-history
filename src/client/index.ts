@@ -588,7 +588,7 @@ function HistoryPage(): React.ReactElement {
       !companion
         ? 'Companion state unavailable on this Host.'
         : companion.listening
-          ? `Listening on 127.0.0.1:${companion.port} · ${companion.paired ? 'paired' : 'not paired yet'}`
+          ? `Listening on 127.0.0.1:${companion.port} · ${companion.paired ? (companion.lastSeenAtMs === undefined ? 'token created, but no client has ever used it' : `paired · last used ${new Date(companion.lastSeenAtMs).toLocaleString()}`) : 'not paired yet'}`
           : `Companion unavailable${companion.reason ? ': ' + companion.reason : ''}`,
     ),
     React.createElement(
