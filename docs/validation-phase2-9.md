@@ -574,3 +574,34 @@ already mangled two files in this phase, so it was dropped.
 The cheap way to do it properly next time: let the plugin record real activity for a
 minute (allow one application, work in it), then copy that row and age it. Two
 commands, and it would be a live check instead of a test-only claim.
+
+## T2.9-4 — an application that never responds
+
+What exists, read rather than assumed:
+
+```text
+native/macos/Sources/ComputerHistoryCollector/Privacy.swift
+  applyMessagingTimeout(element)  →  AXUIElementSetMessagingTimeout(element, 0.5)
+
+Collector.swift   2 AXUIElementCopyAttributeValue sites, 4 applyMessagingTimeout calls
+Privacy.swift     1 helper, 4 reads
+tests/unit/collector-hardening.spec.ts
+  covers the host↔collector protocol: pause acknowledgements, policy propagation,
+  fail-closed on a mismatched acknowledgement, fail-closed on a timed-out one
+```
+
+So the mechanism that keeps an unresponsive application from hanging the collector is
+in place - every accessibility round trip is bounded at half a second - and it is
+applied before the reads in `Collector.swift`.
+
+**What is not in place is anything that keeps it that way.** The hardening spec covers
+the protocol, not the accessibility timeouts; and nothing checks that a new read site
+comes with a timeout. A future `AXUIElementCopyAttributeValue` added without one would
+hang the collector on exactly the application this item is about, and the existing
+tests would stay green - the same shape of gap as the guard that could not fail.
+
+The check that would close it, cheaply and in the style already used here: a guard
+that, for every accessibility read site in the native sources, requires an
+`applyMessagingTimeout` call in the same function, with a self-check that it recognises
+a read it should catch. That is the next piece of work for this item, and it is named
+rather than implied.
