@@ -13,12 +13,15 @@
 **当前状态**：Phase 1 已在真实 DSH Host + 真实 macOS 会话中跑通；三个 blocker 已修复并真机复验（client bundle 格式、cordis inject 门禁、Terminal fail-closed）；A4/A5 已用受控合成 fixture 双向验证；环境已还原；worktree clean。
 commit 链：`62cb5a1 → ef8d4bc → 551f4bc → d34a823 → 6e426e6 → b10fe2b → 554223b → cb1753f → 226c86e`。
 
-**重启后第一件事（N1）**：
+**N1 已完成（2026-10-02 17:55，DSH 重启后实测）**：
 
-1. `dev_plugin_status` → 确认 `@dsh-external/dsh-super-injector` active（profile 会装配已打补丁的 91 槽白名单）；
-2. `dev_inject_plugin {dir: /Users/ysradmin/Projects/dsh-computer-history}` → 期望**直接通过**（不再报 `main`/`sidebar.panellist` 不在白名单）；若仍报旧的 11 条白名单，说明 Host 仍加载旧代码；
-3. `cordis_inspect_query client/Slots listSubTree root=sidebar.panellist` → 期望 occupant `{id: "computer-history", active: true}`；
-4. `pnpm verify:p1` 全绿 → `dev_uninject_plugin dsh-computer-history` 收尾，并确认 profile 还原。
+1. `dev_plugin_status` → 注入器从**打过补丁的 lib** 重新装配（entry URL 正常，不再是上轮那个幽灵条目）；
+2. `dev_inject_plugin {dir: 仓库}` → **校验放行**（不再报 `main`/`sidebar.panellist` 不在白名单）——KNOWN_SLOTS 补丁确认生效；
+3. Host 侧：`GET /api/computer-history/state` → `200 {"enabled":false,"capture":"stopped",...}`（capture OFF 默认值正确），插件 agent 工具 `computer_history_*` 进入工具表；
+4. client 侧：`sidebar.panellist` occupant `{id:"computer-history", order:30, active:true}`；
+5. `pnpm verify:p1` exit 0；随后卸载 entry、删 junction/软链、清 profile 残留，环境还原。
+
+> 注入时的坑（见 F10）：`dev_inject_plugin` 把 junction 建到了 `profiles/web`，而运行 Host 是 desktop profile → 返回 `host ✗ / client ✗`。运行期注入 desktop 需"手工 desktop junction + staging `loader.create`"（本轮即如此完成）。
 
 **仍未确认（条件项，不是欠账）**：
 
@@ -265,13 +268,14 @@ secure 阶段（前台 10s）: rows before 1 -> after 1（delta 0）| secure_row
 |---|---|---|---|
 | F1 | **blocker** | **已修复** | client bundle 缺 `__ModuleLoader__` 包装、且 import 了 loader 不注册的 `.../client` 子路径 id → UI 半根本加载不了。修复后 live Slots occupant 为 active。 |
 | F2 | **blocker** | **已修复** | 插件用 `ctx.computerHistory` 访问自己提供的服务 → cordis 抛 `without inject`，8 条路由全 500/503、agent 工具不可用；204 个既有测试因"假 ctx"未覆盖。改用 `ctx.get()`；测试 harness 同步改为真语义。 |
-| F3 | 中（工具链） | **已报告未修** | `dsh-super-injector` v0.3.3 的 `KNOWN_SLOTS` 白名单过时：`main`、`sidebar.panellist` 等 live 槽位被误判为坏骨架，阻断合法插件注入。建议白名单补全 live slots，或改为查询运行中 client Slots 拓扑。证据：live `Slots.listSubTree`。 |
+| F3 | 中（工具链） | **已修复 + 重启后验证** | `dsh-super-injector` v0.3.3 的 `KNOWN_SLOTS` 白名单过时（11 条），把 live 槽位 `main`、`sidebar.panellist` 误判为坏骨架，阻断合法插件注入。已按 live client 拓扑补到 91 条（built lib + source 双份）；DSH 重启后 `dev_inject_plugin` **放行**（N1 通过）。证据：live `Slots.listSubTree` + 重启前后两次注入返回对比。 |
 | F4 | **blocker（已修复，规则经二次修正）** | 已修复 + 真机双向复验 | Terminal adapter 曾 3/3 判 `unreadable-focused-element` → `privacy.secure=true` → Host drop，**Terminal 观测事实性归零**。根因（AX 探针实测）：focused element 的 `kAXSubroleAttribute` 返回 `-25205 = kAXErrorAttributeUnsupported`，原 `isSecureElement` 把所有非 success 一律当 `.unreadable`。修复分两步：(1) 把"属性不存在/不支持"与"读取失败/超时"分开，分类抽成纯函数 `classifySecureFieldState`；(2) 合成 fixture 量出 secure 与 plain 的唯一差别就是 subrole 是否存在（`NSSecureTextField` → `AXSecureTextField`；`NSTextField`/`AXTextArea` → `attributeUnsupported`），于是去掉"`AXTextField` 无 subrole 仍 fail-closed"这条会误杀**普通文本框**的守卫，只保留**读取失败**才 fail-closed。真机复验：Terminal `secure:false` 8/8（含 document）、plain 文本框 `secure:false` 9/9、真实 secure 字段 `secure:true/secure-field` 4/4 且 window/element 全扣留。端到端（§5.8）：secure 前台 10s → Host 落库 **delta 0**、`secure_rows=0`；plain 对照落库 1 条并生成 `file` resource。 |
 | F5 | 记录 | — | Finder 的 kAXDocument 为 nil → `resource_id` 空；Preview 的 document 为 file:// URL → 资源可用。resource 识别能力随 app 不同而分裂，产品假设需按 app 记账。 |
 | F6 | 环境 | — | 本机 VS Code 为不可启动的假壳（`Contents/MacOS/Code` 实为 Node 脚本），故**真实** VS Code 语义不可验证；但 bundle-id→adapter 映射与 AXDocument 管线已用合成 app 验证（§5.5），故此项只剩"真 app 语义"这一层。 |
 | F7 | 范围 | — | 浏览器类 app 无 adapter：交接文档 §4.1 建议的"本地 HTML 假密码框"测法在当前 Phase 1 适配器集下**不可达**；同理 kAXURL 也缺少可触发场景。 |
 | F8 | 中（工具链） | 已打补丁 / 运行中仍未激活 | `dsh-super-injector` 自重载路径有三处缺陷，本轮全部定位：(A) 复工器硬要求 `entry._dispose`，而 DSH 0.2.0-rc.2 的 loader entry **没有该 API**（实测 dump：`_dispose: undefined`，但 `fiber.dispose` / `entry.update` / `entry.refresh` / `parent.remove` 均为 function）→ `reboot-failed: selfEntry 无官方 _dispose`；(B) reload 的"磁盘降级"路径 import 后只在注入器**私有 loadCache** 里找 URL，而裸 `ctx.loader.import` 不写该缓存，且首次自毁已把缓存删空 → 永远匹配不到；(C) 更深一层：即使补 (B)，`dev_reload_package dsh-super-injector` 仍返回 `缓存中无匹配且磁盘降级失败`（失败点在 entry/URL 匹配更早处，未继续深挖）。已对 (A)(B) 打补丁（built lib + source 双份，备份 `/tmp/dsh-injector-rebuilder-*.bak-*`、`/tmp/dsh-injector-fallback-*.bak-*`），但**本会话无法验证**——它们只在一次成功的自重载里才会执行，而 (C) 挡住了触发。后果不变：**注入器代码改动必须重启 DSH Host 才生效**。附：首次失败后自愈日志有 `heal-ok: 第 1 次 touch patch 官方重装配成功`，但运行实例仍是旧代码（再调 `dev_inject_plugin` 报旧的 11 条白名单）。 |
 | F9 | 记录 | — | 需要位置信息的应用把 URL 放在 **`kAXDocument`**（Chrome 实测 `https://chatgpt.com/...`，Preview/Terminal 为 `file://...`），`kAXURL` 在这些应用上返回 `kAXErrorAttributeUnsupported`。若将来加 browser adapter，位置应读 AXDocument；`safeURL` 的 CFURL 分支仍保留防御。 |
+| F10 | 中（工具链） | 已记录 | `dev_inject_plugin` 的 profile 目标与运行 Host 不一致：重启后本轮它把 junction 建到 `profiles/web`（返回 `host ✗ / client ✗`），而 Host 实际跑在 desktop profile。运行期注入 desktop 需"手工 `profiles/desktop/node_modules` junction + staging `loader.create`"（N1 即以此完成）。另外 `dev_uninject_plugin` 会往**它选中的那个 profile** 的 `cordis.patch.yml` 写 `disabled` 残留行（本轮已手工清除 `profiles/web` 的那两行）。 |
 
 ## 7. §7 验收清单
 
@@ -350,7 +354,7 @@ tests/integration/plugin-multi-host.spec.ts 同上
 
 | # | 动作 | 前置 | 验收 |
 |---|---|---|---|
-| N1 | 重启 DSH Host 后验证注入器补丁：`dev_plugin_status` 确认 injector active → `dev_inject_plugin {dir}` 应直接放行（不再报 `main`/`sidebar.panellist` 不在白名单）→ live client Slots 里 `computer-history` occupant 仍 active | DSH 重启 | 启动前已离线复演注入器两条校验（`/tmp/dsh-verify-injector-patch.mjs`，用 patched 白名单跑其自身 regex）：`lib/client.js` 与 `src/client/index.ts` 的 register 均被接受 ✓、`__ModuleLoader__` ✓、inject 声明 ✓、built/src 白名单一致 ✓；重启后验收标准 §5 注入路径可用 + UI 半 active + `pnpm verify:p1` 全绿 |
+| N1 | 重启 DSH Host 后验证注入器补丁：`dev_plugin_status` 确认 injector active → `dev_inject_plugin {dir}` 应直接放行（不再报 `main`/`sidebar.panellist` 不在白名单）→ live client Slots 里 `computer-history` occupant 仍 active | DSH 重启 | ✅ **已完成（2026-10-02 17:55）**：重启前离线复演通过；重启后 `dev_inject_plugin` 校验放行、host 路由 200、client occupant active、`pnpm verify:p1` exit 0；注入目标 profile 的偏差见 F10（以 desktop junction + staging loader.create 完成），环境已还原 |
 | N2 | 安装真实可启动的 VS Code 或 Cursor → 复测真实 editor 的 kAXDocument 语义 | 可用编辑器 | ✅ 契约部分完成（§5.5 合成 app：adapter 映射 + AXDocument 管线）；真实 VS Code 语义仍待真机 |
 | N3 | 在 AXURL 有值的场景复测 `safeURL` 的 CFURL 解码 | 可触发场景 | ✅ 已完成可行部分：真机探针证明 AXURL 无触发场景（F9），解码逻辑改为纯函数 `decodeURLAttribute` + native/XCTest 覆盖 |
 | N4 | 故障注入"helper 退出无法确认" | 可选 | 逻辑已有单测覆盖（`tests/unit/collector-hardening.spec.ts:847` "releases ownership but records an unconfirmed exit"）；真机触发需要 helper 能存活 SIGKILL（不可构造），故真机项保持未触发 |
