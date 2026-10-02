@@ -260,6 +260,34 @@ post-reload  session 6E5B6072…  episode  :1          with observations 1,2,3
 Lesson for the next live verification: a plugin code change needs a hot reload
 before any live measurement means anything.
 
+## Phase-level review of the 2.0 diff
+
+Reviewed the whole phase diff (`git diff cdab284..HEAD`, 33 files, 2440
+insertions; production code is 5 files and 214 insertions: the native registry,
+the shared adapter table, the union member, `normalize.ts` and the builder).
+Two places were checked adversarially rather than by running the tests:
+
+- **The continuation rule is deliberately app-agnostic.** It requires the same
+  resource, not the same application, so editing a file in one editor and
+  previewing it in another stays one episode. That matches the existing strong
+  (dsh/git) path, which already continues across *different* resources inside
+  one workspace, so the new rule is the stricter of the two.
+- **The new store gate runs inside `pnpm verify`.** On a Mac whose store is fine
+  but whose FileVault is off, the normal build gate now fails. That is the
+  intent of ADR 0005 — the failure names the reason and the ADR — and it skips
+  with a message on other platforms. It is a decision an operator can see, not
+  a silent degradation.
+
+Residual risks the review did not remove (recorded, not hidden):
+
+- `scripts/verify-adapters.mjs` parses the adapter table textually. If the table
+  is reformatted it fails loudly ("no adapters parsed") instead of passing
+  silently, so the failure mode is safe but the parser needs updating with the
+  format.
+- The metric tool (`episode-stats.mjs --replay`) compiles the episode module on
+  demand with the repository toolchain; it is a verification tool, not part of
+  the gate, so a toolchain change can break it without breaking the build.
+
 ## Pending in 2.0
 
 `T2.0-2` is the only task without a completed deliverable, and it is blocked on
