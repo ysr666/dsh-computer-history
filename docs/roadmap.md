@@ -63,9 +63,13 @@ ADR 0004 (accepted) governs semantic summaries.
    locally — remote needs a recorded per-scope opt-in plus a payload preview,
    enforced by `verify:semantic-boundary`. See `docs/semantic.md` and
    `docs/validation-phase2-2.md`.
-4. **2.3 UI and audit** — timeline, per-app/per-site controls, export/audit,
-   redaction preview; closes the Phase 1 findings (F13, unanchored
-   presentation, allow/forget ergonomics).
+4. ~~**2.3 UI and audit**~~ — done (2026-10-02): timeline and per-episode
+   provenance, per-app/per-site/per-retention controls, export and re-import,
+   redaction preview. Closes the Phase 1 findings: F13 by ADR 0008 (a file name
+   the Host cannot place is not stored), the "Unanchored activity" label by
+   naming the applications the episode did see, and the allow/forget flow by
+   one-click controls inside an episode. See `docs/audit.md` and
+   `docs/validation-phase2-3.md`.
 
 ## Deferred
 
