@@ -174,3 +174,49 @@ whole reason to assert on the count instead of trusting `replace`.
 (`Raw observations are kept for 24 hours…`, `Observation hours`, `Episode days`) and the
 first line of Summaries. After those, the visual system: spacing, inputs with labels,
 grouped actions, and one accent for emphasis.
+
+## Iteration 4 - the interface is fully in the interface's language
+
+Evidence: `docs/assets/panel-2026-10-03-after4.png`.
+
+The panel now reads, top to bottom, with no English left in it when the interface is
+Chinese:
+
+```text
+电脑使用记录
+这台电脑被用来做了什么，只保存在本机。
+| 还没有允许任何应用，所以什么都不会被记录。在下面添加一个应用即可开始。
+采集：正在采集 · 辅助功能：已授权 · 保留：24 小时
+浏览器伴侣   正在监听 127.0.0.1:19388 · 令牌已生成，但还没有任何客户端用过它
+             [重新生成配对令牌] [例如 https://example.com] [允许该网站] [拒绝该网站]
+保留策略     原始记录保留 24 小时，工作片段保留 30 天。修改只影响之后记录的内容，
+             不会删除你已经有的历史。  [原始记录保留 24] [工作片段保留 30] [保存]
+时间线       最近七天还没有记录。
+摘要         摘要在这台电脑上计算，不会离开本机。本地模型：未配置；除非你为某个范围
+             打开，否则绝不会使用远端模型。
+从这里继续   [例如：继续计费那件事] [找到上次的位置]
+工作线索     还没有成线索的工作：需要宿主能确认的工作区才会成线索。
+             [暂停采集] [删除全部历史] [刷新]
+隐私与应用权限 只有你下面允许的应用会被记录，而且只记元数据：哪个应用、哪个文件、
+             用了多久——绝不记录屏幕内容、文档内容或选中文字。 [例如 com.apple.Safari]
+最近的工作片段
+```
+
+Two things this iteration also fixed by accident of looking:
+
+- the retention sentence said "Raw observations" and "episodes" - internal words for a
+  user - and now says what is kept, for how long, and what a change does;
+- the Summaries section said the same thing twice ("Deterministic summaries are on
+  (nothing leaves this machine)" followed by "No scope uses a model…"), so the first
+  line now carries the fact and the caveat together.
+
+**What is left of this goal is the visual system, and the panel still looks like a
+document, not a product**: sections are bare headings with no separation beyond
+`marginBottom`, the two number inputs sit inline with their labels run together
+(`原始记录保留 24`), buttons are loose with no grouping, there is no accent colour and no
+hierarchy between a section title and its body. That is the next iteration, and the
+first of them will be spacing and grouping, because the words are now correct and the
+structure is what is left to make legible.
+
+The headless Chrome is deliberately still running: the acceptance loop for the next
+iteration is a capture, and it will be closed when this goal stops needing captures.

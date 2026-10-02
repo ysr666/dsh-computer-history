@@ -359,7 +359,10 @@ function HistoryPage(): React.ReactElement {
       semantic
         ? semantic.scopes.some(scope => scope.providerKind === 'remote')
           ? 'Deterministic summaries are on. At least one scope sends a minimised payload to a remote model: it contains the application id, the surface kind, the file extension, counts, an hour and the workspace folder name - never a path, a URL or a document name. **Once a request has left, it cannot be recalled**, and revoking the scope deletes only the local record of it.'
-          : `Deterministic summaries are on (nothing leaves this machine). Local model: ${semantic.localProviderConfigured ? 'configured' : 'not configured'}; remote: never without a scope opting in.`
+          : t(
+              `Summaries are computed on this machine and nothing leaves it. Local model: ${semantic.localProviderConfigured ? 'configured' : 'not configured'}; a remote model is never used unless you switch a scope on.`,
+              `摘要在这台电脑上计算，不会离开本机。本地模型：${semantic.localProviderConfigured ? '已配置' : '未配置'}；除非你为某个范围打开，否则绝不会使用远端模型。`,
+            )
         : 'Loading…',
     ),
     !semantic || semantic.scopes.length === 0
@@ -434,17 +437,19 @@ function HistoryPage(): React.ReactElement {
           React.createElement(
             'p',
             { style: { opacity: 0.75, margin: '0 0 6px' } },
-            'Raw observations are kept for '
-              + retention.observationRetentionHours
-              + ' hours and episodes for '
-              + retention.episodeRetentionDays
-              + ' days. A change applies to what is recorded from now on; it '
-              + 'does not delete history you already have.',
+            t(
+              `Raw observations are kept for ${retention.observationRetentionHours} hours `
+              + `and episodes for ${retention.episodeRetentionDays} days. A change applies `
+              + 'to what is recorded from now on; it does not delete history you already have.',
+              `原始记录保留 ${retention.observationRetentionHours} 小时，工作片段保留 `
+              + `${retention.episodeRetentionDays} 天。修改只影响之后记录的内容，`
+              + '不会删除你已经有的历史。',
+            ),
           ),
           React.createElement(
             'label',
             null,
-            'Observation hours ',
+            t('Observation hours ', '原始记录保留 '),
             React.createElement('input', {
               type: 'number',
               value: retentionHours,
@@ -459,7 +464,7 @@ function HistoryPage(): React.ReactElement {
           React.createElement(
             'label',
             null,
-            'Episode days ',
+            t('Episode days ', '工作片段保留 '),
             React.createElement('input', {
               type: 'number',
               value: retentionDays,
