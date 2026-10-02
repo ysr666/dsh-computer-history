@@ -144,3 +144,62 @@ Still open for T2.5-4: installing the `.vsix` on the real VS Code and proving th
 anchoring live. The spike could not find a `code` shim in the app bundle, so the
 next attempt starts from `~/.vscode/extensions/` (which the editor scans) or the
 GUI's "Install from VSIX".
+
+## T2.5-4 — anchoring, against real VS Code
+
+The extension was installed with the editor's own CLI
+(`env -u ELECTRON_RUN_AS_NODE code --install-extension … --force`), VS Code was
+launched on a scratch workspace with `open -a`, and the store was read directly.
+
+```text
+session=899DB394-…        provider=macos-ax   ws=none       adapter=vscode
+session=vscode-mur1so8l   provider=companion  ws=companion  root=/private/tmp/dsh-ch-25-ws
+session=899DB394-…        provider=macos-ax   ws=none       adapter=vscode
+```
+
+Three rows from the same running editor at the same moment. The Accessibility
+path — which is what the Host had before this phase — cannot vouch for a
+workspace and records `ws=none`. The row from the extension carries
+`provider=companion`, `ws=companion`, and the workspace root the editor named,
+canonicalised by the ingestion path (`/tmp` resolves to `/private/tmp`). Its
+`collector_session` is the extension's own (`vscode-mur1so8l`), so it cannot be
+confused with the probe requests used to test the intake.
+
+```text
+GET /timeline?days=1
+[{"dayKey":"2026-10-02","episodeCount":1,…,"episodes":[{"id":"episode:probe-4:1",…}]}]
+```
+
+The episode is anchored to the vouched workspace rather than appearing as
+unanchored work — the Phase 2.3 finding, fixed at its root instead of described
+better.
+
+### What went wrong first, and what each failure actually was
+
+Four attempts, and every one of them taught something worth keeping:
+
+1. **The extension activated but sent nothing.** The exthost log proved
+   activation (`_doActivateExtension dsh-local.dsh-computer-history-editor,
+   activationEvent: 'onStartupFinished'`), and the settings file had no token in
+   it — so the extension's unpaired guard returned before building a request.
+   Fail-closed behaviour working exactly as designed, and invisible from the
+   outside.
+2. **A hand-copied extension directory is never scanned.** VS Code keeps the
+   installed set in `extensions.json`; copying a directory into
+   `~/.vscode/extensions/` does not add it, so nothing loaded at all.
+3. **The Host answered an editor payload with `origin must be an http(s) origin
+   without a path`.** That reads like a validation bug in the new code and is
+   not one: the running plugin was a **stale build** from before the payload
+   union, so the browser validator handled it. `pnpm build` and a reload made the
+   same request answer `201 {"stored":true}`.
+4. **`code` was on PATH all along** (`/usr/local/bin/code`); the first spike
+   looked in the app bundle and concluded it was missing.
+
+The report keeps all four because each one is a trap the next person will meet:
+a silent fail-closed guard, a cache that ignores the filesystem, a stale build
+that disguises itself as a new bug, and a tool that was there the whole time.
+
+Environment restored afterwards: VS Code quit (the instance this round launched),
+the user's `settings.json` restored from the backup taken before the token was
+written, the extension directory removed, the plugin uninstalled, the junction
+and `~/.dsh/computer-history` deleted, and the scratch workspace removed.

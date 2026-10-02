@@ -93,3 +93,18 @@ Completed on 2026-10-02, plan `docs/plan-phase2-4.md`, evidence
    root-fixed by moving the rewrite inside the transaction.
 3. **Two maintenance cycles against a reachable episode** - nothing moved, which
    is what the fix and the isolation test predict.
+
+## Phase 2.5 — Editor companion
+
+Plan `docs/plan-phase2-5.md`, evidence `docs/validation-phase2-5.md`, setup and
+traps `docs/editor-companion.md`, boundary ADR 0009.
+
+The companion pattern from ADR 0007 extends to the editor without a new trusted
+concept: one loopback intake with two disjoint payload shapes, contents
+unrepresentable by type and refused by validation, and per-workspace consent
+reusing the existing resource dimension. An editor observation carries the
+workspace root the editor vouched for, recorded with its own `workspace_source`
+(`companion`) rather than misreported as an inference - which fixes the Phase 2.3
+"unanchored" finding at its root: measured live, the same editor at the same
+moment produces `ws=none` through Accessibility and `ws=companion` with the real
+root through the companion.
