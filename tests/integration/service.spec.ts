@@ -280,6 +280,7 @@ describe('Cordis computer history service', () => {
       async pause() {},
       async resume() {},
       getState() { return state },
+      async threads() { return [] },
       pairing() { return { paired: false, listening: false } },
       rotatePairing() {
         return { paired: true, listening: false, token: 'stub-token' }
