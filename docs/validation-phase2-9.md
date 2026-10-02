@@ -539,3 +539,38 @@ Install stays split, and the split is measured rather than assumed:
 The support for the second row: the install tool says so in its own report, and the
 development path starts *the same code* immediately, which is why "the artifact is
 broken" was ruled out earlier in this phase.
+
+## T2.9-4 — retention: what is verified, and the one check I did not fake
+
+The gate asks that storage growth stays bounded by the retention settings that already
+exist. Two kinds of evidence, and they are not the same strength:
+
+**Tests (verified, re-run this round):**
+
+```text
+pnpm verify → 324 tests
+tests/integration/retention.spec.ts
+  expires raw evidence without deleting the independently retained episode
+  can compact all raw evidence while preserving a live episode
+  expires episodes without deleting still-live observations
+tests/integration/retention-settings.spec.ts
+  answers with the built-in default until the user chooses
+  remembers a choice and survives being set twice
+  refuses a window it cannot honour
+  stamps the chosen window on what is recorded next
+```
+
+Those cover the behaviour that matters most for growth - that expiring raw evidence
+does not take the episode with it, and that a live episode is not compacted out from
+under the user.
+
+**A live check was attempted and abandoned rather than faked.** The plan was to copy a
+real observation, rewrite its timestamp to 72 hours ago and let the startup sweep
+remove it. The clean store contains **zero observations** - every probe in this phase
+was refused - so there was no row to copy, and writing one by hand would have meant
+reconstructing the table's columns from memory. That is exactly the guessing that has
+already mangled two files in this phase, so it was dropped.
+
+The cheap way to do it properly next time: let the plugin record real activity for a
+minute (allow one application, work in it), then copy that row and age it. Two
+commands, and it would be a live check instead of a test-only claim.
