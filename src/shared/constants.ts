@@ -119,6 +119,17 @@ export const PHASE1_ADAPTERS: readonly Phase1AdapterDefinition[] = [
     focusedElementPolicy: 'require',
   },
   {
+    id: 'browser',
+    // The companion's synthetic source. No real application carries this bundle
+    // id, so the Accessibility path can never produce it; a companion
+    // observation is the only way this adapter is used (ADR 0007).
+    bundleIds: ['companion.browser'],
+    surfaceKind: 'browser',
+    suppressesWindowTitle: false,
+    documentResourceKind: 'file',
+    focusedElementPolicy: 'require',
+  },
+  {
     id: 'terminal',
     bundleIds: [
       'com.apple.Terminal',

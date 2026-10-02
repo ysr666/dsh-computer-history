@@ -698,3 +698,71 @@ describe('every adapter in the table can be stored', () => {
     history.close()
   })
 })
+
+describe('URL resources are provenance-gated (ADR 0007)', () => {
+  function service(root: string) {
+    const history = openHistoryDatabase({
+      dataDirectory: path.join(root, 'history'),
+      nowMs: 1,
+    })
+    const policies = new PolicyStore(history.db)
+    policies.ensureInitial(1)
+    policies.replace('include-only', [{
+      id: PolicyRuleId('allow-browser'),
+      dimension: 'app',
+      action: 'allow',
+      matcher: 'exact',
+      pattern: 'companion.browser',
+      builtIn: false,
+      createdAtMs: 1,
+      updatedAtMs: 1,
+    }], 2)
+    return {
+      history,
+      ingestion: new IngestionService(
+        history.db,
+        { resolve: async () => ({ source: 'none' as const, confidence: 0 }) },
+        () => policies.get(),
+        () => 100_000,
+      ),
+    }
+  }
+
+  it('still drops a URL that came through Accessibility', async () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'dsh-ch-url-ax-'))
+    roots.push(root)
+    const { history, ingestion } = service(root)
+    expect(await ingestion.ingest({
+      ...native('com.microsoft.VSCode'),
+      window: { title: 'A page', url: 'https://example.test/private?token=abc' },
+      source: { adapter: 'vscode' },
+    })).toBe(false)
+    expect(new ObservationStore(history.db).count()).toBe(0)
+    history.close()
+  })
+
+  it('stores a companion URL without its query string or fragment', async () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'dsh-ch-url-companion-'))
+    roots.push(root)
+    const { history, ingestion } = service(root)
+    expect(await ingestion.ingest({
+      ...native('companion.browser'),
+      window: {
+        title: 'Example page',
+        url: 'https://example.test/docs/guide?token=secret#section-3',
+      },
+      source: { provider: 'companion', adapter: 'browser' },
+    })).toBe(true)
+
+    const observations = new ObservationStore(history.db).listAll()
+    expect(observations).toHaveLength(1)
+    expect(observations[0]!.resource).toMatchObject({
+      kind: 'url',
+      canonicalUri: 'https://example.test/docs/guide',
+      displayLabel: 'Example page',
+    })
+    expect(observations[0]!.source.provider).toBe('companion')
+    expect(String(observations[0]!.resource?.canonicalUri)).not.toContain('secret')
+    history.close()
+  })
+})

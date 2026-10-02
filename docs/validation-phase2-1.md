@@ -56,3 +56,34 @@ migration-upgrade.spec.ts   expected { count: 2 } to deeply equal { count: 1 }
 They now derive the expected count from `latestSchemaVersion()`, so the next
 migration does not need them edited, and the frozen-v1 upgrade fixture still
 proves that an existing database reaches the new schema without losing history.
+
+## T2.1-3 — provenance-gated URL resources
+
+The rule moved from "URL resources are dropped" to "URL resources are dropped
+unless the observation came from the paired companion". The provider is now
+first-class end to end instead of a constant:
+
+- `NativeObservation.source.provider` is optional and the wire parser never sets
+  it, so anything decoded from the collector is `macos-ax` by construction;
+- `ActivityObservation.source.provider` is `'macos-ax' | 'companion'`;
+- `resourceOf` strips the query string and the fragment from an `http(s)` URL,
+  because the extension is not the only thing that must not store a token in a
+  URL: a buggy or compromised companion must not be able to either;
+- the browser adapter (`companion.browser`, surface kind `browser`) is the
+  synthetic source; no real application carries that bundle id, so the
+  Accessibility path cannot produce one.
+
+**A second copied constant surfaced while wiring this:** the store's read path
+hardcoded `provider: 'macos-ax'` instead of reading `source_provider`, so a
+companion row would have read back as an Accessibility observation. It now reads
+the column through a validator, the same shape as the adapter fix in 2.0.
+
+Tests (`pnpm test` → 221):
+
+- an Accessibility observation whose window carries
+  `https://example.test/private?token=abc` is dropped and stores nothing;
+- a companion observation of
+  `https://example.test/docs/guide?token=secret#section-3` is stored with
+  `canonicalUri = https://example.test/docs/guide`, the display label from the
+  title, `source.provider = 'companion'`, and the stored URI contains neither
+  `secret` nor the fragment.

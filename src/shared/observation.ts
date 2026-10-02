@@ -19,9 +19,13 @@ export type ObservationAdapter =
   | 'jetbrains'
   | 'notes'
   | 'obsidian'
+  | 'browser'
   | 'terminal'
   | 'preview'
   | 'finder'
+
+/** Who produced the observation. */
+export type ObservationProvider = 'macos-ax' | 'companion'
 
 export interface ActivityObservation {
   readonly id?: ObservationId
@@ -61,7 +65,7 @@ export interface ActivityObservation {
   }
 
   readonly source: {
-    readonly provider: 'macos-ax'
+    readonly provider: ObservationProvider
     readonly adapter: ObservationAdapter
   }
 

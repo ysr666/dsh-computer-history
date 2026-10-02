@@ -105,6 +105,15 @@ let phase1Adapters: [Phase1Adapter] = [
         focusedElementPolicy: .require
     ),
     Phase1Adapter(
+        id: "browser",
+        // The companion's synthetic bundle id; kept in step with the shared
+        // table so the drift guard stays meaningful.
+        bundleIds: ["companion.browser"],
+        surfaceKind: "browser",
+        suppressesWindowTitle: false,
+        focusedElementPolicy: .require
+    ),
+    Phase1Adapter(
         id: "terminal",
         bundleIds: [
             "com.apple.Terminal",

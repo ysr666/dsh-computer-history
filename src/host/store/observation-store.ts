@@ -5,6 +5,7 @@ import {
   type ActivityObservation,
   type EpisodeId,
   type ObservationAdapter,
+  type ObservationProvider,
   type ObservationId,
   type ResourceId,
   type ResourceKind,
@@ -91,6 +92,15 @@ function workspaceSource(value: string): WorkspaceSource {
  * collector-side probes could not reveal. `tests/integration/ingestion.spec.ts`
  * now ingests one observation per table entry, so the two cannot drift again.
  */
+/**
+ * Providers the store accepts. Like the adapter list this is a validator, not a
+ * copy of the table: an unknown value is a corrupt row and must fail loudly.
+ */
+function provider(value: string): ObservationProvider {
+  if (value === 'macos-ax' || value === 'companion') return value
+  throw new Error(`invalid observation provider: ${value}`)
+}
+
 function adapter(value: string): ObservationAdapter {
   if (value === 'generic') return value
   if (PHASE1_ADAPTERS.some(entry => entry.id === value)) {
@@ -335,7 +345,7 @@ export class ObservationStore {
         ...(privacyReason ? { reason: privacyReason } : {}),
       },
       source: {
-        provider: 'macos-ax',
+        provider: provider(requiredString(row, 'source_provider')),
         adapter: adapter(requiredString(row, 'source_adapter')),
       },
       policyRevision: requiredNumber(row, 'policy_revision'),

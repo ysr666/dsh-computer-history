@@ -14,6 +14,8 @@ export interface CollectorHello {
   readonly capabilities: readonly CollectorCapability[]
 }
 
+import type { ObservationProvider } from './observation.js'
+
 export interface NativeObservation {
   readonly v: 1
   readonly type: 'observation'
@@ -45,6 +47,12 @@ export interface NativeObservation {
   }
   readonly source: {
     readonly adapter: string
+    /**
+     * Where the observation came from. The wire parser never sets it, so an
+     * observation decoded from the collector is 'macos-ax'; the companion
+     * intake sets 'companion' on the messages it builds locally (ADR 0007).
+     */
+    readonly provider?: ObservationProvider
   }
 }
 

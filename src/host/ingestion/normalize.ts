@@ -115,7 +115,21 @@ function resourceOf(
 ): ResourceIdentity | undefined {
   const raw = message.window?.document ?? message.window?.url
   if (!raw) return undefined
-  if (/^https?:\/\//i.test(raw)) return { kind: 'url', canonicalUri: raw, ...(message.window?.title ? { displayLabel: message.window.title } : {}) }
+  if (/^https?:\/\//i.test(raw)) {
+    // Query strings and fragments carry tokens and search terms; the extension
+    // strips them, and the Host strips them again so a compromised or buggy
+    // companion cannot put them in the store.
+    try {
+      const url = new URL(raw)
+      url.search = ''
+      url.hash = ''
+      return {
+        kind: 'url',
+        canonicalUri: url.href,
+        ...(message.window?.title ? { displayLabel: message.window.title } : {}),
+      }
+    } catch { return undefined }
+  }
   if (/^file:\/\//i.test(raw)) {
     try {
       const url = new URL(raw)
@@ -170,7 +184,14 @@ export function normalizeObservation(
   if (!adapter) return undefined
   const resource = resourceOverride
     ?? resourceOf(message, adapter)
-  if (resource?.kind === 'url') return undefined
+  // A URL resource is accepted only from the paired companion (ADR 0007). The
+  // Accessibility path still cannot tell a private window from a normal one, so
+  // a browser seen through AX keeps contributing nothing.
+  const provider = message.source.provider ?? 'macos-ax'
+  if (
+    resource?.kind === 'url'
+    && provider !== 'companion'
+  ) return undefined
   if (
     resource?.kind === 'file'
     || resource?.kind === 'directory'
@@ -224,7 +245,7 @@ export function normalizeObservation(
     workspace,
     activity: message.activity?.idleSeconds === undefined ? {} : { idleSeconds: message.activity.idleSeconds },
     privacy: { secure: false, protected: false },
-    source: { provider: 'macos-ax', adapter: safeAdapter },
+    source: { provider, adapter: safeAdapter },
     policyRevision: policy.revision,
     expiresAtMs,
   }
