@@ -64,7 +64,7 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
 async function api(pathname, init = {}) {
   const response = await fetch(`${apiBase}${pathname}`, {
     ...init,
-    headers: { ...(init.headers ?? {}), ...(cookie ? { cookie } : {}) },
+    headers: { ...init.headers, ...(cookie ? { cookie } : {}) },
   })
   return response
 }
@@ -143,12 +143,16 @@ async function cdpHttp(debugPort, pathname, method = 'GET') {
 
 async function waitForDebugger(debugPort) {
   for (let attempt = 0; attempt < 60; attempt += 1) {
+      // Sequential by nature: each attempt polls the browser, and the
+      // next one only makes sense after it.
     try {
+      // eslint-disable-next-line no-await-in-loop
       const version = await cdpHttp(debugPort, '/json/version')
       if (version.webSocketDebuggerUrl) return version
     } catch {
       // not up yet
     }
+    // eslint-disable-next-line no-await-in-loop
     await sleep(250)
   }
   throw new Error('Chrome DevTools endpoint never came up')
@@ -272,11 +276,13 @@ try {
   // for a working pairing later.
   let workerSeen = false
   for (let attempt = 0; attempt < 20 && !workerSeen; attempt += 1) {
+    // eslint-disable-next-line no-await-in-loop
     const targets = await cdpHttp(debugPort, '/json/list')
     workerSeen = (Array.isArray(targets) ? targets : []).some(
       target => String(target.url)
         === `chrome-extension://${extensionId}/service-worker.js`,
     )
+    // eslint-disable-next-line no-await-in-loop
     if (!workerSeen) await sleep(250)
   }
   if (!workerSeen) throw new Error('the extension loaded but its worker never started')
