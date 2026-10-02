@@ -146,3 +146,40 @@ That settles two things and leaves one:
 
 That is the boundary, stated plainly rather than papered over: the next attempt
 starts after a Host restart, then installs the extension and reads the stored row.
+
+### T2.8-3, fourth attempt: the state check, and where the phase stops
+
+The reload that would have told us whether the plugin loads was interrupted, and the
+outcome was unknown, so the next step was a read-only check rather than a retry:
+
+```text
+/state                 HTTP 404        (nothing loaded)
+junction               absent
+store symlink          absent
+companion port 19388   free
+```
+
+Nothing is half-loaded and nothing is left running: the environment is clean, and
+the interrupted call changed nothing.
+
+**Where 2.8 stands.** Everything the phase promised at the code level is verified:
+
+| promised | evidence |
+|---|---|
+| a declared identity is validated | five malformed claims refused, one accepted, in the intake tests |
+| it is recorded as a claim | `source.provider === 'companion'` asserted with the claimed id; `docs/audit.md` says where to look |
+| the allow-list still decides | an unallowed claim stores nothing (`ingest` false, count 0) |
+| the protected set wins | an allowed claim naming 1Password is dropped |
+| one package serves every VS Code editor | `declaredIdentity` maps VS Code/Cursor/Windsurf and gives anything else its own id; 8 extension tests |
+| what Cursor would send is accepted | the payload test asserts the exact key set; the intake tests accept that shape |
+| another editor can implement the protocol | `docs/editor-companion.md` documents the endpoint, the shape, the statuses, what a claim means and what a client must never send |
+| the pre-existing tests still pass | 316 tests, the additions being the phase's own |
+
+**The one thing missing** is the live run: a real editor's row, stored with the
+identity that editor declared about itself. It needs a Host session whose loader
+still gives a newly created entry a fiber, and this session's no longer does -
+after roughly fifteen create/remove cycles the last three attempts (checkout,
+tarball, a never-before-loaded name) all came back without one.
+
+That is a boundary to hand over, not to paper over: the live run is the first thing
+to do after a restart, and the phase report says so.
