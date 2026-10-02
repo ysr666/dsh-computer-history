@@ -29,7 +29,7 @@
     "verify:store-protection": "node scripts/verify-store-protection.mjs",
     "build:extension": "node scripts/build-extension.mjs",
     "verify:semantic-boundary": "node scripts/verify-semantic-boundary.mjs",
-    "build:editor-extension": "node scripts/build-editor-extension.mjs",
+    "build:editor-extension": "pnpm exec tsc -p extension-editor && cd extension-editor && node node_modules/@vscode/vsce/vsce package --no-dependencies --allow-missing-repository --skip-license -o ../dsh-computer-history-editor.vsix",
     "verify:architecture": "node scripts/verify-architecture.mjs",
     "verify:migrations": "node scripts/verify-migrations.mjs"
   },

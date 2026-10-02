@@ -40,5 +40,14 @@
   },
   "scripts": {
     "compile": "tsc -p ."
+  },
+  "devDependencies": {
+    "@vscode/vsce": "^4.0.0"
+  },
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": true,
+      "description": "Reads the workspace root and the active file path only; it never reads file contents."
+    }
   }
 }

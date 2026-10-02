@@ -466,3 +466,60 @@ from a real VS Code session carries the identity the extension declared.
 
 Not verified, and now precisely explained: that an extension installed from this
 repository's hand-built vsix activates in a normally launched window.
+
+## The install defect, found and fixed: Restricted Mode
+
+The registry-identity reading was **wrong** and is corrected here: the official
+packer produces a registry entry without `uuid`/`publisherId` too, because those come
+from the marketplace, not from a sideloaded vsix. So the difference I measured was
+normal and explained nothing.
+
+What explained everything was **workspace trust**. The scratch workspace is an
+untrusted folder, so the window runs in Restricted Mode, and Restricted Mode does not
+activate an extension that has not declared it supports untrusted workspaces - while
+`--extensionDevelopmentPath`, which is how the working evidence was produced, bypasses
+the trust check. The fix is the declaration the editor asks for:
+
+```json
+"capabilities": {
+  "untrustedWorkspaces": {
+    "supported": true,
+    "description": "Reads the workspace root and the active file path only; it never reads file contents."
+  }
+}
+```
+
+That is true of this extension - it reads metadata, not contents - so declaring it is
+honest as well as necessary. Repackaged with the standard tool (12 files → 7 with a
+`.vscodeignore`), installed, and a **normally launched window**:
+
+```text
+trace  2026-10-02T18:16:25.420Z activated: appName=Visual Studio Code host=desktop
+store  bundle=com.microsoft.VSCode | name=Visual Studio Code | provider=companion
+       session=vscode-murab70p | ws=companion | root=/tmp/dsh-ch-28k-ws
+```
+
+**The phase's live evidence is now produced the ordinary way**: install the vsix,
+launch VS Code, and a row appears carrying the identity the extension declared about
+itself.
+
+Two root fixes came out of this thread, both about not hand-rolling things the
+platform already does:
+
+- the repository no longer writes the vsix by hand; `build:editor-extension` runs
+  `@vscode/vsce` (one dev dependency) and `scripts/build-editor-extension.mjs` is
+  gone;
+- the extension now declares what it needs to run where the folder is untrusted, and
+  says why it is safe to do so.
+
+## Phase 2.8: final state
+
+| gate item | evidence |
+|---|---|
+| both gates green | `pnpm verify` 316 tests, lint 0, seven guards; `pnpm verify:p1` native tests |
+| identity validated, stored as a claim, visible in the audit | intake tests + `docs/audit.md` |
+| an unallowed claim stores nothing; a protected one is dropped | companion-workspace tests |
+| one package serves any VS Code-based editor | `declaredIdentity` + 8 extension tests incl. the exact Cursor payload |
+| live evidence, ordinary install path | `session=vscode-murab70p` in a normally launched window |
+| wire format documented for another editor | `docs/editor-companion.md` |
+| the pre-existing 307 tests still pass | 316, the additions being the phase's own |

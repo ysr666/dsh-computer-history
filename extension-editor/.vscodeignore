@@ -1,0 +1,6 @@
+# The packaged extension needs the compiled output and its manifest; the sources and
+# the tests are for the repository.
+src/**
+tests/**
+tsconfig.json
+node_modules/**
