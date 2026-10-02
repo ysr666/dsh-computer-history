@@ -1,6 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite'
 import {
   EPISODE_RETENTION_MS,
+  OBSERVATION_RETENTION_MS,
   type EpisodeDetail,
   type NativeObservation,
   type ObservationId,
@@ -42,6 +43,10 @@ export class IngestionService {
       WorkspaceResolver,
     private readonly policy: () => PolicySnapshot,
     private readonly now: () => number = Date.now,
+    // Last, so the existing positional contract is untouched: a new parameter
+    // in the middle silently re-points every caller that passed `now`.
+    private readonly observationRetentionMs: () => number = () =>
+      OBSERVATION_RETENTION_MS,
   ) {
     this.observations = new ObservationStore(db)
     this.resources = new ResourceStore(db)
@@ -150,6 +155,9 @@ export class IngestionService {
       message,
       this.policy(),
       this.now(),
+      undefined,
+      undefined,
+      this.observationRetentionMs(),
     )
     if (!preliminary) return false
 
@@ -193,6 +201,7 @@ export class IngestionService {
         this.now(),
         workspace,
         canonicalResource,
+        this.observationRetentionMs(),
       )
       if (!observation) {
         this.db.exec('COMMIT')

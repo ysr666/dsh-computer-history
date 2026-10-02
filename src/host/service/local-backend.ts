@@ -14,6 +14,7 @@ import type {
   PolicyUpdate,
   RecentEpisodesRequest,
   RedactionPreview,
+  RetentionSettings,
   TimelineDay,
   SemanticOptIn,
   SemanticSummaryState,
@@ -40,6 +41,7 @@ import { resolveResume } from '../resume/index.js'
 import { phase1AdapterForBundle } from '../ingestion/index.js'
 import { DeletionService } from '../retention/index.js'
 import { ObservationStore } from '../store/observation-store.js'
+import { RetentionSettingsStore } from '../store/retention-settings.js'
 import {
   EpisodeStore,
   PolicyStore,
@@ -357,6 +359,18 @@ implements ComputerHistoryServiceContract {
       policy: this.policies.get(),
       observations: scoped,
     })
+  }
+
+  public retention(): RetentionSettings {
+    return new RetentionSettingsStore(this.requireDb()).get()
+  }
+
+  public setRetention(input: {
+    readonly observationRetentionHours: number
+    readonly episodeRetentionDays: number
+  }): RetentionSettings {
+    return new RetentionSettingsStore(this.requireDb())
+      .set(input, this.now())
   }
 
   public listPolicyRules(): readonly PolicyRule[] {

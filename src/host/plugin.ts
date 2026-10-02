@@ -8,8 +8,6 @@ import '@deepseek-ai/dsh-subprocess'
 import '@deepseek-ai/dsh-workspace'
 import { registerAgentIntegration } from '../agent/index.js'
 import {
-  EPISODE_RETENTION_MS,
-  OBSERVATION_RETENTION_MS,
   type CollectorToHost,
   type ComputerHistoryState,
 } from '../shared/index.js'
@@ -25,6 +23,7 @@ import {
 } from './collector/index.js'
 import { IngestionService } from './ingestion/index.js'
 import { DeletionService, RetentionService } from './retention/index.js'
+import { RetentionSettingsStore } from './store/retention-settings.js'
 import {
   ComputerHistoryService,
   LocalComputerHistoryBackend,
@@ -163,10 +162,12 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
   const retention = new RetentionService(history.db)
   retention.sweep(Date.now())
 
+  const retentionSettings = new RetentionSettingsStore(history.db)
   const ingestion = new IngestionService(
     history.db,
     new DshWorkspaceResolver(ctx),
     () => policies.get(),
+    () => retentionSettings.observationRetentionMs(),
   )
 
   const retentionTimer = setInterval(
@@ -375,10 +376,7 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
       () => companionState,
     ),
     {
-      observationRetentionHours:
-        OBSERVATION_RETENTION_MS / 3_600_000,
-      episodeRetentionDays:
-        EPISODE_RETENTION_MS / 86_400_000,
+      ...retentionSettings.get(),
       autoResume: config.autoResume ?? false,
       acquirePolicyChangeLease,
       ...(manager

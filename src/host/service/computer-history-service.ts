@@ -14,6 +14,7 @@ import type {
   MinimisedSummaryPayload,
   PairingRotation,
   RedactionPreview,
+  RetentionSettings,
   TimelineDay,
   PairingState,
   SemanticOptIn,
@@ -117,6 +118,17 @@ export class ComputerHistoryService
     request: { readonly days?: number } = {},
   ): Promise<readonly TimelineDay[]> {
     return this.backend.timeline(request)
+  }
+
+  public retention(): RetentionSettings {
+    return this.backend.retention()
+  }
+
+  public setRetention(input: {
+    readonly observationRetentionHours: number
+    readonly episodeRetentionDays: number
+  }): RetentionSettings {
+    return this.backend.setRetention(input)
   }
 
   public redactionPreview(request: {

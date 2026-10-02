@@ -204,6 +204,9 @@ export function normalizeObservation(
   nowMs: number,
   workspace: WorkspaceRef = { source: 'none', confidence: 0 },
   resourceOverride?: ResourceIdentity,
+  // Stamped at insert time, so a later change of the setting governs what is
+  // recorded from then on rather than reaching back into stored history.
+  observationRetentionMs: number = OBSERVATION_RETENTION_MS,
 ): ActivityObservation | undefined {
   if (message.privacy.secure || message.privacy.protected) return undefined
   if (PROTECTED_BUNDLES.has(message.app.bundleId)) return undefined
@@ -237,7 +240,7 @@ export function normalizeObservation(
     return undefined
   }
 
-  const expiresAtMs = message.observedAtMs + OBSERVATION_RETENTION_MS
+  const expiresAtMs = message.observedAtMs + observationRetentionMs
   if (
     !Number.isSafeInteger(expiresAtMs)
     || expiresAtMs <= nowMs

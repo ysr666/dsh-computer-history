@@ -6,6 +6,7 @@ import {
   parsePolicyUpdate,
 } from './validation.js'
 import { HistoryImportError } from '../audit/export.js'
+import { RetentionSettingsError } from '../store/retention-settings.js'
 import { SummaryProviderError } from '../semantic/provider.js'
 import { computerHistoryService } from '../service/index.js'
 
@@ -93,6 +94,51 @@ export function registerHistoryApi(ctx: Context): void {
         return Promise.resolve(json(history.getState()))
       } catch {
         return Promise.resolve(textResponse('Request failed.', 500))
+      }
+    },
+  }))
+
+  ctx.effect(() => ctx.connection.fetch.register({
+    path: HISTORY_API_PREFIX + '/retention',
+    methods: ['GET'],
+    requestBody: 'buffered',
+    fetch: () => Promise.resolve(json(history.retention())),
+  }))
+
+  ctx.effect(() => ctx.connection.fetch.register({
+    path: HISTORY_API_PREFIX + '/retention',
+    methods: ['POST'],
+    requestBody: 'buffered',
+    fetch: async (request: Request) => {
+      let body: unknown
+      try {
+        body = await request.json()
+      } catch {
+        return textResponse('Invalid JSON.', 400)
+      }
+      const candidate = body as Partial<{
+        observationRetentionHours: number
+        episodeRetentionDays: number
+      }>
+      if (
+        typeof candidate?.observationRetentionHours !== 'number'
+        || typeof candidate?.episodeRetentionDays !== 'number'
+      ) {
+        return textResponse(
+          'observationRetentionHours and episodeRetentionDays are required',
+          400,
+        )
+      }
+      try {
+        return json(history.setRetention({
+          observationRetentionHours: candidate.observationRetentionHours,
+          episodeRetentionDays: candidate.episodeRetentionDays,
+        }))
+      } catch (error) {
+        if (error instanceof RetentionSettingsError) {
+          return textResponse(error.message, 400)
+        }
+        return textResponse('Request failed.', 500)
       }
     },
   }))

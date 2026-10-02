@@ -38,3 +38,11 @@ export interface RedactionPreview {
   readonly checked: number
   readonly excluded: readonly RedactionPreviewEntry[]
 }
+
+/** The user's retention choice, as the panel shows and edits it. */
+export interface RetentionSettings {
+  readonly observationRetentionHours: number
+  readonly episodeRetentionDays: number
+  /** Zero means the built-in default is in force. */
+  readonly updatedAtMs: number
+}

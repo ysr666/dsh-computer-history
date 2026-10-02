@@ -3,7 +3,11 @@ import type {
   EpisodeSummary,
   WorkThread,
 } from './episode.js'
-import type { HistoryExport, RedactionPreview } from './audit.js'
+import type {
+  HistoryExport,
+  RedactionPreview,
+  RetentionSettings,
+} from './audit.js'
 import type { TimelineDay } from './audit-view.js'
 import type { EpisodeId } from './ids.js'
 import type {
@@ -117,6 +121,15 @@ export interface ComputerHistoryServiceContract {
 
   /** Read an export back. Throws HistoryImportError-shaped failures as messages. */
   importAll(document: unknown): { readonly imported: Record<string, number> }
+
+  /** The retention choice in force, or the built-in default. */
+  retention(): RetentionSettings
+
+  /** Set it. The TTL applies to what is recorded from now on. */
+  setRetention(request: {
+    readonly observationRetentionHours: number
+    readonly episodeRetentionDays: number
+  }): RetentionSettings
 
   /** Episodes grouped into the days they happened on, newest first. */
   timeline(request?: {

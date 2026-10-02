@@ -124,6 +124,7 @@ describe('Computer History Host API', () => {
       '/api/computer-history/recent',
       '/api/computer-history/resume',
       '/api/computer-history/resume-hint',
+      '/api/computer-history/retention',
       '/api/computer-history/search',
       '/api/computer-history/semantic',
       '/api/computer-history/semantic/opt-in',

@@ -376,3 +376,34 @@ was filtered by a grep written for a different script.
 T2.3-5 remaining: retention controls (a stored override plus a sweep that reads
 it), and the Forget-direction proof if the rule-appearing/disappearing statement
 is wanted.
+
+## T2.3-5 — retention controls
+
+`GET /retention` answers with the choice in force (or the built-in default) and
+`POST /retention` sets it; the panel shows both numbers and a Save button. The
+choice is stored in `retention_settings` (migration 0005), not in a
+configuration file a later default could quietly flip.
+
+**What the control means is stated rather than implied.** The sweep deletes by
+the `expires_at_ms` written when an observation was inserted, so the setting
+decides the TTL *stamped on what is recorded from now on*. Shortening the window
+does not reach back and delete history the user did not ask to delete — and the
+panel says exactly that next to the inputs, because a retention control that
+silently deleted old rows would be a deletion the user never requested.
+
+`pnpm test` → four cases: the default is answered before any choice is made; a
+choice is remembered and survives being set twice; out-of-range values (0, 721,
+0 days, 366 days, a fraction) are refused and leave the default untouched; and
+the chosen window is **stamped on what is recorded next** — a 12-hour setting
+produces an expiry twelve hours out, strictly less than the built-in
+twenty-four.
+
+### A parameter placed in the middle broke fifteen tests
+
+I added the retention provider to `IngestionService` as the fourth constructor
+parameter. The constructor already had a fourth parameter — `now` — so every
+caller that passed a clock positionally now fed it to the retention window
+instead, and fifteen tests across the hardening suite failed: ingests refused,
+episodes not re-derived, one test timing out. The gate caught it immediately;
+the fix is the parameter at the end, with a comment saying why, because the next
+person to add one will face the same trap.

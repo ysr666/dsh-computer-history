@@ -282,6 +282,12 @@ describe('Cordis computer history service', () => {
       getState() { return state },
       async threads() { return [] },
       async timeline() { return [] },
+      retention() {
+        return { observationRetentionHours: 24, episodeRetentionDays: 30, updatedAtMs: 0 }
+      },
+      setRetention() {
+        return { observationRetentionHours: 24, episodeRetentionDays: 30, updatedAtMs: 1 }
+      },
       redactionPreview() {
         return {
           scopeKey: 'app:x',

@@ -17,6 +17,7 @@ import type {
   EpisodeSummary,
   PolicySnapshot,
   EpisodeDetail,
+  RetentionSettings,
   MinimisedSummaryPayload,
   TimelineDay,
   ResumeResolution,
@@ -46,6 +47,9 @@ function HistoryPage(): React.ReactElement {
   const [hint, setHint] = useState<ResumeResolution>()
   const [semantic, setSemantic] = useState<SemanticSummaryState>()
   const [timeline, setTimeline] = useState<readonly TimelineDay[]>([])
+  const [retention, setRetention] = useState<RetentionSettings>()
+  const [retentionHours, setRetentionHours] = useState('')
+  const [retentionDays, setRetentionDays] = useState('')
   const [selected, setSelected] = useState<EpisodeDetail>()
   const [preview, setPreview] = useState<string>()
   const [policy, setPolicy] = useState<PolicySnapshot>()
@@ -60,6 +64,7 @@ function HistoryPage(): React.ReactElement {
       const [
         nextState, nextEpisodes, nextPolicy, nextThreads, nextSemantics,
         nextTimeline,
+        nextRetention,
       ] = await Promise.all([
           api<ComputerHistoryState>('/state'),
           api<readonly EpisodeSummary[]>('/recent?limit=50'),
@@ -67,6 +72,7 @@ function HistoryPage(): React.ReactElement {
           api<readonly WorkThread[]>('/threads?limit=20'),
           api<SemanticSummaryState>('/semantic'),
           api<readonly TimelineDay[]>('/timeline?days=7'),
+          api<RetentionSettings>('/retention'),
         ])
       setState(nextState)
       setEpisodes(nextEpisodes)
@@ -74,6 +80,9 @@ function HistoryPage(): React.ReactElement {
       setThreads(nextThreads)
       setSemantic(nextSemantics)
       setTimeline(nextTimeline)
+      setRetention(nextRetention)
+      setRetentionHours(String(nextRetention.observationRetentionHours))
+      setRetentionDays(String(nextRetention.episodeRetentionDays))
       setError(undefined)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause))
@@ -334,6 +343,75 @@ function HistoryPage(): React.ReactElement {
       : null,
   )
 
+  const saveRetention = async (): Promise<void> => {
+    const next = await api<RetentionSettings>('/retention', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        observationRetentionHours: Number(retentionHours),
+        episodeRetentionDays: Number(retentionDays),
+      }),
+    })
+    setRetention(next)
+  }
+
+  const retentionSection = React.createElement(
+    'section',
+    { style: { marginBottom: 20 } },
+    React.createElement('h2', { style: { margin: '0 0 8px' } }, 'Retention'),
+    retention
+      ? React.createElement(
+          'div',
+          null,
+          React.createElement(
+            'p',
+            { style: { color: '#555', margin: '0 0 6px' } },
+            'Raw observations are kept for '
+              + retention.observationRetentionHours
+              + ' hours and episodes for '
+              + retention.episodeRetentionDays
+              + ' days. A change applies to what is recorded from now on; it '
+              + 'does not delete history you already have.',
+          ),
+          React.createElement(
+            'label',
+            null,
+            'Observation hours ',
+            React.createElement('input', {
+              type: 'number',
+              value: retentionHours,
+              min: 1,
+              max: 720,
+              onChange: (event: { target: { value: string } }) => {
+                setRetentionHours(event.target.value)
+              },
+            }),
+          ),
+          ' ',
+          React.createElement(
+            'label',
+            null,
+            'Episode days ',
+            React.createElement('input', {
+              type: 'number',
+              value: retentionDays,
+              min: 1,
+              max: 365,
+              onChange: (event: { target: { value: string } }) => {
+                setRetentionDays(event.target.value)
+              },
+            }),
+          ),
+          ' ',
+          React.createElement(
+            'button',
+            { type: 'button', onClick: () => { runAction(saveRetention) } },
+            'Save retention',
+          ),
+        )
+      : null,
+  )
+
   const openEpisode = async (id: string): Promise<void> => {
     setSelected(await api<EpisodeDetail>(`/episode?id=${encodeURIComponent(id)}`))
   }
@@ -582,6 +660,7 @@ function HistoryPage(): React.ReactElement {
         )
       : null,
     companionSection,
+    retentionSection,
     timelineSection,
     semanticSection,
     resumeSection,
