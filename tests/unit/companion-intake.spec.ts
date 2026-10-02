@@ -244,24 +244,24 @@ describe('companion intake', () => {
   })
 })
 
-describe('editor payloads (ADR 0009)', () => {
-  function editorPayload(
-    overrides: Record<string, unknown> = {},
-  ): Record<string, unknown> {
-    return {
-      source: 'editor',
-      workspaceRoot: '/Users/someone/Projects/demo',
-      filePath: '/Users/someone/Projects/demo/src/main.ts',
-      languageId: 'typescript',
-      surfaceKind: 'editor',
-      title: 'main.ts',
-      editorSession: 'editor-1',
-      seq: 1,
-      observedAtMs: 10_000,
-      ...overrides,
-    }
+function editorPayload(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    source: 'editor',
+    workspaceRoot: '/Users/someone/Projects/demo',
+    filePath: '/Users/someone/Projects/demo/src/main.ts',
+    languageId: 'typescript',
+    surfaceKind: 'editor',
+    title: 'main.ts',
+    editorSession: 'editor-1',
+    seq: 1,
+    observedAtMs: 10_000,
+    ...overrides,
   }
+}
 
+describe('editor payloads (ADR 0009)', () => {
   it('accepts an editor payload and reports it as stored', async () => {
     const { intake, port, delivered } = await harness()
     const response = await post(port, JSON.stringify(editorPayload()))
