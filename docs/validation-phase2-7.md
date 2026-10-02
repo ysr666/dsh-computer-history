@@ -59,3 +59,60 @@ nothing. The report keeps that mistake because "it went red" is not the same as
 A fourth guard already had self-checks (semantic boundary, added in 2.6), so
 `pnpm verify` now runs five guards that each state what they scanned and can each
 be shown to fail.
+
+## T2.7-2 — layering and dead contracts
+
+`scripts/verify-architecture.mjs` enforces two rules a compiler cannot see, and
+`pnpm verify` runs it as its sixth guard:
+
+```text
+architecture holds: 14 contract files, 83 exports all read, no import escapes the layer
+```
+
+**Rule 1 — the contract layer may not import an implementation.** `src/shared` is
+what the Host, the client and the extensions agree on; an import from it into
+`host`, `client` or `extension*` is a cycle in the dependency graph rather than a
+style preference. Zero escapes today.
+
+**Rule 2 — an export nobody reads is a decision nobody made.**
+`dead means referenced nowhere, including inside the layer` - a name that appears
+only in its own declaration is a leftover; a name that appears in a union the
+layer exports is doing work even if no consumer spells it out.
+
+### The rule was too crude on the first pass, and it nearly deleted live code
+
+The first version counted consumers only, and reported eleven "unread" exports. I
+acted on it: four types lost their `export`, and **seven protocol message types
+were deleted** as leftovers. Then `pnpm typecheck` refused to compile, because
+those seven are members of an exported union - the name never appears outside the
+layer, but the union does, and the union is the contract.
+
+The check was wrong, not the code. Restoring them all and refining the rule to
+"referenced nowhere at all" leaves `83 exports all read`, and the four
+un-exports were reverted too: `Brand` is used by `ids.ts` itself, `ProvenanceInput`
+by the signature that takes it, `EpisodeBoundary` and `EpisodeWorkspaceSummary` by
+`EpisodeSummary`. A check that proposes deleting live code is checking the wrong
+thing, and the honest response is to fix the check rather than keep the tidy-looking
+diff.
+
+### A self-check that counted itself
+
+The dead-export probe asserts that a name appearing nowhere is reported as used.
+It failed immediately, because the guard's own source was part of the consumer
+corpus and therefore contained the synthetic name. The corpus now excludes the
+guard itself, which is the same class of mistake this phase exists to catch: a
+check whose evidence comes from the thing it is checking.
+
+### Calibration
+
+```text
+red    layering matcher replaced with one that cannot match
+       → the layering rule no longer catches an escape - this guard proves nothing
+red    dead-export threshold raised so every export looks dead
+       → RecentEpisodesRequest (exported by src/shared/api.ts, referenced nowhere) …
+green  both restored
+       → architecture holds: 14 contract files, 83 exports all read
+```
+
+`pnpm verify` → 306 tests unchanged, lint 0 warnings, and six guards that each
+state what they scanned.
