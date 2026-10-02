@@ -4,9 +4,9 @@ import { describe, expect, it } from 'vitest'
 import {
   buildEditorPayload,
   surfaceKindOf,
-} from '../../extension-editor/src/payload.js'
+} from '../src/payload'
 
-const SOURCE_DIR = path.join(process.cwd(), 'extension-editor', 'src')
+const SOURCE_DIR = path.join(import.meta.dirname, '..', 'src')
 
 describe('editor companion payload (ADR 0009)', () => {
   it('carries exactly the editor metadata and the envelope', () => {

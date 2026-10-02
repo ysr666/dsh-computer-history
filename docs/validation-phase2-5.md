@@ -238,3 +238,59 @@ is documentation, and documentation is not a measurement.
 pnpm verify → 295 tests, lint 0 warnings, adapters 11/22, store protection,
               semantic boundary
 ```
+
+## T2.5-5 — the ESM attempt, and why the package stays CommonJS
+
+The previous round ended with an outstanding debt: the live anchoring evidence was
+produced with a **CommonJS** build, while the packaging fix had switched the
+package to ESM, and "VS Code supports ESM extensions since 1.94" is documentation
+rather than a measurement. So it was measured:
+
+```text
+extension-editor/package.json  "type": "module", build emits ESM
+code --install-extension … --force   → installed
+VS Code launched on the scratch workspace, 60 seconds watched
+  +10s companion: 0 … +60s companion: 0
+  and the Accessibility path reporting normally:
+  session=C26F9DEA-… provider=macos-ax ws=none
+```
+
+**The ESM artifact does not report; the CommonJS one did.** A measurement beats a
+release note, so the package went back to the configuration that was verified
+live, and the root-project conflict it had been solving was fixed where it
+actually lives:
+
+- the test that imported the extension's source now sits **in the package**
+  (`extension-editor/tests/payload.spec.ts`) and runs under vitest, which
+  transpiles it. The root project's `include` never reaches it, and the package's
+  own `tsc -p extension-editor` covers its types. No `exclude` hides anything, and
+  no file is type-checked twice under settings that do not belong to it;
+- `vitest.config.ts` gains that path with a comment saying why.
+
+```text
+pnpm exec tsc -p extension-editor   → clean, output starts with "use strict"
+node scripts/build-editor-extension.mjs → dsh-computer-history-editor.vsix
+pnpm verify → 295 tests, lint 0 warnings, adapters 11/22, store protection,
+              semantic boundary
+```
+
+Environment restored: VS Code quit (the instance this round launched), the user's
+`settings.json` restored from the backup taken before the token was written, the
+extension directory removed, the plugin uninstalled, the junction and
+`~/.dsh/computer-history` deleted, the scratch workspace removed.
+
+## Phase 2.5 exit gate
+
+| Gate item | Evidence |
+|---|---|
+| One intake, two source kinds, no new trusted concept | ADR 0009; the ADR 0007 listener, token digest, rate and size limits unchanged |
+| Contents unrepresentable, not merely unsent | `{ text: … }` refused with `unknown field for an editor payload: text`; the extension-side guard finds no `getText`/`.text`/`.selection` |
+| `pnpm verify` / `pnpm verify:p1` green | 295 tests, lint 0, adapters 11/22, store protection, semantic boundary; native privacy and protocol tests |
+| An episode carries the root the editor vouched for | `provider=companion ws=companion root=/private/tmp/dsh-ch-25-ws` beside `provider=macos-ax ws=none` from the same editor at the same moment |
+| The unanchored finding is fixed at its root | the timeline anchors that episode to the vouched workspace |
+| Install, pair, allow, rotate documented | `docs/editor-companion.md`, including the two traps that cost this phase time |
+
+**Known and stated:** the extension claims VS Code's real bundle id, so the
+user's existing "allow VS Code" rule governs it; a future editor-agnostic
+companion whose extension declares its own identity needs its own ADR. The
+packaging stays CommonJS because that is what was measured to work.
