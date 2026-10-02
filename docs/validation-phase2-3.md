@@ -462,3 +462,45 @@ So T2.3-5 is complete: the controls render, the per-application click moves the
 policy revision (2 → 3, round 9), the retention click moves `updatedAtMs`, and
 the retention semantics — from now on, not retroactive — are stated in the panel
 next to the inputs.
+
+## Visual review, and the 2.3 exit gate
+
+Two screenshots of the running GUI were reviewed against the DOM text captured
+from the same runs:
+
+- `/tmp/dsh-panel-controls.png` — the header (`Capture: running · Accessibility:
+  granted · Raw retention: 24h`), the companion box with **Allow site** and
+  **Deny site**, **Timeline** (`2026-10-02 · 1 episode` with `Wrote report.md in
+  demo.`), the opened episode detail with the provenance sentence and its
+  **Allow/Forget** buttons, **Summaries**, **Resume**, **Work threads**
+  (`1 episode in demo, touching report.md. (1 episode, 2 citations)`), the
+  capture buttons, and **Privacy & app access** with `Allow app` / `Forget app`
+  and the `com.microsoft.VSCode` rule.
+- `/tmp/dsh-panel-retention.png` — the **Retention** section showing
+  `Raw observations are kept for 6 hours and episodes for 14 days. A change
+  applies to what is recorded from now on; it does not delete history you already
+  have.`
+
+A note on both images: part of the panel is covered by the Host's own
+"预览版说明" overlay. It belongs to DSH, not to this plugin, and the strings hidden
+underneath it are recorded verbatim in the sections above.
+
+| Exit gate item | Evidence |
+|---|---|
+| `pnpm verify` green, export/import and F13 tests inside it | 280 tests, lint 0 warnings, `verify:privacy`, `verify:adapters` (11 adapters / 22 bundle ids), `verify:store-protection`, `verify:semantic-boundary` |
+| `pnpm verify:p1` green | native collector built and signed, native privacy and protocol tests passed |
+| Export round-trips | 4 tests: exact counts, summary text and kind, citation row, idempotence |
+| Export never carries the pairing digest | `deadbeef` and `companion_pairing` both asserted absent from the serialised document |
+| F13 decided, with tests | ADR 0008 (Accepted) and 4 cases in `tests/integration/ingestion.spec.ts`, the control case first |
+| Timeline, detail, per-app/per-site/retention controls | both screenshots above, reviewed |
+| A click changes state | policy revision 2 → 3 (Allow, round 9) and `updatedAtMs` …888780 → …899933 (Save retention, round 11), both read from the API rather than the page |
+| `docs/audit.md`, `docs/validation-phase2-3.md` | this file and `docs/audit.md`; the roadmap retires 2.3 |
+
+Boundaries held: ADR 0002 (F13 only ever drops an observation), ADR 0005
+(`verify:store-protection` green), ADR 0007 (a URL resource is still accepted
+only from the paired companion), ADR 0004 (deterministic summaries on, semantic
+off per scope).
+
+Environment restored after every section: the loader entry removed, staged tools
+demoted, the plugin junction and `~/.dsh/computer-history` deleted, port 19388
+free, worktree clean, forward commits only.
