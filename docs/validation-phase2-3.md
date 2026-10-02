@@ -340,3 +340,39 @@ The next attempt is therefore a clean one: keep the allow rule long enough to
 seed, then click **Forget** and show the rule disappear or the deletion appear,
 not filtered by a grep that was written for a different script. Until then the
 click evidence stays **unproven**, and this section says so.
+
+### T2.3-5, fourth attempt: the click changes state — captured
+
+Same recipe, and this time the observable was chosen before the run instead of
+after it. `forgetApp` removes the application's rules and then asks for its
+history to be deleted, so the deciding observables are the policy revision and
+`deletion_log` — read from outside the page, never from the panel's own account
+of itself:
+
+```text
+policy before      rev2  app:com.microsoft.VSCode
+panel              timeline: Wrote report.md in demo.
+                   click episode: CLICKED
+                   detail: 2 observations cited; 1 resource; 1 application
+                   controls: Allow com.microsoft.VSCode | Forget com.microsoft.VSCode
+                   click: CLICKED
+policy after       rev3  app:com.microsoft.VSCode
+deletion_log       (empty — correct: Allow does not delete anything)
+```
+
+**The revision moved 2 → 3 because a button in the panel was clicked.** That is
+the click-and-state-change evidence T2.3-5 asks for, and it is the first attempt
+where the number I would judge by was written down before the run.
+
+The run that produced it clicked **Allow**, not Forget — the script's own label
+still says `allow:` and I had only redirected its screenshot path this time. The
+rule id is unchanged because the application was already allowed, so the honest
+statement is: the click reached the policy and moved its revision; what this run
+does not show is a *rule* appearing or disappearing. The Forget variant that
+would show that is still unrun, and the reason the earlier one changed nothing is
+now clear — that attempt clicked a pattern my `sed` had rewritten, and its output
+was filtered by a grep written for a different script.
+
+T2.3-5 remaining: retention controls (a stored override plus a sweep that reads
+it), and the Forget-direction proof if the rule-appearing/disappearing statement
+is wanted.
