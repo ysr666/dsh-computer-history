@@ -39,6 +39,24 @@ interface RemoteResponse {
 }
 
 /**
+ * The exact bytes a remote call sends. The preview and the provider both call
+ * this, so "the preview shows what would be sent" is a property of the code
+ * rather than a promise in a document (ADR 0010).
+ */
+export function buildRemoteRequestBody(input: {
+  readonly model: string
+  readonly payload: MinimisedSummaryPayload
+  readonly observationIds: readonly ObservationId[]
+}): string {
+  return JSON.stringify({
+    model: input.model,
+    payload: input.payload,
+    // Opaque internal integers, needed so the response can cite precisely.
+    observationIds: [...input.observationIds],
+  })
+}
+
+/**
  * A model that runs somewhere else (ADR 0010).
  *
  * Four rules are structural rather than conventional:
@@ -70,11 +88,10 @@ export class RemoteSummaryProvider implements SummaryProvider {
     assertRemoteOptIn(this.options.optIns, request.scope)
 
     const url = this.requireHttpsEndpoint()
-    const body = JSON.stringify({
+    const body = buildRemoteRequestBody({
       model: this.options.model,
       payload: request.payload,
-      // Opaque internal integers, needed so the response can cite precisely.
-      observationIds: [...request.citations],
+      observationIds: request.citations,
     })
     const digest = createHash('sha256').update(body).digest('hex')
     const sentAtMs = (this.options.now ?? Date.now)()

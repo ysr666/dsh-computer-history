@@ -29,7 +29,14 @@ import {
   type HistoryExport,
 } from '../audit/export.js'
 import type { CompanionTokenStore } from '../companion/token-store.js'
+import type { ObservationId } from '../../shared/index.js'
 import { minimiseEpisode, type MinimisedSummaryPayload } from '../semantic/minimise.js'
+import { SummaryProviderError } from '../semantic/provider.js'
+import { RemoteSendStore } from '../semantic/send-store.js'
+import {
+  buildRemoteRequestBody,
+  RemoteSummaryProvider,
+} from '../semantic/remote-provider.js'
 import {
   parseScopeKey,
   type SemanticOptInStore,
@@ -280,6 +287,84 @@ implements ComputerHistoryServiceContract {
       ...(detail.threadKey === undefined ? {} : { threadKey: detail.threadKey }),
       ...(detail.workspace === undefined ? {} : { workspace: detail.workspace }),
     })
+  }
+
+  /**
+   * The exact bytes a remote call would send, for the panel to show before the
+   * user switches a scope on (ADR 0010). Built by the same function the
+   * provider uses, so it cannot drift from what is actually sent.
+   */
+  public semanticRemotePreview(request: {
+    readonly scopeKey: string
+    readonly model: string
+  }): { readonly payload: MinimisedSummaryPayload, readonly body: string } | undefined {
+    const payload = this.semanticPreview({ scopeKey: request.scopeKey })
+    if (!payload) return undefined
+    const citations = this.citationsForScope(request.scopeKey)
+    return {
+      payload,
+      body: buildRemoteRequestBody({
+        model: request.model,
+        payload,
+        observationIds: citations,
+      }),
+    }
+  }
+
+  /**
+   * Produce a summary remotely, and record that it happened (ADR 0010). The
+   * provider refuses without a recorded opt-in, so a scope the user has not
+   * enabled cannot reach this far.
+   */
+  public async summariseRemotely(request: {
+    readonly scopeKey: string
+    readonly endpoint: string
+    readonly model: string
+    readonly fetchImpl?: typeof fetch
+  }): Promise<{ readonly summary: string, readonly sendId: number }> {
+    const payload = this.semanticPreview({ scopeKey: request.scopeKey })
+    if (!payload) throw new SummaryProviderError('no episode for that scope')
+    const citations = this.citationsForScope(request.scopeKey)
+    const scope = parseScopeKey(request.scopeKey)
+    if (!this.semanticOptIns) {
+      throw new SummaryProviderError('semantic summaries are unavailable')
+    }
+    const sends = new RemoteSendStore(this.requireDb())
+    const episodeId = this.episodeIdForScope(request.scopeKey)
+    const provider = new RemoteSummaryProvider({
+      endpoint: request.endpoint,
+      model: request.model,
+      optIns: this.semanticOptIns,
+      ...(request.fetchImpl ? { fetchImpl: request.fetchImpl } : {}),
+      now: () => this.now(),
+      onSent: (record) => {
+        lastSendId = sends.record({
+          ...record,
+          scopeKey: request.scopeKey,
+          ...(episodeId === undefined ? {} : { episodeId }),
+        })
+      },
+    })
+    let lastSendId = 0
+    const summary = await provider.summarise({ scope, payload, citations })
+    return { summary, sendId: lastSendId }
+  }
+
+  /** The episode a scope points at, and the citations behind its summary. */
+  private episodeIdForScope(scopeKey: string): EpisodeId | undefined {
+    const [kind, ...rest] = scopeKey.split(':')
+    const id = rest.join(':')
+    const episodes = this.episodes.listRecent({ limit: 50 })
+    const episode = kind === 'workspace'
+      ? episodes.find(item => item.workspace?.id === id)
+      : episodes.find(item => item.surfaces.some(surface => surface.bundleId === id))
+    return episode?.id
+  }
+
+  private citationsForScope(scopeKey: string): readonly ObservationId[] {
+    const episodeId = this.episodeIdForScope(scopeKey)
+    if (episodeId === undefined) return []
+    return this.episodes.get(episodeId)?.summaryObservationIds ?? []
   }
 
   public grantSemanticOptIn(request: {

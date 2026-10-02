@@ -120,3 +120,36 @@ revoking one scope forgets that scope and leaves the other untouched
 Still open: the provenance sink is not yet wired into a summary flow, because
 there is no panel switch that produces a remote summary until T2.6-3. The store
 and its schema are the part this task promised.
+
+## T2.6-3 — the preview is the send, byte for byte
+
+The promise "the preview shows what would be sent" is only worth making if the
+two cannot drift, so both call **one function**:
+`buildRemoteRequestBody({ model, payload, observationIds })`. The provider no
+longer builds its own body; the backend preview calls the same one.
+
+```text
+backend   semanticsRemotePreview({scopeKey, model}) → { payload, body }
+provider  summarise() → fetch(…, { body: buildRemoteRequestBody(…) })
+
+pnpm test tests/integration/semantic-remote-flow.spec.ts → 2 passed
+
+the bytes the injected fetch received EQUAL the preview body, and the recorded
+  payloadDigest is the sha256 of exactly those bytes
+without an opt-in: no call at all and no row recorded
+```
+
+Alongside it, `LocalBackend.summariseRemotely` wires the provenance sink: the
+provider's `onSent` record is written to `remote_summary_sends` together with the
+scope and the episode, so the audit can answer "what left, where, when" from the
+store rather than from the network layer.
+
+Two mistakes of mine surfaced while wiring it - a duplicate `parseScopeKey`
+import and a missing `ObservationId` type - both caught by `pnpm typecheck`
+within a minute, which is the argument for running it before the tests rather
+than after.
+
+Still open in T2.6-3: the panel itself. The switch that turns a scope remote, the
+preview text, and ADR 0010's irreversibility sentence belong with T2.6-4's
+revocation, because the two sentences - "this will leave" and "this cannot be
+recalled" - have to sit next to each other to mean anything.
