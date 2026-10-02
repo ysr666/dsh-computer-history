@@ -84,3 +84,38 @@ code. Instead:
 
 Deleting the store file is a complete and irreversible rollback of local history;
 the panel's **Delete all history** does the same from inside.
+
+## Removing it: verified
+
+Run on this machine, with the output that came back:
+
+```bash
+rm -f ~/.dsh/profiles/<profile>/node_modules/dsh-computer-history   # the junction
+rm -f ~/.dsh/computer-history                                       # the store symlink
+rm -f ~/.dsh/computer-history-editor.log                            # the editor companion's trace
+code --uninstall-extension dsh-local.dsh-computer-history-editor     # the editor extension
+# and remove the settings keys dshComputerHistory.* from the editor's settings.json
+```
+
+```text
+store symlink        gone
+junction             gone
+editor log           gone
+editor extension     0 remaining
+history file         176128 bytes, still there
+port 19388           still listening
+```
+
+Two of those lines are the interesting ones:
+
+- **The history is kept.** Removing the software is not the same as deleting the
+  record, and it must not be: the store file is the whole point of the product. It
+  stays where it is until the user deletes it (the panel's "Delete all history" does
+  that from inside, and `docs/release.md` does not do it for them).
+- **The port stays open until the Host restarts**, because the running plugin holds
+  it. Nothing is left on disk, and the listener disappears at the next start - which
+  is worth knowing rather than discovering.
+
+Nothing else was left behind: no profile `dependencies` or `bundles` entries (there
+were none to remove), no patch residue in any profile, and no stray files in the
+editor's extension directory.

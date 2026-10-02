@@ -512,3 +512,30 @@ Environment: the plugin is left loaded against the clean store at
 `/tmp/dsh-ch-29-fresh` with its symlink and junction in place, because the pending
 evidence is a screenshot of that running panel. Nothing else was started, and the
 editor's own settings were restored in the previous rounds.
+
+## T2.9-4 — removal, verified; install, honest
+
+Removal was run for real and checked item by item:
+
+```text
+before   store symlink present · junction present · editor log present · extension installed: 1
+after    store symlink gone · junction gone · editor log gone · extension installed: 0
+kept     history file, 176128 bytes
+open     port 19388 still listening (the running plugin holds it until a restart)
+```
+
+The two lines worth reading twice: **the history is kept** - removing software is not
+deleting the record, and the store file is the product - and **the port stays open
+until the Host restarts**, which is stated rather than discovered. `docs/release.md`
+now carries this as the verified removal path, with the commands and this output.
+
+Install stays split, and the split is measured rather than assumed:
+
+| path | state |
+|---|---|
+| from a checkout, junction into the profile | **verified** - `[active]`, every phase's runtime evidence |
+| from the packed tarball | **unverified** - the bundle is declared in the profile and assembles at Host startup; a restart with it declared has not been done |
+
+The support for the second row: the install tool says so in its own report, and the
+development path starts *the same code* immediately, which is why "the artifact is
+broken" was ruled out earlier in this phase.
