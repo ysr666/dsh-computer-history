@@ -92,6 +92,13 @@ const DEFAULT_RATE_LIMIT = 120
  * host-side as well as in the extension.
  */
 export class CompanionIntake {
+  /** When a request last proved it holds a valid token, if ever. */
+  private lastSeenAtMs: number | undefined
+
+  public lastSeen(): number | undefined {
+    return this.lastSeenAtMs
+  }
+
   private server: Server | undefined
   private boundPort: number | undefined
   private readonly hits = new Map<string, number[]>()
@@ -181,6 +188,11 @@ export class CompanionIntake {
     if (!this.options.tokens.verify(presented)) {
       return this.send(response, 401, { error: 'pairing token required' })
     }
+
+    // A token existing is not the same as a client using it (ADR 0007, and the
+    // product need behind it): "paired" with nothing ever arriving looks exactly
+    // like a mistyped token, and telling those apart needs this one fact.
+    this.lastSeenAtMs = Date.now()
 
     // Pairing check for the options page: proves the port and the token before
     // the user trusts a pairing, and stores nothing.

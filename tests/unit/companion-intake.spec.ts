@@ -375,3 +375,26 @@ describe('a declared identity (ADR 0011)', () => {
     await intake.stop()
   })
 })
+
+describe('whether a client is actually connected (ADR 0007)', () => {
+  it('records the last request that proved it holds the token', async () => {
+    const { intake, port } = await harness()
+    // A token can exist while nothing uses it: "paired" and "never used" must be
+    // tellable apart, which is the whole point of this fact.
+    expect(intake.lastSeen()).toBeUndefined()
+    await post(port, JSON.stringify(editorPayload()))
+    expect(intake.lastSeen()).toBeTypeOf('number')
+    await intake.stop()
+  })
+
+  it('does not record a request that failed the token check', async () => {
+    const { intake, port } = await harness()
+    await fetch(`http://127.0.0.1:${port}/companion/observation`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-companion-token': 'wrong' },
+      body: JSON.stringify(editorPayload()),
+    }).catch(() => undefined)
+    expect(intake.lastSeen()).toBeUndefined()
+    await intake.stop()
+  })
+})

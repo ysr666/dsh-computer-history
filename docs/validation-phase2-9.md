@@ -227,3 +227,31 @@ them as done.
 Named last round and not yet implemented: `companion.lastSeenAtMs`, set when a request
 passes the token check, so a mistyped token stops reading as "paired" and nothing else.
 It is the last fact the panel needs to answer "is it working?" completely.
+
+## T2.9-2 — "paired" and "never used" are now tellable apart
+
+The intake records the moment a request proves it holds a valid token, and only that
+moment:
+
+```text
+pnpm test tests/unit/companion-intake.spec.ts → 21 passed
+  lastSeen() is undefined before any request
+  after a request with a valid token it is a number
+  a request with the wrong token leaves it undefined
+```
+
+That closes the ambiguity a mistyped token used to create: the panel could only say
+"paired", which was true of a client that had never once connected.
+
+**A mistake worth recording, because it is the second of its kind today.** My patch
+anchor was `export class CompanionIntake`, which is also the prefix of
+`CompanionIntakeError` - so the first replacement hit the error class and left the
+file as `Error extends Error {}` with two class declarations. `pnpm typecheck` named
+the line immediately, the damage was one line, and the repair was to restore the name
+and insert the fields into the class that actually has the server. **An anchor that is
+a prefix of something else is not an anchor**; the third time this session an
+unanchored replacement looked like success.
+
+Still open in this task: wiring `lastSeen()` through the plugin's companion state into
+`/state`, and the panel sentence that uses it. The fact is collected and tested; it is
+not yet visible.
