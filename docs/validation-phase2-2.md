@@ -232,3 +232,25 @@ its children — and the runner turns it back on. If that restore ever failed,
 deleted observations would quietly leave their citation rows behind and every
 "deletion removes derived text" claim would be false while the tests kept
 passing. So the state is asserted, not assumed.
+
+## T2.2-7 — the panel, the routes and the documentation
+
+`GET /semantic` reports who produces summaries per scope, `GET
+/semantic/preview?scope=` returns exactly what a provider would see,
+`POST /semantic/opt-in` records a permission and `POST /semantic/revoke` turns a
+scope off and purges its model-written summaries. The panel gained a
+**Summaries** section: the active layer, per-scope rows, *Preview payload* and
+*Turn off and purge*.
+
+`pnpm test` → 258, four of them new:
+
+| case | expectation |
+|---|---|
+| purge a workspace scope with one `local` and one `remote` episode beside a `deterministic` one | `purged: 2`, and the deterministic episode survives |
+| purge one scope | the other scope's episodes survive |
+| `parseScopeKey` | refuses an unparseable key, allows a colon inside an app id |
+
+The purge rule is the one worth stating plainly: **turning a scope off deletes
+model-written text and nothing else.** Deterministic text never left the
+machine, so there is nothing to withdraw, and deleting *evidence* is a different
+contract that `episode_summary_citations` enforces with `ON DELETE CASCADE`.

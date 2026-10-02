@@ -10,8 +10,11 @@ import type {
   EpisodeDetail,
   EpisodeId,
   EpisodeSummary,
+  MinimisedSummaryPayload,
   PairingRotation,
   PairingState,
+  SemanticOptIn,
+  SemanticSummaryState,
   WorkThread,
   PolicyRule,
   PolicySnapshot,
@@ -95,6 +98,30 @@ export class ComputerHistoryService
     request: { readonly limit?: number } = {},
   ): Promise<readonly WorkThread[]> {
     return this.backend.threads(request)
+  }
+
+  public semanticState(): SemanticSummaryState {
+    return this.backend.semanticState()
+  }
+
+  public semanticPreview(request: {
+    readonly scopeKey: string
+  }): MinimisedSummaryPayload | undefined {
+    return this.backend.semanticPreview(request)
+  }
+
+  public grantSemanticOptIn(request: {
+    readonly scopeKey: string
+    readonly providerKind: 'local' | 'remote'
+    readonly model?: string
+  }): SemanticOptIn {
+    return this.backend.grantSemanticOptIn(request)
+  }
+
+  public revokeSemanticOptIn(request: {
+    readonly scopeKey: string
+  }): { readonly revoked: boolean; readonly purged: number } {
+    return this.backend.revokeSemanticOptIn(request)
   }
 
   public pairing(): PairingState {

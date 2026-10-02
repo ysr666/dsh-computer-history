@@ -17,6 +17,7 @@ import { registerHistoryApi } from './api/index.js'
 import { CompanionIntake } from './companion/intake.js'
 import { companionObservation } from './companion/observation.js'
 import { CompanionTokenStore } from './companion/token-store.js'
+import { SemanticOptInStore } from './semantic/opt-in.js'
 import {
   CAPTURE_LOCK_PROBE_WAIT_MS,
   CaptureOwnershipLock,
@@ -395,6 +396,7 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
       onHistoryChanged: () => { ingestion.reseed() },
     },
      companionTokens,
+    new SemanticOptInStore(history.db),
   )
 
   // Teardown is registered immediately, before anything that can throw,

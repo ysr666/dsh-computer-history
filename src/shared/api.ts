@@ -4,6 +4,11 @@ import type {
   WorkThread,
 } from './episode.js'
 import type { EpisodeId } from './ids.js'
+import type {
+  MinimisedSummaryPayload,
+  SemanticOptIn,
+  SemanticSummaryState,
+} from './semantic.js'
 import type { PolicyRule, PolicySnapshot } from './policy.js'
 import type { ResumeRequest, ResumeResolution } from './resume.js'
 
@@ -104,6 +109,25 @@ export interface ComputerHistoryServiceContract {
 
   /** Rotate the pairing token; the token is returned once. */
   rotatePairing(): PairingRotation
+
+  /** Who produces summaries, per scope (ADR 0004 §4). */
+  semanticState(): SemanticSummaryState
+
+  /** The exact payload a provider would see for a scope (ADR 0004 §4). */
+  semanticPreview(request: {
+    readonly scopeKey: string
+  }): MinimisedSummaryPayload | undefined
+
+  grantSemanticOptIn(request: {
+    readonly scopeKey: string
+    readonly providerKind: 'local' | 'remote'
+    readonly model?: string
+  }): SemanticOptIn
+
+  /** "Turn off and purge": revoke the permission and delete model summaries. */
+  revokeSemanticOptIn(request: {
+    readonly scopeKey: string
+  }): { readonly revoked: boolean; readonly purged: number }
 
   /** Work threads over stored episodes (ADR 0004 §5: each carries citations). */
   threads(request?: { readonly limit?: number }): Promise<readonly WorkThread[]>

@@ -1,7 +1,9 @@
 import type {
   EpisodeDetail,
-  SurfaceKind,
+  MinimisedSummaryPayload,
 } from '../../shared/index.js'
+
+export type { MinimisedSummaryPayload }
 
 /**
  * What a summary provider is allowed to see (ADR 0004 §4).
@@ -11,20 +13,6 @@ import type {
  * shape — which applications, which kinds of resource, how much activity, when
  * in the day, and the basename of the workspace root.
  */
-export interface MinimisedSummaryPayload {
-  readonly appBundleIds: readonly string[]
-  readonly surfaceKinds: readonly SurfaceKind[]
-  readonly resourceKinds: readonly string[]
-  readonly fileExtensions: readonly string[]
-  readonly observationCount: number
-  /** Local hour of the day, so timing survives without a wall-clock stamp. */
-  readonly startHourOfDay: number
-  readonly durationMinutes: number
-  /** The last path segment only; a full path would name directories. */
-  readonly workspaceRootName?: string
-  readonly hasThread: boolean
-}
-
 /** The query string and fragment of a URL never survive minimisation. */
 function extensionOf(canonicalUri: string): string | undefined {
   const withoutQuery = canonicalUri.split(/[?#]/)[0] ?? ''

@@ -281,6 +281,14 @@ describe('Cordis computer history service', () => {
       async resume() {},
       getState() { return state },
       async threads() { return [] },
+      semanticState() {
+        return { active: 'deterministic', localProviderConfigured: false, scopes: [] }
+      },
+      semanticPreview() { return undefined },
+      grantSemanticOptIn(request) {
+        return { scopeKey: request.scopeKey, providerKind: request.providerKind, createdAtMs: 1 }
+      },
+      revokeSemanticOptIn() { return { revoked: false, purged: 0 } },
       pairing() { return { paired: false, listening: false } },
       rotatePairing() {
         return { paired: true, listening: false, token: 'stub-token' }

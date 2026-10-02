@@ -5,6 +5,7 @@ import {
   parseDeleteRequest,
   parsePolicyUpdate,
 } from './validation.js'
+import { SummaryProviderError } from '../semantic/provider.js'
 import { computerHistoryService } from '../service/index.js'
 
 export const HISTORY_API_PREFIX = '/api/computer-history'
@@ -91,6 +92,98 @@ export function registerHistoryApi(ctx: Context): void {
         return Promise.resolve(json(history.getState()))
       } catch {
         return Promise.resolve(textResponse('Request failed.', 500))
+      }
+    },
+  }))
+
+  ctx.effect(() => ctx.connection.fetch.register({
+    path: HISTORY_API_PREFIX + '/semantic',
+    methods: ['GET'],
+    requestBody: 'buffered',
+    fetch: () => Promise.resolve(json(history.semanticState())),
+  }))
+
+  ctx.effect(() => ctx.connection.fetch.register({
+    // The payload preview ADR 0004 §4 requires before a remote opt-in: exactly
+    // what would be sent, computed by the same minimiser the provider uses.
+    path: HISTORY_API_PREFIX + '/semantic/preview',
+    methods: ['GET'],
+    requestBody: 'buffered',
+    fetch: (request: Request) => {
+      const scopeKey = new URL(request.url).searchParams.get('scope') ?? ''
+      try {
+        const preview = history.semanticPreview({ scopeKey })
+        return Promise.resolve(preview === undefined
+          ? textResponse('No episode matches that scope yet.', 404)
+          : json(preview))
+      } catch (error) {
+        if (error instanceof SummaryProviderError) {
+          return Promise.resolve(textResponse(error.message, 400))
+        }
+        return Promise.resolve(textResponse('Request failed.', 500))
+      }
+    },
+  }))
+
+  ctx.effect(() => ctx.connection.fetch.register({
+    path: HISTORY_API_PREFIX + '/semantic/opt-in',
+    methods: ['POST'],
+    requestBody: 'buffered',
+    fetch: async (request: Request) => {
+      let body: unknown
+      try {
+        body = await request.json()
+      } catch {
+        return textResponse('Invalid JSON.', 400)
+      }
+      const record = body as Partial<{
+        scopeKey: unknown
+        providerKind: unknown
+        model: unknown
+      }>
+      if (
+        typeof record.scopeKey !== 'string'
+        || (record.providerKind !== 'local' && record.providerKind !== 'remote')
+      ) {
+        return textResponse('scopeKey and providerKind are required.', 400)
+      }
+      try {
+        return json(history.grantSemanticOptIn({
+          scopeKey: record.scopeKey,
+          providerKind: record.providerKind,
+          ...(typeof record.model === 'string' ? { model: record.model } : {}),
+        }))
+      } catch (error) {
+        if (error instanceof SummaryProviderError) {
+          return textResponse(error.message, 400)
+        }
+        return textResponse('Request failed.', 500)
+      }
+    },
+  }))
+
+  ctx.effect(() => ctx.connection.fetch.register({
+    path: HISTORY_API_PREFIX + '/semantic/revoke',
+    methods: ['POST'],
+    requestBody: 'buffered',
+    fetch: async (request: Request) => {
+      let body: unknown
+      try {
+        body = await request.json()
+      } catch {
+        return textResponse('Invalid JSON.', 400)
+      }
+      const scopeKey = (body as { scopeKey?: unknown }).scopeKey
+      if (typeof scopeKey !== 'string') {
+        return textResponse('scopeKey is required.', 400)
+      }
+      try {
+        return json(history.revokeSemanticOptIn({ scopeKey }))
+      } catch (error) {
+        if (error instanceof SummaryProviderError) {
+          return textResponse(error.message, 400)
+        }
+        return textResponse('Request failed.', 500)
       }
     },
   }))

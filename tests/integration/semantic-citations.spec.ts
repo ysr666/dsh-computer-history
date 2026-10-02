@@ -3,6 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { afterEach, describe, expect, it } from 'vitest'
+import { parseScopeKey, SemanticOptInStore } from '../../src/host/semantic/opt-in.js'
 import { openHistoryDatabase } from '../../src/host/store/index.js'
 
 const roots: string[] = []
@@ -22,16 +23,21 @@ function database(): DatabaseSync {
   return history.db
 }
 
-function insertEpisode(db: DatabaseSync, id: string, kind: string): void {
+function insertEpisode(
+  db: DatabaseSync,
+  id: string,
+  kind: string,
+  workspaceId?: string,
+): void {
   db.prepare(`
     INSERT INTO episodes(
       id, started_at_ms, ended_at_ms, start_reason, end_reason,
-      summary_kind, summary_text, confidence, state,
+      primary_workspace_id, summary_kind, summary_text, confidence, state,
       created_at_ms, updated_at_ms
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id, 1, 2, 'first-observation', 'timeout',
-    kind, 'text', 0.5, 'closed', 1, 1,
+    workspaceId ?? null, kind, 'text', 0.5, 'closed', 1, 1,
   )
 }
 
@@ -86,5 +92,52 @@ describe('semantic provenance in the schema (ADR 0004 §5)', () => {
         .get(),
     ).toEqual({ count: 0 })
     db.close()
+  })
+})
+
+describe('turn off and purge (ADR 0004, Consequences)', () => {
+  it('removes the model summary and leaves the deterministic one', () => {
+    const db = database()
+    insertEpisode(db, 'episode-local', 'local', 'w1')
+    insertEpisode(db, 'episode-remote', 'remote', 'w1')
+    insertEpisode(db, 'episode-plain', 'deterministic', 'w1')
+
+    const optIns = new SemanticOptInStore(db)
+    const scope = { kind: 'workspace', id: 'w1' } as const
+    optIns.grant(scope, 'remote', 'some-model', 1_000)
+    expect(optIns.list()).toHaveLength(1)
+
+    const result = optIns.revoke(scope)
+    const purged = optIns.purge(scope)
+
+    expect(result).toBe(true)
+    // Both model-written summaries go; the deterministic text stays, because it
+    // never left the machine and there is nothing to withdraw.
+    expect(purged).toBe(2)
+    const left = (db.prepare('SELECT id FROM episodes ORDER BY id').all() as Array<{ id: string }>)
+      .map(row => row.id)
+    expect(left).toEqual(['episode-plain'])
+    expect(optIns.list()).toHaveLength(0)
+    db.close()
+  })
+
+  it('purges per scope, not globally', () => {
+    const db = database()
+    insertEpisode(db, 'episode-a', 'local', 'w1')
+    insertEpisode(db, 'episode-b', 'local', 'w2')
+    const optIns = new SemanticOptInStore(db)
+    expect(optIns.purge({ kind: 'workspace', id: 'w1' })).toBe(1)
+    const left = (db.prepare('SELECT id FROM episodes').all() as Array<{ id: string }>)
+      .map(row => row.id)
+    expect(left).toEqual(['episode-b'])
+    db.close()
+  })
+
+  it('refuses a scope key it cannot parse', () => {
+    expect(() => parseScopeKey('nonsense')).toThrow(/unrecognised scope key/)
+    expect(parseScopeKey('workspace:w1')).toEqual({ kind: 'workspace', id: 'w1' })
+    expect(parseScopeKey('app:com.example:extra')).toEqual({
+      kind: 'app', bundleId: 'com.example:extra',
+    })
   })
 })

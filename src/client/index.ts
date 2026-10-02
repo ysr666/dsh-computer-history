@@ -16,7 +16,9 @@ import type {
   ComputerHistoryState,
   EpisodeSummary,
   PolicySnapshot,
+  MinimisedSummaryPayload,
   ResumeResolution,
+  SemanticSummaryState,
   WorkThread,
 } from '../shared/index.js'
 import { historyApiPath } from './api-route.js'
@@ -39,6 +41,8 @@ function HistoryPage(): React.ReactElement {
   const [threads, setThreads] = useState<readonly WorkThread[]>([])
   const [resumeQuery, setResumeQuery] = useState('')
   const [hint, setHint] = useState<ResumeResolution>()
+  const [semantic, setSemantic] = useState<SemanticSummaryState>()
+  const [preview, setPreview] = useState<string>()
   const [policy, setPolicy] = useState<PolicySnapshot>()
   const [bundleId, setBundleId] = useState('')
   const [confirmDeleteAll, setConfirmDeleteAll] = useState(false)
@@ -48,17 +52,19 @@ function HistoryPage(): React.ReactElement {
 
   const refresh = useCallback(async () => {
     try {
-      const [nextState, nextEpisodes, nextPolicy, nextThreads]
+      const [nextState, nextEpisodes, nextPolicy, nextThreads, nextSemantics]
         = await Promise.all([
           api<ComputerHistoryState>('/state'),
           api<readonly EpisodeSummary[]>('/recent?limit=50'),
           api<PolicySnapshot>('/policy'),
           api<readonly WorkThread[]>('/threads?limit=20'),
+          api<SemanticSummaryState>('/semantic'),
         ])
       setState(nextState)
       setEpisodes(nextEpisodes)
       setPolicy(nextPolicy)
       setThreads(nextThreads)
+      setSemantic(nextSemantics)
       setError(undefined)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause))
@@ -242,6 +248,83 @@ function HistoryPage(): React.ReactElement {
       : null,
   )
 
+  const revokeScope = async (scopeKey: string): Promise<void> => {
+    await api('/semantic/revoke', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ scopeKey }),
+    })
+    setPreview(undefined)
+    await refresh()
+  }
+
+  const previewScope = async (scopeKey: string): Promise<void> => {
+    const payload = await api<MinimisedSummaryPayload>(
+      `/semantic/preview?scope=${encodeURIComponent(scopeKey)}`,
+    )
+    setPreview(`${scopeKey}\n${JSON.stringify(payload, null, 2)}`)
+  }
+
+  const semanticSection = React.createElement(
+    'section',
+    { style: { marginBottom: 20 } },
+    React.createElement('h2', { style: { margin: '0 0 8px' } }, 'Summaries'),
+    React.createElement(
+      'p',
+      null,
+      semantic
+        ? `Deterministic summaries are on (nothing leaves this machine). Local model: ${semantic.localProviderConfigured ? 'configured' : 'not configured'}; remote: never without a scope opting in.`
+        : 'Loading…',
+    ),
+    !semantic || semantic.scopes.length === 0
+      ? React.createElement(
+          'p',
+          { style: { color: '#555' } },
+          'No scope uses a model, so every summary here was computed locally.',
+        )
+      : React.createElement(
+          'ul',
+          { style: { margin: 0, paddingLeft: 18 } },
+          ...semantic.scopes.map(scope => React.createElement(
+            'li',
+            { key: scope.scopeKey, style: { marginBottom: 6 } },
+            `${scope.scopeKey} — ${scope.providerKind}${scope.model ? ` (${scope.model})` : ''}`,
+            ' ',
+            React.createElement(
+              'button',
+              {
+                type: 'button',
+                onClick: () => { runAction(() => previewScope(scope.scopeKey)) },
+              },
+              'Preview payload',
+            ),
+            ' ',
+            React.createElement(
+              'button',
+              {
+                type: 'button',
+                onClick: () => { runAction(() => revokeScope(scope.scopeKey)) },
+              },
+              'Turn off and purge',
+            ),
+          )),
+        ),
+    preview
+      ? React.createElement(
+          'pre',
+          {
+            style: {
+              background: '#f2f2f2',
+              padding: 8,
+              borderRadius: 4,
+              overflowX: 'auto',
+            },
+          },
+          preview,
+        )
+      : null,
+  )
+
   const companion = state?.companion
 
   const companionSection = React.createElement(
@@ -367,6 +450,7 @@ function HistoryPage(): React.ReactElement {
         )
       : null,
     companionSection,
+    semanticSection,
     resumeSection,
     threadSection,
     React.createElement(

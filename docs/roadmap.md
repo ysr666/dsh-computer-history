@@ -55,8 +55,14 @@ ADR 0004 (accepted) governs semantic summaries.
    evidence.~~ Done 2026-10-02; the clause above is retired, the matrix is in
    `docs/validation-phase2-1.md`, and the per-site controls land with the panel
    work.
-3. **2.2 Semantic layer** — local-first summaries with observation citations,
-   Work Threads over the existing `threadKey`, and a usable opt-in ResumeHint.
+3. ~~**2.2 Semantic layer** — local-first summaries with observation citations,
+   Work Threads over the existing `threadKey`, and a usable opt-in ResumeHint.~~
+   Done 2026-10-02: every summary carries `summaryKind` and citations
+   (`deterministic` on by default), threads and hints are computed views over
+   that evidence, deletion cascades to the citations, and a model may only run
+   locally — remote needs a recorded per-scope opt-in plus a payload preview,
+   enforced by `verify:semantic-boundary`. See `docs/semantic.md` and
+   `docs/validation-phase2-2.md`.
 4. **2.3 UI and audit** — timeline, per-app/per-site controls, export/audit,
    redaction preview; closes the Phase 1 findings (F13, unanchored
    presentation, allow/forget ergonomics).

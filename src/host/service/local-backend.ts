@@ -13,11 +13,18 @@ import type {
   PolicySnapshot,
   PolicyUpdate,
   RecentEpisodesRequest,
+  SemanticOptIn,
+  SemanticSummaryState,
   ResumeRequest,
   ResumeResolution,
   SearchEpisodesRequest,
 } from '../../shared/index.js'
 import type { CompanionTokenStore } from '../companion/token-store.js'
+import { minimiseEpisode, type MinimisedSummaryPayload } from '../semantic/minimise.js'
+import {
+  parseScopeKey,
+  type SemanticOptInStore,
+} from '../semantic/opt-in.js'
 import { buildWorkThreads } from '../episodes/threads.js'
 import { resolveResume } from '../resume/index.js'
 import { phase1AdapterForBundle } from '../ingestion/index.js'
@@ -57,6 +64,7 @@ implements ComputerHistoryServiceContract {
     private readonly capture: CaptureController,
     private readonly config: LocalBackendConfig,
     private readonly pairingTokens?: CompanionTokenStore,
+    private readonly semanticOptIns?: SemanticOptInStore,
   ) {
     this.now = config.now ?? Date.now
   }
@@ -223,6 +231,75 @@ implements ComputerHistoryServiceContract {
     const token = this.pairingTokens.rotate(this.now())
     return { ...this.pairing(), token }
   }
+
+  /**
+   * Who produces summaries, per scope (ADR 0004 §4). `active` is what a fresh
+   * episode would get today: deterministic text is always available, and a
+   * model only when a scope is switched on.
+   */
+  public semanticState(): SemanticSummaryState {
+    return {
+      active: 'deterministic',
+      localProviderConfigured: false,
+      scopes: this.semanticOptIns?.list() ?? [],
+    }
+  }
+
+  /** The exact payload a provider would see for this scope (ADR 0004 §4). */
+  public semanticPreview(
+    request: { readonly scopeKey: string },
+  ): MinimisedSummaryPayload | undefined {
+    const [kind, ...rest] = request.scopeKey.split(':')
+    const id = rest.join(':')
+    const episodes = this.episodes.listRecent({ limit: 50 })
+    const episode = kind === 'workspace'
+      ? episodes.find(item => item.workspace?.id === id)
+      : episodes.find(item => item.surfaces.some(surface => surface.bundleId === id))
+    if (!episode) return undefined
+    const detail: EpisodeSummary = this.episodes.get(episode.id) ?? episode
+    return minimiseEpisode({
+      resources: detail.resources,
+      surfaces: detail.surfaces,
+      observationIds: detail.summaryObservationIds,
+      startedAtMs: detail.startedAtMs,
+      endedAtMs: detail.endedAtMs,
+      ...(detail.threadKey === undefined ? {} : { threadKey: detail.threadKey }),
+      ...(detail.workspace === undefined ? {} : { workspace: detail.workspace }),
+    })
+  }
+
+  public grantSemanticOptIn(request: {
+    readonly scopeKey: string
+    readonly providerKind: 'local' | 'remote'
+    readonly model?: string
+  }): SemanticOptIn {
+    if (!this.semanticOptIns) {
+      throw new Error('semantic summaries are unavailable')
+    }
+    return this.semanticOptIns.grant(
+      parseScopeKey(request.scopeKey),
+      request.providerKind,
+      request.model,
+      this.now(),
+    )
+  }
+
+  /**
+   * "Turn off and purge" (ADR 0004, Consequences): the permission goes, and so
+   * does every derived summary of that scope that a model produced. The
+   * deterministic text is not touched, because it never left the machine.
+   */
+  public revokeSemanticOptIn(request: {
+    readonly scopeKey: string
+  }): { readonly revoked: boolean; readonly purged: number } {
+    if (!this.semanticOptIns) {
+      throw new Error('semantic summaries are unavailable')
+    }
+    const revoked = this.semanticOptIns.revoke(parseScopeKey(request.scopeKey))
+    const purged = this.semanticOptIns.purge(parseScopeKey(request.scopeKey))
+    return { revoked, purged }
+  }
+
 
   public listPolicyRules(): readonly PolicyRule[] {
     return this.policies.get().rules
