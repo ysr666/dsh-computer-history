@@ -341,3 +341,38 @@ Environment restored: VS Code quit, settings restored from the backup taken befo
 the trace file and token were written, the scratch workspace removed; the extension
 stays installed for the next attempt, and the evidence database is at
 `/tmp/dsh-ch-28d`.
+
+### T2.8-3, seventh attempt: one hypothesis disproven, and the split that is left
+
+`~/Library/Application Support/Code/User/profiles/builtin` looked like a custom
+profile whose extension list would explain the silence. It is not:
+
+```text
+code --profile builtin --install-extension …   → Profile 'builtin' not found.
+code --profile builtin --list-extensions       → Profile 'builtin' not found.
+extensions.json in ~/.vscode/extensions        → one entry, install path correct,
+                                                 metadata.source "vsix"
+```
+
+So the extension is installed where VS Code looks, the CLI lists it, the manifest is
+valid, and activation still never runs. Hypotheses tested and **disproven** so far,
+each by an experiment rather than an argument: the packer was broken (it was not -
+the archive was always valid), the profile was shadowing it (there is no such
+profile), the settings keys did not match (they do), and the extension log was
+missing because it failed to load (a healthy extension logs nothing at all).
+
+**The split that is left, and the next probe:** run the extension from source in the
+Extension Development Host (`code --extensionDevelopmentPath=extension-editor`).
+That bypasses installation, enablement and the marketplace path entirely:
+
+- if it activates **there**, the extension's code is fine and the problem is on the
+  install/enablement side, which is then a small and well-defined question;
+- if it stays silent **there**, the problem is inside the extension - its activation
+  function or its entry file - and the reporter added this round is already in place
+  to say which.
+
+Both outcomes are one command away, and neither needs the Host restarted or the
+policy touched.
+
+Environment restored: VS Code quit, settings restored from the backup, scratch
+workspace removed; the extension remains installed.
