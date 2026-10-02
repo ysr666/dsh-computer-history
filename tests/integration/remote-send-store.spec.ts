@@ -107,3 +107,26 @@ describe('the record of what left the machine (ADR 0010)', () => {
     close()
   })
 })
+
+describe('revoking a scope forgets what left for it (ADR 0010)', () => {
+  it('deletes the send records of that scope and leaves others alone', () => {
+    const { db, close } = database()
+    const sends = new RemoteSendStore(db)
+    sends.record({
+      scopeKey: 'workspace:w1', endpointHost: 'models.example.test',
+      model: 'm', payloadDigest: 'd'.repeat(64), sentAtMs: 1,
+    })
+    sends.record({
+      scopeKey: 'workspace:w2', endpointHost: 'models.example.test',
+      model: 'm', payloadDigest: 'e'.repeat(64), sentAtMs: 2,
+    })
+
+    // What LocalBackend.revokeSemanticOptIn does after revoking the opt-in.
+    const forgotten = sends.deleteForScope('workspace:w1')
+
+    expect(forgotten).toBe(1)
+    expect(sends.listForScope('workspace:w1')).toEqual([])
+    expect(sends.listForScope('workspace:w2')).toHaveLength(1)
+    close()
+  })
+})

@@ -158,7 +158,7 @@ export interface ComputerHistoryServiceContract {
   /** "Turn off and purge": revoke the permission and delete model summaries. */
   revokeSemanticOptIn(request: {
     readonly scopeKey: string
-  }): { readonly revoked: boolean; readonly purged: number }
+  }): { readonly revoked: boolean; readonly purged: number; readonly forgotten: number }
 
   /** Work threads over stored episodes (ADR 0004 §5: each carries citations). */
   threads(request?: { readonly limit?: number }): Promise<readonly WorkThread[]>

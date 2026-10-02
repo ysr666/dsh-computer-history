@@ -291,7 +291,9 @@ function HistoryPage(): React.ReactElement {
       'p',
       null,
       semantic
-        ? `Deterministic summaries are on (nothing leaves this machine). Local model: ${semantic.localProviderConfigured ? 'configured' : 'not configured'}; remote: never without a scope opting in.`
+        ? semantic.scopes.some(scope => scope.providerKind === 'remote')
+          ? 'Deterministic summaries are on. At least one scope sends a minimised payload to a remote model: it contains the application id, the surface kind, the file extension, counts, an hour and the workspace folder name - never a path, a URL or a document name. **Once a request has left, it cannot be recalled**, and revoking the scope deletes only the local record of it.'
+          : `Deterministic summaries are on (nothing leaves this machine). Local model: ${semantic.localProviderConfigured ? 'configured' : 'not configured'}; remote: never without a scope opting in.`
         : 'Loading…',
     ),
     !semantic || semantic.scopes.length === 0

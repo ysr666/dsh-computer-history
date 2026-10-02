@@ -308,7 +308,7 @@ describe('Cordis computer history service', () => {
       grantSemanticOptIn(request) {
         return { scopeKey: request.scopeKey, providerKind: request.providerKind, createdAtMs: 1 }
       },
-      revokeSemanticOptIn() { return { revoked: false, purged: 0 } },
+      revokeSemanticOptIn() { return { revoked: false, purged: 0, forgotten: 0 } },
       pairing() { return { paired: false, listening: false } },
       rotatePairing() {
         return { paired: true, listening: false, token: 'stub-token' }

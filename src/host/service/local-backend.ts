@@ -390,13 +390,23 @@ implements ComputerHistoryServiceContract {
    */
   public revokeSemanticOptIn(request: {
     readonly scopeKey: string
-  }): { readonly revoked: boolean; readonly purged: number } {
+  }): {
+    readonly revoked: boolean
+    readonly purged: number
+    /** Local send records forgotten by this revocation (ADR 0010). */
+    readonly forgotten: number
+  } {
     if (!this.semanticOptIns) {
       throw new Error('semantic summaries are unavailable')
     }
     const revoked = this.semanticOptIns.revoke(parseScopeKey(request.scopeKey))
     const purged = this.semanticOptIns.purge(parseScopeKey(request.scopeKey))
-    return { revoked, purged }
+    // Revoking is an instruction to forget, so the local record of what left
+    // goes too (ADR 0010). The remote side cannot be recalled, and the panel
+    // says so rather than letting this number imply otherwise.
+    const forgotten = new RemoteSendStore(this.requireDb())
+      .deleteForScope(request.scopeKey)
+    return { revoked, purged, forgotten }
   }
 
 

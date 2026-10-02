@@ -153,3 +153,29 @@ Still open in T2.6-3: the panel itself. The switch that turns a scope remote, th
 preview text, and ADR 0010's irreversibility sentence belong with T2.6-4's
 revocation, because the two sentences - "this will leave" and "this cannot be
 recalled" - have to sit next to each other to mean anything.
+
+## T2.6-4 — revocation forgets, and the panel says what it cannot do
+
+Revoking a scope's opt-in now also deletes that scope's send records, and the
+return value says how many were forgotten - a number the panel and the audit can
+show rather than implying the revocation reached further than it did. The remote
+side cannot be recalled, so the panel sentence states the boundary instead of
+leaving a reader to infer it:
+
+```text
+(no remote scope)  Deterministic summaries are on (nothing leaves this machine). …
+(remote scope)     … At least one scope sends a minimised payload to a remote
+                   model: it contains the application id, the surface kind, the
+                   file extension, counts, an hour and the workspace folder name
+                   - never a path, a URL or a document name. Once a request has
+                   left, it cannot be recalled, and revoking the scope deletes
+                   only the local record of it.
+```
+
+The two sentences are deliberately in one place: "this will leave" and "this
+cannot be recalled" only mean something side by side.
+
+Widening the return type exposed how many places declare it - the backend, the
+service, the shared contract and a test stub - and `pnpm typecheck` named each one
+in turn. That is the contract doing its job; the alternative would have been a
+cast that hides the fourth field from whoever reads it next.

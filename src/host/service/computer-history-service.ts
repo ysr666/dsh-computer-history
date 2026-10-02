@@ -157,7 +157,11 @@ export class ComputerHistoryService
 
   public revokeSemanticOptIn(request: {
     readonly scopeKey: string
-  }): { readonly revoked: boolean; readonly purged: number } {
+  }): {
+    readonly revoked: boolean
+    readonly purged: number
+    readonly forgotten: number
+  } {
     return this.backend.revokeSemanticOptIn(request)
   }
 
