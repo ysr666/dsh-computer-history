@@ -2,6 +2,7 @@ import type { DatabaseSync } from 'node:sqlite'
 import { migration0001 } from './migrations/0001-initial.js'
 import { migration0002 } from './migrations/0002-companion-pairing.js'
 import { migration0003 } from './migrations/0003-semantic-citations.js'
+import { migration0004 } from './migrations/0004-semantic-opt-ins.js'
 
 export interface Migration {
   readonly version: number
@@ -22,6 +23,7 @@ const MIGRATIONS: readonly Migration[] = [
   migration0001,
   migration0002,
   migration0003,
+  migration0004,
 ]
 
 function schemaVersion(db: DatabaseSync): number {
