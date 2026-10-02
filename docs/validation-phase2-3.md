@@ -137,3 +137,29 @@ by accident, and that is the claim worth making.
 
 An episode with no readable resource says so and names the applications instead,
 rather than showing an empty resource list.
+
+### Live evidence for T2.3-4
+
+Against the running Host, with one seeded episode dated today:
+
+```text
+GET /timeline?days=7
+[{"dayKey":"2026-10-02","episodeCount":1,"startedAtMs":…,"endedAtMs":…,
+  "episodes":[{"id":"ep-today",…}]}]
+
+panel (no click)  Timeline | Wrote report.md in demo.
+click the episode → Why was this recorded? |
+  Recorded because a supported application became active; and it ended because
+  the machine went idle; 2 observations cited; 1 resource; 0 applications;
+  policy revision 0; confidence 0.80. |
+  Resources: report.md
+```
+
+That is the click-and-state-change evidence the plan asks for: the detail only
+exists after the row is activated.
+
+Two honest notes about this output. `0 applications` is my seed's gap, not the
+Host's: surfaces come from `episode_surfaces`, which the fixture did not fill,
+so the episode legitimately reports none. And `policy revision 0` is the panel's
+placeholder — a stored episode does not carry the revision that was in force when
+it was written, and the sentence says so rather than inventing a number.
