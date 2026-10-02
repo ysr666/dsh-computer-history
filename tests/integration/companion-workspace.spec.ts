@@ -156,29 +156,29 @@ describe('a vouched workspace (ADR 0009)', () => {
   })
 })
 
-describe('a declared identity is a claim, and the rules still decide (ADR 0011)', () => {
-  function editorMessage(input: {
-    seq: number
-    bundleId: string
-    name: string
-    file: string
-    root: string
-    now: number
-  }): NativeObservation {
-    return {
-      v: 1,
-      type: 'observation',
-      collectorSession: 'editor-claim',
-      seq: input.seq,
-      observedAtMs: input.now,
-      app: { pid: 0, bundleId: input.bundleId, name: input.name },
-      window: { document: input.file, title: 'main.ts' },
-      workspace: { root: input.root, title: 'vouched' },
-      privacy: { secure: false, protected: false },
-      source: { provider: 'companion', adapter: 'vscode' },
-    }
+function editorMessage(input: {
+  seq: number
+  bundleId: string
+  name: string
+  file: string
+  root: string
+  now: number
+}): NativeObservation {
+  return {
+    v: 1,
+    type: 'observation',
+    collectorSession: 'editor-claim',
+    seq: input.seq,
+    observedAtMs: input.now,
+    app: { pid: 0, bundleId: input.bundleId, name: input.name },
+    window: { document: input.file, title: 'main.ts' },
+    workspace: { root: input.root, title: 'vouched' },
+    privacy: { secure: false, protected: false },
+    source: { provider: 'companion', adapter: 'vscode' },
   }
+}
 
+describe('a declared identity is a claim, and the rules still decide (ADR 0011)', () => {
   it('stores nothing for an application the user has not allowed', async () => {
     const { root, file } = workspaceOnDisk()
     const { history, ingestion, now } = service(root)
