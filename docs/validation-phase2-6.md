@@ -179,3 +179,41 @@ Widening the return type exposed how many places declare it - the backend, the
 service, the shared contract and a test stub - and `pnpm typecheck` named each one
 in turn. That is the contract doing its job; the alternative would have been a
 cast that hides the fourth field from whoever reads it next.
+
+## T2.6-5 — the calibration is part of the guard, not a story about one
+
+The red/green calibration of the detector was a manual run, which means it proved
+something once and could never fail again. It is now inside
+`verify:semantic-boundary`: before trusting a clean result, the guard proves its
+detector still matches the shapes it exists to catch.
+
+```text
+green  semantic boundary holds: 2 network call(s) in local-provider.ts and
+       remote-provider.ts, each behind its own check
+red    detector replaced with a pattern that matches nothing:
+         the network-call detector no longer matches: fetch(…)
+         the network-call detector no longer matches: this.fetchImpl(…
+         the network-call detector no longer matches: const doFetch = 1; doFetch(url)
+         the network-call detector no longer matches: myFetchImpl(…
+       - this guard proves nothing
+green  detector restored
+```
+
+The `doFetch` probe is in the list because that is the spelling that was invisible
+until this phase; a guard whose blind spots are not in its own test suite will
+rediscover them in production.
+
+`pnpm verify` → 306 tests, lint 0 warnings, adapters 11/22, store protection,
+semantic boundary. `pnpm verify:p1` → native privacy and protocol tests pass.
+
+## Phase 2.6 exit gate
+
+| Gate item | Evidence |
+|---|---|
+| `pnpm verify` / `pnpm verify:p1` green | 306 tests, lint 0, every guard; native privacy and protocol tests |
+| Guard calibrated red then green, inside the suite | detector self-probes above; removing the opt-in check reports two violations |
+| Minimised payload asserted | preview bytes equal sent bytes; the serialised body has no `/Users/`, no `http`, no `main.ts` |
+| No opt-in → zero calls | injected fetch records `[]`; a local-only scope likewise |
+| Out-of-set citation refused | `remote summary cited an observation it was not given: 99` |
+| Revocation deletes locally and says what it cannot | `deleteForScope` + panel sentence; `{revoked, purged, forgotten}` |
+| `docs/remote-models.md`, `docs/validation-phase2-6.md` | both written; ADR 0010 accepted |

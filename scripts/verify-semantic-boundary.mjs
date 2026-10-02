@@ -88,6 +88,18 @@ if (!senders.some(sender => sender.file === path.join(SEMANTIC_DIR, 'local-provi
   )
 }
 
+// A detector that matches nothing looks exactly like a clean codebase, so prove
+// it still recognises the shapes it is meant to catch before trusting a pass.
+// The red calibration is therefore part of the guard rather than a manual run:
+// the `doFetch` case is the one that was invisible until this phase.
+for (const probe of ['fetch(', 'this.fetchImpl(', 'const doFetch = 1; doFetch(url)', 'myFetchImpl(']) {
+  if (!NETWORK_CALL.test(probe)) {
+    violations.push(
+      `the network-call detector no longer matches: ${probe} - this guard proves nothing`,
+    )
+  }
+}
+
 if (violations.length > 0) {
   console.error(violations.join('\n'))
   process.exit(1)
