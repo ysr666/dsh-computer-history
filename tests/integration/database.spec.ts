@@ -72,7 +72,12 @@ describe('history database', () => {
     const dataDirectory = path.join(root, 'history')
     openHistoryDatabase({ dataDirectory, nowMs: 100 }).close()
     const reopened = openHistoryDatabase({ dataDirectory, nowMs: 999 })
-    expect(reopened.db.prepare('SELECT * FROM schema_migrations').all()).toHaveLength(1)
+    // One row per migration, whatever the latest version is: the point of the
+    // assertion is that reopening does not re-apply anything, not that the
+    // schema has a particular number of migrations.
+    expect(
+      reopened.db.prepare('SELECT * FROM schema_migrations').all(),
+    ).toHaveLength(latestSchemaVersion())
     reopened.close()
   })
 

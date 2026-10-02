@@ -27,3 +27,32 @@ panel when it cannot bind.
 
 Done as the plan review above; the remaining work is packaging: the listener
 lives in `src/host/companion/intake.ts` and is started/stopped with the plugin.
+
+## T2.1-1 — pairing token
+
+Migration 0002 adds `companion_pairing` (single row, `CHECK (id = 1)`) holding a
+SHA-256 digest and a timestamp. `CompanionTokenStore.rotate()` returns the token
+exactly once, `verify()` compares digests in constant time, and `state()` never
+exposes the digest.
+
+`pnpm test` → 219 tests, four of them new:
+
+- absent before pairing; only the issued token verifies; a one-character
+  extension, a truncation and an empty string all fail;
+- the stored value is a 64-hex digest that does not contain the token
+  (`expect(row.token_hash).not.toContain(token)`), which is the "shown once"
+  promise in ADR 0007 turned into a test;
+- rotation invalidates the previous token;
+- the pairing survives closing and reopening the store.
+
+Adding the migration made two existing guards fail, both of which hardcoded a
+migration count:
+
+```text
+database.spec.ts            expected [...] to have a length of 1 but got 2
+migration-upgrade.spec.ts   expected { count: 2 } to deeply equal { count: 1 }
+```
+
+They now derive the expected count from `latestSchemaVersion()`, so the next
+migration does not need them edited, and the frozen-v1 upgrade fixture still
+proves that an existing database reaches the new schema without losing history.

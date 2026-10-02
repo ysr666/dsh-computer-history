@@ -1,5 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite'
 import { migration0001 } from './migrations/0001-initial.js'
+import { migration0002 } from './migrations/0002-companion-pairing.js'
 
 export interface Migration {
   readonly version: number
@@ -10,6 +11,7 @@ export interface Migration {
 
 const MIGRATIONS: readonly Migration[] = [
   migration0001,
+  migration0002,
 ]
 
 function schemaVersion(db: DatabaseSync): number {

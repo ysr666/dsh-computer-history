@@ -4,6 +4,7 @@ import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { afterEach, describe, expect, it } from 'vitest'
 import { EpisodeId } from '../../src/shared/index.js'
+import { latestSchemaVersion } from '../../src/host/store/index.js'
 import {
   EpisodeStore,
   ObservationStore,
@@ -259,7 +260,7 @@ describe('v1 database upgrade compatibility', () => {
     })
     expect(upgraded.db.prepare(
       'SELECT COUNT(*) AS count FROM schema_migrations',
-    ).get()).toEqual({ count: 1 })
+    ).get()).toEqual({ count: latestSchemaVersion() })
     upgraded.close()
   })
 })
