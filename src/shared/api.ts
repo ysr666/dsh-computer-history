@@ -1,4 +1,8 @@
-import type { EpisodeDetail, EpisodeSummary } from './episode.js'
+import type {
+  EpisodeDetail,
+  EpisodeSummary,
+  WorkThread,
+} from './episode.js'
 import type { EpisodeId } from './ids.js'
 import type { PolicyRule, PolicySnapshot } from './policy.js'
 import type { ResumeRequest, ResumeResolution } from './resume.js'
@@ -100,6 +104,9 @@ export interface ComputerHistoryServiceContract {
 
   /** Rotate the pairing token; the token is returned once. */
   rotatePairing(): PairingRotation
+
+  /** Work threads over stored episodes (ADR 0004 §5: each carries citations). */
+  threads(request?: { readonly limit?: number }): Promise<readonly WorkThread[]>
 
   recent(
     request?: RecentEpisodesRequest,

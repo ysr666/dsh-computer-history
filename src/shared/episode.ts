@@ -21,6 +21,21 @@ export type EpisodeBoundaryReason =
   | 'timeout'
   | 'manual-rebuild'
 
+/**
+ * A line of work: the episodes sharing a `threadKey`, with the evidence behind
+ * the grouping (ADR 0004 §5).
+ */
+export interface WorkThread {
+  readonly threadKey: string
+  readonly episodeIds: readonly string[]
+  readonly episodeCount: number
+  readonly startedAtMs: number
+  readonly endedAtMs: number
+  readonly resources: readonly ResourceIdentity[]
+  readonly summary: string
+  readonly summaryObservationIds: readonly ObservationId[]
+}
+
 export interface EpisodeResourceSummary extends ResourceIdentity {
   readonly firstSeenAtMs: number
   readonly lastSeenAtMs: number

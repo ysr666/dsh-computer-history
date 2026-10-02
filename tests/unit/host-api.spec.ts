@@ -122,6 +122,7 @@ describe('Computer History Host API', () => {
       '/api/computer-history/resume',
       '/api/computer-history/search',
       '/api/computer-history/state',
+      '/api/computer-history/threads',
     ])
 
     const response = await request('/state')

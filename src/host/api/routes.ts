@@ -96,6 +96,29 @@ export function registerHistoryApi(ctx: Context): void {
   }))
 
   ctx.effect(() => ctx.connection.fetch.register({
+    path: HISTORY_API_PREFIX + '/threads',
+    methods: ['GET'],
+    requestBody: 'buffered',
+    fetch: async (request: Request) => {
+      try {
+        const url = new URL(request.url)
+        const limit = optionalQueryInteger(url, 'limit', 5, 100)
+        // `threads` is async: handing the promise to json() would serialise
+        // as {} and look like an empty list.
+        const threads = await history.threads(
+          limit === undefined ? {} : { limit },
+        )
+        return json(threads)
+      } catch (error) {
+        if (error instanceof RequestValidationError) {
+          return Promise.resolve(textResponse(error.message, 400))
+        }
+        return Promise.resolve(textResponse('Request failed.', 500))
+      }
+    },
+  }))
+
+  ctx.effect(() => ctx.connection.fetch.register({
     path: HISTORY_API_PREFIX + '/pairing',
     methods: ['GET'],
     requestBody: 'buffered',

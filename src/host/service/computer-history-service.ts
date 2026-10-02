@@ -12,6 +12,7 @@ import type {
   EpisodeSummary,
   PairingRotation,
   PairingState,
+  WorkThread,
   PolicyRule,
   PolicySnapshot,
   PolicyUpdate,
@@ -88,6 +89,12 @@ export class ComputerHistoryService
 
   public getState(): ComputerHistoryState {
     return this.backend.getState()
+  }
+
+  public threads(
+    request: { readonly limit?: number } = {},
+  ): Promise<readonly WorkThread[]> {
+    return this.backend.threads(request)
   }
 
   public pairing(): PairingState {

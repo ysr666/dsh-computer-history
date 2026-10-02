@@ -1,6 +1,7 @@
 import type {
   PairingRotation,
   PairingState,
+  WorkThread,
   ComputerHistoryServiceContract,
   ComputerHistoryState,
   DeleteHistoryRequest,
@@ -17,6 +18,7 @@ import type {
   SearchEpisodesRequest,
 } from '../../shared/index.js'
 import type { CompanionTokenStore } from '../companion/token-store.js'
+import { buildWorkThreads } from '../episodes/threads.js'
 import { resolveResume } from '../resume/index.js'
 import { phase1AdapterForBundle } from '../ingestion/index.js'
 import { DeletionService } from '../retention/index.js'
@@ -91,6 +93,15 @@ implements ComputerHistoryServiceContract {
     if (this.activeOperations === 0) return Promise.resolve()
     return new Promise<void>(resolve => {
       this.idleWaiters.push(resolve)
+    })
+  }
+
+  public async threads(
+    request: { readonly limit?: number } = {},
+  ): Promise<readonly WorkThread[]> {
+    const episodes = await this.recent({ limit: 200 })
+    return buildWorkThreads(episodes, {
+      limit: boundedLimit(request.limit, 5, 100),
     })
   }
 

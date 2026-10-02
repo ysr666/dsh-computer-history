@@ -12,7 +12,12 @@ import type * as _rendererClientTypes from '@deepseek-ai/dsh-client-ui-renderer/
 import type * as _sidebarClientTypes from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client'
 import React, { useCallback, useEffect, useState } from 'react'
-import type { ComputerHistoryState, EpisodeSummary, PolicySnapshot } from '../shared/index.js'
+import type {
+  ComputerHistoryState,
+  EpisodeSummary,
+  PolicySnapshot,
+  WorkThread,
+} from '../shared/index.js'
 import { historyApiPath } from './api-route.js'
 
 const PANEL_ID = 'computer-history' as MainPanelId
@@ -30,6 +35,7 @@ function HistoryIcon(): React.ReactElement {
 function HistoryPage(): React.ReactElement {
   const [state, setState] = useState<ComputerHistoryState>()
   const [episodes, setEpisodes] = useState<readonly EpisodeSummary[]>([])
+  const [threads, setThreads] = useState<readonly WorkThread[]>([])
   const [policy, setPolicy] = useState<PolicySnapshot>()
   const [bundleId, setBundleId] = useState('')
   const [confirmDeleteAll, setConfirmDeleteAll] = useState(false)
@@ -39,14 +45,17 @@ function HistoryPage(): React.ReactElement {
 
   const refresh = useCallback(async () => {
     try {
-      const [nextState, nextEpisodes, nextPolicy] = await Promise.all([
-        api<ComputerHistoryState>('/state'),
-        api<readonly EpisodeSummary[]>('/recent?limit=50'),
-        api<PolicySnapshot>('/policy'),
-      ])
+      const [nextState, nextEpisodes, nextPolicy, nextThreads]
+        = await Promise.all([
+          api<ComputerHistoryState>('/state'),
+          api<readonly EpisodeSummary[]>('/recent?limit=50'),
+          api<PolicySnapshot>('/policy'),
+          api<readonly WorkThread[]>('/threads?limit=20'),
+        ])
       setState(nextState)
       setEpisodes(nextEpisodes)
       setPolicy(nextPolicy)
+      setThreads(nextThreads)
       setError(undefined)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause))
@@ -247,6 +256,32 @@ function HistoryPage(): React.ReactElement {
     ),
   )
 
+  const threadSection = React.createElement(
+    'section',
+    { style: { marginBottom: 20 } },
+    React.createElement('h2', { style: { margin: '0 0 8px' } }, 'Work threads'),
+    threads.length === 0
+      ? React.createElement(
+          'p',
+          { style: { color: '#555' } },
+          'No threaded work yet: episodes need a workspace the Host can vouch for.',
+        )
+      : React.createElement(
+          'ul',
+          { style: { margin: 0, paddingLeft: 18 } },
+          ...threads.map(thread => React.createElement(
+            'li',
+            { key: thread.threadKey, style: { marginBottom: 6 } },
+            thread.summary,
+            React.createElement(
+              'span',
+              { style: { color: '#666' } },
+              ` (${thread.episodeCount} episode${thread.episodeCount === 1 ? '' : 's'}, ${thread.summaryObservationIds.length} citations)`,
+            ),
+          )),
+        ),
+  )
+
   return React.createElement(
     'main',
     { style: { padding: 24, maxWidth: 960, margin: '0 auto' } },
@@ -269,6 +304,7 @@ function HistoryPage(): React.ReactElement {
         )
       : null,
     companionSection,
+    threadSection,
     React.createElement(
       'div',
       { style: { display: 'flex', gap: 8, marginBottom: 20 } },

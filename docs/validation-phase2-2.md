@@ -125,3 +125,40 @@ opt-in.ts + await fetch("http://example.com")
 restored
   → semantic boundary holds: 1 network call(s) …                              (exit 0)
 ```
+
+## T2.2-4 — Work Threads
+
+`src/host/episodes/threads.ts` groups episodes by their `threadKey` (newest
+first) into a `WorkThread`: the episode ids, the span, the resources the thread
+touched, a deterministic summary, and the union of its episodes' citations —
+never more than the evidence supports. `GET /threads?limit=` exposes it and the
+panel lists it under **Work threads**.
+
+Live, against the running Host after seeding one threaded episode with two cited
+observations:
+
+```text
+GET /threads?limit=20
+[{"threadKey":"workspace:w1","episodeIds":["ep1"],"episodeCount":1,
+  "startedAtMs":1,"endedAtMs":2,"resources":[],
+  "summary":"1 episode in demo, touching no resources.",
+  "summaryObservationIds":[1,2]}]
+```
+
+`pnpm test` → 250, two of them for the builder: episodes sharing a thread key
+land in one thread, a thread's citations are exactly its own episodes' (an
+episode without a thread key does not donate its citations), and a thread with
+no resources says so instead of inventing some.
+
+### Two real defects the live check found
+
+1. **`GET /threads` answered `{}`.** The route handed the *promise* from
+   `history.threads()` straight to `json()`, which serialises a promise as an
+   empty object — an empty list and a broken route looked identical. The route
+   awaits now.
+2. **The schema was still at version 2 and the route did not exist at all** on
+   the first attempt: the running plugin predated the build, the module-cache
+   trap this project has now hit four times. The recipe in
+   `docs/verification-guide.md` already says "a live measurement after a build is
+   only meaningful after the reload"; this round is the reminder that it applies
+   to *every* live check, including a quick one.
