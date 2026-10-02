@@ -8,6 +8,30 @@
 
 ---
 
+## 0. 快速交接摘要（重启后先读这一节）
+
+**当前状态**：Phase 1 已在真实 DSH Host + 真实 macOS 会话中跑通；三个 blocker 已修复并真机复验（client bundle 格式、cordis inject 门禁、Terminal fail-closed）；A4/A5 已用受控合成 fixture 双向验证；环境已还原；worktree clean。
+commit 链：`62cb5a1 → ef8d4bc → 551f4bc → d34a823 → 6e426e6 → b10fe2b → 554223b → cb1753f → 226c86e`。
+
+**重启后第一件事（N1）**：
+
+1. `dev_plugin_status` → 确认 `@dsh-external/dsh-super-injector` active（profile 会装配已打补丁的 91 槽白名单）；
+2. `dev_inject_plugin {dir: /Users/ysradmin/Projects/dsh-computer-history}` → 期望**直接通过**（不再报 `main`/`sidebar.panellist` 不在白名单）；若仍报旧的 11 条白名单，说明 Host 仍加载旧代码；
+3. `cordis_inspect_query client/Slots listSubTree root=sidebar.panellist` → 期望 occupant `{id: "computer-history", active: true}`；
+4. `pnpm verify:p1` 全绿 → `dev_uninject_plugin dsh-computer-history` 收尾，并确认 profile 还原。
+
+**仍未确认（条件项，不是欠账）**：
+
+- 真 VS Code/Cursor 的 kAXDocument 语义 —— adapter 契约已由合成 app 覆盖（§5.5）；`brew install --cask visual-studio-code`（本机有 brew 6.0.18、无本地缓存）后用 `/tmp/dsh-ch-probe.mjs` + 编辑器前台复测；
+- 注入器自重载补丁 (A)(B) 未验证（见 F8）——需要一次成功的自重载才能执行；
+- 三个"已归位"项：kAXURL 无触发场景（解码已单测锁定）、helper-exit 分支已有单测且真机不可构造、子路径挂载无环境。
+
+**证据位置**：`/tmp/dsh-ch-probe*.log`（原生直驱原始 NDJSON）、`/tmp/dsh-ch-e2e-20261002-170930/history.sqlite`（A4 端到端）、`/tmp/dsh-fixture-app/main.swift`（合成 fixture 源码，secure/plain/hung 三模式）、注入器补丁备份 `/tmp/dsh-*.bak-*`。
+
+**注意**：`/tmp` 证据是机器级的、goal/todo 是会话级的（重启不继承）；仓库级以本报告 + commit 链为准，续做看 §10。
+
+---
+
 ## 1. 环境
 
 | 项 | 值 |
@@ -244,7 +268,7 @@ secure 阶段（前台 10s）: rows before 1 -> after 1（delta 0）| secure_row
 | F3 | 中（工具链） | **已报告未修** | `dsh-super-injector` v0.3.3 的 `KNOWN_SLOTS` 白名单过时：`main`、`sidebar.panellist` 等 live 槽位被误判为坏骨架，阻断合法插件注入。建议白名单补全 live slots，或改为查询运行中 client Slots 拓扑。证据：live `Slots.listSubTree`。 |
 | F4 | **blocker（已修复，规则经二次修正）** | 已修复 + 真机双向复验 | Terminal adapter 曾 3/3 判 `unreadable-focused-element` → `privacy.secure=true` → Host drop，**Terminal 观测事实性归零**。根因（AX 探针实测）：focused element 的 `kAXSubroleAttribute` 返回 `-25205 = kAXErrorAttributeUnsupported`，原 `isSecureElement` 把所有非 success 一律当 `.unreadable`。修复分两步：(1) 把"属性不存在/不支持"与"读取失败/超时"分开，分类抽成纯函数 `classifySecureFieldState`；(2) 合成 fixture 量出 secure 与 plain 的唯一差别就是 subrole 是否存在（`NSSecureTextField` → `AXSecureTextField`；`NSTextField`/`AXTextArea` → `attributeUnsupported`），于是去掉"`AXTextField` 无 subrole 仍 fail-closed"这条会误杀**普通文本框**的守卫，只保留**读取失败**才 fail-closed。真机复验：Terminal `secure:false` 8/8（含 document）、plain 文本框 `secure:false` 9/9、真实 secure 字段 `secure:true/secure-field` 4/4 且 window/element 全扣留。端到端（§5.8）：secure 前台 10s → Host 落库 **delta 0**、`secure_rows=0`；plain 对照落库 1 条并生成 `file` resource。 |
 | F5 | 记录 | — | Finder 的 kAXDocument 为 nil → `resource_id` 空；Preview 的 document 为 file:// URL → 资源可用。resource 识别能力随 app 不同而分裂，产品假设需按 app 记账。 |
-| F6 | 环境 | — | 本机 VS Code 为不可启动的假壳；编辑器 adapter（`vscode`）无法真机验证。 |
+| F6 | 环境 | — | 本机 VS Code 为不可启动的假壳（`Contents/MacOS/Code` 实为 Node 脚本），故**真实** VS Code 语义不可验证；但 bundle-id→adapter 映射与 AXDocument 管线已用合成 app 验证（§5.5），故此项只剩"真 app 语义"这一层。 |
 | F7 | 范围 | — | 浏览器类 app 无 adapter：交接文档 §4.1 建议的"本地 HTML 假密码框"测法在当前 Phase 1 适配器集下**不可达**；同理 kAXURL 也缺少可触发场景。 |
 | F8 | 中（工具链） | 已打补丁 / 运行中仍未激活 | `dsh-super-injector` 自重载路径有三处缺陷，本轮全部定位：(A) 复工器硬要求 `entry._dispose`，而 DSH 0.2.0-rc.2 的 loader entry **没有该 API**（实测 dump：`_dispose: undefined`，但 `fiber.dispose` / `entry.update` / `entry.refresh` / `parent.remove` 均为 function）→ `reboot-failed: selfEntry 无官方 _dispose`；(B) reload 的"磁盘降级"路径 import 后只在注入器**私有 loadCache** 里找 URL，而裸 `ctx.loader.import` 不写该缓存，且首次自毁已把缓存删空 → 永远匹配不到；(C) 更深一层：即使补 (B)，`dev_reload_package dsh-super-injector` 仍返回 `缓存中无匹配且磁盘降级失败`（失败点在 entry/URL 匹配更早处，未继续深挖）。已对 (A)(B) 打补丁（built lib + source 双份，备份 `/tmp/dsh-injector-rebuilder-*.bak-*`、`/tmp/dsh-injector-fallback-*.bak-*`），但**本会话无法验证**——它们只在一次成功的自重载里才会执行，而 (C) 挡住了触发。后果不变：**注入器代码改动必须重启 DSH Host 才生效**。附：首次失败后自愈日志有 `heal-ok: 第 1 次 touch patch 官方重装配成功`，但运行实例仍是旧代码（再调 `dev_inject_plugin` 报旧的 11 条白名单）。 |
 | F9 | 记录 | — | 需要位置信息的应用把 URL 放在 **`kAXDocument`**（Chrome 实测 `https://chatgpt.com/...`，Preview/Terminal 为 `file://...`），`kAXURL` 在这些应用上返回 `kAXErrorAttributeUnsupported`。若将来加 browser adapter，位置应读 AXDocument；`safeURL` 的 CFURL 分支仍保留防御。 |
@@ -262,7 +286,7 @@ secure 阶段（前台 10s）: rows before 1 -> after 1（delta 0）| secure_row
      B7 ✅ / B8 ✅ / C9 ✅ / C10 部分（分支已有单测，真机不可构造）
 [x] 缺陷：修 blocker #1/#2/#3（Terminal fail-closed）+ 补回归护栏（client 契约、ctx.get 语义、secure 分类分支）+ 本报告
 [x] 验证报告落盘（本文件）
-[ ] worktree clean + forward commit（见 §9）
+[x] worktree clean + forward commit（`62cb5a1 … 226c86e`，见 §9）
 ```
 
 ## 8. 仍未确认（原因 + 需要什么条件）
@@ -322,7 +346,7 @@ tests/integration/plugin-multi-host.spec.ts 同上
 
 ## 10. 下一阶段（重启后按序执行）
 
-本阶段已收口：真机验证、三个 blocker 修复（client bundle 格式 / cordis inject 门禁 / Terminal fail-closed）、A4/A5 受控夹具闭环、环境还原、forward commit 链 `62cb5a1 → ef8d4bc → 551f4bc → d34a823 → 6e426e6 → b10fe2b → 554223b`。下一阶段每完成一步就更新本报告：
+本阶段已收口：真机验证、三个 blocker 修复（client bundle 格式 / cordis inject 门禁 / Terminal fail-closed）、A4/A5 受控夹具闭环、环境还原、forward commit 链见 §0。下一阶段每完成一步就更新本报告：
 
 | # | 动作 | 前置 | 验收 |
 |---|---|---|---|
