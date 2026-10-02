@@ -332,3 +332,34 @@ revert.
 Environment restored: the profile's `dependencies`/`bundles` entries removed, the
 installed directory deleted, the patch residue cleared, the store symlink and every
 `/tmp/dsh-ch-27*` directory removed, the tarball left in place for the next probe.
+
+## T2.7-4, closed as far as it can be measured
+
+The manual Host restart that a profile bundle needs at startup is not something
+this session can perform (the Host carries the GUI that is the session). The part
+that *can* be measured was measured, and it is now a gate rather than a promise:
+
+```text
+pnpm test tests/integration/packaged-entry.spec.ts → 1 passed
+  the build output the tarball ships (lib/index.js, byte-identical to the repo)
+  applies without throwing against a stub context and registers its routes:
+  /state, /export, /retention, with one registration per path
+```
+
+That is what "the packaged artifact starts" means in a form this repository can
+check on every run. What remains outside the gate is named in `docs/release.md`:
+assembling a bundle declared in a profile happens at Host startup.
+
+## Phase 2.7 exit gate
+
+| Gate item | Evidence |
+|---|---|
+| `pnpm verify` green with the new checks inside it | seven guards; 307 tests; lint 0 warnings |
+| `pnpm verify:p1` green | native build, privacy and protocol tests |
+| every guard proves it can fail | self-checks in all six guards that had none, each calibrated red then green |
+| layering enforced | `architecture holds: 14 contract files, 83 exports all read, no import escapes the layer` |
+| no dead contract | same guard; its first, too-crude rule wanted to delete seven live types, and the check was fixed rather than the code |
+| migration invariants | `migration invariants hold: 7 migrations, versions 1..7, 2 rebuilds behind an integrity check` |
+| release path exercised | tarball packs with byte-identical `lib/`; the packaged entry applies and registers its routes in the suite; the extension installs and starts on real VS Code; the tarball-into-profile install is documented as **not verified** with what was measured |
+| the 306 pre-existing tests pass unmodified | 307 now: the one addition is the packaged-entry test |
+| `docs/quality.md`, `docs/release.md`, this file | all three written |
