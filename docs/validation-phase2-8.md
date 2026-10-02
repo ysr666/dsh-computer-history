@@ -219,3 +219,43 @@ Environment restored: VS Code quit, the user's settings restored from the backup
 taken before the token was written, the extension directory removed, the dangling
 cache entry cleared, the junction and store symlink deleted, the scratch workspace
 and temporary files removed, the profile patch residue cleared.
+
+### T2.8-3, after the restart: what is verified, and the one step left
+
+The restart fixed the Host side, and the extension installed once the editor was
+closed - `Extension 'dsh-computer-history-editor.vsix' was successfully installed`
+- which also disproved my own hypothesis that the packer had broken: the vsix was a
+valid archive the whole time (`unzip -t`: no errors, 7 files), and the failures were
+VS Code holding its extension directory open.
+
+The three checks that follow separate the two halves cleanly:
+
+```text
+port 19388                        LISTENING
+POST with the current token       {"stored":true}
+stored row                        bundle=com.microsoft.VSCode
+                                  name=Visual Studio Code
+                                  provider=companion
+                                  session=probe-final
+extension activation              no exthost log line for it this launch
+```
+
+So the **wire format and the declared identity are verified end to end** - a real
+request through the real intake stores a row whose application identity came from
+the payload, recorded with companion provenance. What is *not* yet produced is the
+same row sent by the extension itself: this launch did not activate it.
+
+That distinction is the whole reason this section exists. "A row with a declared
+identity was stored through the companion intake" is proven; "the extension sent
+it" is not, and the report will not merge the two into one happy sentence.
+
+Next step, named: launch VS Code on the workspace with the extension installed and
+confirm activation in the exthost log first, then read the stored row - if the log
+stays empty, the extension's own `activationEvents` and `main` path are the thing to
+check, not the Host.
+
+Environment restored after this round: VS Code quit, the user's settings restored
+from the backup taken before the token was written, the extension directory left in
+place (installed), the store symlink and junction removed, the scratch workspace and
+temporary files deleted, the profile patch residue cleared. The evidence database is
+kept at `/tmp/dsh-ch-28d`.
