@@ -77,3 +77,19 @@ semantic boundary.
 Still open in this phase: provenance storage (T2.6-2), the panel preview and the
 irreversibility sentence (T2.6-3), revocation and deletion (T2.6-4), and
 `docs/remote-models.md` (T2.6-5).
+
+### A commit carried a broken guard, and that is the lesson
+
+The previous commit contained a guard script that **did not parse**: my edit that
+reworded the summary line left a stray `)`,`, and `node --check` would have caught
+it in one second. The gate printed `Node.js v24.5.0` and `Found 0 warnings and 2
+errors`, and the commit went in anyway because the message-building step ran
+before the gate result was read.
+
+Two things are worth writing down rather than smoothing over:
+
+- the fix is a forward commit that repairs the file, not an amend, so the broken
+  state stays visible in the history;
+- the guard's own self-check is what would have caught this class if it had been
+  the *detector* that broke - here it was plain syntax, and nothing in the
+  pipeline substitutes for reading the gate result before committing.

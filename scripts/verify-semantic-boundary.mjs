@@ -96,5 +96,4 @@ if (violations.length > 0) {
 console.log(
   `semantic boundary holds: ${senders.length} network call(s) in `
   + `${[...ALLOWED_SENDERS.keys()].join(' and ')}, each behind its own check`,
-)`,
 )
