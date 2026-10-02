@@ -413,18 +413,25 @@ tests/integration/plugin-multi-host.spec.ts 同上
 
 **仍未验证（诚实清单）**：受支持应用**自有**的密码框（本机无可用 SMB/认证面：Finder `mount volume` 返回 `-5016`，未弹出带 secure 字段的认证对话框；当前最强证据仍是**真实 AppKit `NSSecureTextField`** 在 collector 侧被判 `secure-field` 并在 Host 侧整条丢弃）；iTerm2 正常窗口（非首启对话框）的元素形态；多 Host 场景下"第二个 Host 变成只读客户端"的完整端到端行为（当前只验证到锁层面）。
 
-## 13. 真 Cursor 补记（3.23.12）
+## 13. 真 Cursor 补记（3.23.12，已补全）
 
-官方 API 直链下载真 Cursor（`com.todesktop.230313mzl4w4u92`，3.23.12，294 MB dmg）并启动，AX 探针给出与真 VS Code 完全同构的结论：
+官方 API 直链下载真 Cursor（`com.todesktop.230313mzl4w4u92`，3.23.12，294 MB dmg）并启动。**Cursor 3.x 有两种窗口，AX 行为不同**：
 
 ```text
-window document(err=0 value=file:///tmp/dsh-live-fixtures/normal-text.html)
-window title(err=0 value=normal-text.html)
-window axurl(err=-25205 value=nil)
-focusedUIElement(err=-25212)          ← Chromium 系无 app 级焦点属性（F11 修复覆盖）
+经典编辑器窗口: title=normal-text.html  document=file:///tmp/dsh-live-fixtures/normal-text.html  ← 与 VS Code 一致
+Cursor Agents 窗口: title=Cursor Agents  document=""（空串）                                  ← 新 UI：不暴露活动文件
+两个窗口共同:    axurl=-25205(unsupported)   app 级 focusedUIElement=-25212                     ← Chromium 系，F11 修复覆盖
 ```
 
-**未能采到真 Cursor 的 collector 观测**：前台一直被用户正在使用的 Chrome 占住（AX `kAXRaise` + `NSRunningApplication.activate` 均返回成功，frontmost 仍是 Chrome），而 collector 只观测前台 app。故 Cursor 的结论分层为：
-- ✅ adapter 映射：合成 app 冒用 `com.todesktop.230313mzl4w4u92` → `adapter=vscode` + `document=file://…`；
-- ✅ 真 app AX 契约：与 VS Code 同构（document 为 file://、AXURL 不支持、无 app 级焦点属性）；
-- ❓ 真 app 的 collector 观测：需要 Cursor 处于前台（当前环境做不到不打扰用户）。
+四层证据齐全：
+
+| 层 | 结果 |
+|---|---|
+| adapter 映射 | 真 app + 合成 app 双证：`adapter=vscode`（`com.todesktop.230313mzl4w4u92`） |
+| collector 观测（经典编辑器窗口） | `{"adapter":"vscode","app":"com.todesktop.230313mzl4w4u92","privacy":{"secure":false},"window":{"document":"file:///tmp/dsh-live-fixtures/normal-text.html","title":"normal-text.html"}}` |
+| Host 端到端（allow 规则 + capture ON + 一次性目录） | 2 条观测落库、`resources = {kind file, canonical_uri file:///private/tmp/dsh-live-fixtures/normal-text.html}`、2 个 episode（`resources: normal-text.html` / `Applications: com.todesktop.230313mzl4w4u92`） |
+| UI 面板 | 面板允许列表显示 `com.todesktop.230313mzl4w4u92`，episode 列表显示两条 Cursor 活动（截图 `/tmp/dsh-panel-cursor2.png`） |
+
+**观测方法记录**：Cursor 窗口当时在另一 Space/被用户浏览器占据前台，故写了 idle-gated 的 AX `kAXRaise` + `NSRunningApplication.activate` 工具（仅在用户输入停顿 ≥1.2s 时动作），再由 collector 在它处于前台时采集；这也是"真 app 观测"此前缺失的唯一原因。
+
+**Cursor 侧产品含义（记录，未改代码）**：Cursor 3.x 的默认 Agents 窗口不暴露 `kAXDocument` → 若用户只用 Agents 窗口，adapter 只能拿到标题、拿不到 resource，在 episode 里表现为 `Unanchored activity`（与 Finder 无 resource 的情形同类）。经典编辑器窗口则与 VS Code 完全一致。
