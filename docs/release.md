@@ -24,6 +24,19 @@ ln -sfn "$PWD" ~/.dsh/profiles/<profile>/node_modules/dsh-computer-history
 Verified: the entry reaches `[active]`. Every phase's runtime evidence was
 produced on this path.
 
+## A correction, owed to the earlier reading
+
+A previous version of this file said the packaged plugin "does not start" while a
+checkout install does. That was wrong, and the phase that found the error is the
+one to say so: a **freshly created package under a new name**, never loaded before,
+also came back without a fiber in the same Host session, and so did the checkout.
+What looked like a property of the tarball was the state of the running Host after
+many load/unload cycles - any newly created entry stops getting a fiber.
+
+Until that is understood, treat "it did not start" in any measurement here as
+suspicious of the environment first. The tarball's contents are still verified
+byte-for-byte; whether it starts is **unknown**, not known-bad.
+
 ## Installing from the tarball: **not verified**
 
 ```bash

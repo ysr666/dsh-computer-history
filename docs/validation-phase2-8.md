@@ -116,3 +116,33 @@ Environment restored: scratch workspace, store symlink, junction and the profile
 patch residue removed; the user's editor settings were restored from the backup
 taken before this round (VS Code was never launched this time, so nothing was left
 running).
+
+### T2.8-3, third attempt: the hypothesis is disproven, and so is 2.7's conclusion
+
+The named probe was a second package with the **same code** under a different name:
+
+```text
+{"target":"dsh-computer-history-probe","entries":1,
+ "states":"05eb2522:fiber=none"}
+```
+
+Same symptom under a different name, on a package that never existed before, so it
+is **not** per-name accumulated state. It is the session's loader: any entry created
+now comes back without a fiber, whether it is the checkout, the tarball, or a fresh
+name.
+
+That settles two things and leaves one:
+
+- **2.7's conclusion is corrected for good.** "The packaged artifact does not
+  start" was an environment condition, not a property of the tarball; a fresh
+  directory, a package never loaded before, and the checkout all behave the same in
+  this session. `docs/release.md` must be corrected to say what is actually known.
+- **2.8's live run needs a fresh Host session.** Everything the phase promised at
+  the code level is verified (316 tests: validation, policy, protected set,
+  provenance, the extension's identity mapping), and the wire format is now
+  documented well enough for another editor to implement - but the one piece that
+  needs a running editor cannot be produced from a loader that no longer creates
+  fibers.
+
+That is the boundary, stated plainly rather than papered over: the next attempt
+starts after a Host restart, then installs the extension and reads the stored row.
