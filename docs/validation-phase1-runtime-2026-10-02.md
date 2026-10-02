@@ -394,4 +394,37 @@ tests/integration/plugin-multi-host.spec.ts 同上
 
 **一处自我纠正（记录在案）**：本轮中途我一度判断"protect 规则未生效（隐私 bug）"，并按 collector session 重新归因后**被推翻**——第一次统计把**上一轮 session** 的行算进了本轮。教训：跨 session 对比必须按 `collector_session` 分期，否则旧行会伪装成新泄漏。最终结论是 protect 路径工作正常（上表）。
 
-**仍未验证（诚实清单，非欠账）**：UI 面板的真实渲染（只有 Slots 注册证据，没有视觉证据）；iTerm2 / Cursor（未安装）；留存/清理（24h/30d TTL 触发）；`/delete` 在**有数据**时的语义；多 Host 并发占用；受支持应用内的**真实**密码框（当前只有合成 `NSSecureTextField`）。
+## 12. 覆盖补全（第四轮，2026-10-02 18:2x–18:3x）
+
+把 §11 末尾列出的"没验过的面"逐条做完（全部真机）：
+
+| 面 | 方法 | 结果 |
+|---|---|---|
+| 留存/TTL 清理（24h/30d） | 复制库，把 1 条观测与 5 个 episode 的 `expires_at_ms` 改到过去，加载插件触发 apply 时 sweep | ✅ 观测 15→14（aged 全清、live 保留）、episode 6→1（存活者保留）、`episode_observations` 级联 6→1、`deletion_log` 仍为 0 —— **原始 TTL 是证据压实、不算用户删除**，与代码注释一致 |
+| `/delete` 有数据时的语义 | 依次测三种 scope：`episode` / `time-range` / `app` | ✅ `episode` → `{observationsDeleted:1,episodesDeleted:1}`；`time-range` → `{observationsDeleted:6}` 且孤儿 resource 2→1；`app` → `{observationsDeleted:7}` 且 resource 1→0；`deletion_log` 三条记录（scope/range/bundleId/计数）齐全 |
+| 删除后是否误伤新采集 | app-scope 删除 VS Code 后，重新聚焦真 VS Code | ✅ 0→3 条新观测（含 resource）——删除只挡"防回灌"（`requested_at_ms >= observedAtMs` 的旧观测），不误杀新活动；回灌路径本身由集成测试覆盖（`tests/integration/ingestion.spec.ts:178`） |
+| 多 Host 抢锁 | 用**仓库当前代码**新编译 `capture-lock`，双进程受控实验 + 对插件真实锁路径探测 | ✅ 受控：holder 存在时竞争者 `{acquired:false, elapsedMs:4533}`；真机：插件持有 capture 时竞争者 `{acquired:false, elapsedMs:4542}` → 第二个 Host 会退化为只读客户端 |
+| UI 面板真实渲染 | 注入后用 CGWindowList 定位 DSH 窗口 → `screencapture -l` → `read_image` 复核 | ✅ 面板完整渲染：标题 `Computer History`、`Capture: running · Accessibility: granted · Raw retention: 24h`、三个按钮、隐私说明、允许列表 `com.microsoft.VSCode`、以及刚采集的 episode（`normal-text.html` / `com.microsoft.VSCode`）；侧栏条目与「插件/自动化任务/记忆系统」并列 |
+| UI 交互（client→server） | 合成点击面板 "Pause capture" 按钮两次 | ✅ `/state` 由 `running` → `paused` → `running` |
+| iTerm2（第二个 terminal adapter） | 下载官方 3.7.3 zip → 解压到 /tmp → 启动 → 探针 | ✅ `adapter=terminal`、`secure:false`、element `{role:AXButton, identifier:action-button-2}`；首启是 `AXDialog` 且 `kAXDocument=-25212`，窗口元数据为空；**title 抑制对 iTerm2 同样生效**（两 bundle id 共用 `terminal` adapter） |
+| Cursor（第二个 editor adapter） | 官方 API 取直链（3.23.12）；另用合成 app 冒用 `com.todesktop.230313mzl4w4u92` 验证映射 | ✅ 合成 app：`adapter=vscode`、`app=com.todesktop.230313mzl4w4u92`、`document=file://…`（映射正确）；真 Cursor 见 §13 |
+
+**方法论教训（本轮我犯了两次同类的"调用错参数"）**：① 锁探针第一次漏传路径参数（探了个 `undefined` 文件）；② 第二次把 **`.lock` 文件本身**当作 `withFileLock` 的 filename，而该库锁的是 `${filename}.lock` 兄弟文件——两次都得到"1ms 拿到锁"的假警报，直到用受控双进程实验（`holder` + `contender`）才定性。结论：探针类工具必须先用"已知持有/已知空闲"两侧标定，否则负结果不可信。
+
+**仍未验证（诚实清单）**：受支持应用**自有**的密码框（本机无可用 SMB/认证面：Finder `mount volume` 返回 `-5016`，未弹出带 secure 字段的认证对话框；当前最强证据仍是**真实 AppKit `NSSecureTextField`** 在 collector 侧被判 `secure-field` 并在 Host 侧整条丢弃）；iTerm2 正常窗口（非首启对话框）的元素形态；多 Host 场景下"第二个 Host 变成只读客户端"的完整端到端行为（当前只验证到锁层面）。
+
+## 13. 真 Cursor 补记（3.23.12）
+
+官方 API 直链下载真 Cursor（`com.todesktop.230313mzl4w4u92`，3.23.12，294 MB dmg）并启动，AX 探针给出与真 VS Code 完全同构的结论：
+
+```text
+window document(err=0 value=file:///tmp/dsh-live-fixtures/normal-text.html)
+window title(err=0 value=normal-text.html)
+window axurl(err=-25205 value=nil)
+focusedUIElement(err=-25212)          ← Chromium 系无 app 级焦点属性（F11 修复覆盖）
+```
+
+**未能采到真 Cursor 的 collector 观测**：前台一直被用户正在使用的 Chrome 占住（AX `kAXRaise` + `NSRunningApplication.activate` 均返回成功，frontmost 仍是 Chrome），而 collector 只观测前台 app。故 Cursor 的结论分层为：
+- ✅ adapter 映射：合成 app 冒用 `com.todesktop.230313mzl4w4u92` → `adapter=vscode` + `document=file://…`；
+- ✅ 真 app AX 契约：与 VS Code 同构（document 为 file://、AXURL 不支持、无 app 级焦点属性）；
+- ❓ 真 app 的 collector 观测：需要 Cursor 处于前台（当前环境做不到不打扰用户）。
