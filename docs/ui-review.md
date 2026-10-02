@@ -220,3 +220,31 @@ structure is what is left to make legible.
 
 The headless Chrome is deliberately still running: the acceptance loop for the next
 iteration is a capture, and it will be closed when this goal stops needing captures.
+
+## Iteration 5 - one spacing scale, and the last five English strings
+
+Evidence: `docs/assets/panel-2026-10-03-after5.png`.
+
+The layout had the same numbers written inline in fourteen places
+(`marginBottom: 20` seven times, `margin: '0 0 8px'` six, `opacity: 0.75, margin: '0 0 6px'`
+two). They now come from one scale - `SPACE = { xs: 4, sm: 8, md: 12, lg: 18, xl: 26 }` -
+and the two retention inputs sit in a `FIELD_LABEL` row instead of running into their
+boxes: `原始记录保留 [24]  工作片段保留 [30]  [保存]`.
+
+The pass also caught five strings the earlier sweeps missed, all of them invisible until
+the panel was in front of me: `Capture disabled in plugin config`, `Resume capture`,
+`Capture unavailable`, `Confirm delete all history`, `Cancel`.
+
+**Two mistakes of mine, both caught before the file changed:**
+
+- a replacement anchored on `{ style: { marginBottom: 20 } }` assumed one spelling; the
+  source has four, so the count assertion fired and nothing was written -
+- the first attempt declared `SECTION` and `H2` constants and then wrote the expressions
+  inline, leaving two constants unused and the typecheck red. The honest fix was to delete
+  the constants rather than change six call sites to justify them; the numbers still come
+  from `SPACE`, which was the actual goal.
+
+**Still a document, not yet a product**, and it is now specific: sections have no
+separation beyond their margin, every button looks identical (nothing is primary and
+nothing is marked destructive), `删除全部历史` sits in the same row as `刷新`, and the two
+muted lines under 摘要 read as two separate facts. That is the next iteration.

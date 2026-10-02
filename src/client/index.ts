@@ -46,6 +46,15 @@ const CAPTURE_WORD_ZH: Record<string, string> = {
   degraded: '运行不稳定', 'permission-required': '需要授权',
 }
 
+// One spacing scale. The panel had the same numbers written inline in fourteen places,
+// which is how a layout drifts. Declaring constants nobody uses would be its own kind
+// of drift, so only the ones the panel actually reads live here.
+const SPACE = { xs: 4, sm: 8, md: 12, lg: 18, xl: 26 }
+const MUTED = { opacity: 0.72, margin: `0 0 ${SPACE.sm}px`, lineHeight: 1.55 }
+const FIELD_LABEL = {
+  display: 'inline-flex', gap: 6, alignItems: 'center', marginRight: SPACE.md,
+}
+
 const HEALTH_TEXT: Record<string, string> = {
   paused: t('Collection is paused, so nothing new is being recorded.',
     '采集已暂停，所以不会记录新的内容。'),
@@ -293,10 +302,10 @@ function HistoryPage(): React.ReactElement {
         border: '1px solid #d0d0d0',
         borderRadius: 8,
         padding: 12,
-        marginBottom: 20,
+        marginBottom: SPACE.xl,
       },
     },
-    React.createElement('h2', { style: { margin: '0 0 8px' } }, t('Resume', '从这里继续')),
+    React.createElement('h2', { style: { margin: `0 0 ${SPACE.sm}px` } }, t('Resume', '从这里继续')),
     React.createElement(
       'div',
       { style: { display: 'flex', gap: 8 } },
@@ -351,8 +360,8 @@ function HistoryPage(): React.ReactElement {
 
   const semanticSection = React.createElement(
     'section',
-    { style: { marginBottom: 20 } },
-    React.createElement('h2', { style: { margin: '0 0 8px' } }, t('Summaries', '摘要')),
+    { style: { marginBottom: SPACE.xl } },
+    React.createElement('h2', { style: { margin: `0 0 ${SPACE.sm}px` } }, t('Summaries', '摘要')),
     React.createElement(
       'p',
       null,
@@ -428,15 +437,15 @@ function HistoryPage(): React.ReactElement {
 
   const retentionSection = React.createElement(
     'section',
-    { style: { marginBottom: 20 } },
-    React.createElement('h2', { style: { margin: '0 0 8px' } }, t('Retention', '保留策略')),
+    { style: { marginBottom: SPACE.xl } },
+    React.createElement('h2', { style: { margin: `0 0 ${SPACE.sm}px` } }, t('Retention', '保留策略')),
     retention
       ? React.createElement(
           'div',
           null,
           React.createElement(
             'p',
-            { style: { opacity: 0.75, margin: '0 0 6px' } },
+            { style: MUTED },
             t(
               `Raw observations are kept for ${retention.observationRetentionHours} hours `
               + `and episodes for ${retention.episodeRetentionDays} days. A change applies `
@@ -448,7 +457,7 @@ function HistoryPage(): React.ReactElement {
           ),
           React.createElement(
             'label',
-            null,
+            { style: FIELD_LABEL },
             t('Observation hours ', '原始记录保留 '),
             React.createElement('input', {
               type: 'number',
@@ -463,7 +472,7 @@ function HistoryPage(): React.ReactElement {
           ' ',
           React.createElement(
             'label',
-            null,
+            { style: FIELD_LABEL },
             t('Episode days ', '工作片段保留 '),
             React.createElement('input', {
               type: 'number',
@@ -491,8 +500,8 @@ function HistoryPage(): React.ReactElement {
 
   const timelineSection = React.createElement(
     'section',
-    { style: { marginBottom: 20 } },
-    React.createElement('h2', { style: { margin: '0 0 8px' } }, t('Timeline', '时间线')),
+    { style: { marginBottom: SPACE.xl } },
+    React.createElement('h2', { style: { margin: `0 0 ${SPACE.sm}px` } }, t('Timeline', '时间线')),
     timeline.length === 0
       ? React.createElement(
           'p',
@@ -617,10 +626,10 @@ function HistoryPage(): React.ReactElement {
         border: '1px solid #d0d0d0',
         borderRadius: 8,
         padding: 12,
-        marginBottom: 20,
+        marginBottom: SPACE.xl,
       },
     },
-    React.createElement('h2', { style: { margin: '0 0 8px' } }, t('Browser companion', '浏览器伴侣')),
+    React.createElement('h2', { style: { margin: `0 0 ${SPACE.sm}px` } }, t('Browser companion', '浏览器伴侣')),
     React.createElement(
       'p',
       null,
@@ -732,8 +741,8 @@ function HistoryPage(): React.ReactElement {
 
   const threadSection = React.createElement(
     'section',
-    { style: { marginBottom: 20 } },
-    React.createElement('h2', { style: { margin: '0 0 8px' } }, t('Work threads', '工作线索')),
+    { style: { marginBottom: SPACE.xl } },
+    React.createElement('h2', { style: { margin: `0 0 ${SPACE.sm}px` } }, t('Work threads', '工作线索')),
     threads.length === 0
       ? React.createElement(
           'p',
@@ -793,7 +802,7 @@ function HistoryPage(): React.ReactElement {
     threadSection,
     React.createElement(
       'div',
-      { style: { display: 'flex', gap: 8, marginBottom: 20 } },
+      { style: { display: 'flex', gap: 8, marginBottom: SPACE.xl } },
       React.createElement(
         'button',
         {
@@ -807,12 +816,12 @@ function HistoryPage(): React.ReactElement {
           onClick: () => { runAction(toggle) },
         },
         !state?.enabled
-          ? 'Capture disabled in plugin config'
+          ? t('Capture disabled in plugin config', '采集在插件配置里被关闭了')
           : state.capture === 'paused'
-            ? 'Resume capture'
+            ? t('Resume capture', '继续采集')
             : state.capture === 'running'
               ? t('Pause capture', '暂停采集')
-              : 'Capture unavailable',
+              : t('Capture unavailable', '采集暂不可用'),
       ),
       React.createElement(
         'button',
@@ -821,7 +830,7 @@ function HistoryPage(): React.ReactElement {
           onClick: () => { runAction(clearAll) },
         },
         confirmDeleteAll
-          ? 'Confirm delete all history'
+          ? t('Confirm delete all history', '确认：删除全部历史')
           : t('Delete all history', '删除全部历史'),
       ),
       confirmDeleteAll
@@ -833,7 +842,7 @@ function HistoryPage(): React.ReactElement {
                 setConfirmDeleteAll(false)
               },
             },
-            'Cancel',
+            t('Cancel', '取消'),
           )
         : null,
       React.createElement(
