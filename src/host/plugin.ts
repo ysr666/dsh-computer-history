@@ -324,25 +324,26 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
       return ingestion.ingest(companionObservation(payload))
     },
   })
+  // Read the pairing state once, synchronously: the listener's callbacks run
+  // later, possibly after the store is closed during disposal, and a database
+  // read there would reject with "database is not open" while nobody is left
+  // to handle it.
+  const paired = companionTokens.state().paired
   let companionState: NonNullable<
     ComputerHistoryState['companion']
   > = {
     listening: false,
-    paired: companionTokens.state().paired,
+    paired,
     reason: 'companion intake not started',
   }
   void companionIntake.start()
     .then((port) => {
-      companionState = {
-        listening: true,
-        port,
-        paired: companionTokens.state().paired,
-      }
+      companionState = { listening: true, port, paired }
     })
     .catch((error: unknown) => {
       companionState = {
         listening: false,
-        paired: companionTokens.state().paired,
+        paired,
         reason: error instanceof Error
           ? error.message
           : 'companion intake failed',

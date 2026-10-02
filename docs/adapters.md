@@ -17,6 +17,7 @@ synthetic fixtures — never a real private file or a real credential.
 | `jetbrains` | `com.google.android.studio`, `com.jetbrains.*` (10 ids) | editor | nil (`-25212`) | unsupported (`-25205`) | readable in the welcome window (`AXButton`, 23 attributes); an unqueryable element (`-25202`) is tolerated per ADR 0006 | none |
 | `obsidian` | `md.obsidian` | editor | empty on the vault picker | unsupported (`-25205`) | unavailable (`-25212`) | none |
 | `notes` | `com.apple.Notes` | window | nil (`-25212`) | unsupported (`-25205`) | readable (`AXTextArea`) | none |
+| `browser` | `companion.browser` | browser | n/a (the companion sends the address) | n/a | n/a | url |
 | `terminal` | `com.apple.Terminal`, `com.googlecode.iterm2` | terminal | working directory (`file://…` / path) | unsupported (`-25205`) | readable on iTerm2; `-25212` inside Terminal | directory |
 | `preview` | `com.apple.Preview` | document | `file://…` for the open document | unsupported | readable | file |
 | `finder` | `com.apple.finder` | window | nil for plain windows; folder path in folder windows | unsupported (`-25205` / `-25212`) | readable (`AXGroup`) | none or file |
@@ -163,6 +164,23 @@ deliberately **not** recorded: Notes exposes a readable focused element
 note is a title-only surface and the observation carries no resource. The
 adapter document says nothing about note content, and none was read or stored
 during the measurement.
+
+### `browser` — the companion's synthetic source
+
+```json
+{"adapter":"browser","app":"companion.browser","provider":"companion",
+ "window":{"title":"Example page","url":"https://example.test/docs/guide"}}
+```
+
+Not an application: this adapter is the provenance the paired browser companion
+reports (ADR 0007), and no real application carries the bundle id, so the
+Accessibility path can never produce it. Verified 2026-10-02 against the running
+Host — a paired `POST http://127.0.0.1:19388/companion/observation` with
+`path=/docs/guide?token=secret#frag` stored one observation whose resource is
+`url https://example.test/docs/guide` (query and fragment gone), while an
+unpaired POST answered 401, an incognito payload answered 403 and a POST during
+pause answered `202 {stored:false}`. The full recipe is in
+`docs/validation-phase2-1.md`, T2.1-2b.
 
 ### `terminal` — Terminal.app and iTerm2 3.7.3
 
