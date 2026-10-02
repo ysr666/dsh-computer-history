@@ -162,3 +162,48 @@ green  restored
 A third, smaller one: the guard's own self-check helpers tripped the repository's
 lint rule about functions that capture nothing, which is the linter asking for the
 right thing - they are module-scope probes.
+
+## T2.7-4 — the release path, and the defect it found on the first run
+
+Packing works:
+
+```text
+npm pack → dsh-computer-history-0.1.0-dev.0.tgz (295 KB)
+tar tzf  → package/{lib,native,scripts,bin,package.json,README*,LICENSE,SECURITY.md}
+           lib/index.js present, 0 src files (the whitelist holds)
+```
+
+Installing the **packaged artifact** into its own directory and pointing the
+profile junction at it - not at the repository - is where the phase earned its
+keep:
+
+```text
+junction → /tmp/dsh-ch-27-install/package
+loader   → [no-fiber] c9d180ef (dsh-computer-history)
+```
+
+**The packaged plugin has no fiber: it does not start.** The same tree, loaded
+from the repository, is `[active]`. Nothing about the tarball's contents looks
+wrong - the entry file is there, no sources leaked in, the manifest is the one
+that worked - so the fault is in how the packaged entry is resolved or imported,
+and that is not a guess I am willing to write down as a conclusion.
+
+What is established, and what is not:
+
+- **established**: packing produces an installable-looking artifact; installing it
+  by hand and loading it yields an entry with **no fiber**; the repository copy at
+  the same commit starts normally;
+- **not established**: why. The next attempt starts where the 2.6 loader failure
+  was diagnosed successfully - `fiber._error` on the created entry - and compares
+  the extracted package against the repository (resolution of peer imports is the
+  first candidate, since the package has no `node_modules` of its own).
+
+`docs/release.md` therefore documents the install that is **verified** (from a
+checkout, with the junction at the repository) and states plainly that installing
+the tarball fails to start, with the evidence above. A release document that
+described the tarball path as working would be the exact failure mode this phase
+exists to prevent.
+
+Environment restored: loader entry removed, junction and `~/.dsh/computer-history`
+deleted, `/tmp/dsh-ch-27-install` and the store directory removed, the tarball left
+in place for the next attempt.
