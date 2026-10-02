@@ -471,3 +471,44 @@ The one line left is at `src/host/plugin.ts:369`, in the
 construction spans about twenty lines, so it is named here rather than edited blind -
 this phase has already mangled two files by guessing at anchors, and neither of those
 mistakes was worth the round it cost.
+
+## T2.9-1/2/3 — verified end to end, with a real refusal
+
+The last line is in: `plugin.ts` passes `() => ingestion.refusalCounts()` to the
+backend, which spreads it into the state. Verified against the running Host, not by
+reading code:
+
+```text
+build + reload
+  before   {"capture":"running", … }                       no refusedByReason field
+  after    {"capture":"running", …, "refusedByReason":{}}  present
+
+a companion claim for an application the user has not allowed
+  POST /companion/observation → {"stored":false}
+  GET  /state                 → "refusedByReason":{"policy":1}
+```
+
+So the chain holds in the real thing: a claim is refused for a **named** reason, and
+the number is visible where the panel can read it. That is the sentence a new
+installation needs - "nothing is allowed yet, and 1 observation has been refused
+because of it" - and it is now data rather than an inference from the policy rules.
+
+### Where the phase stands
+
+| promised | state |
+|---|---|
+| the product says whether it is working | health sentence in the panel; `/state` carries capture, permission, companion; refusals by reason now visible |
+| pairing without editing files | token creation, copy button, three steps, and "token created but no client has ever used it" |
+| permissions asked for, explained, checked | already reported, now shown next to everything else |
+| survives Mac daily life | lock screen and screen saver are not recorded (mechanism named: `not-an-adapter`); sleep is covered by the quiet-period episode break |
+| install and removal verified | **not yet** - `docs/release.md` still carries an unverified step for macOS |
+| no collection change | ADR 0002 and 0011 untouched |
+
+**The one thing that has never happened: nobody has looked at the panel.** Every claim
+above about the interface is verified by tests, by types and by API responses; the
+screenshot needs the panel opened, and until it exists this report keeps saying so.
+
+Environment: the plugin is left loaded against the clean store at
+`/tmp/dsh-ch-29-fresh` with its symlink and junction in place, because the pending
+evidence is a screenshot of that running panel. Nothing else was started, and the
+editor's own settings were restored in the previous rounds.

@@ -402,6 +402,9 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
      companionTokens,
     new SemanticOptInStore(history.db),
     history.db,
+    // Why observations were refused, so the panel can say "nothing is allowed yet,
+    // and 12 observations have been refused because of it" rather than a bare count.
+    () => ingestion.refusalCounts(),
   )
 
   // Teardown is registered immediately, before anything that can throw,
