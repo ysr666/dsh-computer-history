@@ -33,7 +33,7 @@ async function walk(dir) {
 // The verification helpers under scripts/ are scanned too: they touch the
 // Accessibility API directly, so they must respect the same boundary as the
 // collector they exercise.
-const roots = ['src', 'native', 'scripts']
+const roots = ['src', 'native', 'scripts', 'extension']
 const rootFiles = await Promise.all(roots.map(async (root) => {
   try {
     return await walk(root)
@@ -53,6 +53,42 @@ const violations = contents.flatMap(({ file, text }) =>
     .filter((token) => text.includes(token))
     .map((token) => `${file}: forbidden symbol ${token}`),
 )
+
+// The companion's worker and shared logic must not touch page content. The
+// options page is the extension's own UI and is exempt: it may use the DOM of
+// its own document, and it never reads a page.
+const contentApis = [
+  'document.',
+  'innerText',
+  'textContent',
+  'getSelection',
+  'querySelector',
+  'localStorage',
+]
+const extensionFiles = [
+  'extension/lib.js',
+  'extension/service-worker.js',
+]
+const extensionSources = new Map(
+  (
+    await Promise.all(
+      extensionFiles.map(async file => {
+        try {
+          return [file, await readFile(file, 'utf8')]
+        } catch {
+          return undefined
+        }
+      }),
+    )
+  ).filter(entry => entry !== undefined),
+)
+for (const [file, text] of extensionSources) {
+  for (const token of contentApis) {
+    if (text.includes(token)) {
+      violations.push(`${file}: page-content API ${token}`)
+    }
+  }
+}
 
 if (violations.length) {
   console.error(violations.join('\n'))

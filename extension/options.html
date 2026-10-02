@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Computer History Companion</title>
+    <style>
+      body { font: 13px/1.5 -apple-system, system-ui, sans-serif; margin: 16px; max-width: 520px; }
+      label { display: block; margin-top: 12px; font-weight: 600; }
+      input { width: 100%; padding: 6px; margin-top: 4px; }
+      button { margin-top: 14px; padding: 6px 12px; }
+      #status { margin-top: 12px; white-space: pre-wrap; }
+      .hint { color: #555; font-weight: 400; }
+    </style>
+  </head>
+  <body>
+    <h1>Computer History Companion</h1>
+    <p class="hint">
+      Reports the active tab's origin and path to your local DeepSeek Harness
+      Computer History intake. It never reads page content, and it never reports
+      private windows — Chrome does not even allow this extension in incognito.
+    </p>
+
+    <label for="port">Intake port</label>
+    <input id="port" type="number" min="1" max="65535" value="19388" />
+
+    <label for="token">Pairing token</label>
+    <input id="token" type="password" placeholder="shown once in the panel" />
+
+    <button id="save">Save</button>
+    <button id="test">Test pairing</button>
+    <div id="status"></div>
+
+    <script type="module" src="options.js"></script>
+  </body>
+</html>

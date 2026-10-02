@@ -188,3 +188,56 @@ extension in Chrome.
 optional `getCompanionState()` in the capture-controller interface had no
 implementation, so the accessor silently fell back to the default. It exists now,
 and `GET /pairing` and `/state.companion` both report the live listener.
+
+## T2.1-4 — the MV3 extension
+
+`extension/` holds a plain-ESM MV3 extension: `lib.js` (all the logic that can be
+reasoned about without a browser), `service-worker.js` (Chrome event wiring
+only), `options.html`/`options.js` (pairing UI), and a `lib.d.ts` that types the
+contract for the tests while the implementation stays plain JavaScript because
+Chrome loads it directly.
+
+The privacy posture is in the manifest, not in a promise:
+
+```json
+{"incognito": "not_allowed", "permissions": ["tabs", "storage"],
+ "host_permissions": ["http://127.0.0.1/*", "http://localhost/*"],
+ "background": {"service_worker": "service-worker.js", "type": "module"}}
+```
+
+No content script, no page-content API, and only loopback host permissions. The
+worker checks `tab.incognito` first and returns before reading anything else; it
+reports `origin` and `path` only, because `normalizeUrl` drops the query string
+and the fragment.
+
+`pnpm build:extension` packages `dist/extension/` **and refuses** a manifest that
+is not MV3, that allows incognito, that adds a content script, that asks for a
+permission beyond `tabs`/`storage`, or that reaches a host other than loopback;
+it also runs `node --check` on every script, because a syntax error in a service
+worker otherwise appears only inside Chrome.
+
+`pnpm test` → 240, six of them the extension's:
+
+| case | expectation |
+|---|---|
+| incognito tab | never reported, payload not even built |
+| `chrome://`, `chrome-extension://`, `file://`, `about:blank`, `devtools://`, garbage | not reportable |
+| `https://example.test/docs/guide?token=secret#part-3` | `origin + /docs/guide`; the serialised payload does not contain `q=...` |
+| empty title | omitted rather than sent as `""` |
+| transport | posts to `127.0.0.1:<port>`, sends `x-companion-token`, returns the status |
+| pairing check | `GET /companion/health` with the token, 200 ⇒ paired |
+
+`GET /companion/health` was added to the intake for the options page's "Test
+pairing", gated by the same token and storing nothing; it has its own test.
+
+**Both new guards were calibrated in both directions:**
+
+```text
+lib.js + "document.body.textContent"   → verify:privacy fails, naming both tokens
+manifest incognito: "spanning"         → build:extension fails: incognito must be "not_allowed"
+restored                               → both pass
+```
+
+`pnpm typecheck` also caught what the tests could not: importing plain
+JavaScript from a TypeScript test is `TS7016` until a declaration exists and
+`TS2345` until the payload literal is typed as `false` rather than `boolean`.

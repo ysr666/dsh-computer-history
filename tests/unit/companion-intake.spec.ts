@@ -156,6 +156,32 @@ describe('companion intake', () => {
     await intake.stop()
   })
 
+  it('answers a pairing health check with the token and nothing without it', async () => {
+    const { intake, port } = await harness()
+    const ok = await new Promise<{ status: number; json: Record<string, unknown> }>(
+      resolve => {
+        const request = httpRequest({
+          host: '127.0.0.1',
+          port,
+          method: 'GET',
+          path: '/companion/health',
+          headers: { 'x-companion-token': currentToken() },
+        }, response => {
+          let text = ''
+          response.on('data', chunk => { text += chunk })
+          response.on('end', () => resolve({
+            status: response.statusCode ?? 0,
+            json: JSON.parse(text) as Record<string, unknown>,
+          }))
+        })
+        request.end()
+      },
+    )
+    expect(ok.status).toBe(200)
+    expect(ok.json.ok).toBe(true)
+    await intake.stop()
+  })
+
   it('answers 404 for anything but the observation route', async () => {
     const { intake, port, delivered } = await harness()
     const wrongPath = await new Promise<number>(resolve => {

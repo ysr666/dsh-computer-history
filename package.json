@@ -26,7 +26,8 @@
     "benchmark:ingestion": "vitest run --config vitest.benchmark.config.ts",
     "verify:tools": "node scripts/verify/build-tools.mjs",
     "verify:adapters": "node scripts/verify-adapters.mjs",
-    "verify:store-protection": "node scripts/verify-store-protection.mjs"
+    "verify:store-protection": "node scripts/verify-store-protection.mjs",
+    "build:extension": "node scripts/build-extension.mjs"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "4.0.4",

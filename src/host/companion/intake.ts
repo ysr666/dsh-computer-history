@@ -104,7 +104,11 @@ export class CompanionIntake {
     response: ServerResponse,
   ): Promise<void> {
     const url = request.url ?? '/'
-    if (request.method !== 'POST' || url !== '/companion/observation') {
+    const isObservation =
+      request.method === 'POST' && url === '/companion/observation'
+    const isHealth =
+      request.method === 'GET' && url === '/companion/health'
+    if (!isObservation && !isHealth) {
       return this.send(response, 404, { error: 'not found' })
     }
 
@@ -123,6 +127,12 @@ export class CompanionIntake {
     const presented = Array.isArray(token) ? token[0] : token
     if (!this.options.tokens.verify(presented)) {
       return this.send(response, 401, { error: 'pairing token required' })
+    }
+
+    // Pairing check for the options page: proves the port and the token before
+    // the user trusts a pairing, and stores nothing.
+    if (isHealth) {
+      return this.send(response, 200, { ok: true, port: this.boundPort })
     }
 
     if (!this.withinRate(presented ?? '')) {

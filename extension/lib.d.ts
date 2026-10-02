@@ -1,0 +1,43 @@
+// Types for the companion extension's shared logic. The implementation stays
+// plain ESM JavaScript because Chrome loads it directly; this declaration is
+// what keeps the tests and any future `checkJs` honest about the contract.
+
+export interface CompanionTab {
+  readonly url?: string
+  readonly title?: string
+  readonly incognito?: boolean
+}
+
+export interface CompanionConfig {
+  readonly port: number
+  readonly token: string
+}
+
+export interface CompanionExtensionPayload {
+  readonly origin: string
+  readonly path: string
+  readonly title?: string
+  readonly incognito: false
+  readonly browserSession: string
+  readonly seq: number
+  readonly observedAtMs: number
+}
+
+export function shouldReportTab(tab: CompanionTab | undefined): boolean
+export function isReportableUrl(raw: string): boolean
+export function normalizeUrl(raw: string): { origin: string; path: string }
+export function buildPayload(
+  tab: CompanionTab,
+  session: string,
+  seq: number,
+  observedAtMs?: number,
+): CompanionExtensionPayload | undefined
+export function sendObservation(
+  fetchImpl: typeof fetch,
+  config: CompanionConfig,
+  payload: CompanionExtensionPayload,
+): Promise<number>
+export function checkPairing(
+  fetchImpl: typeof fetch,
+  config: CompanionConfig,
+): Promise<boolean>
