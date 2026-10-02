@@ -206,10 +206,43 @@ The first lint run after the change reported one warning
 (`unicorn/prefer-set-has` in the new metric script); it was fixed rather than
 left, since the repository's baseline is zero warnings.
 
+## T2.0-6 — Cursor Agents window: reviewed, no attribute added
+
+The review question was whether a metadata attribute on a descendant of the
+Agents window (a web area's document/URL) could supply the active file. The
+evidence already collected says the window itself reports no document while the
+same application's classic editor window reports `file:///…/sample.html`
+(Phase 1 report §13 and the Cursor end-to-end store), and the Agents surface is
+a chat-like view rather than a file view.
+
+Decision: do not add the read. ADR 0002 requires a demonstrated need before the
+collector touches a new Accessibility attribute, and here the application's own
+window says there is no document — reading deeper would widen the AX surface for
+a case the product already handles (title-only observation, resource list in the
+panel, aggregation rule from T2.0-7). `bin/verify/ax-probe <pid> 1 --attributes`
+is the tool to revisit this if Cursor starts exposing a document.
+
+## T2.0-7 — weak-workspace labelling: decision
+
+The metric tool showed the observations in the real Cursor store resolved a
+`filesystem` workspace (`/private/tmp/dsh-live-fixtures`, confidence 0.4) while
+their episodes had none, because only `dsh`/`git` workspaces own an episode.
+
+Decision: keep that rule. Replacing "Unanchored activity" with a weak path such
+as `/tmp` or `/private/tmp/...` would be a *less* informative headline, and the
+panel card already lists the observed resources, so the user still sees which
+files were open. The alternative (label episodes from the weak workspace) is
+recorded rather than taken, because it also changes resume scoring, which keys
+on the episode workspace.
+
 ## Pending in 2.0
 
-`T2.0-2` (owner decision on ADR 0006), `T2.0-6` (Cursor Agents metadata
-review), `T2.0-7` (aggregation rule + metric + the adoption question above).
+`T2.0-2` is the only task without a completed deliverable, and it is blocked on
+a decision rather than on work: ADR 0006 (Proposed) asks whether an application
+whose focused element is not queryable at all (the IntelliJ family returns
+`-25202` for role, subrole *and* the attribute list while its window reads fine)
+may be recorded `window-only`. Until the owner decides, the conservative
+fail-closed behaviour stays and no JetBrains adapter is added.
 
 Exit gate status: `pnpm verify:p1` green, `pnpm verify` green (210 tests,
 `verify:privacy`, `verify:adapters` with 7 adapters/9 bundle ids,
