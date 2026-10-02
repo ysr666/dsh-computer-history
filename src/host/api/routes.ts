@@ -96,6 +96,45 @@ export function registerHistoryApi(ctx: Context): void {
   }))
 
   ctx.effect(() => ctx.connection.fetch.register({
+    // `/resume` resumes *capture*; the hint that answers "where was I" is a
+    // different question and gets its own route.
+    path: HISTORY_API_PREFIX + '/resume-hint',
+    methods: ['POST'],
+    requestBody: 'buffered',
+    fetch: async (request: Request) => {
+      let body: unknown
+      try {
+        body = await request.json()
+      } catch {
+        return textResponse('Invalid JSON.', 400)
+      }
+      const record = body as Partial<{
+        query: unknown
+        nowMs: unknown
+        currentWorkspaceId: unknown
+        turn: unknown
+      }>
+      if (typeof record.query !== 'string' || record.query.trim().length === 0) {
+        return textResponse('A query is required.', 400)
+      }
+      try {
+        const resolution = await history.resolveResume({
+          query: record.query,
+          nowMs: typeof record.nowMs === 'number' ? record.nowMs : Date.now(),
+          ...(typeof record.currentWorkspaceId === 'string'
+            ? { currentWorkspaceId: record.currentWorkspaceId }
+            : {}),
+          turn: typeof record.turn === 'number' ? record.turn : 1,
+          source: 'tool',
+        })
+        return json(resolution)
+      } catch {
+        return textResponse('Request failed.', 500)
+      }
+    },
+  }))
+
+  ctx.effect(() => ctx.connection.fetch.register({
     path: HISTORY_API_PREFIX + '/threads',
     methods: ['GET'],
     requestBody: 'buffered',

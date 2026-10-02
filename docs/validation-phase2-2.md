@@ -162,3 +162,54 @@ no resources says so instead of inventing some.
    `docs/verification-guide.md` already says "a live measurement after a build is
    only meaningful after the reload"; this round is the reminder that it applies
    to *every* live check, including a quick one.
+
+## T2.2-5 — a usable resume hint
+
+The hint now names the resource to reopen and the citations behind it, and an
+episode without citations cannot produce one at all:
+
+```ts
+readonly resource?: ResourceIdentity
+readonly citations: readonly [ObservationId, ...ObservationId[]]
+```
+
+All six hit paths in the resolver go through one `hitResolution()` helper, which
+returns `undefined` when the episode has no citations; the caller then answers
+`none` with "the best match has no citations, so it is not a hint". `pnpm test`
+→ 252, two new:
+
+| case | expectation |
+|---|---|
+| a hit from the fixture | `citations` equals the episode's own `summaryObservationIds`, and `resource` is present |
+| the same query with every episode's citations removed | `status: 'none'`, reason mentions citations |
+
+### The route collision this task found
+
+The panel's first version posted to `/resume`. That route already means **resume
+capture** (`history.resume()`), so the hint would have resumed recording and
+returned a body the panel could not render — my POST got `{}` and looked like an
+empty hint. The hint now has its own route, `POST /resume-hint`, which validates
+the query (400 without one) and awaits `resolveResume` (the same promise-to-
+`json()` mistake `/threads` had).
+
+Live, against the running Host:
+
+```text
+POST /resume-hint {query: "继续 demo 那个", …}   → {"status":"none"}
+POST /resume-hint {}                             → HTTP 400
+panel: … | Resume | Find where I left off | …
+```
+
+`status: none` was correct: the seeded episode is dated 1970, outside any
+recency window.
+
+### Deletion coherence, observed by accident
+
+A later panel read showed the seeded episode with **0 citations**, and the
+database agreed: `episode_summary_citations` had no rows and
+`episode_observations` was empty. The cause was not a defect. The store was
+fresh, its default policy is `include-only` with no rules, so the seeded
+`com.microsoft.VSCode` observations were inadmissible and got cleaned up — and
+the two `ON DELETE CASCADE` links took the episode's observation links and its
+citation rows with them. That is exactly the deletion contract T2.2-6 must prove,
+seen once in the wild before its test exists.

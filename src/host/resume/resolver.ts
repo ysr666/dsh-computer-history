@@ -1,5 +1,7 @@
 import type {
   EpisodeSummary,
+  ObservationId,
+  ResumeReason,
   ResumeRequest,
   ResumeResolution,
 } from '../../shared/index.js'
@@ -17,6 +19,37 @@ function latest(
   return episodes.toSorted(
     (left, right) => right.endedAtMs - left.endedAtMs,
   )[0]
+}
+
+/**
+ * A hit is only a hint when a reader can check it (ADR 0004 §5): the citations
+ * come from the episode's own evidence, the resource is the one a person would
+ * reopen, and an episode without citations cannot produce a hit at all.
+ */
+function hitResolution(
+  episode: EpisodeSummary,
+  confidence: number,
+  reasons: readonly ResumeReason[],
+): ResumeResolution | undefined {
+  const citations = episode.summaryObservationIds
+  if (citations.length === 0) return undefined
+  const [first, ...rest] = citations
+  const resource = episode.lastStrongResource ?? episode.resources.at(-1)
+  return {
+    status: 'hit',
+    episode,
+    confidence,
+    reasons,
+    ...(resource ? { resource } : {}),
+    citations: [first as ObservationId, ...rest],
+  }
+}
+
+function noCitations(): ResumeResolution {
+  return {
+    status: 'none',
+    reason: 'the best match has no citations, so it is not a hint',
+  }
 }
 
 export function resolveResume(
@@ -43,12 +76,8 @@ export function resolveResume(
     if (!episode) {
       return { status: 'none', reason: 'workspace episode unavailable' }
     }
-    return {
-      status: 'hit',
-      episode,
-      confidence: 1,
-      reasons: ['explicit-workspace'],
-    }
+    return hitResolution(episode, 1, ['explicit-workspace'])
+      ?? noCitations()
   }
 
   const resourceMatches = eligible
@@ -80,12 +109,8 @@ export function resolveResume(
           )
           const episode = latest(inCurrent)
           if (episode) {
-            return {
-              status: 'hit',
-              episode,
-              confidence: 0.95,
-              reasons: ['exact-resource', 'current-workspace'],
-            }
+            return hitResolution(episode, 0.95, ['exact-resource', 'current-workspace'])
+      ?? noCitations()
           }
         }
 
@@ -100,12 +125,8 @@ export function resolveResume(
 
       const episode = latest(owners)
       if (episode) {
-        return {
-          status: 'hit',
-          episode,
-          confidence: 0.95,
-          reasons: ['exact-resource'],
-        }
+        return hitResolution(episode, 0.95, ['exact-resource'])
+      ?? noCitations()
       }
     }
   }
@@ -119,12 +140,8 @@ export function resolveResume(
     )
     const episode = latest(current)
     if (episode) {
-      return {
-        status: 'hit',
-        episode,
-        confidence: 0.9,
-        reasons: ['current-workspace'],
-      }
+      return hitResolution(episode, 0.9, ['current-workspace'])
+      ?? noCitations()
     }
   }
 
@@ -156,24 +173,16 @@ export function resolveResume(
         }
       }
 
-      return {
-        status: 'hit',
-        episode: top.episode,
-        confidence: 0.8,
-        reasons: ['surface-recency'],
-      }
+      return hitResolution(top.episode, 0.8, ['surface-recency'])
+        ?? noCitations()
     }
   }
 
   if (intent.isResume) {
     const episode = latest(eligible)
     if (episode) {
-      return {
-        status: 'hit',
-        episode,
-        confidence: 0.7,
-        reasons: ['recent-episode'],
-      }
+      return hitResolution(episode, 0.7, ['recent-episode'])
+      ?? noCitations()
     }
   }
 

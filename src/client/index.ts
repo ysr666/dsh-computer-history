@@ -16,6 +16,7 @@ import type {
   ComputerHistoryState,
   EpisodeSummary,
   PolicySnapshot,
+  ResumeResolution,
   WorkThread,
 } from '../shared/index.js'
 import { historyApiPath } from './api-route.js'
@@ -36,6 +37,8 @@ function HistoryPage(): React.ReactElement {
   const [state, setState] = useState<ComputerHistoryState>()
   const [episodes, setEpisodes] = useState<readonly EpisodeSummary[]>([])
   const [threads, setThreads] = useState<readonly WorkThread[]>([])
+  const [resumeQuery, setResumeQuery] = useState('')
+  const [hint, setHint] = useState<ResumeResolution>()
   const [policy, setPolicy] = useState<PolicySnapshot>()
   const [bundleId, setBundleId] = useState('')
   const [confirmDeleteAll, setConfirmDeleteAll] = useState(false)
@@ -179,6 +182,66 @@ function HistoryPage(): React.ReactElement {
     await refresh()
   }
 
+  const findWhereILeftOff = async (): Promise<void> => {
+    const result = await api<ResumeResolution>('/resume-hint', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        query: resumeQuery,
+        nowMs: Date.now(),
+        turn: 1,
+        source: 'tool',
+      }),
+    })
+    setHint(result)
+  }
+
+  const resumeSection = React.createElement(
+    'section',
+    {
+      style: {
+        border: '1px solid #d0d0d0',
+        borderRadius: 8,
+        padding: 12,
+        marginBottom: 20,
+      },
+    },
+    React.createElement('h2', { style: { margin: '0 0 8px' } }, 'Resume'),
+    React.createElement(
+      'div',
+      { style: { display: 'flex', gap: 8 } },
+      React.createElement('input', {
+        type: 'text',
+        placeholder: 'e.g. continue the billing work',
+        value: resumeQuery,
+        onChange: (event: { target: { value: string } }) => {
+          setResumeQuery(event.target.value)
+        },
+        style: { flex: 1, padding: 6 },
+      }),
+      React.createElement(
+        'button',
+        {
+          type: 'button',
+          disabled: resumeQuery.trim().length === 0,
+          onClick: () => { runAction(findWhereILeftOff) },
+        },
+        'Find where I left off',
+      ),
+    ),
+    hint
+      ? React.createElement(
+          'p',
+          { style: { marginTop: 10 } },
+          hint.status === 'hit'
+            ? `Resume “${hint.episode.workspace?.title ?? hint.episode.id}” — open ${hint.resource?.displayLabel ?? hint.resource?.canonicalUri ?? 'the last activity'} (${hint.citations.length} citations, confidence ${hint.confidence.toFixed(2)}, ${hint.reasons.join(', ')})`
+            : hint.status === 'ambiguous'
+              ? `More than one candidate: ${hint.reason}`
+              : `Nothing to resume: ${hint.reason}`,
+        )
+      : null,
+  )
+
   const companion = state?.companion
 
   const companionSection = React.createElement(
@@ -304,6 +367,7 @@ function HistoryPage(): React.ReactElement {
         )
       : null,
     companionSection,
+    resumeSection,
     threadSection,
     React.createElement(
       'div',
