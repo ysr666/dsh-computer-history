@@ -108,3 +108,21 @@ workspace root the editor vouched for, recorded with its own `workspace_source`
 "unanchored" finding at its root: measured live, the same editor at the same
 moment produces `ws=none` through Accessibility and `ws=companion` with the real
 root through the companion.
+
+## Phase 2.6 — Remote model processing
+
+Plan `docs/plan-phase2-6.md`, boundary ADR 0010, operation
+`docs/remote-models.md`, evidence `docs/validation-phase2-6.md`.
+
+The semantic layer could always run locally; this phase made the remote path real
+and bounded. A remote summary is only produced for a scope with a recorded opt-in
+(the check is the provider's first statement, and a scope without one performs no
+network call at all), the request body is the minimised shape and nothing else,
+the preview and the send share one body builder so they cannot drift, the response
+must cite observations from the set it was given, there is no retry, and every
+send is recorded - host, model, time, digest - so the audit can answer what left.
+Revoking forgets the local record and the panel states plainly that the remote
+side cannot be recalled.
+
+**The claim "nothing leaves this machine" is now conditional** on the scope, and
+every document that made it unconditionally has been updated.
