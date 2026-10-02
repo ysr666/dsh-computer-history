@@ -48,6 +48,22 @@ export const PHASE1_ADAPTERS: readonly Phase1AdapterDefinition[] = [
     documentResourceKind: 'file',
   },
   {
+    id: 'word',
+    bundleIds: ['com.microsoft.Word'],
+    surfaceKind: 'document',
+    suppressesWindowTitle: false,
+    documentResourceKind: 'file',
+  },
+  {
+    id: 'wps',
+    // Measured 2026-10-02: WPS reports no kAXDocument for its window, so the
+    // surface stays a window and observations carry titles only.
+    bundleIds: ['com.kingsoft.wpsoffice.mac'],
+    surfaceKind: 'window',
+    suppressesWindowTitle: false,
+    documentResourceKind: 'file',
+  },
+  {
     id: 'terminal',
     bundleIds: [
       'com.apple.Terminal',

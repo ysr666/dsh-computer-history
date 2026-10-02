@@ -12,6 +12,8 @@ synthetic fixtures — never a real private file or a real credential.
 |---|---|---|---|---|---|---|
 | `vscode` | `com.microsoft.VSCode`, `com.todesktop.230313mzl4w4u92` | editor | `file://…` on the editor window | unsupported (`-25205`) | unavailable (`-25212`) | file |
 | `xcode` | `com.apple.dt.Xcode` | editor | `file://…` on the editor window | unsupported (`-25205`) | readable (`AXGroup` / `AXHostingView`) | file |
+| `word` | `com.microsoft.Word` | document | `file://…` for the open document | unsupported (`-25205`) | readable (`AXSplitGroup`, no subrole) | file |
+| `wps` | `com.kingsoft.wpsoffice.mac` | window | nil (`-25212`) | unsupported (`-25205`) | readable (`AXSplitGroup`) | none |
 | `terminal` | `com.apple.Terminal`, `com.googlecode.iterm2` | terminal | working directory (`file://…` / path) | unsupported (`-25205`) | readable on iTerm2; `-25212` inside Terminal | directory |
 | `preview` | `com.apple.Preview` | document | `file://…` for the open document | unsupported | readable | file |
 | `finder` | `com.apple.finder` | window | nil for plain windows; folder path in folder windows | unsupported (`-25205` / `-25212`) | readable (`AXGroup`) | none or file |
@@ -57,6 +59,34 @@ by a probe: a probe without Xcode in the foreground cannot distinguish "no
 adapter" from "not frontmost", and the first baseline attempt was inconclusive
 for exactly that reason.
 
+### `word` — Microsoft Word
+
+```json
+{"adapter":"word","app":"com.microsoft.Word","privacy":{"secure":false},
+ "window":{"document":"file:///tmp/dsh-verify-fixtures/sample.rtf","title":"sample  -  兼容性模式"}}
+```
+
+Measured 2026-10-02 with a synthetic RTF
+(`open -a "Microsoft Word" /tmp/dsh-verify-fixtures/sample.rtf`), then
+`bin/verify/activate --pid <word pid> --budget 90` and
+`node scripts/verify/live-probe.mjs --allow com.microsoft.Word --seconds 20`.
+Word exposes the file URL and its focused element is readable, so it behaves
+like Preview rather than like WPS below.
+
+### `wps` — WPS Office
+
+```json
+{"adapter":"wps","app":"com.kingsoft.wpsoffice.mac","privacy":{"secure":false},
+ "window":{"title":"[只读]sample.rtf"}}
+```
+
+Measured 2026-10-02 on the same synthetic RTF. WPS reports **no**
+`kAXDocument` (`-25212`) and no `kAXURL` (`-25205`), so its observations carry a
+title and no resource; the surface stays `window`. Two observations were
+produced and both matched this shape. This is the same class as Finder's plain
+windows and Cursor's Agents window, and it is the case the aggregation rule in
+T2.0-7 exists for.
+
 ### `terminal` — Terminal.app and iTerm2 3.7.3
 
 Titles are never recorded for this adapter (`suppressesWindowTitle`), and the
@@ -89,12 +119,26 @@ The Host stored seven Finder observations during the Phase 1 validation and all
 seven had an empty `resource_id`, which is why the roadmap treats Finder as a
 window surface rather than a document surface.
 
+## Adding an adapter does not add policy
+
+`protectedBundleIds` is derived by matching the policy's rules against the
+supported bundle ids (`bundleIdsFor('protect')` in the collector manager), so a
+new adapter inherits protection only when an existing rule matches it — a
+`com.apple.*` rule covers a new Apple adapter, while a third-party adapter stays
+unmatched. That is safe rather than leaky: capture is include-only, so an app
+with no allow rule is not captured at all. It does mean a new adapter is
+silent until someone allows it, which is the intended product default.
+
 ## Known gaps
 
 - **Browsers have no adapter.** `kAXDocument` carries the page URL in Chrome
   (measured as `https://…` during Phase 1), but browser capture stays
   fail-closed until the companion in 2.1 can guarantee private-mode exclusion.
 - **Cursor Agents window**: empty document, see above.
-- **Pending adapters** (T2.0-2, T2.0-4): JetBrains family, Obsidian, Word, WPS,
-  Notes. Each needs the same row: bundle id, measured AX facts, resource
-  outcome, command, date.
+- **Notes is deliberately unmeasured**: opening it displays the user's real
+  notes, and the window title would be a note title. Measuring it needs the
+  owner's go-ahead or a synthetic note source, so the adapter stays out rather
+  than being added on an assumption.
+- **Pending adapters** (T2.0-2, T2.0-4): JetBrains family, Obsidian, Notes.
+  Each needs the same row: bundle id, measured AX facts, resource outcome,
+  command, date.

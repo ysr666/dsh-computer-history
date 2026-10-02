@@ -14,6 +14,8 @@ export type ObservationAdapter =
   | 'generic'
   | 'vscode'
   | 'xcode'
+  | 'word'
+  | 'wps'
   | 'terminal'
   | 'preview'
   | 'finder'

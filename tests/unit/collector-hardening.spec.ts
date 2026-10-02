@@ -262,6 +262,9 @@ describe('collector protocol lifecycle hardening', () => {
       'com.todesktop.230313mzl4w4u92',
     ])
     expect(command.policy.protectedBundleIds).toEqual([
+      // The spec's protect rule matches the com.apple.* namespace, so Xcode
+      // joins this list while the third-party adapters (Word, WPS) stay
+      // unmatched: adding an adapter does not add policy rules.
       'com.apple.dt.Xcode',
       'com.apple.Terminal',
       'com.apple.Preview',

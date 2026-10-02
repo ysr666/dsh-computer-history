@@ -33,6 +33,18 @@ let phase1Adapters: [Phase1Adapter] = [
         suppressesWindowTitle: false
     ),
     Phase1Adapter(
+        id: "word",
+        bundleIds: ["com.microsoft.Word"],
+        surfaceKind: "document",
+        suppressesWindowTitle: false
+    ),
+    Phase1Adapter(
+        id: "wps",
+        bundleIds: ["com.kingsoft.wpsoffice.mac"],
+        surfaceKind: "window",
+        suppressesWindowTitle: false
+    ),
+    Phase1Adapter(
         id: "terminal",
         bundleIds: [
             "com.apple.Terminal",
