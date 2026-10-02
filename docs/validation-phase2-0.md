@@ -353,6 +353,33 @@ over.
   produced "0 rows", which is indistinguishable from a passing privacy result
   unless a control runs beside it.
 
+## T2.0-4 completion — Word, WPS, Notes, Obsidian
+
+| adapter | measured shape |
+|---|---|
+| `word` | `document=file://…/sample.rtf`, readable focused element (`AXSplitGroup`) |
+| `wps` | no document (`-25212`), title only |
+| `notes` | readable element (`AXTextArea`), no document, no `kAXURL`; measured on the owner's running instance and the title value was deliberately not recorded anywhere |
+| `obsidian` | Chromium shape (`-25212` on the focused element), title readable, document empty on the vault picker |
+| `jetbrains` | real IntelliJ IDEA CE 2025.3 (`com.jetbrains.intellij`) produced an observation with no document and an empty startup title |
+
+Downloads: Obsidian came through the Homebrew **cache**
+(`brew fetch --cask obsidian`, 228 MB) rather than the GitHub release, whose
+v1.13.8 tag carries only an `.apk`; the cache entry and the mounted image were
+removed afterwards. IntelliJ IDEA CE 2025.3 was a 1.4 GB download, also removed
+after the measurement. Notes needed no download (the owner already had it
+open — that instance was left running, not quit).
+
+Two measurements that are *not* claims:
+
+- Obsidian's window document was empty because only the vault picker was on
+  screen; whether opening a note populates the document is still unmeasured, and
+  the adapter row says so.
+- The IntelliJ unqueryable state did not reproduce in either the Android Studio
+  or the IntelliJ IDEA run, so no stored row carries
+  `focused-element-unqueryable`; the window-only tolerance rests on the fixture
+  pair.
+
 ## Pending in 2.0
 
 `T2.0-2` is the only task without a completed deliverable, and it is blocked on

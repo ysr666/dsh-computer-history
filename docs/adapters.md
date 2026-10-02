@@ -15,6 +15,7 @@ synthetic fixtures — never a real private file or a real credential.
 | `word` | `com.microsoft.Word` | document | `file://…` for the open document | unsupported (`-25205`) | readable (`AXSplitGroup`, no subrole) | file |
 | `wps` | `com.kingsoft.wpsoffice.mac` | window | nil (`-25212`) | unsupported (`-25205`) | readable (`AXSplitGroup`) | none |
 | `jetbrains` | `com.google.android.studio`, `com.jetbrains.*` (10 ids) | editor | nil (`-25212`) | unsupported (`-25205`) | readable in the welcome window (`AXButton`, 23 attributes); an unqueryable element (`-25202`) is tolerated per ADR 0006 | none |
+| `obsidian` | `md.obsidian` | editor | empty on the vault picker | unsupported (`-25205`) | unavailable (`-25212`) | none |
 | `notes` | `com.apple.Notes` | window | nil (`-25212`) | unsupported (`-25205`) | readable (`AXTextArea`) | none |
 | `terminal` | `com.apple.Terminal`, `com.googlecode.iterm2` | terminal | working directory (`file://…` / path) | unsupported (`-25205`) | readable on iTerm2; `-25212` inside Terminal | directory |
 | `preview` | `com.apple.Preview` | document | `file://…` for the open document | unsupported | readable | file |
@@ -133,6 +134,22 @@ validation machine; their rows are unmeasured:
 - `com.jetbrains.goland`, `com.jetbrains.webstorm`, `com.jetbrains.clion`
 - `com.jetbrains.rustrover`, `com.jetbrains.datagrip`
 
+### `obsidian` — Obsidian 1.13.7
+
+```json
+{"adapter":"obsidian","app":"md.obsidian","privacy":{"secure":false},
+ "document":null,"title":"Obsidian","elementRole":null}
+```
+
+Measured 2026-10-02 (cask 1.13.7, opened with a synthetic vault in `/tmp`):
+the application is a Chromium case — `kAXFocusedUIElement` answers `-25212`
+(noValue, the same positive evidence VS Code and Cursor give), the window title
+reads normally, `kAXURL` is unsupported and the window document was **empty** on
+the vault picker, so no resource. A measurement with a note actually open (to
+see whether the document then carries the file) is still pending; the adapter is
+`editor` because that is the application class, and the resource stays absent
+until a document appears.
+
 ### `notes` — Apple Notes
 
 ```json
@@ -209,6 +226,6 @@ silent until someone allows it, which is the intended product default.
   the owner decides, the fail-closed behaviour stays and no JetBrains adapter
   is added. Measured 2026-10-02 with
   `bin/verify/ax-probe <pid> 1 --attributes`.
-- **Pending adapters** (T2.0-2, T2.0-4): JetBrains family (see above),
-  Obsidian, Notes. Each needs the same row: bundle id, measured AX facts,
-  resource outcome, command, date.
+- **Pending adapters**: none. Every adapter in the shared table has a measured
+  row; the only unmeasured entries are the eight `com.jetbrains.*` bundle ids
+  listed above, which share a measured platform.

@@ -95,6 +95,16 @@ let phase1Adapters: [Phase1Adapter] = [
         focusedElementPolicy: .require
     ),
     Phase1Adapter(
+        id: "obsidian",
+        // Measured 2026-10-02: Chromium shape (focused-element attribute
+        // answers -25212), window title readable, window document empty on the
+        // vault picker.
+        bundleIds: ["md.obsidian"],
+        surfaceKind: "editor",
+        suppressesWindowTitle: false,
+        focusedElementPolicy: .require
+    ),
+    Phase1Adapter(
         id: "terminal",
         bundleIds: [
             "com.apple.Terminal",

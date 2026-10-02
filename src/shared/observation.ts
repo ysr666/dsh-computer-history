@@ -18,6 +18,7 @@ export type ObservationAdapter =
   | 'wps'
   | 'jetbrains'
   | 'notes'
+  | 'obsidian'
   | 'terminal'
   | 'preview'
   | 'finder'

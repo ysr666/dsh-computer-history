@@ -109,6 +109,16 @@ export const PHASE1_ADAPTERS: readonly Phase1AdapterDefinition[] = [
     focusedElementPolicy: 'require',
   },
   {
+    id: 'obsidian',
+    // Measured 2026-10-02: Chromium shape (focused-element attribute answers
+    // -25212), readable window title, empty document on the vault picker.
+    bundleIds: ['md.obsidian'],
+    surfaceKind: 'editor',
+    suppressesWindowTitle: false,
+    documentResourceKind: 'file',
+    focusedElementPolicy: 'require',
+  },
+  {
     id: 'terminal',
     bundleIds: [
       'com.apple.Terminal',
