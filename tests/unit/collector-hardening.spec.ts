@@ -262,6 +262,7 @@ describe('collector protocol lifecycle hardening', () => {
       'com.todesktop.230313mzl4w4u92',
     ])
     expect(command.policy.protectedBundleIds).toEqual([
+      'com.apple.dt.Xcode',
       'com.apple.Terminal',
       'com.apple.Preview',
       'com.apple.finder',

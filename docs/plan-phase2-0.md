@@ -88,7 +88,11 @@ Terminal and iTerm2 is asserted from the registry, not from a string compare.
 **Goal:** cover IntelliJ IDEA, PyCharm, GoLand, WebStorm, CLion, RustRover,
 DataGrip, Android Studio.
 
-**Write scope:** `SupportedApps.swift`, `docs/adapters.md`, native tests.
+**Write scope:** the native registry, `src/shared/constants.ts`,
+`src/shared/observation.ts`, the tests that pin policy compilation
+(`tests/unit/collector-hardening.spec.ts`) and `docs/adapters.md`.
+Adding an adapter touches those four places, and the drift guard makes a
+missed one fail rather than degrade silently.
 
 **Deliverables:** bundle-id mappings (`com.jetbrains.*` including `.ce`
 variants) plus the measured AX outcome per app.
@@ -109,7 +113,7 @@ com.jetbrains.intellij --seconds 15`.
 
 ## T2.0-3 — Xcode adapter
 
-Same shape as T2.0-2 for `com.apple.dt.Xcode`. Xcode is AppKit, so expect a
+Same shape as T2.0-2 for `com.apple.dt.Xcode` (added in the same commit as T2.0-1b follow-up). Xcode is AppKit, so expect a
 readable document; verify with a synthetic `.swift` fixture, never a real
 project.
 
@@ -279,5 +283,6 @@ Browser companion (2.1), semantic summaries and work threads (2.2), UI/audit
 | T2.0-0 toolkit into the repo | done | commit `215e9e1`; `pnpm verify:tools` builds both helpers; `pnpm verify` green (204 tests); guard scans `scripts/` after excluding itself (self-reference caught by running it) |
 | T2.0-1 adapter registry | done | commit pending; `Phase1Adapter` registry replaces the `adapterName == "terminal"` test; XCTest invariants + preconditions; `pnpm native:test` green; the repo's own Host/native allowlist guard was updated to read `bundleIds` |
 | T2.0-1b adapter table single source | done | `PHASE1_ADAPTERS` in `src/shared/constants.ts` is canonical; looked up by `normalize.ts` for surface kind, title policy and resource kind; the repository guard now compares all four fields against the Swift registry, and a deliberate `surfaceKind` drift was used to prove the guard fails (208/208 when restored) |
-| T2.0-2 … T2.0-11 | open | — |
+| T2.0-3 Xcode adapter | done | registry + shared table + union; real Xcode 27.0 probe recorded in `docs/adapters.md` (`adapter=xcode`, `document=file://…/sample.swift`); policy-compilation test updated for the new supported bundle; 208/208 |
+| T2.0-2, T2.0-4, T2.0-5 … T2.0-11 | open | — |
 

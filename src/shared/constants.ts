@@ -41,6 +41,13 @@ export const PHASE1_ADAPTERS: readonly Phase1AdapterDefinition[] = [
     documentResourceKind: 'file',
   },
   {
+    id: 'xcode',
+    bundleIds: ['com.apple.dt.Xcode'],
+    surfaceKind: 'editor',
+    suppressesWindowTitle: false,
+    documentResourceKind: 'file',
+  },
+  {
     id: 'terminal',
     bundleIds: [
       'com.apple.Terminal',

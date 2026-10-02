@@ -27,6 +27,12 @@ let phase1Adapters: [Phase1Adapter] = [
         suppressesWindowTitle: false
     ),
     Phase1Adapter(
+        id: "xcode",
+        bundleIds: ["com.apple.dt.Xcode"],
+        surfaceKind: "editor",
+        suppressesWindowTitle: false
+    ),
+    Phase1Adapter(
         id: "terminal",
         bundleIds: [
             "com.apple.Terminal",

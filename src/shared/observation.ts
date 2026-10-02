@@ -13,6 +13,7 @@ export type SurfaceKind =
 export type ObservationAdapter =
   | 'generic'
   | 'vscode'
+  | 'xcode'
   | 'terminal'
   | 'preview'
   | 'finder'
