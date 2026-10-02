@@ -285,5 +285,6 @@ Browser companion (2.1), semantic summaries and work threads (2.2), UI/audit
 | T2.0-1b adapter table single source | done | `PHASE1_ADAPTERS` in `src/shared/constants.ts` is canonical; looked up by `normalize.ts` for surface kind, title policy and resource kind; the repository guard now compares all four fields against the Swift registry, and a deliberate `surfaceKind` drift was used to prove the guard fails (208/208 when restored) |
 | T2.0-3 Xcode adapter | done | registry + shared table + union; real Xcode 27.0 probe recorded in `docs/adapters.md` (`adapter=xcode`, `document=file://…/sample.swift`); policy-compilation test updated for the new supported bundle; 208/208 |
 | T2.0-4 Word + WPS adapters | partial | Word: `adapter=word` + `document=file://…/sample.rtf`; WPS: `adapter=wps`, no document (`-25212`), title-only rows; both recorded in `docs/adapters.md`. Notes deliberately unmeasured (shows the user's real notes); Obsidian pending download |
-| T2.0-2, T2.0-5 … T2.0-11 | open | — |
+| T2.0-2 JetBrains family | blocked on ADR 0006 | measured: IntelliJ platform returns an unqueryable focused element (`-25202` on role/subrole/attribute list) while the window reads fine, so the fail-closed rule drops everything. ADR 0006 (proposed) offers a per-adapter `window-only` declaration; conservative default kept meanwhile. `ax-probe --attributes` added to make the distinction measurable |
+| T2.0-5 … T2.0-11 | open | — |
 

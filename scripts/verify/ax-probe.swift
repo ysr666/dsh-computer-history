@@ -35,10 +35,32 @@ func describeFocused(_ element: AXUIElement) {
 
 let arguments = CommandLine.arguments
 guard arguments.count > 1, let pid = pid_t(arguments[1]) else {
-    print("usage: ax-probe <pid> [rounds]")
+    print("usage: ax-probe <pid> [rounds] [--attributes]")
     exit(2)
 }
-let rounds = arguments.count > 2 ? Int(arguments[2]) ?? 1 : 1
+let rounds = arguments.count > 2 && Int(arguments[2]) != nil
+    ? Int(arguments[2])!
+    : 1
+// --attributes distinguishes "this element does not implement the attribute"
+// from "the read failed": an unimplemented attribute is absent from the
+// element's attribute list, while a failed read still lists it.
+let listAttributes = arguments.contains("--attributes")
+
+/// The attribute names an element advertises, and whether the interesting ones
+/// are among them.
+func describeAttributeList(_ element: AXUIElement, _ label: String) {
+    var names: CFArray?
+    let status = AXUIElementCopyAttributeNames(element, &names)
+    let list = (names as? [String]) ?? []
+    print("  \(label) attributeNames(err=\(status.rawValue) count=\(list.count))")
+    for interesting in [
+        kAXRoleAttribute as String,
+        kAXSubroleAttribute as String,
+        kAXTitleAttribute as String,
+    ] {
+        print("    \(interesting): \(list.contains(interesting) ? "listed" : "absent")")
+    }
+}
 let app = AXUIElementCreateApplication(pid)
 AXUIElementSetMessagingTimeout(app, 1.0)
 
@@ -51,6 +73,24 @@ for round in 1...rounds {
         let element = unsafeBitCast(focused, to: AXUIElement.self)
         AXUIElementSetMessagingTimeout(element, 0.5)
         describeFocused(element)
+        if listAttributes {
+            describeAttributeList(element, "focusedElement")
+            var parentRef: CFTypeRef?
+            if AXUIElementCopyAttributeValue(
+                element,
+                kAXParentAttribute as CFString,
+                &parentRef
+            ) == .success, let parentRef {
+                let parent = unsafeBitCast(parentRef, to: AXUIElement.self)
+                AXUIElementSetMessagingTimeout(parent, 0.5)
+                let (parentRoleStatus, parentRole) = attribute(parent, kAXRoleAttribute as String)
+                let (parentSubroleStatus, parentSubrole) = attribute(parent, kAXSubroleAttribute as String)
+                print("  parent role(err=\(parentRoleStatus.rawValue) value=\(String(describing: parentRole))) subrole(err=\(parentSubroleStatus.rawValue) value=\(String(describing: parentSubrole)))")
+                describeAttributeList(parent, "parent")
+            } else {
+                print("  parent: not readable")
+            }
+        }
     } else {
         let kind = focused == nil ? "nil" : "\(CFGetTypeID(focused!))"
         print("  focusedElement: not an AXUIElement (type=\(kind))")

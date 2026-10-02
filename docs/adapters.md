@@ -139,6 +139,16 @@ silent until someone allows it, which is the intended product default.
   notes, and the window title would be a note title. Measuring it needs the
   owner's go-ahead or a synthetic note source, so the adapter stays out rather
   than being added on an assumption.
-- **Pending adapters** (T2.0-2, T2.0-4): JetBrains family, Obsidian, Notes.
-  Each needs the same row: bundle id, measured AX facts, resource outcome,
-  command, date.
+- **JetBrains family is blocked on a decision, not on a download.**
+  Android Studio (the IntelliJ platform, `com.google.android.studio`) hands out
+  a focused-element reference that is not queryable at all: role, subrole and
+  even the attribute list return `-25202` (`kAXErrorIllegalArgument`) while the
+  window reads normally (`AXStandardWindow`, title present, document
+  `-25212`). The current fail-closed rule therefore drops these observations.
+  ADR 0006 (proposed) recommends a per-adapter `window-only` declaration; until
+  the owner decides, the fail-closed behaviour stays and no JetBrains adapter
+  is added. Measured 2026-10-02 with
+  `bin/verify/ax-probe <pid> 1 --attributes`.
+- **Pending adapters** (T2.0-2, T2.0-4): JetBrains family (see above),
+  Obsidian, Notes. Each needs the same row: bundle id, measured AX facts,
+  resource outcome, command, date.
