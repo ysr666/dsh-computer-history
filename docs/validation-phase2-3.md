@@ -233,3 +233,38 @@ evidence for T2.3-5.
 Net state of T2.3-5: the controls are implemented and type-checked; the click
 that changes the policy is still **not** verified; retention controls are still
 **not** implemented.
+
+### The rebuild lead, narrowed by elimination
+
+I did not chase this live. Instead I enumerated every writer of the two tables
+that were emptied, because guessing at a store writer is how a wrong fix gets
+written:
+
+| Question | Answer |
+|---|---|
+| Is `episode_summary_citations` written anywhere but `EpisodeStore.replace()`? | No |
+| Is `episode_surfaces` written anywhere but `EpisodeStore.replace()`? | No |
+| Who calls `replace()`? | `ingest()` when its builder advances an episode, and `DeletionService` |
+| Did deletion run? | No — `deletion_log` is empty |
+| Are the observations and their episode links intact? | Yes — 2 and 2 |
+| Is `reseed()` a writer? | No — it only rebuilds the in-memory builder from replayable observations |
+
+So the rows went through `replace()` without a deletion, which means either the
+ingest path replaced an episode it does not own, or `replace()` deleted rows for
+an id it was not given. Both are defects of the same class, and the second would
+also explain why `episode_observations` survived while the two tables
+`replace()` writes did not.
+
+I tried to settle it with a deterministic test — seed a foreign episode with
+citations and surfaces, run one `reseed()` and one `ingest()` for a different
+session, and assert the foreign episode is untouched. The test did not get that
+far: `ingest()` returned `false` for a message my policy should admit, so the
+experiment ended on a question about my own fixture rather than about the
+rebuild. The file was removed rather than left skipped; a skipped test asserts
+nothing and still looks like coverage.
+
+The next attempt starts there: find out why `ingest()` refused that message
+(the guard list is short — a duplicate collector sequence, a normaliser refusal,
+a canonicalisation failure, or a resource that looks protected), then let the
+same test answer the rebuild question. The finding is written down here so it is
+not rediscovered as a surprise.
