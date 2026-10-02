@@ -45,7 +45,7 @@ export function companionObservation(
       // than letting the resolver infer one from the document path.
       workspace: {
         root: payload.workspaceRoot,
-        title: payload.workspaceRoot.split('/').filter(Boolean).pop()
+        title: payload.workspaceRoot.split('/').findLast(segment => segment !== '')
           ?? payload.workspaceRoot,
       },
       source: { provider: 'companion', adapter: 'vscode' },

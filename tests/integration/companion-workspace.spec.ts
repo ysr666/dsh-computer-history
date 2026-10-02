@@ -120,20 +120,25 @@ describe('a vouched workspace (ADR 0009)', () => {
   it('anchors an episode to the vouched workspace', async () => {
     const { root, file } = workspaceOnDisk()
     const { history, ingestion, now } = service(root)
-    for (const seq of [1, 2]) {
-      expect(await ingestion.ingest({
-        v: 1,
-        type: 'observation',
-        collectorSession: 'editor-live',
-        seq,
-        observedAtMs: now + seq * 1000,
-        app: { pid: 0, bundleId: 'com.microsoft.VSCode', name: 'Visual Studio Code' },
-        window: { document: file, title: 'main.ts' },
-        workspace: { root, title: 'vouched' },
-        privacy: { secure: false, protected: false },
-        source: { provider: 'companion', adapter: 'vscode' },
-      })).toBe(true)
-    }
+    const editorMessage = (
+      seq: number,
+    ): NativeObservation => ({
+      v: 1,
+      type: 'observation',
+      collectorSession: 'editor-live',
+      seq,
+      observedAtMs: now + seq * 1000,
+      app: { pid: 0, bundleId: 'com.microsoft.VSCode', name: 'Visual Studio Code' },
+      window: { document: file, title: 'main.ts' },
+      workspace: { root, title: 'vouched' },
+      privacy: { secure: false, protected: false },
+      source: { provider: 'companion', adapter: 'vscode' },
+    })
+    const results = [
+      await ingestion.ingest(editorMessage(1)),
+      await ingestion.ingest(editorMessage(2)),
+    ]
+    expect(results).toEqual([true, true])
     const episodes = new EpisodeStore(history.db).listRecent({ limit: 10 })
     expect(episodes).toHaveLength(1)
     expect(episodes[0]!.threadKey ?? episodes[0]!.id).toBeTruthy()
