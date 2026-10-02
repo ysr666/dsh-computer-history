@@ -272,3 +272,32 @@ primary (保存 and 允许该应用 look exactly like 刷新), nothing is marked
 (删除全部历史 looks exactly like 暂停采集), and the four action buttons still sit in one
 row with the delete beside the refresh. That regrouping is the next iteration - and it
 needs the container's structure read first, not guessed.
+
+## Iteration 7 - hierarchy: what is primary, and what is dangerous
+
+Evidence: `docs/assets/panel-2026-10-03-after7.png`.
+
+Three shapes now, all built from the base button and the host's tokens:
+
+| shape | where | what it says |
+|---|---|---|
+| `BUTTON_PRIMARY` (bold, `currentColor` border) | 重新生成配对令牌, 允许该网站, 保存 | this is the action you probably came for |
+| `BUTTON_DANGER` (bold, `var(--dsw-color-danger, currentColor)`) | 删除全部历史 | this one cannot be undone |
+| `BUTTON` | 拒绝该网站, 暂停采集, 刷新, 取消, 忘记该应用 … | everything else |
+
+The danger colour comes from the host with a fallback, so the panel still never invents a
+colour - which is the rule that started all of this, after a hardcoded cream background
+made the most important sentence on the page invisible.
+
+**The same mistake for the third time, and the reason is worth writing down.** My
+line-based pass gave 11 buttons the base shape, 1 the danger shape, and **zero** the primary
+one, because the four buttons I had styled in the previous iteration were skipped by the
+loop - so `BUTTON_PRIMARY` was declared and unused, and the typecheck went red again. The
+fix was to upgrade the three named actions rather than delete the constant, because
+hierarchy is the point of the iteration. The pattern across all three: I keep writing the
+design intent and leaving the wiring for later, and the typecheck is what makes me finish.
+
+**What is left:** section empty states (the timeline and work-threads sections have one;
+最近的工作片段 renders nothing at all when there is nothing to show), and the four action
+buttons still share one row - `删除全部历史` now looks dangerous but still sits beside
+`刷新`, which is a grouping question rather than a styling one.

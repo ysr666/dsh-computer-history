@@ -52,6 +52,7 @@ const CAPTURE_WORD_ZH: Record<string, string> = {
 const SPACE = { xs: 4, sm: 8, md: 12, lg: 18, xl: 26 }
 const MUTED = { opacity: 0.72, margin: `0 0 ${SPACE.sm}px`, lineHeight: 1.55 }
 const HAIRLINE = '1px solid rgba(127,127,127,0.22)'
+const DANGER = 'var(--dsw-color-danger, currentColor)'
 const SECTION = {
   marginBottom: SPACE.xl,
   paddingTop: SPACE.lg,
@@ -66,6 +67,8 @@ const BUTTON = {
   color: 'inherit',
   cursor: 'pointer',
 }
+const BUTTON_PRIMARY = { ...BUTTON, fontWeight: 600, borderColor: 'currentColor' }
+const BUTTON_DANGER = { ...BUTTON, fontWeight: 600, borderColor: DANGER, color: DANGER }
 const FIELD_LABEL = {
   display: 'inline-flex', gap: 6, alignItems: 'center', marginRight: SPACE.md,
 }
@@ -336,7 +339,7 @@ function HistoryPage(): React.ReactElement {
       React.createElement(
         'button',
         {
-          type: 'button',
+          type: 'button', style: BUTTON,
           disabled: resumeQuery.trim().length === 0,
           onClick: () => { runAction(findWhereILeftOff) },
         },
@@ -387,7 +390,7 @@ function HistoryPage(): React.ReactElement {
               `Summaries are computed on this machine and nothing leaves it. Local model: ${semantic.localProviderConfigured ? 'configured' : 'not configured'}; a remote model is never used unless you switch a scope on.`,
               `摘要在这台电脑上计算，不会离开本机。本地模型：${semantic.localProviderConfigured ? '已配置' : '未配置'}；除非你为某个范围打开，否则绝不会使用远端模型。`,
             )
-        : 'Loading…',
+        : t('Loading…', '加载中…'),
     ),
     !semantic || semantic.scopes.length === 0
       ? React.createElement(
@@ -406,7 +409,7 @@ function HistoryPage(): React.ReactElement {
             React.createElement(
               'button',
               {
-                type: 'button',
+                type: 'button', style: BUTTON,
                 onClick: () => { runAction(() => previewScope(scope.scopeKey)) },
               },
               'Preview payload',
@@ -415,7 +418,7 @@ function HistoryPage(): React.ReactElement {
             React.createElement(
               'button',
               {
-                type: 'button',
+                type: 'button', style: BUTTON,
                 onClick: () => { runAction(() => revokeScope(scope.scopeKey)) },
               },
               'Turn off and purge',
@@ -502,7 +505,7 @@ function HistoryPage(): React.ReactElement {
           ' ',
           React.createElement(
             'button',
-            { type: 'button', style: BUTTON, onClick: () => { runAction(saveRetention) } },
+            { type: 'button', style: BUTTON_PRIMARY, onClick: () => { runAction(saveRetention) } },
             t('Save retention', '保存'),
           ),
         )
@@ -543,7 +546,7 @@ function HistoryPage(): React.ReactElement {
                 React.createElement(
                   'button',
                   {
-                    type: 'button',
+                    type: 'button', style: BUTTON,
                     onClick: () => { runAction(() => openEpisode(String(item.id))) },
                   },
                   item.summary,
@@ -600,7 +603,7 @@ function HistoryPage(): React.ReactElement {
               React.createElement(
                 'button',
                 {
-                  type: 'button',
+                  type: 'button', style: BUTTON,
                   onClick: () => {
                     runAction(async () => {
                       setBundleId(surface.bundleId)
@@ -616,7 +619,7 @@ function HistoryPage(): React.ReactElement {
               React.createElement(
                 'button',
                 {
-                  type: 'button',
+                  type: 'button', style: BUTTON,
                   onClick: () => {
                     runAction(async () => {
                       setBundleId(surface.bundleId)
@@ -662,7 +665,7 @@ function HistoryPage(): React.ReactElement {
       { style: { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' } },
       React.createElement(
         'button',
-        { type: 'button', style: BUTTON, onClick: () => { runAction(rotateCompanionToken) } },
+        { type: 'button', style: BUTTON_PRIMARY, onClick: () => { runAction(rotateCompanionToken) } },
         companion?.paired ? t('Rotate pairing token', '重新生成配对令牌') : 'Create pairing token',
       ),
       companionToken
@@ -692,7 +695,7 @@ function HistoryPage(): React.ReactElement {
           React.createElement(
             'button',
             {
-              type: 'button',
+              type: 'button', style: BUTTON,
               onClick: () => {
                 void navigator.clipboard?.writeText(companionToken).then(
                   () => { setCopiedToken(true) },
@@ -743,7 +746,7 @@ function HistoryPage(): React.ReactElement {
       }),
       React.createElement(
         'button',
-        { type: 'button', style: BUTTON, onClick: () => { runAction(() => setSiteRule('allow')) } },
+        { type: 'button', style: BUTTON_PRIMARY, onClick: () => { runAction(() => setSiteRule('allow')) } },
         t('Allow site', '允许该网站'),
       ),
       React.createElement(
@@ -806,7 +809,7 @@ function HistoryPage(): React.ReactElement {
       ? React.createElement(
           'p',
           null,
-          'Status detail: ' + state.reason,
+          t('Status detail: ', '状态详情：') + state.reason,
         )
       : null,
     companionSection,
@@ -821,7 +824,7 @@ function HistoryPage(): React.ReactElement {
       React.createElement(
         'button',
         {
-          type: 'button',
+          type: 'button', style: BUTTON,
           disabled:
             !state?.enabled
             || (
@@ -841,7 +844,7 @@ function HistoryPage(): React.ReactElement {
       React.createElement(
         'button',
         {
-          type: 'button',
+          type: 'button', style: BUTTON_DANGER,
           onClick: () => { runAction(clearAll) },
         },
         confirmDeleteAll
@@ -852,7 +855,7 @@ function HistoryPage(): React.ReactElement {
         ? React.createElement(
             'button',
             {
-              type: 'button',
+              type: 'button', style: BUTTON,
               onClick: () => {
                 setConfirmDeleteAll(false)
               },
@@ -877,7 +880,7 @@ function HistoryPage(): React.ReactElement {
     React.createElement(
       'button',
       {
-        type: 'button',
+        type: 'button', style: BUTTON,
         onClick: () => { runAction(allowApp) },
       },
       t('Allow app', '允许该应用'),
@@ -885,7 +888,7 @@ function HistoryPage(): React.ReactElement {
     React.createElement(
       'button',
       {
-        type: 'button',
+        type: 'button', style: BUTTON,
         onClick: () => { runAction(forgetApp) },
       },
       t('Forget app', '忘记该应用'),
