@@ -112,7 +112,20 @@ in `docs/validation-phase2-0.md`, not by a stored row. A readable secure field
 still withholds the observation, which the same section shows at both the
 collector and the host level.
 
-The nine other bundle ids share the platform but were not installed on the
+A real JetBrains IDE was measured as well: IntelliJ IDEA CE 2025.3
+(`com.jetbrains.intellij`, opened through its LightEdit entry point with a
+synthetic file) produced
+
+```json
+{"adapter":"jetbrains","app":"com.jetbrains.intellij","privacy":{"secure":false},
+ "document":null,"titlePresent":false,"elementRole":"AXButton"}
+```
+
+with a readable focused element (23 attributes, subrole absent). Its window
+title was empty on the startup screen, so the observation carries neither a
+resource nor a title — the window-only ground truth for the family.
+
+The eight other bundle ids share the platform but were not installed on the
 validation machine; their rows are unmeasured:
 
 - `com.jetbrains.intellij`, `com.jetbrains.intellij.ce`
