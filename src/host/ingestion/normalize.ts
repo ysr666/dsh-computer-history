@@ -168,6 +168,36 @@ export function policyAllows(bundleId: string, resource: ResourceIdentity | unde
   return appRules.some(rule => rule.action === 'allow')
 }
 
+/**
+ * A window title that is nothing but a file name: no whitespace, no directory
+ * separator, and a short extension. Editors title a window this way when they
+ * have no document to offer.
+ */
+function looksLikeBareFileName(title: string): boolean {
+  if (/\s/.test(title)) return false
+  if (title.includes('/')) return false
+  return /^[^\s/]+\.[A-Za-z0-9]{1,8}$/.test(title)
+}
+
+/**
+ * F13 (ADR 0008). When the user has declared protected paths and a window
+ * offers only a bare file name, the Host cannot tell whether that file lives
+ * under one of them, so the name is not stored. This only ever drops an
+ * observation: nothing becomes storable that was not storable before.
+ */
+function isUnlocatableFileName(
+  message: NativeObservation,
+  resource: ResourceIdentity | undefined,
+  policy: PolicySnapshot,
+): boolean {
+  if (resource) return false
+  const title = message.window?.title
+  if (!title || !looksLikeBareFileName(title)) return false
+  return policy.rules.some(rule =>
+    rule.dimension === 'resource' && rule.action !== 'allow',
+  )
+}
+
 export function normalizeObservation(
   message: NativeObservation,
   policy: PolicySnapshot,
@@ -184,6 +214,7 @@ export function normalizeObservation(
   if (!adapter) return undefined
   const resource = resourceOverride
     ?? resourceOf(message, adapter)
+  if (isUnlocatableFileName(message, resource, policy)) return undefined
   // A URL resource is accepted only from the paired companion (ADR 0007). The
   // Accessibility path still cannot tell a private window from a normal one, so
   // a browser seen through AX keeps contributing nothing.
