@@ -294,3 +294,50 @@ identity came from the payload, with companion provenance; the allow-list and th
 protected set decide against a claim; the mapping serves any VS Code-based editor;
 the wire format is documented. What is missing is one thing: **the extension's own
 request**, and the phase report says so in those words.
+
+### T2.8-3, sixth attempt: the extension never activates, and the reporter says so
+
+I stopped guessing what the extension was doing and made it say. Every decision now
+goes through one reporter - created during activation, used by the send path too -
+writing to an Output channel and, when `dshComputerHistory.traceFile` is set, to a
+file. That is a fix for the class of problem 2.6 hit: **a guard that returns in
+silence is indistinguishable from an extension that never started.**
+
+Two earlier checks of mine were wrong and are corrected here:
+
+- `say` was defined inside the activation function while the guards live in another
+  function, so the "reasons" were not even reachable - the reporter now sits at
+  module scope and activation assigns it;
+- I first read "nothing in the exthost log" as "it did not activate". A healthy
+  extension logs nothing, so that told me nothing either way.
+
+With the reporter in place the question has an answer on the first run:
+
+```text
+code --install-extension   successfully installed
+settings                   port + token + traceFile written
+launch on a workspace      → then a file opened in it
+trace file                 EMPTY
+store                      zero rows from a real editor session
+```
+
+**The extension's activation never ran.** The problem was never "why does it not
+send" - it is that VS Code does not start it. That is a different and much narrower
+question, and the next probe follows from it directly: the running instance's own
+extension list and enablement, and whether the install landed in the directory that
+instance uses.
+
+## Where 2.8 stands, as of this round
+
+| part | state |
+|---|---|
+| a declared identity is validated, stored as a claim, visible in the audit | verified (tests + a real request through the intake) |
+| the allow-list and the protected set decide against a claim | verified |
+| one package serves any VS Code-based editor | verified (mapping + payload tests) |
+| the wire format is documented for other editors | written |
+| the extension's own request | **not produced - its activation does not run** |
+
+Environment restored: VS Code quit, settings restored from the backup taken before
+the trace file and token were written, the scratch workspace removed; the extension
+stays installed for the next attempt, and the evidence database is at
+`/tmp/dsh-ch-28d`.

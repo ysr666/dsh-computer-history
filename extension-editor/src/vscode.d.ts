@@ -35,7 +35,12 @@ declare module 'vscode' {
     onDidChangeWorkspaceFolders(listener: () => void): Disposable
   }
 
+  export interface OutputChannel {
+    appendLine(value: string): void
+  }
+
   export interface Window {
+    createOutputChannel(name: string): OutputChannel
     readonly activeTextEditor: TextEditor | undefined
     readonly activeTerminal: Terminal | undefined
     onDidChangeActiveTextEditor(listener: () => void): Disposable
@@ -55,3 +60,7 @@ declare module 'vscode' {
   export const window: Window
   export const env: Env
 }
+
+// The extension needs one function from node at runtime, and this declaration is
+// cheaper than adding a type dependency to a package that has none.
+declare function require(name: string): unknown

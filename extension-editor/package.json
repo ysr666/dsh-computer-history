@@ -29,6 +29,11 @@
           "type": "string",
           "default": "",
           "description": "Pairing token. Shown once in the Host panel; without it nothing is sent."
+        },
+        "dshComputerHistory.traceFile": {
+          "type": "string",
+          "default": "",
+          "description": "Optional file path to append the companion's decisions to, for diagnosing why nothing was sent."
         }
       }
     }
