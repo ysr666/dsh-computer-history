@@ -1250,3 +1250,21 @@ that loading, empty, unavailable and error are four different product facts. Wit
 
 That is what the rendered-state check was for: the assertions say these strings are absent; the image shows what
 is present instead.
+
+### The delivery gate, run honestly: evidence accepted, page smoke not satisfiable here
+
+`delivery_check` on this phase's artifact accepts the evidence manifest (12 items: the validation file, six runs
+with their exit codes, three reviewed screenshots, the JetBrains row, and the two rows that stay unverified) and
+passes file-exists, file-nonempty, encoding-utf8. It does **not** pass `page-verify`, and the reason is a
+property of this plugin rather than an omission:
+
+- the panel has no page of its own. It is a client bundle mounted inside the DSH shell, and the only URL that
+  renders it is the Host's own token-protected interface (`http://127.0.0.1:19430/?token=…`);
+- the gate's page smoke wants to fetch and screenshot that URL itself, and a token-protected SPA served by a
+  self-hosted Host is not something it can do without that Host's session;
+- pointing it at an unauthenticated URL would mean pointing it at a page that does not contain the plugin.
+
+The phase therefore reports what is true: its own reproducible checks are green (`pnpm verify` exit 0 with 374
+tests and 0 warnings, `pnpm verify:p1` exit 0, the rendered-state check 50/50 with each state's screenshot
+reviewed), the evidence manifest is accepted, and the delivery gate is **not** satisfied. Saying "delivered"
+here would be claiming a check that did not pass.
