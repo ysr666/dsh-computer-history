@@ -1443,3 +1443,26 @@ showing the shell's workspace picker while its assertion passed for want of anyt
 state had been showing the native section while its name promised ours. Neither would have been caught by the
 assertions, because both assertions were true statements about the wrong surface - which is this file's recurring
 error, now recorded in five different costumes across the phase.
+
+## Phase close-out
+
+**Green, with a command and a record for each:** the three collectors' protocol layers under one conformance suite
+(`pnpm test`, 374 tests); the macOS collector live, built and signed (`pnpm verify:p1`); the JetBrains client live,
+with a stored row whose identity is its own declaration and the client's log showing `201 {"stored":true}`; the
+panel's seven rendered states (`scripts/verify-panel-render.mjs`, 52/52, every state read as an image, light and
+dark); localization and the diagnostic-copy guard; the ingestion baseline; the CI boundary declaration with a red
+run recorded; and the acceptance/command/status table above.
+
+**Unverified, and why:** the three-platform CI matrix (every command run locally with its exit code, but no runner
+has ever executed it - the repository has no remote), the Windows and Linux live rows (they need a desktop session
+on those platforms, which is what the matrix cannot supply either), and the Gecko live row (Firefox's BiDi
+deliberately does not drive privileged pages, so the pairing token needs one human paste).
+
+**Three conclusions changed during the phase, each recorded where it happened rather than quietly:** the settings
+dialog opens on the native section rather than ours (which retired three earlier theories about the keyboard step);
+the loading state had been capturing the shell because the plugin was not mounted yet; and the application-scoped
+listener does not attach in this platform build, which reversed a correction that had itself reversed a claim.
+
+**What would finish it:** a git remote (the matrix, and with it the Windows/Linux rows), one paste in the Firefox
+window, and the owner's decision on the unknown-field contract. Everything else in this phase's acceptance has a
+green command behind it.
