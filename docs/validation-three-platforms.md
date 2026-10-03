@@ -503,7 +503,22 @@ different problems: the listener does not fire (the exit is not reaching it, or 
 fires and **the degraded state is recorded somewhere the state API does not report** - the third of the three
 candidates this section opened with, which the read had left open and which the measurement now points at.
 
-**Not fixed yet, and now narrowed to one question:** does `markDegraded` reach `markDegraded`'s own state, or
-only an internal flag? The next pass answers it by adding a temporary diagnostic rather than by reasoning about
-it - and then re-runs this same measurement, which is still the only thing that will show the interface stops
-saying "running" when nothing is running.
+### The question answered: two states, and the API reports the wrong one
+
+The read answers it without a diagnostic, because the two halves are three lines apart:
+
+```ts
+manager.ts:405        this.state = { v: 1, type: 'state', state: 'degraded', reason }   // where the death is recorded
+local-backend.ts:233  ...this.capture.getState(),                                        // where the API's capture comes from
+```
+
+`markDegraded` does set a real state - it is not an internal flag. But the state the interface reads is the
+**CaptureController's**, and the controller has no idea the collector it owns is gone. So the death is recorded
+in one object and reported from another, and the second one keeps saying `running`. That is the third of the
+three candidates this section opened with, and it is the one that survived contact with the code.
+
+The fix belongs where the report is composed, not where the death is noticed: the capture state has to reflect
+the collector's state - and when they disagree, the collector is the one that knows. Re-running the kill is
+still the only thing that will show the interface stops claiming to record.
+
+**Not fixed yet.**
