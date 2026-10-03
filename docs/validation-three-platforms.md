@@ -552,4 +552,30 @@ next change - and the first attempt to make it was placed before the guard that 
 type checker refused, and the repair of that attempt did not apply, so the file was reverted rather than left
 half-edited. A red tree is not a step forward, and the measurement above is what this pass actually gained.
 
-**Not fixed yet.**
+### There was never a defect: the host restarts a killed collector
+
+The cheapest possible check - the one that would have ended this in the round it started - had not been made:
+
+```text
+collector before the kill: 72465
+collector after the kill:  73587      -> a new process, a new pid
+state: running | reason: (none)
+```
+
+The host restarts a collector that dies. `capture: running` was **true**, and it was true in every one of the
+five measurements in this section. `tests/unit/collector-hardening.spec.ts` calls it the restart breaker, and
+those three tests are what stopped the "fix" written in this pass: it marked degraded on every exit, including
+the recoverable ones, and the suite failed with `expect(value.spawns()).toBe(2)`.
+
+So the score for this section is worth stating plainly:
+
+- **every measurement was correct** - `capture` never changed, because it should not have;
+- **every explanation for it was wrong** - swallowed exit, wrong object, promise that never settles, observer in a
+  dead branch - five readings, each plausible, each falsified in turn;
+- **the question that answers all of them took one command**, `pgrep` before and after a kill, and I never asked
+  it until the product's own tests pushed back.
+
+The lesson is not "read more carefully". It is that I kept measuring the artifact I was already looking at -
+the state the interface reports - and never measured the artifact the question was actually about: **is anything
+still observing?** A dead collector and a restarted one report identically from the first, and only the second
+question distinguishes them.
