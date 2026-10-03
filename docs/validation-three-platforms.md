@@ -1544,3 +1544,22 @@ Two steps follow, and only the first needs the owner:
 Everything after that is the work this phase has been waiting for: the platform's collector tests, the conformance
 suite against a live collector on that machine, a live row in that platform's store with the producing command, and
 the refusal reasons compared across platforms.
+
+### The bridge: token obtained, one identifier short of wired
+
+The OAuth half is done, and it took two attempts for an instructive reason. The first exchange failed with a 500
+after a successful registration and a completed browser sign-in, because the request lacked the **`resource`
+indicator** (RFC 8707) that MCP's authorization flow requires and had ignored the `client_secret` the registration
+returned. With both in place the token was issued: an access token of 1342 characters and a refresh token, written
+to a 0600 file. No credential value has been printed or committed at any point in this work.
+
+The remaining piece is one identifier: the loader id the application assigns to `@deepseek-ai/dsh-mcp-client`. The
+CLI cannot supply it - `dsh --profile desktop --dump-config` answers *"profile \"desktop\" is managed exclusively
+by the Electron application"* - and the package itself declares no `dsh` field or patch layer to read it from. The
+entry belongs in the profile's own patch layer (the file whose header calls itself "your patch layer", so writing
+there is configuration rather than a bypass of installation), and the id is the one thing needed to write it.
+
+Once the id is known - or the entry is added through the client's own settings surface, if it has one - the
+connector is `streamable-http` to `https://mcp.desktopcommander.app/mcp` with an `Authorization` header, and the
+remote machine's tools should appear as `mcp__<serverName>__<tool>`. Then the two unverified rows are the next
+thing this file records.
