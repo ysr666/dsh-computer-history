@@ -323,3 +323,43 @@ cargo build --release --manifest-path native/windows/Cargo.toml
 Passing means: four rows naming four applications, a `protected-app` refusal that did not store, and the
 same three refusal reason strings the macOS collector produces. Until that run exists, every sentence above
 about Windows behaviour is a design, not a measurement.
+
+## P6 - the Linux collector, and the rule it exists to honour
+
+### Verified here
+
+`native/linux` shares the message layer with Windows through `native/collector-protocol`, so "the same
+fields on every platform" is what the dependency graph says. Three tests, and the one that matters is not
+about AT-SPI at all:
+
+> **a collector that cannot observe must say why, because silence is indistinguishable from a machine
+> nobody used.**
+
+Until the session-bus check for `org.a11y.Status` is written and run, the crate reports
+`permission-required` with a reason rather than `running` with silence.
+
+Sharing the layer produced two findings that separate copies would have hidden:
+
+- `hello` **hardcoded `win32`**, so a Linux binary would have claimed to be Windows. It now takes the
+  platform as a parameter, with a test asserting a Linux binary does not claim `win32`.
+- the protected-application list moved into the shared crate, so a platform cannot quietly drop one.
+
+### Not verified, and what would verify it
+
+No Linux machine has run this, and the accessibility check itself is not written. The recipe:
+
+```bash
+# on a Linux desktop with a session bus
+gsettings get org.gnome.desktop.interface toolkit-accessibility      # expect true; if false, enable it
+cargo build --release --manifest-path native/linux/Cargo.toml
+# point the plugin's collector path at the built binary, then:
+#   the first lines on stdout must be hello with platform "linux", then state
+#   with accessibility on:    state "running"
+#   with accessibility off:   state "permission-required" and a diagnostic naming the reason
+# then work in a terminal, the file manager and an editor for a minute each, and read:
+curl -H "$C" "$BASE/recent"
+```
+
+Passing means: three rows naming three applications with the same three refusal reason strings macOS
+produces, and the accessibility-off case reporting a reason rather than silence. Until that run exists,
+every sentence above about Linux behaviour is a design, not a measurement.

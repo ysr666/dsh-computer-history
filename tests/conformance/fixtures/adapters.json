@@ -106,6 +106,7 @@
       "no Windows machine has run the collector: the ids below are the mapping the Windows collector is expected to produce, not something measured"
     ],
     "linux": [
+      "the session-bus check for org.a11y.Status (IsEnabled, ScreenReaderEnabled) is not written yet, so the collector reports permission-required with a reason rather than running",
       "no Linux machine has run the collector: the ids below are the mapping the Linux collector is expected to produce, not something measured"
     ]
   }
