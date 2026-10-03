@@ -28,3 +28,16 @@ See ARCHITECTURE.md, SECURITY.md, and docs/development.md before implementation 
 ## Phase 1 defaults
 
 Capture is off by default and app access is include-only. Browsers are fail-closed until a browser companion can enforce private/incognito boundaries. The packaged macOS collector is a universal arm64/x86_64 binary built by pnpm native:build. Run pnpm verify:p1 for the complete TypeScript/privacy/build/native gate.
+
+## How this is verified, and what cannot be verified on this machine
+
+`pnpm verify` (typecheck, lint, 374 tests and every boundary script) and `pnpm verify:p1` (the macOS collector,
+built and signed, plus its native privacy and protocol tests) run from a clean checkout, and
+`scripts/verify-panel-render.mjs` drives seven rendered states of the panel against a running Host, writing a
+screenshot and the rendered text for each - run it with `PANEL_URL` pointing at a Host of your own.
+
+Two things are deliberately **not** claimed. The three-platform CI workflow has every one of its commands run
+locally with exit codes recorded, but no runner has executed it, because this repository has no remote. And the
+panel has no page of its own: it is a client bundle mounted inside the DSH shell, so the only URL that renders it
+belongs to a token-protected Host - which is why `delivery_check` accepts this project's evidence manifest and
+still fails its `page-verify` smoke, and why that failure is stated rather than worked around.
