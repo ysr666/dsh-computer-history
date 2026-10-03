@@ -871,3 +871,26 @@ created at all in that run. Until a run produces the row, the JetBrains live row
 
 **Not verified:** no live JetBrains row exists yet. The client, the four gates and the intake's answers are
 measured; the row is not.
+
+### The trigger, measured: LightEdit runs neither hook
+
+The last live run settles the question the previous round left open, and the answer is not the one the theory
+predicted. The IDE log shows the plugin loaded and the file opened - and nothing at all from the plugin:
+
+```
+PluginManager - Loaded custom plugins: Computer History Companion (0.1.0)
+LightEditProjectManager - LightEditProjectImpl loaded in 367 ms
+LightEditServiceImpl - Opened new tab for /tmp/jb-live/src/Main.kt
+```
+
+No `postStartupActivity` line, no project listener line. So in LightEdit - which is what opening a single file
+produces, and the `LightEditProject` is a special lightweight project - **neither registered hook runs**. The
+earlier reports in this file came from runs where the project activity did fire, which means the trigger is not
+reliable across LightEdit runs rather than merely mis-wired; a client that reports only when an event happens to
+be delivered is not a client anyone can rely on.
+
+Two candidate routes were checked against the distribution rather than assumed, and both are absent from this
+build: `com.intellij.openapi.startup` ships only project-scoped activities, and `EditorFactoryListener` has no
+`init` to attach from. What is left is the design that does not depend on those hooks at all: report the
+editor the IDE is currently showing on a timer, with the event hooks kept as a latency optimisation rather than
+as the trigger. That is the next change, and the row stays unverified until a run produces it.
