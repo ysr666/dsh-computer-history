@@ -1366,3 +1366,22 @@ Four things this evidences, all of which were previously assertions or absent:
 
 The keyboard count of 30 focusable controls also has a shape now: one switch, the disclosure rows, and the
 per-application entries the 22 已允许 line accounts for.
+
+### `loading.png` shows the shell, not the loading state - and its assertion was vacuous
+
+The image is the shell's workspace picker (探索未至之境 / 选择工作区 / 标准模式 / 选择一个工作区开始); the panel is
+not open. The step navigates, waits 900 ms and captures - and 900 ms after navigation the shell has not even
+reached the point where the plugin mounts, so what it captured is the shell and what its forbidden-string
+assertion ran against is the shell's text. The assertion passed, and it passed for a reason that has nothing to do
+with the plugin: there was nothing of ours on screen to be wrong.
+
+The same shape as `settings-read-failed`, and worth naming as a pair: two of the seven states carry names their
+images do not support. The other two reviewed states carry more than their names promise -
+`partial-failure.png` demonstrates independent settled reads and `focus-by-keyboard.png` demonstrates the disabled
+write control - so the visual review is not wasted, but it does mean the loading half of "loading, empty,
+unavailable and error stay distinct" is **not** evidenced, and the assertion that was supposed to cover it needs
+to mount the panel first and capture before its reads settle.
+
+Recorded rather than fixed here: the fix is a change to the step (open the panel, then capture inside the window
+before the reads land), and the phase's rule is that an unverified row says so instead of borrowing a green
+assertion.
