@@ -139,3 +139,23 @@ Three ways to make it mean "how long did this last", with what each costs:
 **Recommendation: (1).** It uses what is already known, it needs one field rather than a new cadence,
 and that field is exactly what a three-platform build needs anyway so the three can be compared
 honestly.
+
+### The duration floor: the four places it touches
+
+Located, so the implementation is mechanical rather than exploratory:
+
+| place | file | what changes |
+|---|---|---|
+| the interval itself | `native/macos/Sources/ComputerHistoryCollector/Collector.swift:6` | `private let heartbeatInterval: TimeInterval = 5` becomes visible to the message builder |
+| the message | `native/macos/Sources/ComputerHistoryCollector/Protocol.swift:15-17` | `Configured` gains `heartbeatSeconds` |
+| the parser | `src/host/collector/protocol.ts:383` (`case 'configured'`) and the type at `src/shared/protocol.ts:82` | accept and carry the field |
+| the floor | `src/host/episodes/builder.ts:426` (`emit(this.active, 'timeout', false)`) | an episode closed by quiet ends at `max(lastIncludedAtMs, lastIncludedAtMs + heartbeat)` |
+
+**The first step of that work is a read, not an edit:** whether the `configured` parser tolerates an
+unknown field. If it is strict, the Swift field has to land after the TypeScript side accepts it, or
+every configuration handshake fails and capture stops - which is the kind of change that looks fine in
+a diff and breaks the product.
+
+Also worth deciding then, and not now: whether a 5-second floor is the right number to show a user, or
+whether the interface should say "at least a few seconds" rather than a figure that implies precision
+the sampling does not have.
