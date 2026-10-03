@@ -20,7 +20,7 @@
     "native:build": "node scripts/build-native.mjs",
     "native:test": "node scripts/test-native.mjs",
     "verify:privacy": "node scripts/verify-privacy-boundary.mjs",
-    "verify": "pnpm check && pnpm verify:privacy && pnpm verify:adapters && pnpm verify:store-protection && pnpm verify:semantic-boundary && pnpm verify:architecture && pnpm verify:migrations && pnpm verify:native-timeouts && pnpm verify:docs && pnpm verify:collector-windows",
+    "verify": "pnpm check && pnpm verify:privacy && pnpm verify:adapters && pnpm verify:store-protection && pnpm verify:semantic-boundary && pnpm verify:architecture && pnpm verify:migrations && pnpm verify:native-timeouts && pnpm verify:docs && pnpm verify:ci-boundaries && pnpm verify:collector-windows",
     "verify:p1": "pnpm verify && pnpm build && pnpm benchmark:ingestion && pnpm native:build && pnpm native:test",
     "prepack": "pnpm build && pnpm native:build",
     "benchmark:ingestion": "vitest run --config vitest.benchmark.config.ts",
@@ -35,7 +35,8 @@
     "verify:native-timeouts": "node scripts/verify-native-timeouts.mjs",
     "verify:docs": "node scripts/verify-docs.mjs",
     "verify:collector-windows": "node scripts/verify-collector-windows.mjs",
-    "build:extension:firefox": "node scripts/build-extension.mjs --target=firefox"
+    "build:extension:firefox": "node scripts/build-extension.mjs --target=firefox",
+    "verify:ci-boundaries": "node scripts/verify-ci-boundaries.mjs"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "4.0.4",

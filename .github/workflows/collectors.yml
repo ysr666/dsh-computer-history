@@ -11,6 +11,9 @@
 #   tests/conformance/fixtures/adapters.json and docs/validation-three-platforms.md until a machine with a
 #   desktop produces them. A green run here is not evidence for those rows, and this comment exists so nobody
 #   reads it as if it were.
+# A platform whose live row does not exist yet is listed here and in the fixture and the
+# validation file; scripts/verify-ci-boundaries.mjs fails when the three disagree.
+# unverified-platforms: win32, linux
 name: collectors
 
 on:

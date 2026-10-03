@@ -661,6 +661,9 @@ that looked like evidence and supported nothing, and each was caught by a measur
 
 ### CI: what the runners can verify, and what they cannot
 
+<!-- unverified-platforms: win32, linux -->
+<!-- Checked against the workflow header and the conformance fixture by scripts/verify-ci-boundaries.mjs. -->
+
 `.github/workflows/collectors.yml` runs the message layer on **macos-latest, windows-latest and
 ubuntu-latest** and the whole gate - including `tests/conformance` - on macOS. A Windows or Linux collector
 that cannot speak the protocol fails there, which is the half of the objective's CI item that hardware does
@@ -722,3 +725,39 @@ produces it is in `docs/companion.md` ("A second engine (Gecko)"), and it is two
 `dist/extension-firefox/manifest.json`, then pair the token as on Chromium. Accepting a manifest that parses as
 evidence for a browser that never ran it would be the "compiles, therefore works" error this file keeps
 returning to.
+
+## The workflow's commands, measured on this machine
+
+`collectors.yml` has still never run on a runner - the repository has no remote - so every command it contains
+was run here first, so that the first real run is about the runners and not about the file. Exit codes are the
+whole point of the table: a command that "should work" is not a command that worked.
+
+| job | command | exit | what it printed |
+|---|---|---|---|
+| protocol | `cargo test --manifest-path native/collector-protocol/Cargo.toml` | 0 | `5 passed; 0 failed` |
+| protocol | `cargo test --manifest-path native/linux/Cargo.toml` | 0 | `3 passed; 0 failed` |
+| protocol | `cargo test --manifest-path native/windows/Cargo.toml` | 0 | `0 passed; 0 failed` |
+| suite | `pnpm install --frozen-lockfile` | 0 | lockfile in sync, nothing to change |
+| suite | `pnpm verify` | 0 | 61 files / 371 tests, lint 0 warnings |
+
+The Windows row is the one to read twice. `0 passed` is not a failure and not a pass: the Windows crate's
+tests are `cfg`-gated to Windows, so on macOS the crate compiles and contributes no cases. On `windows-latest`
+the same command runs them. Writing that down matters because "the Windows job is green" and "the Windows
+collector was exercised" are different claims, and only the second one is about UI Automation.
+
+## The boundary between "verified by a runner" and "needs a desktop"
+
+Three files state that boundary - the workflow header, the fixture's `$unverified` lists, and this file - and
+prose drifts. It is now a declaration in each of the three, checked by a script:
+
+```console
+$ pnpm verify:ci-boundaries
+ci boundary holds: unverified platforms [linux, win32] agree in the workflow, the conformance fixture and the
+validation file; matrix runs on [macos-latest, ubuntu-latest, windows-latest]
+```
+
+Red/green, because a check that has never failed is not a check: editing the marker in this file to claim
+`darwin` as unverified produces
+`docs/validation-three-platforms.md says [darwin,linux,win32] but the fixture's $unverified lists say [linux,win32]`
+and exit 1; reverting it returns the green line above. The script also asserts the matrix still names all three
+runners, so a platform cannot quietly leave the workflow while the prose still promises it.
