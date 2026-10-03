@@ -235,3 +235,49 @@ build that has the detector, then make a newer artifact without installing it.
 **The remote half is not started** and is not pretended to be: comparing against a published version
 needs a published version, which waits for the owner's decision about distribution. The local half is
 what a developer meets every day, and it is what this phase delivers.
+
+## P4 - the collector contract, and the suite that measures it
+
+### The document was wrong about its own boundary, and the suite found it
+
+`docs/collector-protocol.md` claimed that unknown fields are refused. Measured
+(`tests/conformance/collector-protocol.spec.ts`):
+
+```text
+unknown field        -> ACCEPTED, the key is silently dropped
+unknown message type -> REFUSED (unknown collector message type)
+not JSON             -> REFUSED (invalid JSON)
+```
+
+Nothing leaks either way - a dropped field cannot reach storage - but "silently dropped" means a
+collector's mistake is invisible, which is the opposite of a boundary a parser enforces. Making the
+collector parser strict is now recorded as an **open contract decision** for the three-platform work,
+and the document no longer claims it.
+
+### The cross-platform contract, as data
+
+`tests/conformance/fixtures/adapters.json` states the platform-independent facts every collector must
+reproduce: which adapter an application maps to, what surface that adapter has, whether its title is
+recorded, and the three refusal reason strings - unchanged, because a platform that invents its own
+makes the refusal breakdown incomparable, which is the one thing it exists for. Each adapter carries
+per-platform ids (`darwin` filled, `win32` and `linux` as fields P5 and P6 must fill).
+
+The first version of that fixture restated each adapter's **resource kind** and got it wrong (the table
+said `none`, the fixture said `file`). The field is gone: the resource kind is the adapter table's own
+data, and a copy here would be a second source of truth that can drift.
+
+### Calibration: three deliberate breaks, each red
+
+```text
+green (as committed)                  5 passed
+claim the terminal records its title  1 failed
+invent a refusal reason string        1 failed
+point an adapter at an unknown id     1 failed
+green again (restored)                5 passed
+```
+
+### One more thing the gate tolerated
+
+`pnpm verify` exits zero **with** lint warnings, so a commit landed carrying one (`flatMap` with a
+spread). The standing rule is zero warnings, and the exit code alone does not catch it - the warning
+count has to be read. Fixed forward in `e30ceee`.
