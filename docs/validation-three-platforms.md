@@ -1404,3 +1404,15 @@ new assertions (the panel is ours, not the shell; loading is neither an error no
 The earlier version of this step is kept in the record above rather than deleted: it captured the shell's workspace
 picker for a whole phase and its assertion passed because nothing of ours was on screen. The lesson is the file's
 recurring one, and this is the first state where the fix is deterministic rather than a longer wait.
+
+### The loading state, seen
+
+`loading.png` is the panel mounted with its history reads held: title and subtitle in place, the status card reading
+**正在加载电脑使用记录…** with 仅记录元数据 and **正在加载时间线…**, then 时间线 / 工作线索 / 摘要 each carrying its own
+**正在加载…** line and no content. No error text, no empty-state wording, no rows - a fourth state that shares no
+wording with the other three.
+
+Six of the seven states have now been read rather than only asserted: ready (light and dark), partial failure, total
+failure, loading, and the settings section with its disabled control. The seventh, `settings-read-failed`, is the one
+whose image shows the native section instead of ours; that step is the next thing to fix, and until it is fixed the
+file says its name promises more than its picture supports.
