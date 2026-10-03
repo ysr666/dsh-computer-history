@@ -112,3 +112,30 @@ Two ways to fix it, and they are not equivalent:
 
 The next pass takes (1) and re-runs this measurement; if the duration is still zero, the assumption
 to attack is that the episode ever sees a second sample.
+
+### What a duration means when sampling is change-driven
+
+`src/host/episodes/builder.ts` closes an episode after 480 s of quiet with
+`emit(this.active, 'timeout', false)`, and the emitted end is the last included timestamp. With one
+observation - which is all an unchanged state produces - the duration is exactly zero. The number is
+not wrong by accident; it is the honest answer to "how long did we *see* this", and the sampling
+model means we see a state once.
+
+Three ways to make it mean "how long did this last", with what each costs:
+
+1. **floor the duration at the collector's heartbeat interval.** We already know the state held for
+   at least one interval after the last observation, so a floor is knowledge we have, not a guess.
+   Cost: the host needs that interval, which means the collector declares it over the existing
+   protocol - one field, and the same field is needed on all three platforms for the durations to be
+   comparable.
+2. **let the end track "now" while the episode is open.** No protocol change, and it is right for a
+   dwell that is still happening - but for the episode above it would report the 480 s quiet period,
+   which overstates a ten-second look at a file.
+3. **emit heartbeat observations even when nothing changed.** Simple to reason about and the number
+   becomes true, but it trades storage for continuity, adds a cadence to keep in step across three
+   platforms, and makes an idle machine indistinguishable from an unchanged one unless the two are
+   distinguished explicitly.
+
+**Recommendation: (1).** It uses what is already known, it needs one field rather than a new cadence,
+and that field is exactly what a three-platform build needs anyway so the three can be compared
+honestly.
