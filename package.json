@@ -82,7 +82,8 @@
     "LICENSE",
     "SECURITY.md",
     "scripts/build-native.mjs",
-    "scripts/test-native.mjs"
+    "scripts/test-native.mjs",
+    "presets"
   ],
   "peerDependencies": {
     "@deepseek-ai/cordis": "~4.0.4",

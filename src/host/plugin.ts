@@ -1,4 +1,5 @@
 import path from 'node:path'
+import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dshHomePath } from '@deepseek-ai/dsh-home-paths'
 import type { Context } from '@deepseek-ai/cordis'
@@ -8,6 +9,8 @@ import '@deepseek-ai/dsh-subprocess'
 import '@deepseek-ai/dsh-workspace'
 import { registerAgentIntegration } from '../agent/index.js'
 import {
+  isFirstRunPreset,
+  presetBundles,
   type CollectorToHost,
   type ComputerHistoryState,
 } from '../shared/index.js'
@@ -405,6 +408,25 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
     // Why observations were refused, so the panel can say "nothing is allowed yet,
     // and 12 observations have been refused because of it" rather than a bare count.
     () => ingestion.refusalCounts(),
+    // Read at startup and handed over as data: the panel must not carry its own copy of
+    // the adapter table, or the two would disagree the first time an adapter is added.
+    () => {
+      try {
+        const raw: unknown = JSON.parse(
+          readFileSync(new URL('../../presets/first-run.json', import.meta.url), 'utf8'),
+        )
+        if (!isFirstRunPreset(raw)) return undefined
+        return {
+          bundles: presetBundles(raw),
+          title: { ...raw.title },
+          description: { ...raw.description },
+        }
+      } catch {
+        // A missing or unreadable preset is not a failure: the panel falls back to
+        // explaining that nothing is allowed yet, which is what it did before.
+        return undefined
+      }
+    },
   )
 
   // Teardown is registered immediately, before anything that can throw,

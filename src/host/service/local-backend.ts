@@ -92,6 +92,7 @@ implements ComputerHistoryServiceContract {
      * Appended last so no existing construction moves.
      */
     private readonly refusalCounts?: () => ReadonlyMap<string, number>,
+    private readonly firstRunPreset?: () => ComputerHistoryState['firstRunPreset'],
   ) {
     this.now = config.now ?? Date.now
   }
@@ -233,6 +234,9 @@ implements ComputerHistoryServiceContract {
       // number, and this is the sentence a new installation needs.
       ...(this.refusalCounts
         ? { refusedByReason: Object.fromEntries(this.refusalCounts()) }
+        : {}),
+      ...(this.firstRunPreset
+        ? { firstRunPreset: this.firstRunPreset() }
         : {}),
       observationRetentionHours:
         this.config.observationRetentionHours,
