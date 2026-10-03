@@ -1663,3 +1663,23 @@ checkout at the same path. So the bridge works and reaches a macOS machine, whic
 rows need: a live row for Windows and for Linux requires a desktop session on those platforms. Those rows stay
 unverified, and the way to close them is unchanged - pair a Windows or Linux machine the same way
 (`npx @wonderwhy-er/desktop-commander@latest remote`) and the tools for it will appear beside this one.
+
+### One connector, one account - and which side this Mac is
+
+The bridge is authenticated as one account (`jeroysr@gmail.com`, one device online) and this Mac is deliberately the
+**controlled** end of it. That has a consequence worth stating before anyone spends time on it: a connector's token
+belongs to the account that authorized it, so a machine paired under a **different** account is not visible to this
+one - not because of a setting, but because authorization is per account.
+
+The client's own note gives the clean way through, and it is the same fact that fixed the config: *each plugin
+instance connects to one MCP server; load multiple instances for multiple servers*. Two options, both small:
+
+- pair the Windows or Linux machine under the **same** account this connector already holds - then its tools appear
+  beside the current device with nothing else to change;
+- or keep the other account and authorize a **second** instance of the client here with that account's token, which
+  needs one sign-in as that account (an account boundary, not a file to edit - the sign-in is the part no file
+  change can stand in for).
+
+The current login is left untouched either way: no token rotated, no device revoked, no re-authorization. The two
+remaining rows stay unverified until one of the two options lands, and the second one costs this work exactly one
+more entry plus their sign-in.
