@@ -837,3 +837,37 @@ copy, a raw Host reason code, and the Host's English sentences reaching a Chines
 - The Gate itself caught the author: a ternary used as a statement is a lint error, and a missing `failureText`
   import was a type error; the build was run before both were fixed, which is how a green screenshot can sit on
   top of a red tree.
+
+## T7.1 JetBrains client: what the live runs taught, and one correction
+
+The client is built and loads in a real IDE (`Loaded custom plugins: Computer History Companion (0.1.0)`), and
+the intake answers its payloads. Getting from "it posts" to "it is stored" turned out to be four gates, each of
+which the first attempts failed at, each verified rather than assumed:
+
+1. **The intake is only for a Host that owns capture.** `deliver` returns false unless
+   `enabled && ownsCapture && state === 'running'`; a second Host on the same machine gets `202 {"stored":false}`.
+2. **`ownsCapture` is a lock in the plugin's *data directory*, not in `DSH_HOME`.** A separate `DSH_HOME`
+   therefore does not isolate it: both Hosts take the lock in `~/.dsh/computer-history` and only one wins.
+   Giving the test Host `dataDirectory` of its own is what moved the state to `capture: running`.
+3. **A profile patch entry replaces the whole config; it does not merge.** Writing only `companionPort` in the
+   patch dropped `enabled`, and the Host answered `409 computer history capture is disabled` until the entry
+   carried `enabled: true` as well.
+4. **Policy is the last gate, and it behaves exactly as designed.** A fresh store starts with the built-in
+   protections and *no* allow rules, so an unlisted application is accepted (202, well-formed) and dropped
+   (`stored: false`). The declared app `com.jetbrains.intellij` is in the shipped preset - the shared store
+   allows it - so on a real installation this gate is already open; the isolated store needed the rule, which
+   the product's own policy API took once the payload shape was right (`builtIn` is a boolean over HTTP and a
+   0/1 in SQLite - the first two attempts were refused with exactly those messages).
+
+**Correction to an earlier claim in this file.** I recorded that LightEdit - opening a single file - puts the
+file in the default project, where project-scoped listeners are not registered, and rewrote the client to
+report from an application-scoped `EditorFactoryListener` instead. The evidence contradicts half of that: runs
+*before* the rewrite did report from the project-scoped hooks, with `workspaceRoot` `/tmp/jb-live/src`, so the
+file listener does fire in LightEdit. After the rewrite the same run produced **no report at all**, which is
+worse than what it replaced. The next measurement is therefore not another theory but a diagnostic: log whether
+the application listener is registered at all in this build (the `applicationListeners` declaration is
+deprecated upstream and this distribution ships no application-initialized hook), and whether an editor is
+created at all in that run. Until a run produces the row, the JetBrains live row stays **unverified**.
+
+**Not verified:** no live JetBrains row exists yet. The client, the four gates and the intake's answers are
+measured; the row is not.

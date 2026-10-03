@@ -8,8 +8,19 @@
   ]]></description>
   <depends>com.intellij.modules.platform</depends>
 
+  <!-- Application-scoped, because project-scoped listeners are not registered for the default project and
+       LightEdit - opening a single file - lives in exactly that project. `applicationListeners` is marked
+       deprecated upstream, and it is used deliberately: this platform build ships no application-initialized
+       hook (com.intellij.openapi.startup has only project-scoped activities), so this is the registration that
+       exists for an application-level topic. -->
+  <applicationListeners>
+    <listener class="dev.dsh.computerhistory.jetbrains.AppEditorReporter"
+              topic="com.intellij.openapi.editor.event.EditorFactoryListener"/>
+  </applicationListeners>
+
   <!-- Modern extension points for 2024.2+: a post-startup activity for the workspace, a project listener for
        the editor. The older applicationListeners/projectListeners registrations still work but are deprecated. -->
+  <!-- Still useful inside a real project: it reports the workspace even before any file is opened. -->
   <postStartupActivity implementation="dev.dsh.computerhistory.jetbrains.ProjectReporter"/>
 
   <projectListeners>

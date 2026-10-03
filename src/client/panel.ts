@@ -45,7 +45,7 @@ function friendlyAppName(bundleId: string): string {
     'com.openai.chat': 'ChatGPT',
   }
   if (known[bundleId]) return known[bundleId]
-  const tail = bundleId.split('.').filter(Boolean).at(-1)
+  const tail = bundleId.split('.').findLast(part => part.length > 0)
   return tail && tail.length <= 28 ? tail.replaceAll('-', ' ') : bundleId
 }
 

@@ -70,8 +70,8 @@ export function createSettingsPage({
       React.createElement(RecordingRow, props),
       React.createElement(ApplicationsRow, props),
       React.createElement(RetentionRow, props),
-      React.createElement(DeleteHistoryRow, props),
       React.createElement(CompanionRow, props),
+      React.createElement(DeleteHistoryRow, props),
       React.createElement(AboutRow, props),
     )
   }
