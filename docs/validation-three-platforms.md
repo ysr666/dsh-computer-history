@@ -1037,3 +1037,16 @@ open, one nav click away, and showing something else.
 The check now fails loudly at that point instead of measuring the native rows, which is the whole reason this
 took until now to see. The remaining work is one click on the `电脑使用记录` nav item inside the settings dialog,
 verified by `.ch-settings-item` appearing, and only then does the keyboard walk mean anything.
+
+### The dialog has no `ch-*` classes at all - so classes are not the diagnostic
+
+The run that was supposed to answer "which class do the settings rows carry" answered something better: the
+dialog contains **no `ch-*` class whatsoever** at that point. It is the shell's own settings dialog showing
+native rows, and the plugin's section was not selected by the click. That retires the class-name question -
+after five versions of guessing at it - and names the next diagnostic properly: the dialog's **structure**, not
+its classes, because a nav item whose text is not exactly the label (an icon, a count, a nested button) is
+invisible to a text match.
+
+Recorded as the sixth attempt on this one step. What the step does have, and why it is worth keeping: it fails
+loudly at the surface instead of measuring the native rows, and it writes its state and class inventory beside
+the screenshot for exactly this kind of reading.
