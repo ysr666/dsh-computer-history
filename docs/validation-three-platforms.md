@@ -1311,3 +1311,18 @@ panel "has not changed at all" was about the copy in the application's profile, 
 until this phase installed the current one. And it settles it **without a restart**: the application picked the
 new client up on its own, so the restart this file listed as a human action turned out not to be needed, which is
 recorded here rather than left as a stale instruction.
+
+### Partial failure, seen: one read failing does not blank the others
+
+`partial-failure.png` blocks only the timeline read. What the page shows is the claim this phase's acceptance
+makes, and it is visible rather than inferred:
+
+- 时间线 carries its own failure - `时间线暂时不可用。` with a 重试 button;
+- **工作线索 still has data**: `dsh-computer-history · ui-review.md, validation-three-platforms.md · 3 个片段 ·
+  8 分钟`, rendered from a read that succeeded while its neighbour failed;
+- 摘要 and its `本地摘要` label are unaffected, the status card names only the affected part (`已停止 / 仅记录元数据
+  / 时间线暂时不可用。`), and no browser error or empty-state wording appears anywhere.
+
+Together with `all-reads-failed.png` this covers both halves of the rule: when everything fails each section says
+so for itself, and when one thing fails the rest keep their content. A single shared error flag could not produce
+either picture.
