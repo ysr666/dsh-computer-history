@@ -1683,3 +1683,23 @@ instance connects to one MCP server; load multiple instances for multiple server
 The current login is left untouched either way: no token rotated, no device revoked, no re-authorization. The two
 remaining rows stay unverified until one of the two options lands, and the second one costs this work exactly one
 more entry plus their sign-in.
+
+### The second instance, and why it was removed again
+
+The multi-instance route works exactly as the module describes - a second `insert` entry with its own id, its own
+`serverName`, and its own token produced a second registered instance - but the sign-in for it landed on the account
+the browser was already signed into. Decoding both tokens' `email` claims shows one account, not two:
+
+```
+instance 1 account: jeroysr@gmail.com
+instance 2 account: jeroysr@gmail.com
+different accounts: False
+```
+
+A second instance on the same account reaches no new device and registers the same tools twice, and it spends the
+account's remote-call quota twice to do it. It was therefore removed, and the token from that sign-in is kept in a
+0600 file: when a sign-in is done **as the other account** (the browser has to be that account, which is the one
+thing no file can arrange), re-adding the instance is a two-line change that is already written down.
+
+The alternative remains the cheaper one: pair the Windows or Linux machine under the account this connector already
+holds, and its tools appear beside the current device with no second instance at all.
