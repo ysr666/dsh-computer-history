@@ -617,8 +617,6 @@ export function CompanionRow({
     t('companionDescriptionShort'),
     value(companionValue, { connected: status === 'connected', chevron: true }),
     detail(
-      React.createElement('p', { className: 'ch-row-body' }, receiverText),
-      React.createElement('p', { className: 'ch-row-body' }, t('companionDescription')),
       React.createElement(
         'div', { className: 'ch-browser-setup' },
         React.createElement(
@@ -636,17 +634,28 @@ export function CompanionRow({
               : setup === undefined
                 ? React.createElement('span', { className: 'ch-skeleton-line ch-skeleton-medium', 'aria-hidden': true })
                 : React.createElement('p', { className: 'ch-feedback ch-feedback-error' }, t('browserExtensionMissing')),
+          React.createElement('p', { className: 'ch-setup-privacy' }, t('companionDescription')),
         ),
         React.createElement(
           'section', { className: 'ch-setup-step' },
           React.createElement('h4', null, t('browserPairTitle')),
           React.createElement('p', { className: 'ch-row-body' }, t('browserPairDescription')),
-          React.createElement('p', { className: 'ch-row-body' },
-            companion?.lastSeenAtMs !== undefined
-              ? t('browserLastConnected', {
-                  when: settingsRelativeAge(t, companion.lastSeenAtMs),
-                })
-              : t('browserNeverConnected')),
+          React.createElement(
+            'div', { className: 'ch-setup-status' },
+            React.createElement('span', {
+              className: status === 'connected'
+                ? 'ch-settings-status-dot ch-settings-status-dot-success'
+                : 'ch-settings-status-dot',
+              'aria-hidden': true,
+            }),
+            React.createElement('span', null, receiverText),
+            React.createElement('span', { className: 'ch-setup-status-age' },
+              companion?.lastSeenAtMs !== undefined
+                ? t('browserLastConnected', {
+                    when: settingsRelativeAge(t, companion.lastSeenAtMs),
+                  })
+                : t('browserNeverConnected')),
+          ),
           controls(React.createElement('button', {
             type: 'button', className: 'ch-button',
             disabled: pending || !companion?.listening,

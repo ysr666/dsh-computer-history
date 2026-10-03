@@ -1518,3 +1518,29 @@ account owner can complete.
 `cargo test` for the platform's collector, the conformance suite against a live collector, a live row in that
 platform's store with the producing command recorded, and the refusal reasons compared across platforms. Those are
 the two rows this phase leaves unverified, and they need nothing else.
+
+### Connecting the Desktop Commander bridge, as far as it can be prepared
+
+The connector cannot simply be "added", and the reason is a version fact rather than a permission: DSH 0.2.0-rc.2
+has no MCP concept of its own (`dsh --help` knows only plugins, and no profile has an MCP package), so the
+assistant-side connector that Remote Desktop Commander's setup describes does not exist here yet. What does exist
+is the official bridge and its exact shape:
+
+- **`@deepseek-ai/dsh-mcp-client` 0.0.1-rc.1** — "MCP client bridge: connects to MCP servers and registers their
+  tools on `ctx.tools`", with `transport: stdio | streamable-http`, `url`, and `headers` (the README's own example
+  is a bearer token from an environment variable);
+- the hosted endpoint needs **OAuth**, and the official client carries **headers, not an OAuth flow** - so the
+  order of work is: obtain a token through the hosted server's OAuth once, then pass it as a header.
+
+Two steps follow, and only the first needs the owner:
+
+1. install `@deepseek-ai/dsh-mcp-client` **from the application's plugin page** (the sanctioned path for the
+   `desktop` profile, which the CLI refuses to manage on purpose - `dsh plugin --profile desktop …` answers
+   "profile desktop is managed exclusively by the Electron application");
+2. then the connector entry itself: `streamable-http` to `https://mcp.desktopcommander.app/mcp` with an
+   `Authorization` header, the token obtained through one browser sign-in under the account the remote machine was
+   paired with.
+
+Everything after that is the work this phase has been waiting for: the platform's collector tests, the conformance
+suite against a live collector on that machine, a live row in that platform's store with the producing command, and
+the refusal reasons compared across platforms.
