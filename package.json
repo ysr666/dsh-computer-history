@@ -70,7 +70,8 @@
     "./client": {
       "types": "./lib/client.d.ts",
       "default": "./lib/client.js"
-    }
+    },
+    "./cordis.patch.yml": "./cordis.patch.yml"
   },
   "files": [
     "lib",
@@ -83,7 +84,8 @@
     "SECURITY.md",
     "scripts/build-native.mjs",
     "scripts/test-native.mjs",
-    "presets"
+    "presets",
+    "cordis.patch.yml"
   ],
   "peerDependencies": {
     "@deepseek-ai/cordis": "~4.0.4",
@@ -110,6 +112,9 @@
         "@deepseek-ai/dsh-client-ui-slots"
       ],
       "platform": "web"
+    },
+    "bundle": {
+      "patch": "./cordis.patch.yml"
     }
   }
 }

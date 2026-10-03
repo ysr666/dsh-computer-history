@@ -1,0 +1,11 @@
+# This bundle's own layer. It is applied automatically when the package is installed into a
+# profile (package.json declares dsh.bundle.patch), so a profile that installs it gets both
+# halves - the host plugin and its client panel - without hand-editing any patch file. That is
+# the difference between "I loaded it with a tool" and "somebody installed it".
+#
+# Later layers (the profile's own cordis.patch.yml, --patch overlays) override these rows by id.
+- insert:
+    - id: computer-history
+      name: dsh-computer-history
+      config:
+        enabled: true
