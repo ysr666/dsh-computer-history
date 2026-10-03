@@ -66,9 +66,17 @@ const CAPTURE_WORD_ZH: Record<string, string> = {
 // which is how a layout drifts. Declaring constants nobody uses would be its own kind
 // of drift, so only the ones the panel actually reads live here.
 const SPACE = { xs: 4, sm: 8, md: 12, lg: 18, xl: 26 }
-const MUTED = { opacity: 0.72, margin: `0 0 ${SPACE.sm}px`, lineHeight: 1.55 }
-const HAIRLINE = '1px solid rgba(127,127,127,0.22)'
-const DANGER = 'var(--dsw-color-danger, currentColor)'
+// Colours come from the interface's own aliases - the 14 tokens the theme provider publishes - and never
+// from constants. The first version of this file hardcoded rgba() values and invented a --dsw-radius-sm that
+// does not exist, which is why the fields rendered dark in a light panel and why several radii silently fell
+// back. A literal radius is honest here; a fake var() is not.
+const MUTED_TEXT = 'var(--dsw-alias-label-secondary)'
+const SURFACE = 'var(--dsw-alias-bg-layer-1)'
+const SURFACE_NESTED = 'var(--dsw-alias-bg-layer-2)'
+const RADIUS = 10
+const MUTED = { color: MUTED_TEXT, margin: `0 0 ${SPACE.sm}px`, lineHeight: 1.55 }
+const HAIRLINE = '1px solid var(--dsw-alias-border-l1)'
+const DANGER = 'var(--dsw-alias-state-error-primary)'
 const SECTION = {
   marginBottom: SPACE.xl,
   paddingTop: SPACE.lg,
@@ -77,7 +85,7 @@ const SECTION = {
 const BUTTON = {
   font: 'inherit',
   padding: '5px 10px',
-  borderRadius: 'var(--dsw-radius-sm, 8px)',
+  borderRadius: RADIUS,
   border: HAIRLINE,
   background: 'transparent',
   color: 'inherit',
@@ -327,7 +335,7 @@ function HistoryPage(): React.ReactElement {
             style: {
               margin: `0 0 ${SPACE.sm}px`,
               paddingLeft: 10,
-              borderLeft: '3px solid currentColor',
+              borderLeft: '3px solid var(--dsw-alias-brand-primary)',
               fontWeight: 600,
             },
           },
@@ -347,8 +355,8 @@ function HistoryPage(): React.ReactElement {
             style: {
               margin: 0,
               padding: 8,
-              borderRadius: 'var(--dsw-radius-sm, 8px)',
-              background: 'rgba(127,127,127,0.18)',
+              borderRadius: RADIUS,
+              background: SURFACE,
               overflowX: 'auto',
             },
           },
@@ -417,7 +425,7 @@ function HistoryPage(): React.ReactElement {
           : null,
         React.createElement(
           'p',
-          { style: { margin: `0 0 ${SPACE.sm}px`, opacity: 0.72 } },
+          { style: { margin: `0 0 ${SPACE.sm}px`, color: MUTED_TEXT } },
           t('It never records the contents of a screen, a document or a selection, and never what you type. Password managers are protected and are skipped whatever this setting says.',
             '它绝不记录屏幕内容、文档内容或选中文字，也绝不记录你输入的内容。密码管理器受保护，无论这里怎么设置都会被跳过。'),
         ),
@@ -535,7 +543,7 @@ function HistoryPage(): React.ReactElement {
     !semantic || semantic.scopes.length === 0
       ? React.createElement(
           'p',
-          { style: { opacity: 0.75 } },
+          { style: { color: MUTED_TEXT } },
           t('No scope uses a model, so every summary here was computed locally.', '没有范围使用模型，所以这里的摘要都是在本地算出来的。'),
         )
       : React.createElement(
@@ -570,7 +578,7 @@ function HistoryPage(): React.ReactElement {
           'pre',
           {
             style: {
-              background: 'rgba(127,127,127,0.18)',
+              background: SURFACE_NESTED,
               padding: 8,
               borderRadius: 4,
               overflowX: 'auto',
@@ -672,7 +680,7 @@ function HistoryPage(): React.ReactElement {
     timeline.length === 0
       ? React.createElement(
           'p',
-          { style: { opacity: 0.75 } },
+          { style: { color: MUTED_TEXT } },
           t('Nothing recorded in the last seven days yet.', '最近七天还没有记录。'),
         )
       : React.createElement(
@@ -695,7 +703,7 @@ function HistoryPage(): React.ReactElement {
               ...day.episodes.map(item => React.createElement(
                 'li',
                 { key: String(item.id) },
-                React.createElement('span', { style: { opacity: 0.75 } }, durationLabel(item) + ' · '),
+                React.createElement('span', { style: { color: MUTED_TEXT } }, durationLabel(item) + ' · '),
                 React.createElement(
                   'button',
                   {
@@ -733,7 +741,7 @@ function HistoryPage(): React.ReactElement {
           })),
           React.createElement(
             'p',
-            { style: { opacity: 0.75 } },
+            { style: { color: MUTED_TEXT } },
             selected.resources.length > 0
               ? 'Resources: ' + selected.resources
                 .map(item => item.displayLabel ?? item.canonicalUri)
@@ -827,7 +835,7 @@ function HistoryPage(): React.ReactElement {
             {
               style: {
                 padding: '4px 8px',
-                background: 'rgba(127,127,127,0.18)',
+                background: SURFACE_NESTED,
                 borderRadius: 4,
                 userSelect: 'all',
               },
@@ -842,7 +850,7 @@ function HistoryPage(): React.ReactElement {
           null,
           React.createElement(
             'p',
-            { style: { opacity: 0.75 } },
+            { style: { color: MUTED_TEXT } },
             'Only a digest is stored, so this is the one moment it can be copied. Rotating it again stops any client still using the old one.',
           ),
           React.createElement(
@@ -860,7 +868,7 @@ function HistoryPage(): React.ReactElement {
           ),
           React.createElement(
             'ol',
-            { style: { opacity: 0.75, marginTop: 8, paddingLeft: 20 } },
+            { style: { color: MUTED_TEXT, marginTop: 8, paddingLeft: 20 } },
             React.createElement(
               'li',
               null,
@@ -917,7 +925,7 @@ function HistoryPage(): React.ReactElement {
     threads.length === 0
       ? React.createElement(
           'p',
-          { style: { opacity: 0.75 } },
+          { style: { color: MUTED_TEXT } },
           t('No threaded work yet: episodes need a workspace the Host can vouch for.', '还没有成线索的工作：需要宿主能确认的工作区才会成线索。'),
         )
       : React.createElement(
@@ -929,7 +937,7 @@ function HistoryPage(): React.ReactElement {
             thread.summary,
             React.createElement(
               'span',
-              { style: { opacity: 0.65 } },
+              { style: { color: MUTED_TEXT } },
               ` (${thread.episodeCount} episode${thread.episodeCount === 1 ? '' : 's'}, ${thread.summaryObservationIds.length} citations)`,
             ),
           )),
@@ -942,7 +950,7 @@ function HistoryPage(): React.ReactElement {
     React.createElement('h1', { style: { margin: '0 0 4px' } }, t('Computer History', '电脑使用记录')),
     React.createElement(
       'p',
-      { style: { margin: '0 0 18px', opacity: 0.7 } },
+      { style: { margin: '0 0 18px', color: MUTED_TEXT } },
       t('What this machine has been used for, kept locally.',
         '这台电脑被用来做了什么，只保存在本机。'),
     ),
