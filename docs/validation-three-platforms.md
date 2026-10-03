@@ -393,3 +393,17 @@ Two things that matter beyond "it works":
 No JetBrains plugin exists yet, so nothing has run inside an IDE. The recipe for the first real run is
 `docs/editor-companion.md`'s wire format, unchanged: one endpoint, one shape, no token means no request.
 The half that remains is packaging and IDE plumbing, not protocol.
+
+### A test I wrote at the wrong layer, and what it taught about the document
+
+`docs/companion.md` says the query string and fragment are removed twice: by the extension before it sends,
+and by the host **before it stores**. I wrote an intake-level test asserting the secret was already gone from
+the delivered payload. It failed - the payload still carried `token=secret` - and the failure is mine, not the
+product's: the intake **delivers**, ingestion **stores**, and the stripping belongs to the second one. The
+document's wording is exact; my test read "host" as "intake".
+
+Kept because the distinction is easy to get wrong twice, and because the test would have been a second,
+inconsistent statement of a guarantee that `src/host/companion/observation.ts` and the ingestion path already
+own. Writing an assertion at the layer where it is convenient rather than where the guarantee lives is the
+same mistake as asserting a field name instead of the thing it carries - both produce a green test that proves
+nothing about the property anyone cares about.
