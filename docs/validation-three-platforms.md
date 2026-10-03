@@ -462,3 +462,28 @@ exit and a SIGKILL never confirms one; or the degraded state is recorded somewhe
 
 Naming those three before reading is the point: the honest next step is a read, not a fix, and definitely not
 a fix based on "the state did not change, so nothing handles it".
+
+### The read settles it: the degraded path exists, and an out-of-band death never reaches it
+
+`src/host/collector/manager.ts:212-222` is the second candidate made concrete:
+
+```ts
+const exitError = new Error('collector exited before acknowledgement')
+this.rejectStateWaiters(exitError)
+this.rejectPolicyAck(exitError)
+this.markDegraded('collector-exited')
+```
+
+So degradation **is** recorded on exit - inside the handshake or stop sequence, where something is waiting for
+the child. A collector that dies while running has no waiter, so nothing observes the exit and nothing is
+marked. That matches the measurement exactly and makes it a real defect rather than a missing feature: a
+crash, an out-of-memory kill or a user killing the process is precisely the case a user meets, and it is the
+one case the interface reports as healthy.
+
+The fix is small and belongs at the spawn site: one listener that marks degraded when the child exits without
+the host having asked it to. Writing down the shape before writing the code is what the previous paragraph is
+for - the first three attempts at this measurement all looked like "the interface is wrong somewhere", and the
+line numbers turned it into a five-line change with a test.
+
+**Not yet fixed.** This section states the diagnosis and the fix; the next pass implements it and re-runs the
+same measurement, which is the only thing that will show it works.
