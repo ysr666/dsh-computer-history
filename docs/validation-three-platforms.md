@@ -180,3 +180,32 @@ first made it `added 1`, and the new strings appeared.
 `grep` for a string you just added in
 `~/.dsh/profiles/<profile>/node_modules/<package>/lib/`, not just that the install command succeeded.
 A version-stable dev loop has to force the reinstall by hand.
+
+## P2 - the documents a user reads, in Chinese
+
+### The guard first, and its red side is real
+
+`scripts/verify-docs.mjs` holds the rule the plan adopted: anything a user reads has a Chinese
+version, anything an engineer reads stays in one language. The user-facing list is **explicit** rather
+than discovered - "is this document user-facing" is a judgement, and a rule that guesses would either
+miss documents or demand translations of ADRs.
+
+Two checks: every listed document has a `<name>.zh.md`, and the pair was last changed in the same
+commit, because a translation that quietly falls behind is worse than none: it is wrong without
+looking wrong.
+
+Run against the repository as it stands, it fails on exactly the documents that have no Chinese yet:
+
+```text
+SECURITY.md: no Chinese sibling (SECURITY.zh.md)
+docs/companion.md: no Chinese sibling (docs/companion.zh.md)
+docs/editor-companion.md: no Chinese sibling (docs/editor-companion.zh.md)
+docs/adapters.md: no Chinese sibling (docs/adapters.zh.md)
+docs/remote-models.md: no Chinese sibling (docs/remote-models.zh.md)
+```
+
+That is its red side, taken from the real repository rather than from a synthetic sample.
+
+**It is deliberately not wired into `pnpm verify` yet.** A gate that is red while the work is
+unfinished teaches people to ignore it; the guard becomes part of the gate in the same commit that
+writes the translations, which is also the commit where it can be seen to pass.
