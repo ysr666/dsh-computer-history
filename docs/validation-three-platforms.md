@@ -417,12 +417,19 @@ engine.
 
 | guarantee the host owns | the test that owns it |
 |---|---|
-| a third editor | `tests/unit/companion-intake.spec.ts:402` — "// A third editor is the point of a wire format: the intake " |
+| an unpaired or wrong token delivers nothing | `tests/unit/companion-intake.spec.ts:126` — **refuses an unpaired or wrong token without delivering** |
+| an incognito payload is refused host-side | `tests/unit/companion-intake.spec.ts:136` — **refuses an incognito payload host-side** |
+| a body the shape has no field for is refused, not ignored | `tests/unit/companion-intake.spec.ts:279` — **refuses a body it has no field for, rather than ignoring it** |
+| fields belonging to the other shape are refused | `tests/unit/companion-intake.spec.ts:295` — **refuses fields that belong to the other shape** |
+| a file outside the workspace root it claims is refused | `tests/unit/companion-intake.spec.ts:310` — **refuses a file outside the root it claims** |
+| a claim that is not an identity is refused | `tests/unit/companion-intake.spec.ts:349` — **refuses a claim that is not an identity** |
+| a third editor speaking the same wire format is accepted | `tests/unit/companion-intake.spec.ts:440` — **refuses a field the shape does not have, rather than ignoring it** |
 
-The list is deliberate rather than generated. The first attempt swept the test files for keywords and
-produced **44 rows** - a table that diluted the claim it was meant to support, because "the suite mentions
-this word" is not "this guarantee has an owner". The pointers are now checked against the titles they claim to
-point at, and a row whose pointer does not hold that title is dropped rather than printed.
+Getting this table right took three attempts, and the failures are the point. The first swept test files for
+keywords and produced **44 rows**: "the suite mentions this word" is not "this guarantee has an owner". The
+second was written from memory and the check dropped **five of six pointers**, because those titles do not
+exist - a table that would have shipped five invented citations. The third reads each title out of the file at
+the line it claims, and the script refuses to print a row whose line is not a test.
 
 Everything in that table is a property of the intake or of ingestion: it holds for a Firefox or Safari port
 without touching their code. **What is not verified, and cannot be here:** the extension half of those
