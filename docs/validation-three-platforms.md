@@ -1126,3 +1126,19 @@ What that step cost, in one line: fourteen of the sixteen rounds were spent meas
 screen - a shell focus ring, `document` standing in for a dialog, the panel, the native settings section, a
 class inventory with no `ch-*` in it, one stray element, and finally the settings nav. Every one of them was
 recorded in this file as it happened, which is the only reason the last two rounds could be short.
+
+### Reproducing this phase
+
+```console
+$ pnpm verify                     # typecheck, lint, 374 tests, every boundary script
+$ pnpm verify:p1                  # the Phase 1 close-out: builds and signs the macOS collector, runs the
+                                  # native privacy/protocol tests
+$ pnpm benchmark:ingestion        # the three baseline numbers (duration, throughput, store size)
+$ pnpm verify:ci-boundaries       # the workflow, the fixture and this file agree on what is unverified
+$ PANEL_URL='http://127.0.0.1:<port>/?token=…' node scripts/verify-panel-render.mjs
+                                  # 50/50: seven rendered states, screenshots and text beside each one
+```
+
+The render check needs a Host and a headless Chromium; everything else runs from a clean checkout. The Host it
+points at is deliberately not started by the script: evidence produced against a Host somebody else runs is
+evidence about the plugin rather than about the script's own idea of one.
