@@ -34,7 +34,8 @@
     "verify:migrations": "node scripts/verify-migrations.mjs",
     "verify:native-timeouts": "node scripts/verify-native-timeouts.mjs",
     "verify:docs": "node scripts/verify-docs.mjs",
-    "verify:collector-windows": "node scripts/verify-collector-windows.mjs"
+    "verify:collector-windows": "node scripts/verify-collector-windows.mjs",
+    "build:extension:firefox": "node scripts/build-extension.mjs --target=firefox"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "4.0.4",

@@ -1,8 +1,9 @@
 # Browser companion
 
-The companion is a Chrome MV3 extension that reports **which page you are on** —
+The companion is a browser MV3 extension that reports **which page you are on** —
 origin, path and the tab title — to the local DeepSeek Harness Computer History
-intake. It is the only source allowed to store a URL (ADR 0007); a browser
+intake. It is packaged for Chromium, and for Gecko from the same source: one
+implementation, two manifests. It is the only source allowed to store a URL (ADR 0007); a browser
 window seen through Accessibility still contributes nothing.
 
 ## What it collects, and what it never touches
@@ -31,6 +32,34 @@ Chrome 154 ignores the `--load-extension` command line, so automation loads it
 over CDP instead (`Extensions.loadUnpacked`, with
 `--enable-unsafe-extension-debugging`); a person installing it by hand uses the
 steps above.
+
+### A second engine (Gecko)
+
+1. `pnpm build:extension:firefox` → packages the same source into
+   `dist/extension-firefox/`, with the Gecko manifest written as its `manifest.json`.
+2. In Firefox: `about:debugging#/runtime/this-firefox` → *Load Temporary Add-on…*
+   → choose `dist/extension-firefox/manifest.json`.
+3. Pair it the same way, in the extension's own options page.
+
+The two packages hold **one implementation**: `extension/background.js` carries the listeners and
+`extension/engine.js` resolves the namespace, so the entry file the engines load is the same file.
+Only the manifest differs, in the three keys where the engines genuinely disagree:
+
+| | Chromium | Gecko |
+|---|---|---|
+| background | `service_worker` | `scripts` + `type: module` (Gecko has no service worker) |
+| options | `options_page` | `options_ui` (`open_in_tab`) |
+| identity | `minimum_chrome_version` | `browser_specific_settings.gecko.id` (without it, storage and permissions do not persist across restarts) |
+
+`pnpm build:extension` and `pnpm build:extension:firefox` apply the same guard: MV3,
+`incognito: "not_allowed"`, no content script, permissions within `tabs`/`storage`, host access on
+loopback only, and every script parsed before packaging. A manifest asking for the other engine's
+background key is refused rather than packaged, because that mistake produces an extension that
+loads and then silently never reports.
+
+**Unverified:** no Gecko engine is installed on the machine this was written on, so the Firefox
+package has been built and its manifest checked, but **no live Gecko row exists**. The recipe above
+is the one that produces it; until it is run, treat the Gecko half as unproven.
 
 ## Pair
 

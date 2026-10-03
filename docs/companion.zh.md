@@ -1,6 +1,6 @@
 # 浏览器伴侣
 
-伴侣是一个 Chrome MV3 扩展，向本机的 DeepSeek Harness Computer History 接收端报告**你当前在哪个页面** —— 源站、路径与标签页标题。它是**唯一被允许存储 URL 的来源**（ADR 0007）；**通过辅助功能看到的浏览器窗口仍然什么都不贡献**。
+伴侣是一个浏览器 MV3 扩展（同一份源码既打包给 Chromium，也打包给 Gecko：一份实现、两份 manifest），向本机的 DeepSeek Harness Computer History 接收端报告**你当前在哪个页面** —— 源站、路径与标签页标题。它是**唯一被允许存储 URL 的来源**（ADR 0007）；**通过辅助功能看到的浏览器窗口仍然什么都不贡献**。
 
 ## 它采集什么，绝不碰什么
 
@@ -19,6 +19,24 @@
 3. 扩展只申请 `tabs` 与 `storage` 权限，且只申请对 `127.0.0.1` 的主机访问。**出现别的权限就说明构建有问题**：`pnpm build:extension` 会拒绝任何放宽这两项的 manifest。
 
 Chrome 154 会忽略 `--load-extension` 命令行参数，所以自动化改为通过 CDP 加载（`Extensions.loadUnpacked`，配合 `--enable-unsafe-extension-debugging`）；**由人手工安装则用上面的步骤**。
+
+### 第二个引擎（Gecko）
+
+1. `pnpm build:extension:firefox` → 把**同一份源码**打包到 `dist/extension-firefox/`，并把 Gecko 的 manifest 写进去当作它的 `manifest.json`。
+2. 在 Firefox 中：`about:debugging#/runtime/this-firefox` → *临时载入附加组件…* → 选择 `dist/extension-firefox/manifest.json`。
+3. 配对方式完全相同，在扩展自己的选项页里做。
+
+两个包里是**同一份实现**：监听器都在 `extension/background.js`，命名空间由 `extension/engine.js` 决定，所以两个引擎加载的入口文件是**同一个文件**。只有 manifest 不同，差别只在三处引擎真正不一致的地方：
+
+| | Chromium | Gecko |
+|---|---|---|
+| 后台 | `service_worker` | `scripts` + `type: module`（Gecko 没有 service worker） |
+| 选项页 | `options_page` | `options_ui`（`open_in_tab`） |
+| 身份 | `minimum_chrome_version` | `browser_specific_settings.gecko.id`（缺了它，storage 与权限在重启后不保留） |
+
+`pnpm build:extension` 与 `pnpm build:extension:firefox` 用**同一套守卫**：必须是 MV3、`incognito: "not_allowed"`、不得有 content script、权限不超出 `tabs`/`storage`、主机访问只允许回环，并且**打包前每个脚本都要先解析通过**。写错引擎的后台键会被**拒绝打包**，而不是打出一个"能装上、但永远静默不上报"的扩展。
+
+**未验证：** 写这份文档的机器上没有安装 Gecko 引擎，因此 Firefox 包**只做到"能构建 + manifest 检查通过"，不存在实机的 Gecko 记录**。上面第 2 步就是产生那条记录的配方；在跑过之前，Gecko 这一半按未证实对待。
 
 ## 配对
 

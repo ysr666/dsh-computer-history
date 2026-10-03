@@ -674,3 +674,51 @@ badge cannot be read as a measured platform.
 **Not run yet:** the workflow has not executed. Writing it is not running it - the same distinction this file
 makes about compiling and running, applied to a file rather than a binary. Its first run needs a push, which
 waits for the owner.
+
+## P7.2 - the second browser host (Gecko)
+
+### What was built, and what is proven about it
+
+The companion was a Chromium-only extension: `chrome.*` calls in the worker and in the options page, and a
+`service_worker` background. The second engine is added as **one implementation with two manifests**, not a
+second copy:
+
+- `extension/engine.js` resolves the namespace once (`browser` when the engine defines it, otherwise `chrome`).
+  Gecko defines both names and only `browser.*` returns promises there, so the order is the whole point.
+- `extension/background.js` holds every listener and the reporting loop, written against that namespace.
+- `extension/service-worker.js` became the entry both engines load; the manifest decides whether the engine
+  starts it as a service worker or as an event page.
+- `extension/manifest.firefox.json` differs from the Chromium manifest in exactly the three keys where the
+  engines disagree (background form, `options_ui` instead of `options_page`, `browser_specific_settings.gecko.id`).
+- `pnpm build:extension:firefox` packages the same source with the Gecko manifest written as `manifest.json`,
+  and applies the same guard as the Chromium build: MV3, `incognito: "not_allowed"`, no content script,
+  permissions within `tabs`/`storage`, loopback hosts only, and **a manifest asking for the other engine's
+  background key is refused** rather than packaged.
+
+Measured on this machine: both packages build (`extension packaged for chrome` / `for firefox`), the packaged
+manifests differ in the expected keys and agree on every privacy-relevant one, and
+`tests/unit/companion-engines.spec.ts` pins those facts plus the "no second copy" invariant (the entry has no
+listeners of its own; the shared file names no engine directly).
+
+### The mistakes this entry keeps
+
+1. **The first manifest shape was the Chromium one with keys renamed.** Gecko has no service worker, and a
+   `service_worker` key there is not an error the browser reports loudly - the extension loads and never
+   reports. The build now refuses the wrong key per target instead of trusting the file.
+2. **The type surface caught the missing declaration.** `tsc` refused `extension/engine.js` with
+   `TS7016: implicitly has an 'any' type`; `extension/engine.d.ts` was written to mirror `lib.d.ts`, and it
+   declares only the members both engines must provide.
+3. **`chrome.storage` survived in the options page** after the worker had been converted - three call sites.
+   The engine test would not have caught it (it does not load the page); a grep for `chrome.` outside
+   `engine.js` did. The options page is the extension's own UI, and it is the surface a person uses to pair, so
+   a broken namespace there looks like "pairing is broken", not like "the API is wrong".
+
+### Not verified
+
+**There is no live Gecko row.** No Gecko engine is installed on this machine, so the Firefox package is built
+and its manifest is checked, but nothing has loaded it. The row stays marked unverified; the recipe that
+produces it is in `docs/companion.md` ("A second engine (Gecko)"), and it is two commands plus one dialog:
+`pnpm build:extension:firefox`, then `about:debugging#/runtime/this-firefox` → *Load Temporary Add-on…* →
+`dist/extension-firefox/manifest.json`, then pair the token as on Chromium. Accepting a manifest that parses as
+evidence for a browser that never ran it would be the "compiles, therefore works" error this file keeps
+returning to.

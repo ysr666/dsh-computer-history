@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "Computer History Companion",
+  "version": "0.1.0",
+  "description": "Reports the active tab's origin and path to a paired DeepSeek Harness Computer History intake. Metadata only: no page content, ever.",
+  "incognito": "not_allowed",
+  "permissions": ["tabs", "storage"],
+  "host_permissions": ["http://127.0.0.1/*", "http://localhost/*"],
+  "background": {
+    "scripts": ["service-worker.js"],
+    "type": "module"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "computer-history@dsh.invalid",
+      "strict_min_version": "121.0"
+    }
+  }
+}

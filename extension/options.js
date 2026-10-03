@@ -3,6 +3,7 @@
 // This page is the extension's own UI, so it is the one place allowed to touch
 // the DOM; `verify:privacy` applies its no-content rule to the worker and
 // lib.js, not here. It never reads a page's content.
+import { ext } from './engine.js'
 import { checkPairing } from './lib.js'
 
 const portInput = document.getElementById('port')
@@ -14,7 +15,7 @@ function show(message) {
 }
 
 async function load() {
-  const stored = await chrome.storage.local.get([
+  const stored = await ext.storage.local.get([
     'companionPort',
     'companionToken',
   ])
@@ -35,13 +36,13 @@ async function save() {
   const update = { companionPort: port }
   const token = tokenInput.value.trim()
   if (token.length > 0) update.companionToken = token
-  await chrome.storage.local.set(update)
+  await ext.storage.local.set(update)
   tokenInput.value = ''
   show(`Saved. Reporting to 127.0.0.1:${port}.`)
 }
 
 async function test() {
-  const stored = await chrome.storage.local.get([
+  const stored = await ext.storage.local.get([
     'companionPort',
     'companionToken',
   ])
