@@ -294,6 +294,51 @@ function HistoryPage(): React.ReactElement {
   // Colours come from the interface, never from constants: the first version of this
   // line hardcoded a cream background with inherited light text and rendered as an
   // empty bar on the dark theme.
+  // Running an older copy than the one that was built is a failure that looks exactly like a broken
+  // feature - it cost this phase two measurements. The state carries the profile and the exact command,
+  // and this line is silent when there is nothing to say.
+  const staleRelease = state?.release?.stale
+  const staleSection = staleRelease
+    ? React.createElement(
+        'section',
+        { style: SECTION },
+        React.createElement(
+          'p',
+          {
+            role: 'status',
+            style: {
+              margin: `0 0 ${SPACE.sm}px`,
+              paddingLeft: 10,
+              borderLeft: '3px solid currentColor',
+              fontWeight: 600,
+            },
+          },
+          t(
+            `The installed copy is older than the one you built (profile: ${staleRelease.profile}).`,
+            `你运行的是旧副本——比你已经构建出来的那份更旧（profile：${staleRelease.profile}）。`,
+          ),
+        ),
+        React.createElement(
+          'p',
+          { style: MUTED },
+          t('Run this, then restart the Host:', '运行这条命令，然后重启宿主：'),
+        ),
+        React.createElement(
+          'pre',
+          {
+            style: {
+              margin: 0,
+              padding: 8,
+              borderRadius: 'var(--dsw-radius-sm, 8px)',
+              background: 'rgba(127,127,127,0.18)',
+              overflowX: 'auto',
+            },
+          },
+          staleRelease.updateCommand,
+        ),
+      )
+    : null
+
   // The first-run path: a store that has never recorded anything, with a policy that has
   // never been changed, is a blank page. This says what will be recorded, what never will be,
   // and gives the one action that makes the panel useful - using the same /policy path the
@@ -883,6 +928,8 @@ function HistoryPage(): React.ReactElement {
       t('What this machine has been used for, kept locally.',
         '这台电脑被用来做了什么，只保存在本机。'),
     ),
+    // Anything that needs an action comes before the status line, oldest problem first.
+    staleSection,
     // A brand new store gets the path that makes it useful; everyone else gets the status.
     firstRunSection,
     // First after the title: the one fact that needs an action, before any status.
