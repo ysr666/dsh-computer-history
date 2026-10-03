@@ -533,6 +533,23 @@ Worth stating plainly, because it is the same mistake this whole phase keeps rec
 **part of a function is not the function.** An exit observer that "did not fire" and a report composed from the
 wrong object look identical from three lines of code, and only a measurement separates them.
 
-**Not fixed yet. Next step is a measurement, not a read:** put a temporary line where the listener runs, restart,
-kill the collector, and look for it. If it appears, the degraded state is being written and something downstream
-drops it; if it does not, `waitForExit()` does not resolve the way this pass assumed.
+### The measurement, and what it says
+
+A temporary line at the top of the listener, a rebuild, a reinstall verified by grepping the installed copy for
+that line, a restart and a `kill -9` on the collector produced **nothing**:
+
+```text
+[diag] collector exit observed ...      (never printed)
+capture: running | reason: (none)
+```
+
+So the listener never ran: **`waitForExit()` does not settle for a child killed out of band.** The observer was
+attached to something that never happens, which is why the fix was present, verified present, and silent.
+
+The reliable signal is the pipe closing, which happens when the process is gone however it went, and that stream
+is already being listened to two lines further down for protocol data. Attaching the exit observer there is the
+next change - and the first attempt to make it was placed before the guard that proves `stdout` exists, which the
+type checker refused, and the repair of that attempt did not apply, so the file was reverted rather than left
+half-edited. A red tree is not a step forward, and the measurement above is what this pass actually gained.
+
+**Not fixed yet.**
