@@ -176,23 +176,6 @@ async function main() {
   // dismissal never ran and every later click landed on the overlay - two "failures" that were the harness
   // looking at a screen it had never opened.
   const dialogCount = async () => Number(await evaluate("document.querySelectorAll('[role=\"dialog\"],dialog').length"))
-  // A settings nav item's own text *is* the label, so containment matching (which prefers the shortest
-  // clickable ancestor) can still land on a wrapper. Exact match on the element's own text, smallest first.
-  const clickExact = (label) => evaluate(`(function(){
-    var wanted = ${JSON.stringify(label)};
-    var all = document.querySelectorAll('button,[role="tab"],[role="menuitem"],[role="option"],li,a,[data-slot]');
-    var best = null;
-    for (var i = 0; i < all.length; i++) {
-      var node = all[i];
-      if (node.getClientRects().length === 0) continue;
-      if ((node.textContent || '').trim() !== wanted) continue;
-      if (best === null || (node.textContent || '').length < (best.textContent || '').length) best = node;
-    }
-    if (best === null) return 'missing';
-    best.click();
-    return 'clicked';
-  })()`)
-
   const dismissIntro = async () => {
     for (let attempt = 0; attempt < 8; attempt += 1) {
       if ((await dialogCount()) === 0) return

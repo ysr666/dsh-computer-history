@@ -282,7 +282,7 @@ export function ApplicationsRow({
                 React.createElement('span', { className: 'ch-app-rule-id' }, rule.pattern),
               ),
               React.createElement('button', {
-                type: 'button', className: 'ch-button', disabled: pending,
+                type: 'button', className: 'ch-button ch-button-danger', disabled: pending,
                 onClick: () => { void forgetApp(rule.pattern) },
               }, t('forget')),
             )),
