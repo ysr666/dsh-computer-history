@@ -1283,7 +1283,7 @@ than implying one.
 | A live record per platform, with the producing command | macOS: `pnpm verify:p1` + the collector's own run; Windows/Linux: none | macOS green; **Windows and Linux unverified** |
 | Identical refusal reasons across platforms | `tests/conformance/**` + the fixture's `$unverified` lists | green for the message layer; live refusals **unverified** |
 | A panel screenshot per platform store | macOS: the self-hosted Host; others: none | macOS green (three states reviewed by eye); others **unverified** |
-| Loading, empty, unavailable and error stay distinct | `node scripts/verify-panel-render.mjs` | green: 50/50, `all-reads-failed.png` reviewed |
+| Loading, empty, unavailable and error stay distinct | `node scripts/verify-panel-render.mjs` | green: 52/52, and all four states read as images - loading says 正在加载… per section, failure says 暂时不可用 with a retry, empty is absent from both |
 | Copy goes through the locale dictionary | `pnpm test` (`client-locale`, `client-diagnostic-copy`) | green |
 | No diagnostic reaches the reader | `tests/unit/client-diagnostic-copy.spec.ts` | green (guard added after the regression shipped twice) |
 | A live client row from a third end | the JetBrains run: `gradle build` then the IDE with `-Dcomputer-history.*` | green: row `companion\|jetbrains\|com.jetbrains.intellij\|editor` stored, client log `201 {"stored":true}` |
@@ -1432,3 +1432,14 @@ named for ("no write control stays available without a snapshot") is evidenced e
 
 Seven of seven states have now been read. Two of them corrected themselves in the process - the loading state and
 this one - and both corrections came from reading the image rather than trusting the step's name.
+
+### Seven of seven states read, and what that changed
+
+`settings-read-failed.png` now shows the settings dialog with 电脑使用记录 selected and its own failure copy -
+`无法连接到宿主。` with a 重试 button - over a panel that reports its own failure. Name and picture agree.
+
+All seven states have been read as images, and the exercise earned its keep twice: the loading state had been
+showing the shell's workspace picker while its assertion passed for want of anything of ours on screen, and this
+state had been showing the native section while its name promised ours. Neither would have been caught by the
+assertions, because both assertions were true statements about the wrong surface - which is this file's recurring
+error, now recorded in five different costumes across the phase.
