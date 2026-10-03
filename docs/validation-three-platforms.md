@@ -437,3 +437,28 @@ promises on any engine other than Chrome - `tabs` and `storage` permissions, the
 extension-side stripping all have engine-specific forms, and the privacy matrix in `docs/companion.md` is the
 recipe for measuring them (one cell per promise, with a control cell whose failure fails the whole matrix).
 Until a port exists and runs that matrix, "works on Firefox" is a design, not a measurement.
+
+## The operations group - degradation, first measurement
+
+### What the interface says when the collector is killed
+
+```text
+before              capture: running | accessibilityTrusted: true
+immediately after   capture: running | accessibilityTrusted: true
+31 seconds after    capture: running | accessibilityTrusted: true
+```
+
+The collector was killed with SIGKILL. The state did not change and carried no reason for over half a
+minute: **the interface keeps saying it is recording while nothing is recording.** That is the failure mode
+the Linux rule is written against - silence is indistinguishable from a machine nobody used - except here it
+is worse, because the user believes their history is being kept.
+
+**What this is and is not, so far.** The measurement is exact and repeatable. The cause is not yet
+established: `src/host/collector/manager.ts:809` carries a comment about "the degraded state above records
+that the exit was unconfirmed", so there is degradation logic in this file, and my first grep for its trigger
+(`'exit'`, `child.on`) found nothing - which means one of three things, and the next pass reads the code to
+find out which: the listener uses a form I did not search for; the state is degraded only for a confirmed
+exit and a SIGKILL never confirms one; or the degraded state is recorded somewhere the API does not report.
+
+Naming those three before reading is the point: the honest next step is a read, not a fix, and definitely not
+a fix based on "the state did not change, so nothing handles it".
