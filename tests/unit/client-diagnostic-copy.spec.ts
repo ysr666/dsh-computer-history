@@ -39,7 +39,8 @@ describe('no view renders a raw diagnostic as copy', () => {
         const rendered = /React\.createElement\([^)]*role: 'alert'[^)]*\),\s*([a-zA-Z][a-zA-Z0-9]*)\)/.exec(line)
         const variable = rendered?.[1]
         if (variable !== undefined && !line.includes('failureText')) {
-          const assignments = text.split('\n').filter(candidate => candidate.includes(`set${variable[0].toUpperCase()}${variable.slice(1)}(`))
+          const setter = `set${variable.charAt(0).toUpperCase()}${variable.slice(1)}(`
+          const assignments = text.split('\n').filter(candidate => candidate.includes(setter))
           for (const assignment of assignments) {
             if (!assignment.includes('failureText')) {
               offenders.push(`${view}: ${variable} set without the mapping - ${assignment.trim()}`)
