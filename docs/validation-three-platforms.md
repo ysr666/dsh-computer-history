@@ -80,3 +80,35 @@ So P1's third item is **met in the narrow sense** (the path works and a row appe
 the terminal) and **not yet met in the useful sense** (an application, a file, and a duration). The
 next pass should repeat it with an editor in the foreground for longer, and if the row is still
 0 ms, look at the sampling interval rather than at the panel.
+
+### Why the duration is zero, and it is not the panel
+
+Repeated with an editor in the foreground for 150 seconds. The row became useful - a **file**
+resource, and a summary naming both:
+
+```text
+resource  file  .../dsh-computer-history/docs/ui-review.md
+summary   Worked in dsh-computer-history. Observed resources: - ui-review.md
+          Applications: com.microsoft.VSCode
+duration  0 ms
+```
+
+The duration is still zero, and the reason is in the collector rather than the interface: the
+heartbeat timer fires every interval and calls `reconcileFrontmost()`, but observations are
+deduplicated by a fingerprint - **an unchanged state does not produce a new observation**. Sitting in
+one file for two and a half minutes therefore produces exactly one observation, an episode with a
+single sample, and a duration of zero.
+
+Two ways to fix it, and they are not equivalent:
+
+1. **the episode side** (preferred): while an episode is open, its end should track "now" rather than
+   the last observation's timestamp, so a dwell that is still happening has a duration. This changes
+   nothing about what is collected and nothing about the collector's cadence - the data already
+   supports it.
+2. **the collector side**: emit a heartbeat observation even when nothing changed, which trades
+   storage for continuity and adds a cadence to keep in step across three platforms. It also makes
+   "the machine was idle" indistinguishable from "nothing changed" unless the two are distinguished
+   explicitly.
+
+The next pass takes (1) and re-runs this measurement; if the duration is still zero, the assumption
+to attack is that the episode ever sees a second sample.
