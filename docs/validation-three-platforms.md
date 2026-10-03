@@ -1599,3 +1599,27 @@ Sessions are durable, so the restart resumes this conversation with the entry lo
 
 Also recorded: `ds-harness-remote` is present but **[disabled]** in the loader, which is why the other bridge has
 not been reachable either.
+
+### After the restart: the entry is intact, and the app's own plugin manager is what enables it
+
+The restart happened (the application's helper processes are new) and the entry survived it, so the file-level work
+is sound. What the four checks after it show, in order:
+
+- **not loaded**: no tool named `mcp__…` is registered, and the loader's own listing does not contain
+  `dsh-mcp-client` (it does contain `mcp-resources`);
+- **not a resolution problem**: `@deepseek-ai/dsh-mcp-client` resolves from the desktop profile (through the
+  globally installed harness);
+- **nothing in the logs**: no loader complaint, no config error, no resolution failure in anything written since
+  the restart - and the newest crash log predates it and is unrelated (`phase: running`);
+- **no state file to flip**: nothing under `~/.dsh/storages` records plugin enablement; the only matches for the
+  package name there are session caches, which mention it because this conversation discusses it.
+
+So the app's plugin manager is the thing that decides, not the patch layer alone, and that manager's own loader
+entry is itself listed as `[disabled]`. Writing the entry was the right file-level step and it is still the right
+configuration; enabling it is a surface this work cannot drive - synthetic clicks do not reach this Electron app
+(the click on 插件 in its own sidebar did nothing, verified by screenshot), and its UI answers `401` without a
+session token it keeps to itself.
+
+That is the honest division: the OAuth token, the entry, its validation, the restart verification and the
+diagnosis are done here; one toggle in the application's plugin page is what remains before the remote machine's
+tools appear.
