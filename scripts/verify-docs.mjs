@@ -77,7 +77,11 @@ export function checkDocs({ repoDir = REPO, documents = USER_FACING, changedAt =
   if (checkDocs({ documents: ['docs/does-not-exist.md'] }).length === 0) {
     selfProblems.push('a missing document is not reported - this guard proves nothing')
   }
-  if (checkDocs({ documents: ['a.md'], changedAt: () => undefined }).length !== 0) {
+  // A file that exists, with a clock that knows nothing: an unknown clock must not be read as drift,
+  // or a fresh clone without history would fail. (The first version of this case used a file that does
+  // not exist, so it tripped the missing-file check instead and blocked the guard with its own
+  // self-check.)
+  if (checkDocs({ documents: ['README.md'], changedAt: () => undefined }).length !== 0) {
     selfProblems.push('an unknown clock reports drift - it would fail on a fresh clone')
   }
   if (selfProblems.length > 0) {
