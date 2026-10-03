@@ -1,17 +1,21 @@
 #!/usr/bin/env node
-// User-facing documents must have a Chinese sibling, and the pair must not drift.
+// User-facing documents must have a Chinese sibling, and the translation must not fall behind.
 //
 //   pnpm verify:docs
 //
-// The rule this repository adopted with the three-platform plan: anything a user reads has a
-// Chinese version; anything an engineer reads stays in one language. The list below is explicit
-// rather than discovered, because "is this document user-facing" is a judgement and a rule that
-// guesses would either miss documents or demand translations of ADRs.
+// The rule: anything a user reads has a Chinese version; anything an engineer reads stays in one
+// language. The list is explicit rather than discovered, because whether a document is user-facing is
+// a judgement and a rule that guesses would either miss documents or demand translations of ADRs.
 //
-// Two checks, and the second is the one that matters:
-//   1. every listed document has <name>.zh.md;
-//   2. the pair was last changed in the same commit. A translation that quietly falls behind is
-//      worse than no translation, because it is wrong without looking wrong.
+// Two checks: a Chinese sibling exists, and the English side has not changed more recently than its
+// translation. A translation that quietly falls behind is worse than none: it is wrong without looking
+// wrong.
+//
+// Two things this file learned the hard way, both kept as comments because both cost a round:
+//   - "the pair was last changed in the same commit" cannot be satisfied by a first translation (the
+//     original necessarily predates it), so drift means *the English side moved last*;
+//   - the logic stays in plain JavaScript on purpose. scripts/*.mjs run under node with no TypeScript
+//     loader, so importing the typed module this briefly lived in made the guard unable to run at all.
 import { execFileSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import path from 'node:path'
@@ -32,18 +36,19 @@ export function siblingOf(relative) {
   return relative.endsWith('.md') ? `${relative.slice(0, -3)}.zh.md` : `${relative}.zh.md`
 }
 
-/** The commit that last touched a path, or undefined when git cannot say. */
-export function lastCommit(repoDir, relative) {
+/** When a path was last changed, as an epoch second, or undefined when git cannot say. */
+export function lastChangeSeconds(repoDir, relative) {
   try {
-    return execFileSync('git', ['log', '-1', '--format=%H', '--', relative], {
+    const value = execFileSync('git', ['log', '-1', '--format=%ct', '--', relative], {
       cwd: repoDir, encoding: 'utf8',
-    }).trim() || undefined
+    }).trim()
+    return value ? Number(value) : undefined
   } catch {
     return undefined
   }
 }
 
-export function checkDocs({ repoDir = REPO, documents = USER_FACING } = {}) {
+export function checkDocs({ repoDir = REPO, documents = USER_FACING, changedAt = lastChangeSeconds } = {}) {
   const problems = []
   for (const document of documents) {
     const zh = siblingOf(document)
@@ -55,11 +60,10 @@ export function checkDocs({ repoDir = REPO, documents = USER_FACING } = {}) {
       problems.push(`${document}: no Chinese sibling (${zh})`)
       continue
     }
-    const [enCommit, zhCommit] = [lastCommit(repoDir, document), lastCommit(repoDir, zh)]
-    if (enCommit && zhCommit && enCommit !== zhCommit) {
-      problems.push(
-        `${document} and ${zh} were last changed in different commits - the translation has fallen behind`,
-      )
+    const enAt = changedAt(repoDir, document)
+    const zhAt = changedAt(repoDir, zh)
+    if (enAt !== undefined && zhAt !== undefined && enAt > zhAt) {
+      problems.push(`${document} was changed after ${zh} - the translation has fallen behind`)
     }
   }
   return problems
@@ -72,6 +76,9 @@ export function checkDocs({ repoDir = REPO, documents = USER_FACING } = {}) {
   if (!USER_FACING.includes('README.md')) selfProblems.push('the list lost a document it had')
   if (checkDocs({ documents: ['docs/does-not-exist.md'] }).length === 0) {
     selfProblems.push('a missing document is not reported - this guard proves nothing')
+  }
+  if (checkDocs({ documents: ['a.md'], changedAt: () => undefined }).length !== 0) {
+    selfProblems.push('an unknown clock reports drift - it would fail on a fresh clone')
   }
   if (selfProblems.length > 0) {
     console.error(selfProblems.join('\n'))
