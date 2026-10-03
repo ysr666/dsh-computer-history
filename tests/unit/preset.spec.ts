@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { describe, expect, it } from 'vitest'
 import { PHASE1_ADAPTERS } from '../../src/shared/constants.js'
-import { isFirstRunPreset, presetBundles } from '../../src/shared/preset.js'
+import { isFirstRunPreset, presetBundles, readFirstRunPreset } from '../../src/shared/preset.js'
 
 async function shippedPreset(): Promise<ReturnType<typeof presetBundles>> {
   const raw: unknown = JSON.parse(
@@ -43,5 +43,17 @@ describe('the first-run preset', () => {
 
   it('is stable: the same preset expands to the same list', async () => {
     expect(await shippedPreset()).toEqual(await shippedPreset())
+  })
+})
+
+describe('finding the shipped preset', () => {
+  it('works from a flat build and from a nested source path', () => {
+    // The bug this pins: the built layout is lib/index.js while the sources are nested, so a
+    // fixed ../../ was correct in one and silently wrong in the other - and the reader treats
+    // "cannot read it" as "no preset", so the only symptom was a missing field.
+    const repo = new URL('../../', import.meta.url).pathname
+    expect(readFirstRunPreset(`${repo}lib/index.js`)).toBeDefined()
+    expect(readFirstRunPreset(`${repo}src/host/plugin.ts`)).toBeDefined()
+    expect(readFirstRunPreset(`${repo}src/host/plugin.ts`)?.id).toBe('first-run')
   })
 })
