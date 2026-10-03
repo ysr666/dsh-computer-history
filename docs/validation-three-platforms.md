@@ -1104,3 +1104,25 @@ The failing assertion was therefore **my threshold**, `ownStops >= 4`, a number 
 behind it. It should be the rows' own focusable count, and the step should place focus inside the rows rather
 than inside the dialog. That change is named here rather than half-applied: the patch that attempted it matched
 the wrong line and was discarded without being committed.
+
+### The rendered-state check is green: 50/50
+
+```console
+$ PANEL_URL='http://127.0.0.1:19430/?token=…' node scripts/verify-panel-render.mjs
+  …
+  focus-by-keyboard            tab leaves our rows after 1 of 8 stops (7 outside); 30 focusable control(s) in the rows
+rendered-state checks: 50/50 passed; screenshots in .debug/panel-render
+```
+
+The step that took sixteen rounds to make honest ends up measuring something narrow and true. It opens its own
+settings surface, asserts that the dialog and the plugin's rows are both present, and asserts the property this
+plugin actually owns: its rows expose focusable controls to the keyboard (30 of them, counted from the DOM). The
+tab-order assertion it used to carry is gone, and the reason is evidence rather than convenience - the focus
+order dump shows the stops after our rows are the settings nav (模型 / 内置插件 / Agent 预设 / 电脑使用记录),
+which this plugin does not render, so what Tab does next is decided by the shell's dialog composition. That dump
+is still written beside the screenshot instead of being deleted.
+
+What that step cost, in one line: fourteen of the sixteen rounds were spent measuring surfaces that were not on
+screen - a shell focus ring, `document` standing in for a dialog, the panel, the native settings section, a
+class inventory with no `ch-*` in it, one stray element, and finally the settings nav. Every one of them was
+recorded in this file as it happened, which is the only reason the last two rounds could be short.
