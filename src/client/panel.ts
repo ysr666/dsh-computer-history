@@ -58,8 +58,35 @@ function episodeApp(episode: Pick<EpisodeSummary, 'surfaces'>): string {
   return first ? friendlyAppName(first) : '—'
 }
 
-function episodeSubject(episode: EpisodeSummary): string {
-  return episode.workspace?.title
+function isHomeDirectoryResource(resource: { readonly kind: string; readonly canonicalUri: string } | undefined): boolean {
+  return resource?.kind === 'directory'
+    && /^file:\/\/\/Users\/[^/]+\/?$/.test(resource.canonicalUri)
+}
+
+function resourceLabel(
+  t: HistoryTranslate,
+  resource: { readonly kind: string; readonly canonicalUri: string; readonly displayLabel?: string },
+  app?: string,
+): string {
+  if (app === 'Terminal' && isHomeDirectoryResource(resource)) return t('homeDirectory')
+  return resource.displayLabel ?? resource.canonicalUri
+}
+
+function episodeSubject(t: HistoryTranslate, episode: EpisodeSummary): string {
+  const workspaceTitle = episode.workspace?.title?.trim()
+  if (episodeApp(episode) === 'Terminal') {
+    const rootParts = episode.workspace?.root?.split('/').filter(Boolean) ?? []
+    const isHomeWorkspace = rootParts.length === 2
+      && rootParts[0] === 'Users'
+      && rootParts[1] === workspaceTitle
+    const resource = episode.lastStrongResource ?? episode.resources[0]
+    if (!workspaceTitle || isHomeWorkspace) {
+      return isHomeDirectoryResource(resource)
+        ? t('terminalSession')
+        : resource?.displayLabel ?? t('terminalSession')
+    }
+  }
+  return workspaceTitle
     ?? episode.lastStrongResource?.displayLabel
     ?? episode.resources[0]?.displayLabel
     ?? episode.summary
@@ -108,6 +135,16 @@ function formatDuration(t: HistoryTranslate, milliseconds: number): string {
   if (hours > 0 && minutes > 0) return t('durationHoursMinutes', { hours, minutes })
   if (hours > 0) return t('durationHours', { hours })
   return t('minutes', { minutes })
+}
+
+function formatRelativeAge(t: HistoryTranslate, atMs: number): string {
+  const elapsed = Math.max(0, Date.now() - atMs)
+  if (elapsed < 60_000) return t('justNow')
+  const minutes = Math.floor(elapsed / 60_000)
+  if (minutes < 60) return t('minutesAgo', { minutes })
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return t('hoursAgo', { hours })
+  return t('daysAgo', { days: Math.floor(hours / 24) })
 }
 
 function dayDuration(day: TimelineDay): number {
@@ -372,7 +409,7 @@ export function createHistoryPage({
                           React.createElement('span', { className: 'ch-app-mark', 'aria-hidden': true }, appMark(app)),
                           React.createElement(
                             'span', { className: 'ch-episode-copy' },
-                            React.createElement('span', { className: 'ch-episode-title' }, episodeSubject(item)),
+                            React.createElement('span', { className: 'ch-episode-title' }, episodeSubject(t, item)),
                             React.createElement('span', { className: 'ch-episode-meta' }, app),
                           ),
                         ),
@@ -392,7 +429,7 @@ export function createHistoryPage({
                 appMark(episodeApp(selected))),
               React.createElement(
                 'span', { className: 'ch-detail-copy' },
-                React.createElement('span', { className: 'ch-detail-title' }, episodeSubject(selected)),
+                React.createElement('span', { className: 'ch-detail-title' }, episodeSubject(t, selected)),
                 React.createElement('span', { className: 'ch-detail-meta' },
                   `${episodeApp(selected)} · ${formatClock(selected.startedAtMs, activeLocale)}–${formatClock(selected.endedAtMs, activeLocale)} · ${formatDuration(t, selected.endedAtMs - selected.startedAtMs)}`),
               ),
@@ -401,7 +438,7 @@ export function createHistoryPage({
               selected.resources.length > 0
                 ? t('resources', {
                     resources: selected.resources
-                      .map(item => item.displayLabel ?? item.canonicalUri)
+                      .map(item => resourceLabel(t, item, episodeApp(selected)))
                       .join(', '),
                   })
                 : t('noResourceApps', {
@@ -464,11 +501,11 @@ export function createHistoryPage({
                 appMark(episodeApp(recentEpisode))),
               React.createElement(
                 'span', { className: 'ch-resume-copy' },
-                React.createElement('span', { className: 'ch-resume-title' }, resumeSubject(recentEpisode) ?? episodeSubject(recentEpisode)),
+                React.createElement('span', { className: 'ch-resume-title' }, resumeSubject(recentEpisode) ?? episodeSubject(t, recentEpisode)),
                 React.createElement('span', { className: 'ch-resume-meta' },
                   t('resumeRecentMeta', {
+                    when: formatRelativeAge(t, recentEpisode.endedAtMs),
                     app: episodeApp(recentEpisode),
-                    duration: formatDuration(t, recentEpisode.endedAtMs - recentEpisode.startedAtMs),
                   })),
               ),
             )
@@ -544,7 +581,8 @@ export function createHistoryPage({
       React.createElement(
         'summary', null,
         React.createElement('span', null, t('summaries')),
-        React.createElement('span', null, summaryStatus),
+        React.createElement('span', { className: 'ch-summary-status' }, summaryStatus),
+        React.createElement('span', { className: 'ch-summary-chevron', 'aria-hidden': true }, '›'),
       ),
       React.createElement(
         'div', { className: 'ch-summary-body' },

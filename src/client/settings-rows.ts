@@ -220,10 +220,12 @@ export function ApplicationsRow({
   const [bundleId, setBundleId] = React.useState('')
   const [pending, setPending] = React.useState(false)
   const [feedback, setFeedback] = React.useState<Feedback>()
+  const [showAll, setShowAll] = React.useState(false)
   const { policy } = snapshot
   const userRules = (policy?.rules ?? []).filter(rule => !rule.builtIn)
   const allowed = userRules.filter(rule => rule.action === 'allow')
   const denied = userRules.filter(rule => rule.action !== 'allow')
+  const visibleAllowed = showAll ? allowed : allowed.slice(0, 5)
 
   const addApp = async (): Promise<void> => {
     const appId = bundleId.trim()
@@ -274,7 +276,7 @@ export function ApplicationsRow({
       allowed.length === 0
         ? React.createElement('p', { className: 'ch-row-body' }, t('applicationsNone'))
         : React.createElement('ul', { className: 'ch-list' },
-            ...allowed.map(rule => React.createElement(
+            ...visibleAllowed.map(rule => React.createElement(
               'li', { key: rule.id },
               React.createElement(
                 'span', { className: 'ch-app-rule-copy' },
@@ -287,6 +289,15 @@ export function ApplicationsRow({
               }, t('forget')),
             )),
           ),
+      allowed.length > 5
+        ? React.createElement('button', {
+            type: 'button',
+            className: 'ch-text-action ch-list-more',
+            onClick: () => { setShowAll(current => !current) },
+          }, showAll
+            ? t('showFewerApplications')
+            : t('showMoreApplications', { count: allowed.length - 5 }))
+        : null,
       controls(
         React.createElement('input', {
           className: 'ch-input', value: bundleId,

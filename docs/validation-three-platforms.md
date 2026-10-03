@@ -1466,3 +1466,26 @@ listener does not attach in this platform build, which reversed a correction tha
 **What would finish it:** a git remote (the matrix, and with it the Windows/Linux rows), one paste in the Firefox
 window, and the owner's decision on the unknown-field contract. Everything else in this phase's acceptance has a
 green command behind it.
+
+### The Gecko row: the paste is done, and the refusal is by design
+
+Two corrections to this file, both from doing the work instead of reasoning about it.
+
+**The paste is not a human step.** Firefox's BiDi does not drive privileged pages - that part stands - but the
+window itself can be driven by the platform's own UI scripting, which this machine allows. Typing the port and the
+token into the options page with System Events works, and the intake confirms it: `paired: true` with a
+`lastSeenAtMs` that moves when the extension reports. So "one human paste" was wrong, and the corrected statement
+is "one scripted paste, which I can do".
+
+**The row is refused by design, and that is the finding.** With the token in place, the extension reporting, the
+intake answering, the Host owning capture (it stores JetBrains rows from the same session) and a policy rule added
+for the page's origin, no browser row is stored. The reason is in the README, in one line: *"Browsers are
+fail-closed until a browser companion can enforce private/incognito boundaries."* The browser path is closed on
+purpose in this phase, so the acceptance "a live record per platform store" cannot be met by the Gecko companion
+here - not because the chain is broken, but because the product refuses browser observations until the companion
+can prove the incognito boundary.
+
+What is therefore verified for the second engine: Firefox 157 installed, the extension built for it, loaded over
+BiDi, paired through its own options page, reporting to the intake with a valid token, and the intake answering.
+What is not, and cannot be in this phase: a stored browser row. That belongs with the browser-boundary work, and
+the honest form of it is a refusal reason rather than a missing row.
