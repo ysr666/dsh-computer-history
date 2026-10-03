@@ -43,7 +43,7 @@ describe('the cross-platform adapter contract', () => {
   })
 
   it('carries this platform\u2019s ids for every adapter it claims to cover', () => {
-    const known = new Set(PHASE1_ADAPTERS.flatMap(adapter => [...adapter.bundleIds]))
+    const known = new Set(PHASE1_ADAPTERS.flatMap(adapter => adapter.bundleIds))
     for (const entry of fixture.adapters) {
       const darwin = entry.ids.darwin ?? []
       expect(darwin.length).toBeGreaterThan(0)
