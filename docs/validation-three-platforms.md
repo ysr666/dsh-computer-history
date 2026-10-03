@@ -1214,3 +1214,22 @@ panel in a Chinese interface with data, and what it confirms is the part automat
 One thing worth naming rather than "fixing": the status card says 已停止 while the panel still lists yesterday's
 episodes. That is the product's own distinction - capture is stopped, the store is not empty - and the wording
 keeps them apart, which is why it is recorded as correct rather than as an inconsistency.
+
+### The dark screenshot, and what it confirms independently
+
+`ready-dark.png` is the same panel with the settings dialog open, and it shows three things the assertions could
+not:
+
+- **The plugin's settings entry exists in the shell's own settings dialog.** The nav reads 通用设置 / 模型 /
+  内置插件 / Agent 预设 / **电脑使用记录** / Vision Router - our section is registered alongside the platform's
+  own, in the shell's own nav, not in a panel of our own making. That is the `settings.section` registration
+  working, seen rather than inferred.
+- **The dark theme is correct** on both the panel and the dialog: the same rows, the same card borders, the 深色
+  option shown as selected, and no element left with a light-theme fill.
+- **The dialog opens on the native 通用设置 section** (权限 / 语言 / 外观 / 字号大小 / 工作步骤展示 / 快捷键), which
+  is exactly what the keyboard step spent its rounds discovering from the other direction. Seeing it here is
+  what makes that finding obvious rather than mysterious.
+
+Worth recording as the phase's shape: the check spent fourteen rounds learning that the dialog opens on someone
+else's section, and this screenshot would have shown it in one look. Reading the images is part of the job, not a
+formality after it.
