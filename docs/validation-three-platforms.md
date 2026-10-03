@@ -159,3 +159,24 @@ a diff and breaks the product.
 Also worth deciding then, and not now: whether a 5-second floor is the right number to show a user, or
 whether the interface should say "at least a few seconds" rather than a figure that implies precision
 the sampling does not have.
+
+### The timeline says how long, and the reinstall trap that hid it for two measurements
+
+```text
+时间线 | 2026-10-03 · 4 个片段 | 不到一分钟 · Worked in dsh-computer-history. Observed resources: -
+validation-three-platforms.md  Applications: com.microsoft.VSCode | 不到一分钟 · …
+```
+
+Evidence: `docs/assets/panel-timeline-duration.png`.
+
+**Two measurements showed the old interface and I nearly recorded the wrong conclusion.** The panel
+still said `3 episodes` after the change was committed and built, with the browser cache disabled, so
+the interface was not stale - the *installed copy* was. `dsh plugin --profile firstrun add <tarball>`
+printed **`added 0`**: pnpm keys an install on the version, the version had not changed
+(`0.1.0-dev.0`), so nothing was replaced. Removing the dependency entry and the installed directory
+first made it `added 1`, and the new strings appeared.
+
+**The rule: after changing the plugin, check that the profile's installed copy actually changed** -
+`grep` for a string you just added in
+`~/.dsh/profiles/<profile>/node_modules/<package>/lib/`, not just that the install command succeeded.
+A version-stable dev loop has to force the reinstall by hand.
