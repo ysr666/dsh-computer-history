@@ -83,9 +83,12 @@ function appMark(label: string): string {
 }
 
 function resumeSubject(episode: EpisodeSummary): string | undefined {
-  return episode.workspace?.title
-    ?? episode.lastStrongResource?.displayLabel
+  const resource = episode.lastStrongResource?.displayLabel
     ?? episode.resources[0]?.displayLabel
+  if (resource) return resource
+  const workspace = episode.workspace?.title
+  if (workspace && episodeApp(episode) !== 'Terminal') return workspace
+  return undefined
 }
 
 function formatClock(atMs: number, locale: string): string {
