@@ -1292,3 +1292,22 @@ than implying one.
 | Boundaries cannot drift silently | `pnpm verify:ci-boundaries` | green, with a red run recorded |
 | The unknown-field contract is decided | `docs/collector-protocol.md`, three options and costs | **open**: the decision belongs to the repository owner |
 | Delivery gate | `delivery_check` | **not satisfiable here**: the panel has no page of its own, so its evidence manifest is accepted and its page smoke fails; stated, not worked around |
+
+### The owner's own application, seen: the reviewed client is live there
+
+The panel in the owner's running application shows the reviewed client, and the evidence is a screenshot of that
+application - not of a Host this work started:
+
+- the status card reads **正在采集 / 仅记录元数据 / 今天还没有记录** - capture running, metadata only;
+- the timeline groups by day (`昨天 · 2026-10-03 · 20 秒 · 6 个片段`) and every row carries its duration **in
+  seconds** (`22:52-22:52 | >_ | ysradmin | Terminal | 14 秒`), which is the change that was sitting uncommitted in
+  the tree until this phase committed it;
+- 从这里继续 shows `validation-three-platforms.md · VS Code · 1 秒` and the **查找其他工作** entry, a locale key
+  added in this phase;
+- 工作线索 follows, and nothing diagnostic appears anywhere.
+
+Two things this settles. The client that reaches the reader is the reviewed one - the earlier complaint that the
+panel "has not changed at all" was about the copy in the application's profile, which was the pre-rework build
+until this phase installed the current one. And it settles it **without a restart**: the application picked the
+new client up on its own, so the restart this file listed as a human action turned out not to be needed, which is
+recorded here rather than left as a stale instruction.
