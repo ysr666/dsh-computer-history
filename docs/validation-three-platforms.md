@@ -1194,3 +1194,23 @@ Two honest options, with what each costs:
 
 Recorded rather than acted on: it is a product trade-off about how the list behaves, and the owner has the
 context for how many applications that list usually holds.
+
+### The screenshots, looked at
+
+The assertions were green; this is the first time the images were actually read. `ready-light.png` shows the
+panel in a Chinese interface with data, and what it confirms is the part automated checks cannot:
+
+- **Nothing diagnostic on screen.** No `Failed to fetch`, no `capture-owned-by-another-host`, no English sentence
+  from the Host. The status card reads 已停止 / 仅记录元数据 / 今天还没有记录, and the thread line reads
+  `dsh-computer-history · ui-review.md, validation-three-platforms.md · 3 个片段 · 8 分钟` - the structured fields
+  through the locale dictionary, which is what the mapping work was for.
+- **The rows read like the platform's own.** Title, subtitle, section headings, bordered cards, and one row per
+  observation: `22:52-22:52 | >_ | ysradmin | Terminal | 14 秒`. Durations are in seconds, application names are
+  localized, and the timeline groups by day with a summary line (`昨天 · 2026-10-03 · 20 秒 · 6 个片段`).
+- **The sections are the ones Main is supposed to own**: timeline, 从这里继续 (with the new 查找其他工作 entry
+  visible), 工作线索, and 摘要 - no pause, delete, policy or Recent Episodes controls, which live in Settings.
+- **Nothing clipped or overflowing** in the light theme, matching the dark-theme measurement taken earlier.
+
+One thing worth naming rather than "fixing": the status card says 已停止 while the panel still lists yesterday's
+episodes. That is the product's own distinction - capture is stopped, the store is not empty - and the wording
+keeps them apart, which is why it is recorded as correct rather than as an inconsistency.
