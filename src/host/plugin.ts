@@ -8,6 +8,7 @@ import '@deepseek-ai/dsh-subprocess'
 import '@deepseek-ai/dsh-workspace'
 import { registerAgentIntegration } from '../agent/index.js'
 import {
+  findStaleInstall,
   presetBundles,
   readFirstRunPreset,
   runningRelease,
@@ -419,7 +420,16 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
         description: { ...preset.description },
       }
     },
-    () => runningRelease(),
+    () => {
+      const release = runningRelease()
+      if (!release) return undefined
+      const stale = findStaleInstall(
+        release.loadedFrom,
+        release.builtAtMs,
+        dshHomePath('profiles'),
+      )
+      return stale ? { ...release, stale } : release
+    },
   )
 
   // Teardown is registered immediately, before anything that can throw,

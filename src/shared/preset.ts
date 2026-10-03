@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { PHASE1_ADAPTERS } from './constants.js'
@@ -87,6 +87,13 @@ export interface RunningRelease {
   readonly version: string
   readonly loadedFrom: string
   readonly builtAtMs?: number
+  /** Set when the profile's dependency points at an artifact older than the installed code. */
+  readonly stale?: {
+    readonly profile: string
+    readonly artifact: string
+    readonly artifactAtMs: number
+    readonly updateCommand: string
+  }
 }
 
 export function runningRelease(
@@ -107,4 +114,52 @@ export function runningRelease(
   } catch {
     return undefined
   }
+}
+
+/**
+ * Does the profile that installed this copy point at an artifact predating the installed code?
+ *
+ * The failure this catches has already cost this phase twice: the plugin is changed and built, the
+ * profile still runs the previous copy, and the result looks exactly like a broken feature. The plugin
+ * can work it out without any help - it knows where it was loaded from, and it can find the profile
+ * whose node_modules resolves to that directory - so the interface does not have to guess.
+ */
+export function findStaleInstall(
+  loadedFrom: string,
+  builtAtMs: number | undefined,
+  profilesRoot: string,
+): RunningRelease['stale'] {
+  if (builtAtMs === undefined) return undefined
+  if (!existsSync(profilesRoot)) return undefined
+  for (const profile of readdirSync(profilesRoot)) {
+    const manifestPath = path.join(profilesRoot, profile, 'package.json')
+    if (!existsSync(manifestPath)) continue
+    let spec: unknown
+    try {
+      const manifest: unknown = JSON.parse(readFileSync(manifestPath, 'utf8'))
+      spec = (manifest as { dependencies?: Record<string, unknown> }).dependencies?.['dsh-computer-history']
+    } catch {
+      continue
+    }
+    if (typeof spec !== 'string' || !spec.startsWith('file:')) continue
+    const installed = path.join(profilesRoot, profile, 'node_modules', 'dsh-computer-history')
+    let resolved: string
+    try {
+      resolved = realpathSync(installed)
+    } catch {
+      continue
+    }
+    if (path.resolve(resolved) !== path.resolve(loadedFrom)) continue
+    const artifact = path.resolve(path.dirname(manifestPath), spec.slice('file:'.length))
+    if (!existsSync(artifact)) continue
+    const artifactAtMs = Math.round(statSync(artifact).mtimeMs)
+    if (artifactAtMs <= builtAtMs) return undefined
+    return {
+      profile,
+      artifact,
+      artifactAtMs,
+      updateCommand: `dsh plugin --profile ${profile} add ${artifact}`,
+    }
+  }
+  return undefined
 }

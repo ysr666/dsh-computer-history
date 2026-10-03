@@ -108,6 +108,12 @@ export interface ComputerHistoryState {
     readonly version: string
     readonly loadedFrom: string
     readonly builtAtMs?: number
+    readonly stale?: {
+      readonly profile: string
+      readonly artifact: string
+      readonly artifactAtMs: number
+      readonly updateCommand: string
+    } | undefined
   } | undefined
 
   readonly firstRunPreset?: {
