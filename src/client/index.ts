@@ -743,7 +743,7 @@ function HistoryPage(): React.ReactElement {
       React.createElement(
         'button',
         { type: 'button', style: BUTTON_PRIMARY, onClick: () => { runAction(rotateCompanionToken) } },
-        companion?.paired ? t('Rotate pairing token', '重新生成配对令牌') : 'Create pairing token',
+        companion?.paired ? t('Rotate pairing token', '重新生成配对令牌') : t('Create pairing token', '生成配对令牌'),
       ),
       companionToken
         ? React.createElement(
