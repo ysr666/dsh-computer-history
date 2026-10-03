@@ -985,3 +985,19 @@ Also fixed in passing: the step's own expressions are now plain concatenated str
 them with nested template literals, produced an invalid one, and the browser's refusal
 (`Failed to deserialize params.expression`) surfaced as a stack trace rather than as a labelled failure - the
 same "cannot tell a dead check from a negative result" problem the file already records twice.
+
+### Focus step, next narrowing: the navigation, not the assertion
+
+Two corrections in this step, both narrowings rather than fixes:
+
+- The assertion now names `.ch-settings-item`, the class `settings-rows.ts` renders in every settings state.
+  `.ch-settings-list` is rendered by one section's list wrapper, so asserting on it reported a missing surface
+  while the rows were on screen in another state of the same run (`controls: enabled,enabled,disabled`).
+- Section selection tries every candidate label and verifies the result, because the previous version clicked
+  `panelLabels.at(-1)` - the English name - in a Chinese interface and selected nothing.
+
+With both in place the step still reports zero rows: after a fresh load, opening the settings dialog and
+clicking the entry does not render the section. This is now clearly the navigation step, not the assertion,
+and not anything about the plugin's markup. The keyboard question therefore stays **unverified**, with the
+remaining work named: reach the section in the fresh-page flow (the state dump for that step is
+`.debug/panel-render/focus-by-keyboard.txt`, which shows what was on screen instead).

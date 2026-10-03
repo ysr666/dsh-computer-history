@@ -50,6 +50,7 @@ const enCore = {
   timelineDayOne: '{day} · 1 episode',
   timelineDayMany: '{day} · {count} episodes',
   whyRecorded: 'Why was this recorded?',
+  episodeAuditMeta: 'Evidence: {citations} observations · confidence {confidence} · {start} → {end}',
   resources: 'Resources: {resources}',
   noResourceApps: 'No resource was visible. Applications: {apps}',
 } as const
@@ -209,6 +210,7 @@ export const zh: Record<HistoryLocaleKey, string> = {
   timelineDayOne: '{day} · 1 个片段',
   timelineDayMany: '{day} · {count} 个片段',
   whyRecorded: '为什么会记录这一段？',
+  episodeAuditMeta: '证据：{citations} 条观测 · 置信度 {confidence} · {start} → {end}',
   resources: '资源：{resources}',
   noResourceApps: '没有可见资源。涉及应用：{apps}',
   summaries: '摘要',

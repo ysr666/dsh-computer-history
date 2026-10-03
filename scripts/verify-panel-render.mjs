@@ -284,10 +284,16 @@ async function main() {
       await sleep(2200)
       if ((await dialogCount()) > 0) break
     }
-    await clickText(panelLabels.at(-1), { last: true })
-    await sleep(2500)
+    // Every candidate label is tried, and the result is checked: clicking `panelLabels.at(-1)` alone clicked the
+    // English name in a Chinese interface and selected nothing, which is why this step measured an absent
+    // surface through four versions.
+    for (const label of panelLabels) {
+      await clickText(label, { last: true })
+      await sleep(2000)
+      if (Number(await evaluate("document.querySelectorAll('.ch-settings-item').length")) > 0) return true
+    }
+    return false
   }
-
   await send('Network.setBlockedURLs', { urls: [] })
   await send('Page.reload', { ignoreCache: true })
   await sleep(12_000)
@@ -300,7 +306,7 @@ async function main() {
   // built these expressions with nested template literals and produced an invalid one, which the browser
   // refused with "Failed to deserialize params.expression" and which surfaced as a stack trace rather than as
   // the step failing.
-  const LIST = ".ch-settings-list"
+  const LIST = ".ch-settings-item"
   const surfaceRows = Number(await evaluate("document.querySelectorAll('" + LIST + "').length"))
   results.push({ state: 'focus-by-keyboard', label: 'the settings surface is showing our rows', ok: surfaceRows > 0 })
   const entered = String(await evaluate("(function(){var s=document.querySelector('" + LIST + "');if(!s)return 'no rows';var f=s.querySelector('input,button,select,textarea');if(!f)return 'no control';f.focus();return 'focused';})()"))

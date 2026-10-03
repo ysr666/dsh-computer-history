@@ -8,13 +8,12 @@ import type {
   TimelineDay,
   WorkThread,
 } from '../shared/index.js'
-import { describeProvenance, localDayKey } from '../shared/audit-view.js'
+import { localDayKey } from '../shared/audit-view.js'
 import { historyApi } from './api.js'
 import {
   captureLabel,
   failureText,
   reasonText,
-  threadSubjectText,
   type HistoryTranslate,
 } from './locale.js'
 import type { HistoryControlStore } from './store.js'
@@ -38,6 +37,11 @@ function section(title: string, ...children: React.ReactNode[]): React.ReactElem
 
 function friendlyAppName(bundleId: string): string {
   const known: Record<string, string> = {
+    'com.apple.Notes': 'Notes',
+    'com.apple.Preview': 'Preview',
+    'com.apple.Terminal': 'Terminal',
+    'com.apple.finder': 'Finder',
+    'com.apple.dt.Xcode': 'Xcode',
     'com.apple.Safari': 'Safari',
     'com.google.Chrome': 'Google Chrome',
     'com.microsoft.VSCode': 'VS Code',
@@ -62,8 +66,26 @@ function episodeSubject(episode: EpisodeSummary): string {
 }
 
 function appMark(label: string): string {
+  const known: Record<string, string> = {
+    Terminal: '>_',
+    'VS Code': '<>',
+    Xcode: 'X',
+    Finder: '◇',
+    Preview: 'P',
+    Notes: 'N',
+    Safari: 'S',
+    'Google Chrome': '◎',
+    ChatGPT: '✦',
+  }
+  if (known[label]) return known[label]
   const match = label.trim().match(/[A-Za-z0-9]/)
   return (match?.[0] ?? '•').toUpperCase()
+}
+
+function resumeSubject(episode: EpisodeSummary): string | undefined {
+  return episode.workspace?.title
+    ?? episode.lastStrongResource?.displayLabel
+    ?? episode.resources[0]?.displayLabel
 }
 
 function formatClock(atMs: number, locale: string): string {
@@ -256,7 +278,9 @@ export function createHistoryPage({
       ? new Set(todayDay.episodes.flatMap(episode => episode.surfaces.map(surface => surface.bundleId))).size
       : 0
     const todayDuration = todayDay ? dayDuration(todayDay) : 0
-    const recentEpisode = timeline && timeline !== null ? timeline[0]?.episodes[0] : undefined
+    const recentEpisode = timeline && timeline !== null
+      ? timeline.flatMap(day => day.episodes).find(episode => resumeSubject(episode) !== undefined)
+      : undefined
 
     const statusDotClass = state?.capture === 'running'
       ? 'ch-status-dot ch-status-dot-success'
@@ -341,16 +365,18 @@ export function createHistoryPage({
       selected
         ? React.createElement(
             'div', { className: 'ch-detail' },
-            React.createElement('h3', null, t('whyRecorded')),
-            React.createElement('p', { className: 'ch-muted' }, describeProvenance({
-              boundary: selected.boundary,
-              policyRevision: 0,
-              citations: selected.summaryObservationIds,
-              resources: selected.resources,
-              surfaces: selected.surfaces,
-              confidence: selected.confidence,
-            })),
-            React.createElement('p', { className: 'ch-muted' },
+            React.createElement(
+              'div', { className: 'ch-detail-head' },
+              React.createElement('span', { className: 'ch-app-mark', 'aria-hidden': true },
+                appMark(episodeApp(selected))),
+              React.createElement(
+                'span', { className: 'ch-detail-copy' },
+                React.createElement('span', { className: 'ch-detail-title' }, episodeSubject(selected)),
+                React.createElement('span', { className: 'ch-detail-meta' },
+                  `${episodeApp(selected)} · ${formatClock(selected.startedAtMs, activeLocale)}–${formatClock(selected.endedAtMs, activeLocale)} · ${formatDuration(t, selected.endedAtMs - selected.startedAtMs)}`),
+              ),
+            ),
+            React.createElement('p', { className: 'ch-detail-resource' },
               selected.resources.length > 0
                 ? t('resources', {
                     resources: selected.resources
@@ -360,6 +386,17 @@ export function createHistoryPage({
                 : t('noResourceApps', {
                     apps: selected.surfaces.map(item => friendlyAppName(item.bundleId)).join(', '),
                   })),
+            React.createElement(
+              'details', { className: 'ch-inspector' },
+              React.createElement('summary', null, t('whyRecorded')),
+              React.createElement('p', { className: 'ch-muted' },
+                t('episodeAuditMeta', {
+                  citations: selected.summaryObservationIds.length,
+                  confidence: selected.confidence.toFixed(2),
+                  start: selected.boundary.startReason,
+                  end: selected.boundary.endReason ?? '—',
+                })),
+            ),
           )
         : null,
     )
@@ -406,7 +443,7 @@ export function createHistoryPage({
                 appMark(episodeApp(recentEpisode))),
               React.createElement(
                 'span', { className: 'ch-resume-copy' },
-                React.createElement('span', { className: 'ch-resume-title' }, episodeSubject(recentEpisode)),
+                React.createElement('span', { className: 'ch-resume-title' }, resumeSubject(recentEpisode) ?? episodeSubject(recentEpisode)),
                 React.createElement('span', { className: 'ch-resume-meta' },
                   t('resumeRecentMeta', {
                     app: episodeApp(recentEpisode),
@@ -438,15 +475,32 @@ export function createHistoryPage({
             ? React.createElement('p', { className: 'ch-muted' }, t('workThreadsEmpty'))
             : React.createElement(
                 'ul', { className: 'ch-thread-list' },
-                ...threads.slice(0, 6).map(thread => React.createElement(
-                  'li', { key: thread.threadKey, className: 'ch-thread-item' },
-                  React.createElement('span', { className: 'ch-thread-title' }, threadSubjectText(t, thread)),
-                  React.createElement('span', { className: 'ch-thread-meta' },
-                    t('threadMeta', {
-                      episodes: thread.episodeCount,
-                      duration: formatDuration(t, thread.endedAtMs - thread.startedAtMs),
-                    })),
-                )),
+                ...threads.slice(0, 6).map(thread => {
+                  const title = thread.workspaceTitle ?? t('unnamedWorkspace')
+                  const resources = thread.resources
+                    .slice(0, 2)
+                    .map(resource => resource.displayLabel ?? resource.canonicalUri)
+                    .join(', ')
+                  return React.createElement(
+                    'li', { key: thread.threadKey, className: 'ch-thread-item' },
+                    React.createElement(
+                      'span', { className: 'ch-thread-leading' },
+                      React.createElement('span', { className: 'ch-app-mark', 'aria-hidden': true }, appMark(title)),
+                      React.createElement(
+                        'span', { className: 'ch-thread-copy' },
+                        React.createElement('span', { className: 'ch-thread-title' }, title),
+                        resources
+                          ? React.createElement('span', { className: 'ch-thread-resources' }, resources)
+                          : null,
+                      ),
+                    ),
+                    React.createElement('span', { className: 'ch-thread-meta' },
+                      t('threadMeta', {
+                        episodes: thread.episodeCount,
+                        duration: formatDuration(t, thread.endedAtMs - thread.startedAtMs),
+                      })),
+                  )
+                }),
               ),
     )
 
