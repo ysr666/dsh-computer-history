@@ -1,0 +1,18 @@
+{
+  "id": "first-run",
+  "title": {
+    "en": "Record what you work in",
+    "zh": "记录你在用的应用"
+  },
+  "description": {
+    "en": "Allows the applications this build understands - editors, terminals, documents and the file manager - so the first minute produces something. Password managers stay protected and are never recorded, nothing outside this list is recorded, and browsers are recorded only when you pair the browser companion, because the Accessibility path cannot tell a private window from a normal one.",
+    "zh": "放开这个版本能理解的应用：编辑器、终端、文档和文件管理器，让第一分钟就有记录。密码管理器仍然受保护、绝不记录；这个清单之外的应用也不会被记录。浏览器只有在配对浏览器伴侣之后才会被记录——因为辅助功能分不清隐私窗口和普通窗口。"
+  },
+  "allowSurfaceKinds": [
+    "editor",
+    "terminal",
+    "browser",
+    "document",
+    "window"
+  ]
+}
