@@ -109,6 +109,23 @@ export function captureControlMode(
   return 'unavailable'
 }
 
+function friendlyBundleName(bundleId: string): string {
+  const known: Record<string, string> = {
+    'com.apple.Notes': 'Notes',
+    'com.apple.Preview': 'Preview',
+    'com.apple.Terminal': 'Terminal',
+    'com.apple.finder': 'Finder',
+    'com.apple.Safari': 'Safari',
+    'com.google.Chrome': 'Google Chrome',
+    'com.microsoft.VSCode': 'VS Code',
+    'com.microsoft.edgemac': 'Microsoft Edge',
+    'com.openai.chat': 'ChatGPT',
+  }
+  if (known[bundleId]) return known[bundleId]
+  const tail = bundleId.split('.').findLast(part => part.length > 0)
+  return tail && tail.length <= 28 ? tail.replaceAll('-', ' ') : bundleId
+}
+
 function allowRuleUpdate(
   policy: PolicySnapshot,
   bundleId: string,
@@ -259,7 +276,11 @@ export function ApplicationsRow({
         : React.createElement('ul', { className: 'ch-list' },
             ...allowed.map(rule => React.createElement(
               'li', { key: rule.id },
-              React.createElement('span', { className: 'ch-row-body' }, rule.pattern),
+              React.createElement(
+                'span', { className: 'ch-app-rule-copy' },
+                React.createElement('span', { className: 'ch-app-rule-title' }, friendlyBundleName(rule.pattern)),
+                React.createElement('span', { className: 'ch-app-rule-id' }, rule.pattern),
+              ),
               React.createElement('button', {
                 type: 'button', className: 'ch-button', disabled: pending,
                 onClick: () => { void forgetApp(rule.pattern) },

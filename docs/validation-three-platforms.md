@@ -960,3 +960,28 @@ being counted as a pass or a product defect.
 Next action, one clean run with the narrowed assertion, plus making the CDP connection failure a labelled
 error rather than a stack trace: a check that dies mid-run cannot be distinguished from a check that found
 nothing, which is the same lesson this file keeps re-learning in a new costume.
+
+### The focus step, resolved: it never had the surface
+
+The step now refuses to measure a surface it has not confirmed, and the first run with that rule gives the
+answer: `the settings surface is showing our rows` fails. `.ch-settings-list` is not in the DOM at that point,
+so all four earlier variants - tabbing from the shell, treating `document` as the dialog, accepting `.ch-main`
+as the settings surface, and finally this one - failed at the same place: the harness never opened the plugin's
+settings section at all.
+
+That is worth stating precisely, because the difference matters:
+
+- **Not a product defect.** Nothing was measured about the keyboard path through the settings rows, so nothing
+  can be concluded about them either way.
+- **Not a pass either.** The step remains unverified. What changed is that it now fails loudly and names the
+  missing surface instead of measuring whatever happened to be on screen and attributing the result to the
+  plugin.
+
+The immediate next step is making the section selection reliable - clicking a nav item by text is what has been
+failing - and the step is written so that this failure and a real "the rows are not in the tab order" failure
+cannot be confused.
+
+Also fixed in passing: the step's own expressions are now plain concatenated strings. The previous version built
+them with nested template literals, produced an invalid one, and the browser's refusal
+(`Failed to deserialize params.expression`) surfaced as a stack trace rather than as a labelled failure - the
+same "cannot tell a dead check from a negative result" problem the file already records twice.

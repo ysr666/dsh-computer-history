@@ -73,8 +73,12 @@ function formatClock(atMs: number, locale: string): string {
 }
 
 function formatDuration(t: HistoryTranslate, milliseconds: number): string {
-  const totalMinutes = Math.max(0, Math.round(milliseconds / 60_000))
-  if (totalMinutes < 1) return t('underMinute')
+  const safeMilliseconds = Math.max(0, milliseconds)
+  if (safeMilliseconds < 60_000) {
+    const seconds = Math.max(1, Math.round(safeMilliseconds / 1_000))
+    return t('seconds', { seconds })
+  }
+  const totalMinutes = Math.round(safeMilliseconds / 60_000)
   const hours = Math.floor(totalMinutes / 60)
   const minutes = totalMinutes % 60
   if (hours > 0 && minutes > 0) return t('durationHoursMinutes', { hours, minutes })
@@ -293,7 +297,7 @@ export function createHistoryPage({
                   'details', {
                     key: day.dayKey,
                     className: 'ch-day',
-                    defaultOpen: dayIndex === 0,
+                    open: dayIndex === 0 ? true : undefined,
                   },
                   React.createElement(
                     'summary', { className: 'ch-day-summary' },
@@ -304,6 +308,7 @@ export function createHistoryPage({
                         duration: formatDuration(t, dayDuration(day)),
                         count: day.episodeCount,
                       })),
+                    React.createElement('span', { className: 'ch-day-chevron', 'aria-hidden': true }, '⌄'),
                   ),
                   React.createElement(
                     'ul', { className: 'ch-timeline-list' },
@@ -372,6 +377,24 @@ export function createHistoryPage({
           : t('resumeNone', { reason: hint.reason })
       : undefined
 
+    const resumeControls = React.createElement('div', { className: 'ch-resume-controls' },
+      React.createElement('input', {
+        type: 'text',
+        className: 'ch-input',
+        'aria-label': t('resumeAria'),
+        placeholder: t('resumePlaceholder'),
+        value: resumeQuery,
+        onChange: (event: React.ChangeEvent<HTMLInputElement>) => {
+          setResumeQuery(event.target.value)
+        },
+      }),
+      React.createElement('button', {
+        type: 'button', className: 'ch-button',
+        disabled: resumeQuery.trim().length === 0,
+        onClick: () => { runAction(findWhereILeftOff) },
+      }, t('resumeFind')),
+    )
+
     const resumeSection = section(
       t('resume'),
       React.createElement(
@@ -392,23 +415,13 @@ export function createHistoryPage({
               ),
             )
           : null,
-        React.createElement('div', { className: 'ch-resume-controls' },
-          React.createElement('input', {
-            type: 'text',
-            className: 'ch-input',
-            'aria-label': t('resumeAria'),
-            placeholder: t('resumePlaceholder'),
-            value: resumeQuery,
-            onChange: (event: React.ChangeEvent<HTMLInputElement>) => {
-              setResumeQuery(event.target.value)
-            },
-          }),
-          React.createElement('button', {
-            type: 'button', className: 'ch-button',
-            disabled: resumeQuery.trim().length === 0,
-            onClick: () => { runAction(findWhereILeftOff) },
-          }, t('resumeFind')),
-        ),
+        recentEpisode
+          ? React.createElement(
+              'details', { className: 'ch-resume-search' },
+              React.createElement('summary', null, t('findAnotherWork')),
+              resumeControls,
+            )
+          : resumeControls,
         resumeText
           ? React.createElement('p', { className: 'ch-row-body', role: 'status' }, resumeText)
           : null,

@@ -12,7 +12,7 @@
 //
 // The Host is not started or configured here: pointing at a Host someone else runs keeps this script from
 // owning a profile, a store or a port, and makes the evidence reproducible by whoever has a Host.
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { spawn } from 'node:child_process'
 import path from 'node:path'
 
@@ -43,6 +43,16 @@ const FORBIDDEN = [
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
 
+/**
+ * A check that dies mid-run and a check that finds nothing must not look the same. Every failure path below
+ * ends in a labelled message and a distinct exit code, because a stack trace from the DevTools connection was
+ * read as "the step found nothing" once already.
+ */
+function labelledFailure(what, error) {
+  console.error(`render check could not measure ${what}: ${error instanceof Error ? error.message : String(error)}`)
+  process.exit(2)
+}
+
 async function ensureChrome() {
   const probe = async () => {
     try {
@@ -53,6 +63,9 @@ async function ensureChrome() {
     }
   }
   if (await probe()) return undefined
+  // A profile directory left behind by a killed instance makes the next launch exit immediately, which is the
+  // most likely reason one run died in the DevTools connection.
+  rmSync(path.join(outDir, 'chrome-profile'), { recursive: true, force: true })
   const child = spawn(chromePath, [
     '--headless=new',
     `--remote-debugging-port=${cdpPort}`,
@@ -87,7 +100,20 @@ function connect(target) {
     pending.set(messageId, { resolve, reject })
     socket.send(JSON.stringify({ id: messageId, method, params }))
   })
-  return new Promise(resolve => socket.addEventListener('open', () => resolve({ send, socket })))
+  // The socket closing mid-run used to surface as an unhandled rejection and a stack trace, which read like
+  // "the step found nothing". Every pending call is rejected with a label, and the reason the browser went away
+  // is printed once.
+  socket.addEventListener('close', () => {
+    for (const call of pending.values()) call.reject(new Error('the DevTools connection closed'))
+    pending.clear()
+  })
+  socket.addEventListener('error', () => {
+    console.error('render check: the DevTools socket reported an error (the headless browser may have exited)')
+  })
+  return new Promise((resolve, reject) => {
+    socket.addEventListener('open', () => resolve({ send, socket }))
+    socket.addEventListener('error', () => reject(new Error('the DevTools socket refused to open')))
+  })
 }
 
 const results = []
@@ -101,10 +127,20 @@ function check(state, text) {
 async function main() {
   mkdirSync(outDir, { recursive: true })
   await ensureChrome()
-  const targets = await (await fetch(`http://127.0.0.1:${cdpPort}/json/list`)).json()
-  const page = targets.find(target => target.type === 'page')
-  if (!page) throw new Error('no page target in the headless browser')
-  const { send } = await connect(page)
+  let page
+  try {
+    const targets = await (await fetch(`http://127.0.0.1:${cdpPort}/json/list`)).json()
+    page = targets.find(target => target.type === 'page')
+  } catch (error) {
+    labelledFailure('the headless browser', error)
+  }
+  if (!page) labelledFailure('the headless browser', new Error('no page target'))
+  let send
+  try {
+    ({ send } = await connect(page))
+  } catch (error) {
+    labelledFailure('a DevTools session', error)
+  }
   await send('Page.enable')
   await send('Runtime.enable')
   await send('Network.enable')
@@ -259,50 +295,25 @@ async function main() {
   await openPanel()
   await sleep(3500)
   await openSettingsSection()
-  // Deterministic, and it refuses to measure the wrong surface. The previous version fell back to `document`
-  // when no dialog was open, so "the dialog holds focus" was vacuously true and the check then blamed the
-  // plugin for a tab order it had never entered. Now the surface itself is asserted first: our settings rows
-  // must be rendered, and only then does the tab walk mean anything.
-  const surface = await evaluate(`(() => {
-    const dialog = document.querySelector('[role="dialog"],dialog')
-    return JSON.stringify({
-      dialog: !!dialog,
-      // Only the settings list counts as the settings surface. Accepting `.ch-main` here let the assertion pass
-      // on the panel while the settings dialog was closed - the third variant of "measuring the wrong surface"
-      // in this one step, and the reason it is narrowed to the one class that only the settings view renders.
-      ourRows: document.querySelectorAll('.ch-settings-list').length,
-    })
-  })()`)
-  const parsed = JSON.parse(String(surface))
-  results.push({
-    state: 'focus-by-keyboard',
-    label: 'the settings surface is showing our rows',
-    ok: parsed.ourRows > 0,
-  })
   // What is measured is what this plugin owns: from the first control inside our own settings rows, does the
-  // tab order walk the rest of them? Where the shell routes focus before that - its nav appears to keep it -
-  // is the shell's business, and an earlier version of this step asserted about it and blamed the plugin.
-  const entered = await evaluate(`(() => {
-    const scope = document.querySelector('.ch-settings-list')
-    if (!scope) return 'no rows'
-    const first = scope.querySelector('input,button,select,textarea,[tabindex]:not([tabindex="-1"])')
-    if (!first) return 'no control'
-    first.focus()
-    return 'focused'
-  })()`)
-  results.push({
-    state: 'focus-by-keyboard',
-    label: 'our rows contain a focusable control',
-    ok: entered === 'focused',
-  })
+  // tab order walk the rest of them? Written as plain concatenated strings on purpose - the previous version
+  // built these expressions with nested template literals and produced an invalid one, which the browser
+  // refused with "Failed to deserialize params.expression" and which surfaced as a stack trace rather than as
+  // the step failing.
+  const LIST = ".ch-settings-list"
+  const surfaceRows = Number(await evaluate("document.querySelectorAll('" + LIST + "').length"))
+  results.push({ state: 'focus-by-keyboard', label: 'the settings surface is showing our rows', ok: surfaceRows > 0 })
+  const entered = String(await evaluate("(function(){var s=document.querySelector('" + LIST + "');if(!s)return 'no rows';var f=s.querySelector('input,button,select,textarea');if(!f)return 'no control';f.focus();return 'focused';})()"))
+  results.push({ state: 'focus-by-keyboard', label: 'our rows contain a focusable control', ok: entered === 'focused' })
   await sleep(300)
+  const insideNow = "!!(document.activeElement && document.activeElement.closest('" + LIST + "'))"
   let ownStops = 0
   let firstOwnStop = 0
   let leftOurRows = 0
   for (let press = 1; press <= 8; press += 1) {
     await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9, nativeVirtualKeyCode: 9 })
     await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9, nativeVirtualKeyCode: 9 })
-    if (await evaluate("!!document.activeElement?.closest('.ch-settings-list')")) {
+    if (await evaluate(insideNow)) {
       ownStops += 1
       if (firstOwnStop === 0) firstOwnStop = press
     } else {
@@ -329,4 +340,8 @@ async function main() {
   process.exit(failures.length === 0 ? 0 : 1)
 }
 
+process.on('unhandledRejection', error => {
+  console.error(`render check failed with an unhandled rejection: ${error instanceof Error ? error.message : String(error)}`)
+  process.exit(2)
+})
 await main()
