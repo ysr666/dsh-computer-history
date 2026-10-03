@@ -1341,3 +1341,28 @@ itself while the shell's settings dialog is open on top of it, and the shell's n
 The claim itself is not withdrawn - it is simply not evidenced by this step. The step that can evidence it is the
 keyboard step, which now opens the plugin's own section and leaves it on screen; its screenshot is the next thing
 to read, and if the rows are there with their controls disabled, that is where this acceptance gets its picture.
+
+### `focus-by-keyboard.png`: the plugin's own settings section, and the disabled control
+
+The step that used to measure a dialog it had never opened now leaves this on screen, and it closes the previous
+section's gap. With 电脑使用记录 selected in the shell's settings nav, the rows read:
+
+- **记录** - `当前不会写入新的电脑使用记录。` and a **disabled** switch labelled **不可用**;
+- 参与的应用与网站 - `22 已允许`, with the focus ring the keyboard walk placed;
+- 历史保留多久 - `30 天`; 浏览器伴侣 - a green dot and **已连接**; 删除历史 - `清除电脑使用记录数据。`; 关于 -
+  `版本、隐私与采集器状态。`
+
+Four things this evidences, all of which were previously assertions or absent:
+
+1. **"A settings surface without a snapshot must not keep its write controls available" now has its picture** - the
+   recording switch is disabled and says 不可用 while the state is unavailable. This is the acceptance that the
+   previous section recorded as un-evidenced; it is evidenced here, by the step that can open the section.
+2. **The plugin's settings section is real and reachable**: it is selected in the shell's own nav, drawn with the
+   shell's own row anatomy (icon, title, description, value or chevron on the right), in the shell's own dialog.
+3. **The copy is entirely the dictionary's**: no reason codes, no Host sentences, no browser text - including the
+   state that produces them (`不可用`, `已连接`, `22 已允许`).
+4. **The companion really is paired** on this machine: 浏览器伴侣 shows 已连接, which is the owner's own
+   application holding the intake, seen from the settings surface rather than from a store query.
+
+The keyboard count of 30 focusable controls also has a shape now: one switch, the disclosure rows, and the
+per-application entries the 22 已允许 line accounts for.
