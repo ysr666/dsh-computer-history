@@ -1385,3 +1385,22 @@ to mount the panel first and capture before its reads settle.
 Recorded rather than fixed here: the fix is a change to the step (open the panel, then capture inside the window
 before the reads land), and the phase's rule is that an unverified row says so instead of borrowing a green
 assertion.
+
+### The loading state, held open and captured: 52/52
+
+The step now pauses the history reads at the network layer, mounts the panel, and captures while they are still in
+flight. What the panel says in that window:
+
+```
+电脑使用记录 | 这台电脑最近被用来做了什么，只记录应用、文件与时长。 | 正在加载电脑使用记录… | 仅记录元数据 |
+正在加载时间线… | 时间线 | 正在加载时间线… | 工作线索 | 正在加载工作线索… | 摘要 | 正在加载摘要状态…
+```
+
+That is the fourth state, and it is neither of the other three: not an error (`Failed to fetch` or 暂时不可用), not an
+empty store (还没有 / 没有任何记录), and not the unavailable state - each section says **正在加载…** for itself, which is
+also the independent-reads rule showing up in the fourth place. The check goes from 50/50 to **52/52** with the two
+new assertions (the panel is ours, not the shell; loading is neither an error nor an empty state).
+
+The earlier version of this step is kept in the record above rather than deleted: it captured the shell's workspace
+picker for a whole phase and its assertion passed because nothing of ours was on screen. The lesson is the file's
+recurring one, and this is the first state where the fix is deterministic rather than a longer wait.

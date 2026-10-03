@@ -219,11 +219,31 @@ async function main() {
     console.log(`  ${state.padEnd(28)} ${note}`)
   }
 
-  // 1. the state nobody can produce by hand: the first paint, before the reads come back
+  // 1. The plugin's own loading state, held open deterministically. The previous version navigated, waited
+  // 900 ms and captured the shell's workspace picker - 900 ms after navigation the plugin is not mounted yet, so
+  // its forbidden-string assertion ran against the shell's text and passed because nothing of ours was on
+  // screen. Here the history reads are paused at the network layer, so the panel mounts and stays loading until
+  // this step lets go.
   await send('Network.setBlockedURLs', { urls: [] })
+  await send('Fetch.enable', { patterns: [{ urlPattern: '*api/computer-history/*' }] })
   await send('Page.navigate', { url })
-  await sleep(900)
-  await record('loading', 'captured before the reads settle')
+  await sleep(12_000)
+  await dismissIntro()
+  await openPanel()
+  await sleep(1_500)
+  const loadingText = await text()
+  await record('loading', 'panel mounted with its history reads held')
+  results.push({
+    state: 'loading',
+    label: 'the loading state is our panel, not the shell',
+    ok: (await evaluate("!!document.querySelector('.ch-main')")) === true,
+  })
+  results.push({
+    state: 'loading',
+    label: 'loading is neither an error nor an empty state',
+    ok: !/Failed to fetch|暂时不可用|还没有|没有任何记录/.test(loadingText),
+  })
+  await send('Fetch.disable')
 
   // 2. ready
   await sleep(12_000)
