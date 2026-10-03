@@ -789,3 +789,51 @@ Reading it: the spread between runs is under 2%, so a future run more than a few
 at, and a store that grows per observation faster than ~630 B is a storage-shape change rather than noise. This
 is one machine and one shape of input - it is a baseline, not a bound, and the file says so rather than
 implying a guarantee the measurement cannot make.
+
+## Rendered-state verification, as a command instead of a habit
+
+`scripts/verify-panel-render.mjs` drives a headless Chromium over the DevTools protocol against a running Host,
+forces the states that are awkward to produce by hand (blocking requests so a read fails, and blocking one read
+so the others still succeed), asserts what must and must not appear in the rendered text, and writes a
+screenshot plus the rendered text per state.
+
+```console
+$ PANEL_URL='http://127.0.0.1:19430/?token=…' node scripts/verify-panel-render.mjs
+  loading                      captured before the reads settle
+  ready-light                  panel with data
+  partial-failure              timeline blocked; other sections must still render
+  all-reads-failed             every history read blocked
+  settings-read-failed         controls: enabled,enabled,disabled
+  focus-by-keyboard            never reached our controls; focus ended on BUTTON:电脑使用记录
+  ready-dark                   same panel in dark
+
+rendered-state checks: 45/46 passed; screenshots in .debug/panel-render
+```
+
+The forbidden strings it checks are the regressions this phase actually shipped: a browser error printed as
+copy, a raw Host reason code, and the Host's English sentences reaching a Chinese interface.
+
+### What it found
+
+1. **Fixed in this pass:** `Failed to fetch` was still reaching the reader on two paths the earlier fix had not
+   covered. `store.ts` keeps the raw cause (correct - it is diagnostic state), but `settings-view.ts` and the
+   panel's alert rendered `snapshot.error` / `controls.error` directly. Both now go through `failureText`, which
+   is where a cause becomes copy.
+2. **Open:** the settings dialog's rows are not reached by 26 tab presses; focus ends on the sidebar entry
+   (`BUTTON:电脑使用记录`). Whether that is the shell keeping focus in its own scope or our rows not being in
+   the tab order is not yet decided by evidence, and the check now records where focus landed instead of only
+   reporting that it did not arrive.
+
+### Mistakes this script's own first versions made, kept because they are the phase's recurring error
+
+- It reported two product failures while the panel had never opened: it clicked `Computer History` in a Chinese
+  interface. Matching by an English label in a localized shell is the same mistake as measuring a keyword
+  instead of an owner.
+- It detected the blocking dialog by matching a phrase from the shell's preview notice; the dialog actually in
+  the way belonged to a different plugin and said something else, so the dismissal never ran and every later
+  click landed on the overlay. Detection is by DOM presence now.
+- It clicked the outermost element whose text contained the label, and the first version used exact text, which
+  never matched the sidebar's `◷ 电脑使用记录`. It now prefers the shortest clickable ancestor.
+- The Gate itself caught the author: a ternary used as a statement is a lint error, and a missing `failureText`
+  import was a type error; the build was run before both were fixed, which is how a green screenshot can sit on
+  top of a red tree.

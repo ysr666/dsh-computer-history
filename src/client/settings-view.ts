@@ -4,6 +4,7 @@ import type {
   HistoryControlStore,
 } from './store.js'
 import type { HistoryTranslate } from './locale.js'
+import { failureText } from './locale.js'
 import {
   AboutRow,
   ApplicationsRow,
@@ -54,7 +55,8 @@ export function createSettingsPage({
     if (mode === 'error') {
       return React.createElement(
         'div', { className: 'ch-alert' },
-        React.createElement('p', { role: 'alert' }, snapshot.error),
+        // The store keeps the raw cause for logs; the view is where it becomes copy.
+        React.createElement('p', { role: 'alert' }, failureText(t, snapshot.error)),
         React.createElement('button', {
           type: 'button', className: 'ch-button',
           onClick: () => { void store.reload().catch(() => {}) },

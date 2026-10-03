@@ -371,7 +371,7 @@ export function createHistoryPage({
       (controls.status === 'error' && controls.error) || contentError
         ? React.createElement(
             'div', { className: 'ch-alert' },
-            React.createElement('p', { role: 'alert' }, controls.error ?? contentError),
+            React.createElement('p', { role: 'alert' }, failureText(t, controls.error ?? contentError)),
             React.createElement('button', {
               type: 'button', className: 'ch-button', onClick: retryLoads,
             }, t('retry')),
