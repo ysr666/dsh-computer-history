@@ -593,6 +593,15 @@ function HistoryPage(): React.ReactElement {
     setSelected(await api<EpisodeDetail>(`/episode?id=${encodeURIComponent(id)}`))
   }
 
+  // How long a piece of work lasted. Below the sampling resolution the honest answer is
+  // "under a minute": change-driven sampling knows a state was seen, not how long it held, so a
+  // precise figure would imply accuracy the data does not have.
+  const durationLabel = (item: TimelineDay['episodes'][number]): string => {
+    const minutes = Math.round((item.endedAtMs - item.startedAtMs) / 60_000)
+    if (!Number.isFinite(minutes) || minutes < 1) return t('under a minute', '不到一分钟')
+    return t(`${minutes} min`, `${minutes} 分钟`)
+  }
+
   const timelineSection = React.createElement(
     'section',
     { style: SECTION },
@@ -612,7 +621,10 @@ function HistoryPage(): React.ReactElement {
             React.createElement(
               'div',
               { style: { fontWeight: 600 } },
-              `${day.dayKey} · ${day.episodeCount} episode${day.episodeCount === 1 ? '' : 's'}`,
+              t(
+                `${day.dayKey} · ${day.episodeCount} episode${day.episodeCount === 1 ? '' : 's'}`,
+                `${day.dayKey} · ${day.episodeCount} 个片段`,
+              ),
             ),
             React.createElement(
               'ul',
@@ -620,6 +632,7 @@ function HistoryPage(): React.ReactElement {
               ...day.episodes.map(item => React.createElement(
                 'li',
                 { key: String(item.id) },
+                React.createElement('span', { style: { opacity: 0.75 } }, durationLabel(item) + ' · '),
                 React.createElement(
                   'button',
                   {
