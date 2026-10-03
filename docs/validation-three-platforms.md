@@ -43,3 +43,40 @@ slots, so it was not).
 
 **The rule that would have saved the eleven rounds: check the Host's version against the interface's
 before concluding anything about the plugin.**
+
+### The first minute, end to end, without a terminal
+
+Done on a store that had never recorded anything, through the interface only:
+
+1. open the panel (`Computer History` in the sidebar) - the first section is 从这里开始;
+2. press **开始记录** - the panel applies the preset through `/policy`;
+3. work for about a minute in an allowed application;
+4. the timeline has a row.
+
+Measured either side of step 2:
+
+```text
+policy before   only built-in rules (protection), nothing allowed
+policy after    34 rules, 22 of them allow
+first-run       the 从这里开始 section disappears, because a user rule now exists
+/recent         [] before the minute, one episode after it
+episode         Applications: com.apple.Terminal   resource: file:///Users/ysradmin (directory)
+summary         "Recent computer activity. Observed resources: - ysradmin Applications: com.apple.Terminal"
+```
+
+Evidence: `docs/assets/panel-first-row.png`.
+
+**Honest about the quality of that first row**, because "a row appeared" is not the same as "useful":
+
+- the resource is the terminal's **working directory**, not a file - a terminal has no document, so a
+  file needs an editor in the foreground;
+- the duration is **0 ms**: one sample, because the observation arrived at the edge of the wait. The
+  acceptance says "work for a minute", and a minute of *sampling* is what produces a duration;
+- the earlier attempt produced nothing at all, and the reason is worth keeping: the collector records
+  the **frontmost** application, and `open -a Finder` moved no focus, so the machine appeared idle.
+  The refusal breakdown was empty, which is correct - nothing had been refused, nothing had arrived.
+
+So P1's third item is **met in the narrow sense** (the path works and a row appears without touching
+the terminal) and **not yet met in the useful sense** (an application, a file, and a duration). The
+next pass should repeat it with an editor in the foreground for longer, and if the row is still
+0 ms, look at the sampling interval rather than at the panel.
