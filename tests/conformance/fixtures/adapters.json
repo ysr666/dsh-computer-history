@@ -1,0 +1,55 @@
+{
+  "$comment": "The cross-platform contract, one entry per adapter id: which adapter an application maps to, what surface it has, and whether its title is recorded. The ids differ per platform and mapping them is the collector's job. Resource kind is deliberately absent - it is the adapter table's own data, and copying it here would create a second source of truth that can drift. Facts come from docs/adapters.md, which records real-machine measurements with dates and commands.",
+  "adapters": [
+    {
+      "adapter": "vscode",
+      "ids": {
+        "darwin": ["com.microsoft.VSCode", "com.todesktop.230313mzl4w4u92"],
+        "win32": ["Microsoft.VisualStudioCode"],
+        "linux": ["code.desktop", "code-insiders.desktop"]
+      },
+      "expect": { "surfaceKind": "editor", "titleRecorded": true }
+    },
+    {
+      "adapter": "xcode",
+      "ids": { "darwin": ["com.apple.dt.Xcode"] },
+      "expect": { "surfaceKind": "editor", "titleRecorded": true }
+    },
+    {
+      "adapter": "terminal",
+      "ids": {
+        "darwin": ["com.apple.Terminal", "com.googlecode.iterm2"],
+        "win32": ["Microsoft.WindowsTerminal"],
+        "linux": ["org.gnome.Terminal.desktop"]
+      },
+      "expect": { "surfaceKind": "terminal", "titleRecorded": false }
+    },
+    {
+      "adapter": "finder",
+      "ids": { "darwin": ["com.apple.finder"], "win32": ["explorer.exe"], "linux": ["org.gnome.Nautilus.desktop"] },
+      "expect": { "surfaceKind": "window", "titleRecorded": true }
+    },
+    {
+      "adapter": "browser",
+      "ids": { "darwin": ["companion.browser"] },
+      "expect": { "surfaceKind": "browser", "titleRecorded": true }
+    }
+  ],
+  "refusals": [
+    {
+      "$comment": "The same reason string on every platform: a protected application is dropped before storage, and the refusal is counted by this name.",
+      "case": "protected-application",
+      "reason": "protected-app"
+    },
+    {
+      "$comment": "A focused element whose value cannot be read fails closed, which withholds the observation rather than recording a title.",
+      "case": "unreadable-secure-field",
+      "reason": "secure-field"
+    },
+    {
+      "$comment": "An application no adapter claims is dropped: a helper that invents an id cannot widen the surface.",
+      "case": "unknown-application",
+      "reason": "not-an-adapter"
+    }
+  ]
+}
