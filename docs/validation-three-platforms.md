@@ -209,3 +209,29 @@ That is its red side, taken from the real repository rather than from a syntheti
 **It is deliberately not wired into `pnpm verify` yet.** A gate that is red while the work is
 unfinished teaches people to ignore it; the guard becomes part of the gate in the same commit that
 writes the translations, which is also the commit where it can be seen to pass.
+
+## P3 - the update path, without distribution
+
+### Drift is now a field, and both states were measured live
+
+```text
+consistent state (just installed)            version 0.1.0-dev.0, builtAtMs 1791012815224, stale: no
+drift state (artifact newer, not installed)  version 0.1.0-dev.0, builtAtMs 1791012815224, stale: YES
+                                             command: dsh plugin --profile firstrun add
+                                                      /Users/…/dsh-computer-history-0.1.0-dev.0.tgz
+```
+
+The plugin works it out by itself: it knows where it was loaded from, finds the profile whose
+node_modules resolves to that directory, reads that profile's own dependency spec, and compares the
+artifact's timestamp with its own built entry. Evidence for the interface line:
+`docs/assets/panel-stale-copy.png`.
+
+**The detector has a self-referential limit, and the first drift run proved it.** With the *old* build
+installed, `/state` carried no `release` at all - the detector lives in the new code, which was exactly
+what had not been installed. So the first install of a build containing the detector is always silent,
+and the feature helps from the second install onwards. The order that demonstrates it is: install the
+build that has the detector, then make a newer artifact without installing it.
+
+**The remote half is not started** and is not pretended to be: comparing against a published version
+needs a published version, which waits for the owner's decision about distribution. The local half is
+what a developer meets every day, and it is what this phase delivers.
