@@ -611,3 +611,50 @@ bec82d7` | feat: the backend can carry the refusal breakdown (T2.9-1/2/ | the ty
 What this record is for: every entry is a change that looked finished and was not. The two that mattered most
 were not type errors - a red gate that was read too late, and a commit that carried lint warnings because the
 exit code was zero. Neither would have been caught by running the tests again.
+
+## What is measured, what is not, and the command for each
+
+Two gates, read for warnings as well as exit status, at the end of the phase this file covers:
+
+```bash
+pnpm verify        # exit 0, 0 warnings, 346 tests, 6 documents guarded, 8 Rust tests
+pnpm verify:p1     # exit 0, native privacy and protocol tests passed
+```
+
+### Measured on this machine
+
+| what | the command that shows it |
+|---|---|
+| the preset applied through the interface | `pnpm exec vitest run tests/integration/preset.spec.ts` |
+| the first-run screen on a clean store | `docs/assets/panel-firstrun-clean-store.png`, recipe in the P1 section |
+| a row after a minute, without a terminal | `docs/assets/panel-firstrow.png`, same section |
+| the timeline says how long | `docs/assets/panel-timeline-duration.png` |
+| running an older artifact than the one built | `docs/assets/panel-stale-copy.png`, two live runs in the P3 section |
+| the collector protocol's enforced behaviour | `pnpm exec vitest run tests/conformance/collector-protocol.spec.ts` |
+| the cross-platform adapter contract | `pnpm exec vitest run tests/conformance/adapter-contract.spec.ts` |
+| the Windows and Linux message layers | `pnpm verify:collector-windows` (8 tests) |
+| a third editor against the real intake | `pnpm exec vitest run tests/unit/companion-intake.spec.ts` |
+| six user-facing documents in Chinese | `pnpm verify:docs` |
+| the panel's degraded, empty and first-run states | `docs/ui-review.md` and `docs/assets/` |
+
+### Not measured, with what would measure it
+
+| what | why it is not measured | what would measure it |
+|---|---|---|
+| UI Automation observation on Windows | no Windows machine | the recipe in the P5 section, four rows and a `protected-app` refusal |
+| AT-SPI on Linux | no Linux machine, and the `org.a11y.Status` check is not written | the recipe in the P6 section, including the accessibility-off case |
+| a second browser engine | no Firefox or Safari port exists | the privacy matrix in `docs/companion.md`, one cell per promise |
+| a JetBrains plugin | Kotlin, Gradle and the IntelliJ SDK are not part of this checkout | the wire format in `docs/editor-companion.md`, which the intake already accepts (measured) |
+| the remote half of the update path | there is no published version to compare against | the owner's decision about distribution |
+
+The fixture carries the first two in its own data (`$unverified`), with a test that fails if the note is removed,
+so "unverified" has to be deleted deliberately rather than quietly.
+
+### The thing this phase was actually about
+
+Seven stages were delivered, and the most expensive work in them was not the code. It was the recurring error
+this file records in five different costumes: **measuring the artifact that was already in front of me instead
+of the artifact the question was about** - a keyword instead of an owner, a field name instead of the thing it
+carries, a convenient layer instead of the layer the guarantee lives in, part of a function instead of the
+function, and finally a reported state instead of "is anything still observing". Each one produced something
+that looked like evidence and supported nothing, and each was caught by a measurement that took one command.
