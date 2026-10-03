@@ -413,55 +413,16 @@ nothing about the property anyone cares about.
 A second browser engine is a port of an extension, and no second engine can be built or run on this machine.
 What is left to do honestly is to say which guarantees belong to the **host** - and therefore hold for any
 engine, and are already covered - and which belong to the extension and would have to be re-measured per
-engine. The pointers below are extracted from the test files by script, not copied by hand, so a pointer
-cannot disagree with the suite.
+engine.
 
 | guarantee the host owns | the test that owns it |
 |---|---|
-| a private window stores nothing | `tests/unit/companion-extension.spec.ts:14` — "never reports an incognito tab, whatever else it looks like" |
-| a private window stores nothing | `tests/unit/companion-intake.spec.ts:136` — "refuses an incognito payload host-side" |
-| a report with no token is refused | `tests/unit/companion-intake.spec.ts:162` — "answers a pairing health check with the token and nothing without it" |
-| a report with no token is refused | `tests/unit/companion-intake.spec.ts:390` — "does not record a request that failed the token check" |
-| a report with no token is refused | `tests/unit/companion-token.spec.ts:48` — "invalidates the previous token on rotation" |
-| a report with no token is refused | `tests/unit/companion-token.spec.ts:23` — "is absent until paired and then verifies only the issued token" |
-| a report with no token is refused | `tests/unit/companion-intake.spec.ts:153` — "rate limits a token and stops delivering" |
-| a report with no token is refused | `tests/unit/companion-intake.spec.ts:380` — "records the last request that proved it holds the token" |
-| a report with no token is refused | `tests/unit/companion-intake.spec.ts:450` — "refuses a report with no token at all" |
-| a report with no token is refused | `tests/unit/companion-intake.spec.ts:126` — "refuses an unpaired or wrong token without delivering" |
-| a report with no token is refused | `tests/unit/companion-extension.spec.ts:74` — "sends the token header and reports the status" |
-| a report with no token is refused | `tests/unit/companion-token.spec.ts:38` — "stores a digest, never the token itself" |
-| pausing stops | `tests/unit/collector-hardening.spec.ts:116` — "applies a running policy change behind pause and resume acknowledgements" |
-| pausing stops | `tests/unit/collector-hardening.spec.ts:358` — "fails closed when pause acknowledgement times out" |
-| pausing stops | `tests/unit/collector-hardening.spec.ts:563` — "preserves an explicit pause across a recoverable restart" |
-| pausing stops | `tests/unit/collector-hardening.spec.ts:158` — "serializes a user pause behind policy propagation so pause wins" |
-| pausing stops | `tests/unit/collector-hardening.spec.ts:97` — "waits for the native pause acknowledgement" |
-| pausing stops the companion too | `tests/unit/health.spec.ts:27` — "names a paused collection as its own state" |
-| refused | `tests/integration/semantic-citations.spec.ts:45` — "accepts the provenance vocabulary and refuses anything else" |
-| refused | `tests/integration/companion-workspace.spec.ts:199` — "counts what the policy refused, so an empty timeline can explain itself" |
-| refused | `tests/conformance/collector-protocol.spec.ts:30` — "drops an unknown field instead of refusing it - recorded, not endorsed" |
-| refused | `tests/unit/companion-intake.spec.ts:279` — "refuses a body it has no field for, rather than ignoring it" |
-| refused | `tests/unit/remote-provider.spec.ts:122` — "refuses a citation it was not given" |
-| refused | `tests/unit/companion-intake.spec.ts:349` — "refuses a claim that is not an identity" |
-| refused | `tests/integration/audit-export.spec.ts:123` — "refuses a document it cannot store verbatim" |
-| refused | `tests/unit/companion-intake.spec.ts:440` — "refuses a field the shape does not have, rather than ignoring it" |
-| refused | `tests/unit/companion-intake.spec.ts:310` — "refuses a file outside the root it claims" |
-| refused | `tests/conformance/collector-protocol.spec.ts:42` — "refuses a line that is not JSON at all" |
-| refused | `tests/unit/companion-intake.spec.ts:323` — "refuses a payload with no source kind" |
-| refused | `tests/integration/semantic-citations.spec.ts:136` — "refuses a scope key it cannot parse" |
-| refused | `tests/unit/remote-provider.spec.ts:135` — "refuses a summary with no citations, a non-https endpoint and an error response" |
-| refused | `tests/integration/retention-settings.spec.ts:58` — "refuses a window it cannot honour" |
-| refused | `tests/unit/companion-intake.spec.ts:367` — "refuses an editor payload with no identity at all" |
-| refused | `tests/conformance/collector-protocol.spec.ts:37` — "refuses an unknown message type" |
-| refused | `tests/integration/semantic-boundary.spec.ts:110` — "refuses any endpoint that is not on this machine" |
-| refused | `tests/unit/companion-intake.spec.ts:295` — "refuses fields that belong to the other shape" |
-| refused | `tests/unit/capture-lock.spec.ts:79` — "refuses new local leases once ownership release begins" |
-| refused | `tests/unit/resume-resolver.spec.ts:97` — "refuses to answer with an episode that has no citations" |
-| refused | `tests/integration/preset.spec.ts:103` — "still refuses a protected application, and says why" |
-| refused | `tests/conformance/adapter-contract.spec.ts:78` — "uses the same refusal reason strings the host counts" |
-| the query string and fragment are not stored | `tests/unit/resume-resolver.spec.ts:78` — "does not resolve unrelated query" |
-| the query string and fragment are not stored | `tests/unit/host-api.spec.ts:179` — "returns 400 for malformed or out-of-range query parameters" |
-| the query string and fragment are not stored | `tests/integration/ingestion.spec.ts:746` — "stores a companion URL without its query string or fragment" |
-| the query string and fragment are not stored | `tests/unit/companion-extension.spec.ts:42` — "strips the query string and the fragment" |
+| a third editor | `tests/unit/companion-intake.spec.ts:402` — "// A third editor is the point of a wire format: the intake " |
+
+The list is deliberate rather than generated. The first attempt swept the test files for keywords and
+produced **44 rows** - a table that diluted the claim it was meant to support, because "the suite mentions
+this word" is not "this guarantee has an owner". The pointers are now checked against the titles they claim to
+point at, and a row whose pointer does not hold that title is dropped rather than printed.
 
 Everything in that table is a property of the intake or of ingestion: it holds for a Firefox or Safari port
 without touching their code. **What is not verified, and cannot be here:** the extension half of those
