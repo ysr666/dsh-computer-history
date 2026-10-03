@@ -119,3 +119,40 @@ Two of those lines are the interesting ones:
 Nothing else was left behind: no profile `dependencies` or `bundles` entries (there
 were none to remove), no patch residue in any profile, and no stray files in the
 editor's extension directory.
+
+## Installing from the tarball: verified
+
+```bash
+npm pack                                        # dsh-computer-history-<version>.tgz
+dsh plugin --profile <profile> add ./dsh-computer-history-<version>.tgz
+# then list the package in the profile's package.json "bundles" and start the Host
+```
+
+Verified on this machine, with the result that came back:
+
+```text
+install        Packages: +1, done in 705ms (pnpm, through the plugin entry)
+profile        dependencies: { "dsh-computer-history": "file:.../dsh-computer-history-0.1.0-dev.0.tgz" }
+               bundles: [ "dsh-computer-history" ]
+after restart  GET /api/computer-history/state → { "enabled": true, ... }
+               firstRunPreset present: true
+```
+
+What made it work is a field this package did not have: **`dsh.bundle.patch`** pointing at its
+own `cordis.patch.yml`, which declares the plugin's entry. Without it the package could be
+mounted **by hand** - which is how every measurement in the earlier phases was taken - but not
+**installed**: a profile that added it as a bundle got nothing at all.
+
+Three approaches recorded as measured failures, so nobody repeats them:
+
+- **a symlink from the profile into the checkout**: the loader does not accept a realpath
+  outside the profile (the same wall the vision-router hit), so the plugin simply does not load;
+- **a hand-copied directory** in the profile's `node_modules` with `dependencies` and `bundles`
+  set: still nothing - the profile has to be installed through its own package manager, which is
+  what `dsh plugin --profile <profile> add` does;
+- **a profile copied into a temporary `DSH_HOME`**: its bundles and `file:` dependencies do not
+  resolve there at all.
+
+**Still open, and stated as such:** the **client half** of an installed bundle does not appear in
+the interface on this Host yet, so the install is verified for the host plugin and *not* for the
+panel. Until that is fixed, this document says so rather than claiming a complete install.
