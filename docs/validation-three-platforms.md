@@ -517,8 +517,22 @@ local-backend.ts:233  ...this.capture.getState(),                               
 in one object and reported from another, and the second one keeps saying `running`. That is the third of the
 three candidates this section opened with, and it is the one that survived contact with the code.
 
-The fix belongs where the report is composed, not where the death is noticed: the capture state has to reflect
-the collector's state - and when they disagree, the collector is the one that knows. Re-running the kill is
-still the only thing that will show the interface stops claiming to record.
+**That conclusion was wrong, and reading the rest of the function is what showed it.** `plugin.ts:124`:
 
-**Not fixed yet.**
+```ts
+capture: !this.enabled ? 'stopped' : snapshot?.state?.state ?? 'degraded',
+```
+
+The composition **already** reports the collector's state, and it already has a degraded fallback. There are not
+two disagreeing sources; there is one source that never learned the collector died. So the cause is back to the
+first candidate - **the listener added in the previous pass does not fire** - and the difference between this
+pass and the last one is not knowledge, it is method: last pass I read two lines and concluded; the correct
+move, which the section said two paragraphs earlier and then ignored, is a diagnostic.
+
+Worth stating plainly, because it is the same mistake this whole phase keeps recording in different clothes:
+**part of a function is not the function.** An exit observer that "did not fire" and a report composed from the
+wrong object look identical from three lines of code, and only a measurement separates them.
+
+**Not fixed yet. Next step is a measurement, not a read:** put a temporary line where the listener runs, restart,
+kill the collector, and look for it. If it appears, the degraded state is being written and something downstream
+drops it; if it does not, `waitForExit()` does not resolve the way this pass assumed.
