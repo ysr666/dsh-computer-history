@@ -1489,3 +1489,32 @@ What is therefore verified for the second engine: Firefox 157 installed, the ext
 BiDi, paired through its own options page, reporting to the intake with a valid token, and the intake answering.
 What is not, and cannot be in this phase: a stored browser row. That belongs with the browser-boundary work, and
 the honest form of it is a refusal reason rather than a missing row.
+
+### The remote bridge: two different mechanisms, and the one step that needs the account owner
+
+Reaching a Windows or Linux desktop would close the last two unverified rows, so the bridge was investigated
+rather than assumed. There are two, and they are not the same product:
+
+1. **`ds-harness-remote` 0.4.27** (installed in the `desktop` profile) is *DeepSeek Harness Remote* - a Remote Host
+   and workspace plugin for DSH. The other machine runs a **Host**; this machine holds a `client` half under
+   `~/.dsh/remote/servers/<id>/client/`. Its README states the rules: session traffic is Noise-encrypted, the Host
+   connects **outbound only** (no public port), and a connection needs **account membership plus the Host's locally
+   pinned device identity**.
+2. **Remote Desktop Commander** is the official hosted MCP server for Desktop Commander. Its setup is: pair the
+   machine with `npx @wonderwhy-er/desktop-commander@latest remote` (browser sign-in plus a matching device code;
+   the agent stays in the foreground), then add the connector `https://mcp.desktopcommander.app/mcp` to the
+   assistant, which triggers an **OAuth sign-in with the same account**.
+
+Both bridges end at the same gate, and it is not a technical one: **an OAuth sign-in with the account the remote
+machine was paired under**. The credentials on this machine belong to the previous account (the shape is
+`serverUrl` / `deviceId` / `account` / `accessToken` / `refreshToken`; only the field names were read, no values),
+so they cannot be reused, and inventing or transplanting credentials is not something this work will do.
+
+**What is needed:** sign in here with the account the remote machine now uses - in the Remote UI for the first
+mechanism, or through the MCP connector's OAuth flow for the second. Both are a browser sign-in that only the
+account owner can complete.
+
+**What happens the moment either is connected:** the same suite the macOS rows came from runs on that machine -
+`cargo test` for the platform's collector, the conformance suite against a live collector, a live row in that
+platform's store with the producing command recorded, and the refusal reasons compared across platforms. Those are
+the two rows this phase leaves unverified, and they need nothing else.

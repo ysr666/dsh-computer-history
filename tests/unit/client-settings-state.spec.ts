@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import type { ComputerHistoryState } from '../../src/shared/index.js'
-import { captureControlMode } from '../../src/client/settings-rows.js'
+import {
+  captureControlMode,
+  companionUiStatus,
+  deleteHistoryRequest,
+} from '../../src/client/settings-rows.js'
 import { settingsViewMode } from '../../src/client/settings-view.js'
 
 const baseState: ComputerHistoryState = {
@@ -33,3 +37,35 @@ describe('client settings page state', () => {
     expect(settingsViewMode({ status: 'ready' })).toBe('ready')
   })
 })
+
+describe('client companion presentation', () => {
+  it('does not confuse a stored token with an extension that has actually connected', () => {
+    expect(companionUiStatus(undefined)).toBe('unavailable')
+    expect(companionUiStatus({ listening: false, paired: false })).toBe('unavailable')
+    expect(companionUiStatus({ listening: true, paired: false, port: 19388 })).toBe('setup')
+    expect(companionUiStatus({ listening: true, paired: true, port: 19388 })).toBe('configured')
+    expect(companionUiStatus({
+      listening: true,
+      paired: true,
+      port: 19388,
+      lastSeenAtMs: 100,
+    })).toBe('connected')
+  })
+})
+
+describe('client history deletion presets', () => {
+  it('maps recent-history choices onto the existing time-range contract', () => {
+    const now = 1_000_000_000
+    expect(deleteHistoryRequest('ten-minutes', now)).toEqual({
+      scope: { kind: 'time-range', startMs: now - 600_000, endMs: now },
+    })
+    expect(deleteHistoryRequest('hour', now)).toEqual({
+      scope: { kind: 'time-range', startMs: now - 3_600_000, endMs: now },
+    })
+    expect(deleteHistoryRequest('day', now)).toEqual({
+      scope: { kind: 'time-range', startMs: now - 86_400_000, endMs: now },
+    })
+    expect(deleteHistoryRequest('all', now)).toEqual({ scope: { kind: 'all' } })
+  })
+})
+

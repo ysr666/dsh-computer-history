@@ -50,6 +50,20 @@ describe('client history API contract', () => {
     })
   })
 
+  it('reads browser companion install information through the typed API', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
+      chromium: { available: true, extensionPath: '/tmp/extension' },
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(historyApi.getCompanionSetup()).resolves.toEqual({
+      chromium: { available: true, extensionPath: '/tmp/extension' },
+    })
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      'api/computer-history/companion/setup',
+    )
+  })
+
   it('rotates the companion token through /pairing/rotate', async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
       token: 'once', paired: false, listening: true, port: 4123,

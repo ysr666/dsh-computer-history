@@ -35,6 +35,47 @@ function section(title: string, ...children: React.ReactNode[]): React.ReactElem
   )
 }
 
+function skeletonLine(className = ''): React.ReactElement {
+  return React.createElement('span', {
+    className: `ch-skeleton-line${className ? ` ${className}` : ''}`,
+  })
+}
+
+function timelineSkeleton(label: string): React.ReactElement {
+  return React.createElement(
+    'div', { className: 'ch-skeleton-surface', 'aria-busy': true },
+    React.createElement('span', { className: 'ch-visually-hidden', role: 'status' }, label),
+    React.createElement(
+      'div', { className: 'ch-skeleton-head', 'aria-hidden': true },
+      skeletonLine('ch-skeleton-short'),
+      skeletonLine('ch-skeleton-tiny'),
+    ),
+    ...Array.from({ length: 3 }, (_, index) => React.createElement(
+      'div', { className: 'ch-skeleton-row', key: index, 'aria-hidden': true },
+      skeletonLine('ch-skeleton-time'),
+      React.createElement(
+        'span', { className: 'ch-skeleton-copy' },
+        skeletonLine(index === 1 ? 'ch-skeleton-medium' : 'ch-skeleton-long'),
+        skeletonLine('ch-skeleton-small'),
+      ),
+      skeletonLine('ch-skeleton-tiny'),
+    )),
+  )
+}
+
+function threadSkeleton(label: string): React.ReactElement {
+  return React.createElement(
+    'div', { className: 'ch-skeleton-thread', 'aria-busy': true },
+    React.createElement('span', { className: 'ch-visually-hidden', role: 'status' }, label),
+    React.createElement(
+      'span', { className: 'ch-skeleton-copy', 'aria-hidden': true },
+      skeletonLine('ch-skeleton-medium'),
+      skeletonLine('ch-skeleton-small'),
+    ),
+    skeletonLine('ch-skeleton-tiny'),
+  )
+}
+
 function friendlyAppName(bundleId: string): string {
   const known: Record<string, string> = {
     'com.apple.Notes': 'Notes',
@@ -56,6 +97,33 @@ function friendlyAppName(bundleId: string): string {
 function episodeApp(episode: Pick<EpisodeSummary, 'surfaces'>): string {
   const first = episode.surfaces[0]?.bundleId
   return first ? friendlyAppName(first) : '—'
+}
+
+function appMark(label: string): string {
+  const known: Record<string, string> = {
+    Terminal: '>_',
+    'VS Code': 'VS',
+    Xcode: 'X',
+    Finder: 'F',
+    Preview: 'P',
+    Notes: 'N',
+    Safari: 'S',
+    'Google Chrome': 'GC',
+    'Microsoft Edge': 'E',
+    ChatGPT: '✦',
+  }
+  if (known[label]) return known[label]
+  const parts = label.trim().split(/\s+/).filter(Boolean)
+  const initials = parts.slice(0, 2).map(part => part[0]).join('')
+  return (initials || '•').toUpperCase()
+}
+
+function appBadge(app: string): React.ReactElement {
+  return React.createElement(
+    'span',
+    { className: 'ch-app-mark', 'aria-hidden': true, title: app },
+    appMark(app),
+  )
 }
 
 function isHomeDirectoryResource(resource: { readonly kind: string; readonly canonicalUri: string } | undefined): boolean {
@@ -92,21 +160,17 @@ function episodeSubject(t: HistoryTranslate, episode: EpisodeSummary): string {
     ?? episode.summary
 }
 
-function appMark(label: string): string {
-  const known: Record<string, string> = {
-    Terminal: '>_',
-    'VS Code': '<>',
-    Xcode: 'X',
-    Finder: '◇',
-    Preview: 'P',
-    Notes: 'N',
-    Safari: 'S',
-    'Google Chrome': '◎',
-    ChatGPT: '✦',
-  }
-  if (known[label]) return known[label]
-  const match = label.trim().match(/[A-Za-z0-9]/)
-  return (match?.[0] ?? '•').toUpperCase()
+function episodeMeta(
+  t: HistoryTranslate,
+  episode: EpisodeSummary,
+  app: string,
+): string {
+  const resource = episode.lastStrongResource ?? episode.resources[0]
+  if (!resource) return app
+  const label = resourceLabel(t, resource, app)
+  const subject = episodeSubject(t, episode)
+  if (app === 'Terminal' && label === t('homeDirectory')) return label
+  return label && label != subject ? `${app} · ${label}` : app
 }
 
 function resumeSubject(episode: EpisodeSummary): string | undefined {
@@ -160,6 +224,17 @@ function dayLabel(t: HistoryTranslate, dayKey: string): string {
   const yesterday = localDayKey(Date.now() - 86_400_000)
   if (dayKey === yesterday) return t('yesterday')
   return dayKey
+}
+
+function formatDayDate(dayKey: string, locale: string): string {
+  const date = new Date(`${dayKey}T12:00:00`)
+  const dateText = new Intl.DateTimeFormat(locale || undefined, {
+    month: 'short', day: 'numeric',
+  }).format(date)
+  const weekday = new Intl.DateTimeFormat(locale || undefined, {
+    weekday: 'short',
+  }).format(date)
+  return `${dateText} · ${weekday}`
 }
 
 export function createHistoryPage({
@@ -331,35 +406,41 @@ export function createHistoryPage({
       ? timeline.flatMap(day => day.episodes).find(episode => resumeSubject(episode) !== undefined)
       : undefined
 
-    const statusDotClass = state?.capture === 'running'
-      ? 'ch-status-dot ch-status-dot-success'
-      : state?.capture === 'degraded' || state?.capture === 'permission-required'
-        ? 'ch-status-dot ch-status-dot-warn'
-        : state?.capture === 'stopped'
-          ? 'ch-status-dot ch-status-dot-error'
-          : 'ch-status-dot'
+    const statusDotClass = isFirstRun
+      ? 'ch-status-dot'
+      : state?.capture === 'running'
+        ? 'ch-status-dot ch-status-dot-success'
+        : state?.capture === 'degraded' || state?.capture === 'permission-required'
+          ? 'ch-status-dot ch-status-dot-warn'
+          : state?.capture === 'stopped'
+            ? 'ch-status-dot ch-status-dot-error'
+            : 'ch-status-dot'
 
-    const statusPrimary = state
-      ? captureLabel(t, state.capture)
-      : controls.status === 'error'
-        ? t('stateUnavailable')
-        : t('loadingHistory')
+    const statusPrimary = isFirstRun
+      ? t('captureNotStarted')
+      : state
+        ? captureLabel(t, state.capture)
+        : controls.status === 'error'
+          ? t('stateUnavailable')
+          : t('loadingHistory')
 
-    const statusSummary = timeline === undefined
-      ? t('timelineLoading')
-      : timeline === null
-        ? t('timelineUnavailable')
-        : todayDay
-          ? t('todayUsage', {
-              duration: formatDuration(t, todayDuration),
-              apps: todayApps,
-            })
-          : t('todayUsageNone')
+    const statusSummary = isFirstRun
+      ? t('readyToStart')
+      : timeline === undefined
+        ? t('timelineLoading')
+        : timeline === null
+          ? t('timelineUnavailable')
+          : todayDay
+            ? t('todayUsage', {
+                duration: formatDuration(t, todayDuration),
+                apps: todayApps,
+              })
+            : t('todayUsageNone')
 
     const timelineSection = section(
       t('timeline'),
       timeline === undefined
-        ? React.createElement('p', { className: 'ch-muted', role: 'status' }, t('timelineLoading'))
+        ? timelineSkeleton(t('timelineLoading'))
         : timeline === null
           ? React.createElement(
               'div', { className: 'ch-inline-failure' },
@@ -381,7 +462,7 @@ export function createHistoryPage({
                   React.createElement(
                     'summary', { className: 'ch-day-summary' },
                     React.createElement('span', { className: 'ch-day-title' }, dayLabel(t, day.dayKey)),
-                    React.createElement('span', { className: 'ch-day-date' }, day.dayKey),
+                    React.createElement('span', { className: 'ch-day-date' }, formatDayDate(day.dayKey, activeLocale)),
                     React.createElement('span', { className: 'ch-day-total' },
                       t('daySummary', {
                         duration: formatDuration(t, dayDuration(day)),
@@ -406,11 +487,11 @@ export function createHistoryPage({
                             'aria-expanded': String(selected?.id) === String(item.id),
                             onClick: () => { runAction(() => openEpisode(String(item.id))) },
                           },
-                          React.createElement('span', { className: 'ch-app-mark', 'aria-hidden': true }, appMark(app)),
+                          appBadge(app),
                           React.createElement(
                             'span', { className: 'ch-episode-copy' },
                             React.createElement('span', { className: 'ch-episode-title' }, episodeSubject(t, item)),
-                            React.createElement('span', { className: 'ch-episode-meta' }, app),
+                            React.createElement('span', { className: 'ch-episode-meta' }, episodeMeta(t, item, app)),
                           ),
                         ),
                         React.createElement('span', { className: 'ch-duration' },
@@ -425,8 +506,7 @@ export function createHistoryPage({
             'div', { className: 'ch-detail' },
             React.createElement(
               'div', { className: 'ch-detail-head' },
-              React.createElement('span', { className: 'ch-app-mark', 'aria-hidden': true },
-                appMark(episodeApp(selected))),
+              appBadge(episodeApp(selected)),
               React.createElement(
                 'span', { className: 'ch-detail-copy' },
                 React.createElement('span', { className: 'ch-detail-title' }, episodeSubject(t, selected)),
@@ -497,8 +577,7 @@ export function createHistoryPage({
         recentEpisode
           ? React.createElement(
               'div', { className: 'ch-resume-suggestion' },
-              React.createElement('span', { className: 'ch-app-mark', 'aria-hidden': true },
-                appMark(episodeApp(recentEpisode))),
+              appBadge(episodeApp(recentEpisode)),
               React.createElement(
                 'span', { className: 'ch-resume-copy' },
                 React.createElement('span', { className: 'ch-resume-title' }, resumeSubject(recentEpisode) ?? episodeSubject(t, recentEpisode)),
@@ -526,7 +605,7 @@ export function createHistoryPage({
     const threadSection = section(
       t('workThreads'),
       threads === undefined
-        ? React.createElement('p', { className: 'ch-muted', role: 'status' }, t('workThreadsLoading'))
+        ? threadSkeleton(t('workThreadsLoading'))
         : threads === null
           ? React.createElement(
               'div', { className: 'ch-inline-failure' },
@@ -549,7 +628,6 @@ export function createHistoryPage({
                     'li', { key: thread.threadKey, className: 'ch-thread-item' },
                     React.createElement(
                       'span', { className: 'ch-thread-leading' },
-                      React.createElement('span', { className: 'ch-app-mark', 'aria-hidden': true }, appMark(title)),
                       React.createElement(
                         'span', { className: 'ch-thread-copy' },
                         React.createElement('span', { className: 'ch-thread-title' }, title),
@@ -575,6 +653,24 @@ export function createHistoryPage({
         : semantic.scopes.some(scope => scope.providerKind === 'remote')
           ? t('summaryRemoteShort')
           : t('summaryLocalShort')
+
+    const allContentUnavailable = hasAnyEpisode === null
+      && timeline === null
+      && threads === null
+      && semantic === null
+    const unavailableSection = React.createElement(
+      'section', { className: 'ch-state-card', role: 'alert' },
+      React.createElement('div', { className: 'ch-state-mark', 'aria-hidden': true }, '!'),
+      React.createElement(
+        'div', { className: 'ch-state-copy' },
+        React.createElement('h2', null, t('historyUnavailableTitle')),
+        React.createElement('p', { className: 'ch-muted' },
+          failureText(t, controls.error ?? contentError)),
+      ),
+      React.createElement('button', {
+        type: 'button', className: 'ch-button', onClick: retryLoads,
+      }, t('retry')),
+    )
 
     const semanticSection = React.createElement(
       'details', { className: 'ch-summary-disclosure' },
@@ -621,13 +717,15 @@ export function createHistoryPage({
           'div', { className: 'ch-heading' },
           React.createElement('h1', null, t('title')),
           React.createElement('p', { className: 'ch-subtitle' }, t('subtitleProduct')),
-        ),
-        React.createElement(
-          'div', { className: 'ch-status-card', role: 'status' },
-          React.createElement('span', { className: statusDotClass, 'aria-hidden': true }),
-          React.createElement('span', { className: 'ch-status-primary' }, statusPrimary),
-          React.createElement('span', { className: 'ch-status-meta' }, t('metadataOnly')),
-          React.createElement('span', { className: 'ch-status-summary' }, statusSummary),
+          React.createElement(
+            'div', { className: 'ch-status-line', role: 'status' },
+            React.createElement('span', { className: statusDotClass, 'aria-hidden': true }),
+            React.createElement('span', { className: 'ch-status-primary' }, statusPrimary),
+            React.createElement('span', { className: 'ch-status-separator', 'aria-hidden': true }, '·'),
+            React.createElement('span', { className: 'ch-status-meta' }, t('metadataOnly')),
+            React.createElement('span', { className: 'ch-status-separator', 'aria-hidden': true }, '·'),
+            React.createElement('span', { className: 'ch-status-summary' }, statusSummary),
+          ),
         ),
       ),
       staleSection,
@@ -635,7 +733,7 @@ export function createHistoryPage({
         ? React.createElement('div', { className: 'ch-alert' },
             React.createElement('p', null, reasonText(t, state.reason)))
         : null,
-      (controls.status === 'error' && controls.error) || contentError
+      !allContentUnavailable && ((controls.status === 'error' && controls.error) || contentError)
         ? React.createElement(
             'div', { className: 'ch-alert' },
             React.createElement('p', { role: 'alert' }, failureText(t, controls.error ?? contentError)),
@@ -649,10 +747,16 @@ export function createHistoryPage({
       actionError
         ? React.createElement('div', { className: 'ch-alert', role: 'alert' }, actionError)
         : null,
-      isFirstRun ? firstRunSection : timelineSection,
-      !isFirstRun && timeline && timeline.length > 0 ? resumeSection : null,
-      !isFirstRun ? threadSection : null,
-      !isFirstRun ? semanticSection : null,
+      allContentUnavailable
+        ? unavailableSection
+        : React.createElement(
+            React.Fragment,
+            null,
+            isFirstRun ? firstRunSection : timelineSection,
+            !isFirstRun && timeline && timeline.length > 0 ? resumeSection : null,
+            !isFirstRun ? threadSection : null,
+            !isFirstRun ? semanticSection : null,
+          ),
     )
   }
 }

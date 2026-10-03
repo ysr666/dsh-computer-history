@@ -1,4 +1,5 @@
 import type {
+  BrowserCompanionSetup,
   ComputerHistoryState,
   DeleteHistoryRequest,
   DeleteHistoryResult,
@@ -77,6 +78,8 @@ export const historyApi = {
     postJson('/delete', request),
   rotatePairing: (): Promise<PairingRotation> =>
     postJson('/pairing/rotate'),
+  getCompanionSetup: (): Promise<BrowserCompanionSetup> =>
+    requestJson('/companion/setup'),
   resolveResume: (query: string): Promise<ResumeResolution> =>
     postJson('/resume-hint', {
       query,

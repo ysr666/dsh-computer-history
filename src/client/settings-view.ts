@@ -47,16 +47,37 @@ export function createSettingsPage({
 
     const mode = settingsViewMode(snapshot)
     if (mode === 'loading') {
-      return React.createElement('p', {
-        className: 'ch-row-body', role: 'status',
-      }, t('loadingSettings'))
+      return React.createElement(
+        'ul', { className: 'ch-settings-list ch-settings-loading', 'aria-busy': true },
+        React.createElement('span', {
+          className: 'ch-visually-hidden', role: 'status',
+        }, t('loadingSettings')),
+        ...Array.from({ length: 5 }, (_, index) => React.createElement(
+          'li', { className: 'ch-settings-item', key: index, 'aria-hidden': true },
+          React.createElement(
+            'div', { className: 'ch-settings-line' },
+            React.createElement('span', { className: 'ch-settings-skeleton-icon' }),
+            React.createElement(
+              'span', { className: 'ch-skeleton-copy' },
+              React.createElement('span', { className: 'ch-skeleton-line ch-skeleton-medium' }),
+              React.createElement('span', { className: 'ch-skeleton-line ch-skeleton-small' }),
+            ),
+            React.createElement('span', { className: 'ch-skeleton-line ch-skeleton-tiny' }),
+          ),
+        )),
+      )
     }
 
     if (mode === 'error') {
       return React.createElement(
-        'div', { className: 'ch-alert' },
-        // The store keeps the raw cause for logs; the view is where it becomes copy.
-        React.createElement('p', { role: 'alert' }, failureText(t, snapshot.error)),
+        'section', { className: 'ch-state-card ch-settings-state', role: 'alert' },
+        React.createElement('div', { className: 'ch-state-mark', 'aria-hidden': true }, '!'),
+        React.createElement(
+          'div', { className: 'ch-state-copy' },
+          React.createElement('h2', null, t('historyUnavailableTitle')),
+          // The store keeps the raw cause for logs; the view is where it becomes copy.
+          React.createElement('p', { className: 'ch-muted' }, failureText(t, snapshot.error)),
+        ),
         React.createElement('button', {
           type: 'button', className: 'ch-button',
           onClick: () => { void store.reload().catch(() => {}) },

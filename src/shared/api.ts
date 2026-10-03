@@ -74,6 +74,14 @@ export interface PairingState {
   readonly port?: number
 }
 
+/** Files shipped with the plugin that let a user install the browser companion. */
+export interface BrowserCompanionSetup {
+  readonly chromium: {
+    readonly available: boolean
+    readonly extensionPath?: string
+  }
+}
+
 export interface PairingRotation extends PairingState {
   /** Returned once; the store keeps only its digest. */
   readonly token: string

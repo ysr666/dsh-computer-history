@@ -124,6 +124,7 @@ describe('Computer History Host API', () => {
     const { request, routes } = harness()
     expect([...routes.keys()].toSorted()).toEqual([
       '/api/computer-history/audit/preview',
+      '/api/computer-history/companion/setup',
       '/api/computer-history/delete',
       '/api/computer-history/episode',
       '/api/computer-history/export',
@@ -149,6 +150,12 @@ describe('Computer History Host API', () => {
     const response = await request('/state')
     expect(response.status).toBe(200)
     expect(response.headers.get('cache-control')).toBe('no-store')
+
+    const setupResponse = await request('/companion/setup')
+    expect(setupResponse.status).toBe(200)
+    expect(setupResponse.headers.get('cache-control')).toBe('no-store')
+    const setup = await setupResponse.json() as { chromium?: { available?: boolean } }
+    expect(typeof setup.chromium?.available).toBe('boolean')
   })
   it('accepts bounded recent and search queries without silently coercing them', async () => {
     const { calls, request } = harness()

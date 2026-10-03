@@ -1,9 +1,12 @@
 import React from 'react'
 import type {
+  BrowserCompanionSetup,
   ComputerHistoryState,
+  DeleteHistoryRequest,
   PolicySnapshot,
 } from '../shared/index.js'
 import { RETENTION_BOUNDS } from '../shared/audit.js'
+import { historyApi } from './api.js'
 import {
   captureLabel,
   failureText,
@@ -44,11 +47,33 @@ function copy(title: string, description: string): React.ReactElement {
   )
 }
 
-function mark(glyph: string): React.ReactElement {
-  return React.createElement('span', {
-    className: 'ch-settings-mark',
-    'aria-hidden': true,
-  }, glyph)
+type SettingsIconName = 'record' | 'apps' | 'clock' | 'browser' | 'trash' | 'info'
+
+const SETTINGS_ICON_PATHS: Record<SettingsIconName, string> = {
+  record: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8',
+  apps: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z',
+  clock: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18M12 7v5l3 2',
+  browser: 'M4 5h16v14H4zM4 9h16M7 7h.01M10 7h.01',
+  trash: 'M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5',
+  info: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18M12 11v6M12 7h.01',
+}
+
+function settingIcon(name: SettingsIconName): React.ReactElement {
+  return React.createElement(
+    'span', { className: 'ch-settings-icon-wrap', 'aria-hidden': true },
+    React.createElement(
+      'svg', {
+        className: 'ch-settings-icon',
+        viewBox: '0 0 24 24',
+        fill: 'none',
+        stroke: 'currentColor',
+        strokeWidth: 1.7,
+        strokeLinecap: 'round',
+        strokeLinejoin: 'round',
+      },
+      React.createElement('path', { d: SETTINGS_ICON_PATHS[name] }),
+    ),
+  )
 }
 
 function value(text: string, options: { readonly connected?: boolean; readonly chevron?: boolean } = {}): React.ReactElement {
@@ -76,7 +101,7 @@ function detail(...children: React.ReactNode[]): React.ReactElement {
 }
 
 function disclosure(
-  glyph: string,
+  icon: SettingsIconName,
   title: string,
   description: string,
   right: React.ReactNode,
@@ -89,7 +114,7 @@ function disclosure(
       'details', { className: 'ch-settings-disclosure' },
       React.createElement(
         'summary', { className: 'ch-settings-summary' },
-        mark(glyph),
+        settingIcon(icon),
         copy(title, description),
         right,
       ),
@@ -183,7 +208,7 @@ export function RecordingRow({
     'li', { className: 'ch-settings-item' },
     React.createElement(
       'div', { className: 'ch-settings-line' },
-      mark('●'),
+      settingIcon('record'),
       copy(
         t('recordingTitle'),
         recording ? t('recordingOnDescriptionShort') : t('recordingOffDescriptionShort'),
@@ -264,7 +289,7 @@ export function ApplicationsRow({
   }
 
   return disclosure(
-    '▦',
+    'apps',
     t('applicationsTitle'),
     t('applicationsDescriptionShort'),
     value(t('applicationsValue', { count: allowed.length }), { chevron: true }),
@@ -298,20 +323,24 @@ export function ApplicationsRow({
             ? t('showFewerApplications')
             : t('showMoreApplications', { count: allowed.length - 5 }))
         : null,
-      controls(
-        React.createElement('input', {
-          className: 'ch-input', value: bundleId,
-          'aria-label': t('bundleIdAria'),
-          placeholder: t('bundleIdPlaceholder'),
-          onChange: (event: React.ChangeEvent<HTMLInputElement>) => {
-            setBundleId(event.target.value)
-          },
-        }),
-        React.createElement('button', {
-          type: 'button', className: 'ch-button',
-          disabled: pending || bundleId.trim().length === 0 || !policy,
-          onClick: () => { void addApp() },
-        }, t('allowApp')),
+      React.createElement(
+        'details', { className: 'ch-manual-add' },
+        React.createElement('summary', null, t('manualAddApplication')),
+        controls(
+          React.createElement('input', {
+            className: 'ch-input', value: bundleId,
+            'aria-label': t('bundleIdAria'),
+            placeholder: t('bundleIdPlaceholder'),
+            onChange: (event: React.ChangeEvent<HTMLInputElement>) => {
+              setBundleId(event.target.value)
+            },
+          }),
+          React.createElement('button', {
+            type: 'button', className: 'ch-button',
+            disabled: pending || bundleId.trim().length === 0 || !policy,
+            onClick: () => { void addApp() },
+          }, t('allowApp')),
+        ),
       ),
       feedbackNode(feedback),
     ),
@@ -373,7 +402,7 @@ export function RetentionRow({
   }
 
   return disclosure(
-    '◷',
+    'clock',
     t('retentionTitle'),
     t('retentionDescriptionShort'),
     value(retention ? t('retentionValue', { days: retention.episodeRetentionDays }) : '—', { chevron: true }),
@@ -415,19 +444,47 @@ export function RetentionRow({
   )
 }
 
+export type DeleteHistoryPreset = 'ten-minutes' | 'hour' | 'day' | 'all'
+
+export function deleteHistoryRequest(
+  preset: DeleteHistoryPreset,
+  nowMs: number,
+): DeleteHistoryRequest {
+  if (preset === 'all') return { scope: { kind: 'all' } }
+  const durationMs = preset === 'ten-minutes'
+    ? 10 * 60_000
+    : preset === 'hour'
+      ? 60 * 60_000
+      : 24 * 60 * 60_000
+  return {
+    scope: {
+      kind: 'time-range',
+      startMs: Math.max(0, nowMs - durationMs),
+      endMs: nowMs,
+    },
+  }
+}
+
 export function DeleteHistoryRow({
   t, store,
 }: SettingsRowProps): React.ReactElement {
-  const [confirming, setConfirming] = React.useState(false)
+  const [confirming, setConfirming] = React.useState<DeleteHistoryPreset>()
   const [pending, setPending] = React.useState(false)
   const [feedback, setFeedback] = React.useState<Feedback>()
 
-  const removeAll = async (): Promise<void> => {
+  const labels: Record<DeleteHistoryPreset, string> = {
+    'ten-minutes': t('clearLastTenMinutes'),
+    hour: t('clearLastHour'),
+    day: t('clearLastDay'),
+    all: t('clearAll'),
+  }
+
+  const remove = async (preset: DeleteHistoryPreset): Promise<void> => {
     setPending(true)
     setFeedback(undefined)
     try {
-      await store.deleteHistory({ scope: { kind: 'all' } })
-      setConfirming(false)
+      await store.deleteHistory(deleteHistoryRequest(preset, Date.now()))
+      setConfirming(undefined)
       setFeedback({ kind: 'success', text: t('historyDeleted') })
     } catch (cause) {
       setFeedback({ kind: 'error', text: failureText(t, cause) })
@@ -437,31 +494,68 @@ export function DeleteHistoryRow({
   }
 
   return disclosure(
-    '×',
+    'trash',
     t('deleteTitle'),
     t('deleteDescriptionShort'),
     value('', { chevron: true }),
     detail(
-      React.createElement('p', { className: 'ch-row-body' }, t('deleteDescription')),
-      controls(confirming
-        ? React.createElement(React.Fragment, null,
+      React.createElement('p', { className: 'ch-row-body' }, t('deleteRangePrompt')),
+      React.createElement(
+        'div', { className: 'ch-delete-ranges' },
+        ...(['ten-minutes', 'hour', 'day', 'all'] as const).map(preset =>
+          React.createElement('button', {
+            type: 'button',
+            className: preset === 'all'
+              ? 'ch-button ch-range-button ch-button-danger'
+              : 'ch-button ch-range-button',
+            disabled: pending,
+            onClick: () => { setConfirming(preset) },
+          }, labels[preset])),
+      ),
+      confirming
+        ? React.createElement(
+            'div', { className: 'ch-delete-confirm', role: 'group' },
+            React.createElement('span', { className: 'ch-row-body' },
+              t('confirmClearRange', { range: labels[confirming] })),
             React.createElement('button', {
               type: 'button', className: 'ch-button ch-button-danger',
-              disabled: pending, onClick: () => { void removeAll() },
-            }, t('confirmDeleteAll')),
+              disabled: pending, onClick: () => { void remove(confirming) },
+            }, t('confirmClearRange', { range: labels[confirming] })),
             React.createElement('button', {
               type: 'button', className: 'ch-button', disabled: pending,
-              onClick: () => { setConfirming(false) },
+              onClick: () => { setConfirming(undefined) },
             }, t('cancel')),
           )
-        : React.createElement('button', {
-            type: 'button', className: 'ch-button ch-button-danger',
-            onClick: () => { setConfirming(true) },
-          }, t('deleteAll'))),
+        : null,
       feedbackNode(feedback),
     ),
     true,
   )
+}
+
+export type CompanionUiStatus = 'connected' | 'configured' | 'setup' | 'unavailable'
+
+export function companionUiStatus(
+  companion: ComputerHistoryState['companion'] | undefined,
+): CompanionUiStatus {
+  if (!companion?.listening) return 'unavailable'
+  if (companion.lastSeenAtMs !== undefined) return 'connected'
+  if (companion.paired) return 'configured'
+  return 'setup'
+}
+
+function settingsRelativeAge(
+  t: HistoryTranslate,
+  atMs: number,
+  nowMs = Date.now(),
+): string {
+  const elapsed = Math.max(0, nowMs - atMs)
+  if (elapsed < 60_000) return t('justNow')
+  const minutes = Math.floor(elapsed / 60_000)
+  if (minutes < 60) return t('minutesAgo', { minutes })
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return t('hoursAgo', { hours })
+  return t('daysAgo', { days: Math.floor(hours / 24) })
 }
 
 export function CompanionRow({
@@ -470,7 +564,19 @@ export function CompanionRow({
   const [pending, setPending] = React.useState(false)
   const [token, setToken] = React.useState<string>()
   const [feedback, setFeedback] = React.useState<Feedback>()
+  const [setup, setSetup] = React.useState<BrowserCompanionSetup>()
+  const [setupError, setSetupError] = React.useState<string>()
   const companion = snapshot.state?.companion
+
+  React.useEffect(() => {
+    let disposed = false
+    void historyApi.getCompanionSetup().then(setupResult => {
+      if (!disposed) setSetup(setupResult)
+    }).catch(cause => {
+      if (!disposed) setSetupError(failureText(t, cause))
+    })
+    return () => { disposed = true }
+  }, [t])
 
   const createPairingToken = async (): Promise<void> => {
     setPending(true)
@@ -487,33 +593,75 @@ export function CompanionRow({
     }
   }
 
-  const connected = Boolean(companion?.listening && companion.paired)
-  const companionValue = companion?.listening
-    ? connected ? t('companionConnected') : t('companionWaiting')
-    : t('companionUnavailableShort')
+  const status = companionUiStatus(companion)
+  const companionValue = status === 'connected'
+    ? t('companionConnected')
+    : status === 'configured'
+      ? t('companionConfigured')
+      : status === 'setup'
+        ? t('companionWaiting')
+        : t('companionUnavailableShort')
+
+  const receiverText = companion?.listening
+    ? t(
+        companion.paired
+          ? 'companionListeningPaired'
+          : 'companionListeningUnpaired',
+        { port: companion.port ?? '—' },
+      )
+    : t('companionUnavailable')
 
   return disclosure(
-    '⌁',
+    'browser',
     t('companionTitle'),
     t('companionDescriptionShort'),
-    value(companionValue, { connected, chevron: true }),
+    value(companionValue, { connected: status === 'connected', chevron: true }),
     detail(
-      React.createElement('p', { className: 'ch-row-body' }, companion?.listening
-        ? t(
-            companion.paired
-              ? 'companionListeningPaired'
-              : 'companionListeningUnpaired',
-            { port: companion.port ?? '—' },
-          )
-        : t('companionUnavailable')),
+      React.createElement('p', { className: 'ch-row-body' }, receiverText),
       React.createElement('p', { className: 'ch-row-body' }, t('companionDescription')),
-      controls(React.createElement('button', {
-        type: 'button', className: 'ch-button',
-        disabled: pending || !companion?.listening,
-        onClick: () => { void createPairingToken() },
-      }, t('createPairingToken'))),
-      feedbackNode(feedback),
-      token ? React.createElement('pre', { className: 'ch-code' }, token) : null,
+      React.createElement(
+        'div', { className: 'ch-browser-setup' },
+        React.createElement(
+          'section', { className: 'ch-setup-step' },
+          React.createElement('h4', null, t('browserInstallTitle')),
+          React.createElement('p', { className: 'ch-row-body' }, t('browserInstallDescription')),
+          setup?.chromium.available && setup.chromium.extensionPath
+            ? React.createElement(
+                'div', { className: 'ch-extension-path' },
+                React.createElement('span', null, t('browserExtensionFolder')),
+                React.createElement('code', null, setup.chromium.extensionPath),
+              )
+            : setupError
+              ? React.createElement('p', { className: 'ch-feedback ch-feedback-error', role: 'alert' }, setupError)
+              : setup === undefined
+                ? React.createElement('span', { className: 'ch-skeleton-line ch-skeleton-medium', 'aria-hidden': true })
+                : React.createElement('p', { className: 'ch-feedback ch-feedback-error' }, t('browserExtensionMissing')),
+        ),
+        React.createElement(
+          'section', { className: 'ch-setup-step' },
+          React.createElement('h4', null, t('browserPairTitle')),
+          React.createElement('p', { className: 'ch-row-body' }, t('browserPairDescription')),
+          React.createElement('p', { className: 'ch-row-body' },
+            companion?.lastSeenAtMs !== undefined
+              ? t('browserLastConnected', {
+                  when: settingsRelativeAge(t, companion.lastSeenAtMs),
+                })
+              : t('browserNeverConnected')),
+          controls(React.createElement('button', {
+            type: 'button', className: 'ch-button',
+            disabled: pending || !companion?.listening,
+            onClick: () => { void createPairingToken() },
+          }, companion?.paired ? t('replacePairingToken') : t('createPairingToken'))),
+          feedbackNode(feedback),
+          token
+            ? React.createElement(
+                'div', { className: 'ch-token-block', role: 'status' },
+                React.createElement('p', { className: 'ch-row-body' }, t('pairingTokenOnce')),
+                React.createElement('pre', { className: 'ch-code' }, token),
+              )
+            : null,
+        ),
+      ),
     ),
   )
 }
@@ -521,7 +669,7 @@ export function CompanionRow({
 export function AboutRow({ t, snapshot }: SettingsRowProps): React.ReactElement {
   const { state } = snapshot
   return disclosure(
-    'i',
+    'info',
     t('aboutTitle'),
     t('aboutDescriptionShort'),
     value('', { chevron: true }),

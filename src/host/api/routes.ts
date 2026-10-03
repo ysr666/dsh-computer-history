@@ -9,6 +9,7 @@ import { HistoryImportError } from '../audit/export.js'
 import { RetentionSettingsError } from '../store/retention-settings.js'
 import { SummaryProviderError } from '../semantic/provider.js'
 import { computerHistoryService } from '../service/index.js'
+import { browserCompanionSetup } from '../companion/setup.js'
 
 export const HISTORY_API_PREFIX = '/api/computer-history'
 
@@ -367,6 +368,13 @@ export function registerHistoryApi(ctx: Context): void {
         return Promise.resolve(textResponse('Request failed.', 500))
       }
     },
+  }))
+
+  ctx.effect(() => ctx.connection.fetch.register({
+    path: HISTORY_API_PREFIX + '/companion/setup',
+    methods: ['GET'],
+    requestBody: 'buffered',
+    fetch: () => Promise.resolve(json(browserCompanionSetup())),
   }))
 
   ctx.effect(() => ctx.connection.fetch.register({
