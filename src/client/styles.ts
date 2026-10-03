@@ -12,6 +12,7 @@ const CSS = `
 .ch-button:focus-visible,.ch-text-action:focus-visible,.ch-input:focus-visible,.ch-switch:focus-visible,.ch-settings-summary:focus-visible,.ch-day-summary:focus-visible,.ch-timeline-action:focus-visible,.ch-inspector>summary:focus-visible,.ch-resume-search>summary:focus-visible,.ch-summary-disclosure>summary:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:2px}
 .ch-code{display:block;box-sizing:border-box;max-width:100%;margin:8px 0 0;padding:10px 12px;border-radius:10px;background:var(--dsw-alias-bg-layer-2);overflow-x:auto;font-size:12px}
 .ch-feedback{margin:8px 0 0;font-size:12px;line-height:1.5;color:var(--dsw-alias-state-success-primary)}.ch-feedback-error{color:var(--dsw-alias-state-error-primary)}
+.ch-inline-failure{display:flex;align-items:center;gap:10px}.ch-inline-failure .ch-muted{margin:0}.ch-text-action{appearance:none;padding:2px 0;border:0;background:transparent;color:var(--dsw-alias-brand-primary);font:inherit;font-size:12px;font-weight:600;cursor:pointer}.ch-text-action:hover{text-decoration:underline}
 
 /* Timeline is the product surface: one restrained container, date groups, readable rows. */
 .ch-timeline-shell{overflow:hidden;border:1px solid var(--dsw-alias-border-l1);border-radius:14px;background:var(--dsw-alias-bg-layer-1)}

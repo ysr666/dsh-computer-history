@@ -1065,3 +1065,22 @@ it is that this step never opened its own surface and kept measuring whatever ha
 
 The next version opens the settings dialog **inside** the keyboard step, asserts the dialog and the plugin's
 section in the same breath, and only then walks the tab order.
+
+### The keyboard step works now, and it says something narrow
+
+With the step opening its own surface, both new assertions pass - the settings dialog opens in this step, and the
+plugin's settings rows are shown - and the check moves from 45/48 to **49/50**. The remaining failure is a real
+measurement rather than a harness artefact:
+
+```
+tab leaves our rows after 1 of 8 stops (7 outside)
+```
+
+From the first focusable control inside the plugin's settings rows, one Tab press stays inside them and the
+following seven leave. That is a statement about how many focusable controls those rows have and where the tab
+order goes afterwards, and it is now worth asking as a product question - the earlier six attempts could not
+have answered it, because none of them ever had the rows on screen.
+
+Not yet concluded: whether one stop inside is correct (the rows may simply have two focusable controls - the
+state dump for that step reported `controls: enabled,enabled,disabled`), or whether the rows are missing
+focusable affordances. Answering it needs the focus order inside the rows, which the step can now produce.

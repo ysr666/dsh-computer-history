@@ -161,9 +161,12 @@ export function createHistoryPage({
       setThreads(threadResult.status === 'fulfilled' ? threadResult.value : null)
       setSemantic(semanticResult.status === 'fulfilled' ? semanticResult.value : null)
       setTimeline(timelineResult.status === 'fulfilled' ? timelineResult.value : null)
-      const failure = results.find(result => result.status === 'rejected')
+      const failures = results.filter(result => result.status === 'rejected')
+      const failure = failures[0]
       setContentError(
-        failure?.status === 'rejected' ? failureText(t, failure.reason) : undefined,
+        failures.length === results.length && failure?.status === 'rejected'
+          ? failureText(t, failure.reason)
+          : undefined,
       )
     }, [t])
 
@@ -318,7 +321,13 @@ export function createHistoryPage({
       timeline === undefined
         ? React.createElement('p', { className: 'ch-muted', role: 'status' }, t('timelineLoading'))
         : timeline === null
-          ? React.createElement('p', { className: 'ch-muted' }, t('timelineUnavailable'))
+          ? React.createElement(
+              'div', { className: 'ch-inline-failure' },
+              React.createElement('span', { className: 'ch-muted' }, t('timelineUnavailable')),
+              React.createElement('button', {
+                type: 'button', className: 'ch-text-action', onClick: retryLoads,
+              }, t('retry')),
+            )
           : timeline.length === 0
             ? React.createElement('p', { className: 'ch-muted' }, t('timelineEmpty'))
             : React.createElement(
@@ -479,7 +488,13 @@ export function createHistoryPage({
       threads === undefined
         ? React.createElement('p', { className: 'ch-muted', role: 'status' }, t('workThreadsLoading'))
         : threads === null
-          ? React.createElement('p', { className: 'ch-muted' }, t('workThreadsUnavailable'))
+          ? React.createElement(
+              'div', { className: 'ch-inline-failure' },
+              React.createElement('span', { className: 'ch-muted' }, t('workThreadsUnavailable')),
+              React.createElement('button', {
+                type: 'button', className: 'ch-text-action', onClick: retryLoads,
+              }, t('retry')),
+            )
           : threads.length === 0
             ? React.createElement('p', { className: 'ch-muted' }, t('workThreadsEmpty'))
             : React.createElement(
@@ -595,7 +610,7 @@ export function createHistoryPage({
         ? React.createElement('div', { className: 'ch-alert', role: 'alert' }, actionError)
         : null,
       timelineSection,
-      resumeSection,
+      timeline && timeline.length > 0 ? resumeSection : null,
       threadSection,
       semanticSection,
     )
