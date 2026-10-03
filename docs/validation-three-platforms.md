@@ -1640,3 +1640,26 @@ having measured, because "it looks wrapped" and "it is corrupted" are not the sa
 The file parses to 16 entries with 3 insert blocks, one of which is this one. What remains is the same restart as
 before, now with the right shape: configuration is applied when the process reads the layer, and a live toggle in
 the plugin page works because it goes through the loader rather than through the file.
+
+### The bridge is live, and what it reaches
+
+Two rounds of `servers:` were wrong, and the module's own note says why: *each plugin instance connects to one MCP
+server; load multiple instances for multiple servers*. The config **is** that one server - `serverName`,
+`transport`, `url`, `headers` - not a list containing it. The decisive feedback came from an isolated boot (a
+temporary profile with only this entry, booted with the CLI) rather than from another application restart: it
+printed `ValidationError: invalid config` with the expected shape in the same line, twice, until the shape matched.
+The owner's question - "the toggle in the UI is just a code change underneath, isn't it" - is what started that, and
+it was right on both counts: the layer is a file, and the earlier attempts were failing on my own mistake rather
+than on a permission.
+
+With the shape fixed the client loads and its tools register (`mcp__desktopcommander__*`). One device is online:
+
+```
+1. ysr.local   Status: Online   App version: 0.2.52
+```
+
+and what it turns out to be is a **Mac** - `Darwin ... arm64`, `MacBookPro18,2`, user `ysradmin`, with this same
+checkout at the same path. So the bridge works and reaches a macOS machine, which is not what the two remaining
+rows need: a live row for Windows and for Linux requires a desktop session on those platforms. Those rows stay
+unverified, and the way to close them is unchanged - pair a Windows or Linux machine the same way
+(`npx @wonderwhy-er/desktop-commander@latest remote`) and the tools for it will appear beside this one.
