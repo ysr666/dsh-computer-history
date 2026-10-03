@@ -294,6 +294,83 @@ function HistoryPage(): React.ReactElement {
   // Colours come from the interface, never from constants: the first version of this
   // line hardcoded a cream background with inherited light text and rendered as an
   // empty bar on the dark theme.
+  // The first-run path: a store that has never recorded anything, with a policy that has
+  // never been changed, is a blank page. This says what will be recorded, what never will be,
+  // and gives the one action that makes the panel useful - using the same /policy path the
+  // per-application controls use, so there is no second way to write a rule.
+  const isFirstRun =
+    episodes.length === 0
+    && timeline.length === 0
+    && (policy === undefined || policy.rules.every(rule => rule.builtIn))
+  const preset = state?.firstRunPreset
+  const presetText = (value: Record<string, string> | undefined): string =>
+    (value ? (CHINESE ? value.zh ?? value.en : value.en ?? value.zh) : undefined)
+      ?? ''
+
+  const startRecording = async (): Promise<void> => {
+    if (!preset || !policy) return
+    const existing = new Map<string, NonNullable<PolicySnapshot>['rules'][number]>(
+      policy.rules.filter(rule => !rule.builtIn).map(rule => [rule.pattern, rule]),
+    )
+    for (const bundle of preset.bundles) {
+      if (existing.has(bundle)) continue
+      existing.set(bundle, {
+        id: (`preset:${bundle}`) as never,
+        dimension: 'app',
+        action: 'allow',
+        matcher: 'exact',
+        pattern: bundle,
+        builtIn: false,
+        createdAtMs: Date.now(),
+        updatedAtMs: Date.now(),
+      })
+    }
+    await api('/policy', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ mode: 'include-only', rules: Array.from(existing.values()) }),
+    })
+    await refresh()
+  }
+
+  const firstRunSection = isFirstRun
+    ? React.createElement(
+        'section',
+        { style: SECTION },
+        React.createElement('h2', { style: { margin: `0 0 ${SPACE.sm}px` } }, t('Start here', '从这里开始')),
+        React.createElement(
+          'p',
+          { style: MUTED },
+          t('Nothing is recorded yet. That is the default: this product records only the applications you allow, and only metadata - which application, which file, for how long.',
+            '现在还没有记录任何东西。这是默认状态：本产品只记录你允许的应用，而且只记元数据——哪个应用、哪个文件、用了多久。'),
+        ),
+        preset
+          ? React.createElement(
+              'div',
+              { style: { marginTop: SPACE.sm } },
+              React.createElement('p', { style: { margin: `0 0 ${SPACE.xs}px`, fontWeight: 600 } }, presetText(preset.title)),
+              React.createElement('p', { style: MUTED }, presetText(preset.description)),
+            )
+          : null,
+        React.createElement(
+          'p',
+          { style: { margin: `0 0 ${SPACE.sm}px`, opacity: 0.72 } },
+          t('It never records the contents of a screen, a document or a selection, and never what you type. Password managers are protected and are skipped whatever this setting says.',
+            '它绝不记录屏幕内容、文档内容或选中文字，也绝不记录你输入的内容。密码管理器受保护，无论这里怎么设置都会被跳过。'),
+        ),
+        React.createElement(
+          'button',
+          {
+            type: 'button',
+            style: BUTTON_PRIMARY,
+            disabled: !preset,
+            onClick: () => { runAction(startRecording) },
+          },
+          t('Start recording', '开始记录'),
+        ),
+      )
+    : null
+
   const healthSection = React.createElement(
     'section',
     { style: { margin: '0 0 18px' } },
@@ -793,6 +870,8 @@ function HistoryPage(): React.ReactElement {
       t('What this machine has been used for, kept locally.',
         '这台电脑被用来做了什么，只保存在本机。'),
     ),
+    // A brand new store gets the path that makes it useful; everyone else gets the status.
+    firstRunSection,
     // First after the title: the one fact that needs an action, before any status.
     healthSection,
     React.createElement(
