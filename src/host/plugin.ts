@@ -8,7 +8,6 @@ import '@deepseek-ai/dsh-subprocess'
 import '@deepseek-ai/dsh-workspace'
 import { registerAgentIntegration } from '../agent/index.js'
 import {
-  findStaleInstall,
   presetBundles,
   readFirstRunPreset,
   runningRelease,
@@ -421,14 +420,10 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
       }
     },
     () => {
-      const release = runningRelease()
-      if (!release) return undefined
-      const stale = findStaleInstall(
-        release.loadedFrom,
-        release.builtAtMs,
-        dshHomePath('profiles'),
-      )
-      return stale ? { ...release, stale } : release
+      // No drift guess here: pnpm hard-links installed files out of its content-addressed store, so the
+      // installed copy carries the store entry's timestamp and looks older than the artifact by construction.
+      // The owner's own install showed the banner crying wolf; the plugin states facts instead.
+      return runningRelease()
     },
   )
 

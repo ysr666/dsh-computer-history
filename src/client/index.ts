@@ -32,9 +32,25 @@ const PANEL_ID = 'computer-history' as MainPanelId
 
 // The interface tells us its language; a plugin that invents its own language switch
 // asks the user to set the same thing twice (ADR: no plugin-level preference).
-const INTERFACE_LANG = (document.documentElement.lang || navigator.language || 'en').toLowerCase()
-const CHINESE = INTERFACE_LANG.startsWith('zh')
-const t = (en: string, zh: string): string => (CHINESE ? zh : en)
+// Read **live**, not once at module load: the shell writes `documentElement.lang` when the locale service
+// initialises, which can happen after this bundle's factory has run. The first version captured `en` before
+// that write, so a Chinese interface showed an English panel.
+const interfaceLanguage = (): string =>
+  (document.documentElement.lang || navigator.language || 'en').toLowerCase()
+const t = (en: string, zh: string): string =>
+  (interfaceLanguage().startsWith('zh') ? zh : en)
+
+/** The interface language, re-read whenever the shell changes it. */
+function useInterfaceLanguage(): string {
+  const [language, setLanguage] = React.useState(interfaceLanguage)
+  React.useEffect(() => {
+    setLanguage(interfaceLanguage())
+    const observer = new MutationObserver(() => { setLanguage(interfaceLanguage()) })
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['lang'] })
+    return () => { observer.disconnect() }
+  }, [])
+  return language
+}
 
 // The collector's state words are for a log, not for a person.
 const CAPTURE_WORD: Record<string, string> = {
@@ -100,6 +116,8 @@ function HistoryIcon(): React.ReactElement {
 }
 
 function HistoryPage(): React.ReactElement {
+  // Re-renders when the shell's language arrives; the value also labels the panel for assistive tech.
+  const language = useInterfaceLanguage()
   const [state, setState] = useState<ComputerHistoryState>()
   const [episodes, setEpisodes] = useState<readonly EpisodeSummary[]>([])
   const [threads, setThreads] = useState<readonly WorkThread[]>([])
@@ -349,7 +367,7 @@ function HistoryPage(): React.ReactElement {
     && (policy === undefined || policy.rules.every(rule => rule.builtIn))
   const preset = state?.firstRunPreset
   const presetText = (value: Record<string, string> | undefined): string =>
-    (value ? (CHINESE ? value.zh ?? value.en : value.en ?? value.zh) : undefined)
+    (value ? (language.startsWith('zh') ? value.zh ?? value.en : value.en ?? value.zh) : undefined)
       ?? ''
 
   const startRecording = async (): Promise<void> => {
