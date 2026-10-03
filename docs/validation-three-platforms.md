@@ -1174,3 +1174,23 @@ so no runner has ever executed it.
 *Action:* add a remote (or say the matrix is not wanted).
 *Evidence it unlocks:* the first real run of `collectors.yml` on three runners, and with it the answer to the one
 question the local runs cannot settle - whether the Windows crate's `cfg`-gated tests actually execute there.
+
+### The 30 tab stops, broken down (a trade-off for the owner, not a defect)
+
+The keyboard step counts 30 focusable controls in the settings rows. The rendering source has 7 button sites,
+3 input sites and 1 switch site, so the bulk is not in the single controls: the applications list renders one
+forget-button per application, which is where the count comes from (the same list produced the "22 buttons, 26
+tabs to traverse" measurement earlier in this file).
+
+Two honest options, with what each costs:
+
+- **Leave it.** Every row is operable with one Tab and one Enter, nothing is hidden behind a menu, and the count
+  grows with the number of applications the user has used. A keyboard user passes 22 stops to reach the controls
+  below the list.
+- **Collapse the per-row action.** One list with a single stop (roving tabindex, or the action inside a row menu)
+  keeps the settings surface short, at the cost of one more interaction per application and of a pattern the
+  platform's own settings pages do not use - which is why this is a question rather than a change: the reviewed
+  row anatomy was matched to the native rows deliberately.
+
+Recorded rather than acted on: it is a product trade-off about how the list behaves, and the owner has the
+context for how many applications that list usually holds.
