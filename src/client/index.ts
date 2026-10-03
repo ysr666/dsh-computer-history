@@ -5,6 +5,9 @@ import type { Context } from '@deepseek-ai/cordis'
 import '@deepseek-ai/dsh-client-ui-renderer'
 import '@deepseek-ai/dsh-client-ui-sidebar'
 import '@deepseek-ai/dsh-client-ui-slots'
+import '@deepseek-ai/dsh-client-ui-settings'
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+import type * as _settingsClientTypes from '@deepseek-ai/dsh-client-ui-settings/client'
 // Type-only imports carry the client-side contract augmentations (`ctx.slots`,
 // sidebar/panel slot props, `MainPanelId`). They are erased at runtime, so the
 // wrapped bundle never requires the unregistered `.../client` subpath ids.
@@ -27,6 +30,7 @@ import type {
 import { describeProvenance } from '../shared/audit-view.js'
 import { describeHealth } from '../shared/health.js'
 import { historyApiPath } from './api-route.js'
+import { applySettings } from './settings.js'
 
 const PANEL_ID = 'computer-history' as MainPanelId
 
@@ -1153,6 +1157,9 @@ export function apply(ctx: Context): void {
     name: 'main',
     key: PANEL_ID,
   }, HistoryPage))
+  // Settings live where this application keeps settings: the frame, heading and list come from it, and this
+  // plugin supplies rows. Owning a whole main panel and drawing every control is what made it look foreign.
+  applySettings(ctx, { t })
   ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
     name: 'sidebar.panellist',
     id: PANEL_ID,
