@@ -1,0 +1,19 @@
+<idea-plugin>
+  <id>dev.dsh.computer-history</id>
+  <name>Computer History Companion</name>
+  <vendor>dsh-computer-history</vendor>
+  <description><![CDATA[
+    Reports the file the editor is showing to a local DeepSeek Harness Computer History intake.
+    Metadata only: which workspace, which file, which language - never file contents, selections or keystrokes.
+  ]]></description>
+  <depends>com.intellij.modules.platform</depends>
+
+  <!-- Modern extension points for 2024.2+: a post-startup activity for the workspace, a project listener for
+       the editor. The older applicationListeners/projectListeners registrations still work but are deprecated. -->
+  <postStartupActivity implementation="dev.dsh.computerhistory.jetbrains.ProjectReporter"/>
+
+  <projectListeners>
+    <listener class="dev.dsh.computerhistory.jetbrains.EditorReporter"
+              topic="com.intellij.openapi.fileEditor.FileEditorManagerListener"/>
+  </projectListeners>
+</idea-plugin>
