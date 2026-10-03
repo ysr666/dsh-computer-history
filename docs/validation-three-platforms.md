@@ -1623,3 +1623,20 @@ session token it keeps to itself.
 That is the honest division: the OAuth token, the entry, its validation, the restart verification and the
 diagnosis are done here; one toggle in the application's plugin page is what remains before the remote machine's
 tools appear.
+
+### The shape was wrong, and the owner's intuition found it
+
+The question "the toggle in the UI is just a code change underneath, isn't it" is right, and it located the actual
+mistake: the entry had been appended as a **top-level** patch item. This layer's own header says what a top-level
+item is for - "id-targeted config **overrides**, disables, and **insert lists**" - and `dsh-computer-history`'s own
+patch shows the difference in eight lines: an existing entry is overridden at the top level, while **adding** one is
+what `insert:` is for. A top-level entry for an id that does not exist is an override for nothing.
+
+Re-shaped into an `insert` list, and the round trip verified rather than eyeballed: the parsed `Authorization` value
+equals `Bearer ` plus the token from the 0600 file **character for character** (1349 = 7 + 1342). The file's long
+scalar is folded across lines by whatever re-emitted it, and YAML folding reconstructs it exactly - which is worth
+having measured, because "it looks wrapped" and "it is corrupted" are not the same thing.
+
+The file parses to 16 entries with 3 insert blocks, one of which is this one. What remains is the same restart as
+before, now with the right shape: configuration is applied when the process reads the layer, and a live toggle in
+the plugin page works because it goes through the loader rather than through the file.
