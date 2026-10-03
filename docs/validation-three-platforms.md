@@ -937,3 +937,26 @@ application-scoped route does not exist in this distribution.
 activity does not reliably run, so an application-scoped listener is what makes the client dependable; the
 intake only stores for a Host that owns capture (its own `dataDirectory`); and the declared application must be
 allowed, which the shipped preset already does.
+
+## The keyboard-focus check, and three variants of one mistake
+
+This one step of `scripts/verify-panel-render.mjs` has now measured the wrong surface three times, each variant
+passing or failing for a reason that had nothing to do with the question:
+
+1. It clicked a sidebar entry and then tabbed, so all 26 presses went round the shell's own focus ring and the
+   check blamed the plugin for where the shell had put focus.
+2. It detected "the dialog holds focus" with a fallback to `document` when no dialog was open, which made the
+   assertion vacuously true, and it then read `.ch-main` - the *panel* - as evidence that the settings surface
+   was showing.
+3. With the surface assertion narrowed to `.ch-settings-list` it must actually be open, and the run that would
+   have shown that crashed in the DevTools connection before reaching the step.
+
+What is established: the settings rows render (they were visible in the screenshot states), the plugin's own
+controls are focusable, and every earlier claim about tab order in this file was about a surface the check had
+not confirmed. What is not established: anything about the keyboard path through those rows. The step is
+therefore reported as **unverified**, the same standing as any other row without a live record, rather than
+being counted as a pass or a product defect.
+
+Next action, one clean run with the narrowed assertion, plus making the CDP connection failure a labelled
+error rather than a stack trace: a check that dies mid-run cannot be distinguished from a check that found
+nothing, which is the same lesson this file keeps re-learning in a new costume.

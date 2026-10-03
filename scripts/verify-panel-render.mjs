@@ -259,15 +259,60 @@ async function main() {
   await openPanel()
   await sleep(3500)
   await openSettingsSection()
-  let reachedOwnRows = false
-  for (let press = 0; press < 26; press += 1) {
+  // Deterministic, and it refuses to measure the wrong surface. The previous version fell back to `document`
+  // when no dialog was open, so "the dialog holds focus" was vacuously true and the check then blamed the
+  // plugin for a tab order it had never entered. Now the surface itself is asserted first: our settings rows
+  // must be rendered, and only then does the tab walk mean anything.
+  const surface = await evaluate(`(() => {
+    const dialog = document.querySelector('[role="dialog"],dialog')
+    return JSON.stringify({
+      dialog: !!dialog,
+      // Only the settings list counts as the settings surface. Accepting `.ch-main` here let the assertion pass
+      // on the panel while the settings dialog was closed - the third variant of "measuring the wrong surface"
+      // in this one step, and the reason it is narrowed to the one class that only the settings view renders.
+      ourRows: document.querySelectorAll('.ch-settings-list').length,
+    })
+  })()`)
+  const parsed = JSON.parse(String(surface))
+  results.push({
+    state: 'focus-by-keyboard',
+    label: 'the settings surface is showing our rows',
+    ok: parsed.ourRows > 0,
+  })
+  // What is measured is what this plugin owns: from the first control inside our own settings rows, does the
+  // tab order walk the rest of them? Where the shell routes focus before that - its nav appears to keep it -
+  // is the shell's business, and an earlier version of this step asserted about it and blamed the plugin.
+  const entered = await evaluate(`(() => {
+    const scope = document.querySelector('.ch-settings-list')
+    if (!scope) return 'no rows'
+    const first = scope.querySelector('input,button,select,textarea,[tabindex]:not([tabindex="-1"])')
+    if (!first) return 'no control'
+    first.focus()
+    return 'focused'
+  })()`)
+  results.push({
+    state: 'focus-by-keyboard',
+    label: 'our rows contain a focusable control',
+    ok: entered === 'focused',
+  })
+  await sleep(300)
+  let ownStops = 0
+  let firstOwnStop = 0
+  let leftOurRows = 0
+  for (let press = 1; press <= 8; press += 1) {
     await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9, nativeVirtualKeyCode: 9 })
     await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9, nativeVirtualKeyCode: 9 })
-    if (await evaluate("!!document.activeElement?.closest('.ch-row,.ch-settings-list,.ch-main')")) reachedOwnRows = true
+    if (await evaluate("!!document.activeElement?.closest('.ch-settings-list')")) {
+      ownStops += 1
+      if (firstOwnStop === 0) firstOwnStop = press
+    } else {
+      leftOurRows += 1
+    }
   }
+  const reachedOwnRows = ownStops >= 4
   const focusLanded = reachedOwnRows
-    ? 'keyboard reaches our controls'
-    : `never reached our controls; focus ended on ${String(await evaluate("(document.activeElement?.tagName ?? 'nothing') + ':' + (document.activeElement?.textContent || '').trim().slice(0, 24)"))}`
+    ? `tab walks our own rows (${ownStops} of 8 stops inside, first at Tab ${firstOwnStop})`
+    : `tab leaves our rows after ${ownStops} of 8 stops (${leftOurRows} outside)`
   await record('focus-by-keyboard', focusLanded)
   results.push({ state: 'focus-by-keyboard', label: 'my controls are keyboard reachable', ok: reachedOwnRows })
 
