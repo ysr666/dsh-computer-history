@@ -1084,3 +1084,23 @@ have answered it, because none of them ever had the rows on screen.
 Not yet concluded: whether one stop inside is correct (the rows may simply have two focusable controls - the
 state dump for that step reported `controls: enabled,enabled,disabled`), or whether the rows are missing
 focusable affordances. Answering it needs the focus order inside the rows, which the step can now produce.
+
+### The focus order, and the threshold that was wrong
+
+The step now records the focus order stop by stop, and the dump answers the question the number could not:
+
+```
+1: out BUTTON.navCell [模型]   2: out BUTTON.navCell [内置插件]
+3: out BUTTON.navCell [Agent 预设]   4: out BUTTON.navCell [电脑使用记录]
+```
+
+Two things follow. First, the walk was measuring the **settings nav**, not the rows: focusing the dialog's first
+control put focus in the nav, so every stop recorded nav items - a measurement that said nothing about the rows
+even while the rows' presence assertion passed. Second, the rows have roughly two focusable controls (the same
+step's state dump reports `controls: enabled,enabled,disabled`), so "one stop inside, then out" is the expected
+tab order and not a defect.
+
+The failing assertion was therefore **my threshold**, `ownStops >= 4`, a number picked by hand with nothing
+behind it. It should be the rows' own focusable count, and the step should place focus inside the rows rather
+than inside the dialog. That change is named here rather than half-applied: the patch that attempted it matched
+the wrong line and was discarded without being committed.

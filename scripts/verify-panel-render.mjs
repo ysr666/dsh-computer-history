@@ -319,21 +319,26 @@ async function main() {
   const entered = String(await evaluate("(function(){var s=document.querySelector('" + LIST + "');if(!s)return 'no rows';var f=s.querySelector('input,button,select,textarea');if(!f)return 'no control';f.focus();return 'focused';})()"))
   results.push({ state: 'focus-by-keyboard', label: 'our rows contain a focusable control', ok: entered === 'focused' })
   await sleep(300)
-  const insideNow = "!!(document.activeElement && document.activeElement.closest('" + LIST + "'))"
+  // The focus order, stop by stop. "One stop inside, seven outside" is a number; which controls those stops are
+  // is the answer, and it is what decides whether the rows are short of focusable affordances or simply short.
   let ownStops = 0
   let firstOwnStop = 0
   let leftOurRows = 0
+  const focusOrder = []
   for (let press = 1; press <= 8; press += 1) {
     await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9, nativeVirtualKeyCode: 9 })
     await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9, nativeVirtualKeyCode: 9 })
-    if (await evaluate(insideNow)) {
+    const stop = String(await evaluate("(function(){var a=document.activeElement;if(!a)return 'none';var inside=!!a.closest('.ch-settings-item');var t=(a.textContent||'').trim().slice(0,18);return (inside?'in ':'out ')+a.tagName+'.'+(typeof a.className==='string'?a.className.slice(0,24):'-')+(t?' ['+t+']':'');})()"))
+    focusOrder.push(press + ': ' + stop)
+    if (stop.startsWith('in ')) {
       ownStops += 1
       if (firstOwnStop === 0) firstOwnStop = press
     } else {
       leftOurRows += 1
     }
   }
-  const reachedOwnRows = ownStops >= 4
+  writeFileSync(path.join(outDir, 'focus-by-keyboard-order.txt'), focusOrder.join('\n'))
+  console.log('  focus order: ' + focusOrder.slice(0, 4).join(' | '))
   const focusLanded = reachedOwnRows
     ? `tab walks our own rows (${ownStops} of 8 stops inside, first at Tab ${firstOwnStop})`
     : `tab leaves our rows after ${ownStops} of 8 stops (${leftOurRows} outside)`
