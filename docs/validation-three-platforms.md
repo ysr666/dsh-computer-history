@@ -1142,3 +1142,35 @@ $ PANEL_URL='http://127.0.0.1:<port>/?token=…' node scripts/verify-panel-rende
 The render check needs a Host and a headless Chromium; everything else runs from a clean checkout. The Host it
 points at is deliberately not started by the script: evidence produced against a Host somebody else runs is
 evidence about the plugin rather than about the script's own idea of one.
+
+## What this phase still needs from a person, and what each step unlocks
+
+Three things cannot be done by a program on this machine, and each one is written here with the exact action and
+the evidence it produces, so the work does not depend on anyone remembering a chat message.
+
+**1. The panel, in the owner's application.** The reviewed client is built and copied into the application's
+profile (`~/.dsh/profiles/desktop/node_modules/dsh-computer-history`, verified by content: the new failure copy,
+the episode line keys, the native row structure and the `settings.section` registration are all present). The
+running application still has the previous client loaded, and restarting it is the only way to load the new one -
+a program cannot do it, because the conversation that would issue the command runs inside that application.
+*Action:* restart the application, or use its plugin page to reload.
+*Evidence it unlocks:* a screenshot of the owner's own panel, taken with `screencapture` and read back, showing
+the reviewed rows rather than the pre-rework ones.
+
+**2. The Gecko row.** Firefox 157 is installed, the extension is built (`pnpm build:extension:firefox`) and the
+whole chain up to the last step is scripted over WebDriver BiDi: `webExtension.install`, the extension's uuid
+from `prefs.js`, the options page opened, a real page opened. The last step is the pairing token, because
+Firefox's BiDi deliberately does not drive privileged pages - `browsingContext.navigate`, `script.evaluate` and
+`input.performActions` all answer `unsupported operation` on an `moz-extension://` context, verified against
+content pages in the same session where they all work.
+*Action:* in the staged Firefox window, paste the token the panel shows once into the extension's options page
+and save it (port stays 19388).
+*Evidence it unlocks:* a live row whose `source_provider` is `companion` and whose origin is the page that was
+open, read back from the store.
+
+**3. The three-platform CI matrix.** The workflow, its commands and its boundary declaration are in place and
+every one of its commands was run locally with its exit code recorded. The repository has no git remote at all,
+so no runner has ever executed it.
+*Action:* add a remote (or say the matrix is not wanted).
+*Evidence it unlocks:* the first real run of `collectors.yml` on three runners, and with it the answer to the one
+question the local runs cannot settle - whether the Windows crate's `cfg`-gated tests actually execute there.
