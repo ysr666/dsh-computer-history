@@ -1,0 +1,17 @@
+[package]
+name = "dsh-computer-history-collector-linux"
+version = "0.1.0"
+edition = "2021"
+description = "Linux collector for DSH Computer History: speaks the collector protocol in docs/collector-protocol.md"
+license = "MIT"
+
+[dependencies]
+dsh-collector-protocol = { path = "../collector-protocol" }
+
+[lib]
+name = "collector"
+path = "src/lib.rs"
+
+[[bin]]
+name = "dsh-computer-history-collector-linux"
+path = "src/main.rs"

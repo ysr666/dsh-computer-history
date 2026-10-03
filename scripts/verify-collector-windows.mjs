@@ -25,6 +25,7 @@ const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const CRATES = [
   ['collector-protocol', path.join(REPO, 'native', 'collector-protocol')],
   ['windows', path.join(REPO, 'native', 'windows')],
+  ['linux', path.join(REPO, 'native', 'linux')],
 ].filter(([, dir]) => existsSync(dir))
 
 if (CRATES.length === 0) {

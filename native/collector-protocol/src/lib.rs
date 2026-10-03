@@ -108,13 +108,16 @@ impl Observation {
     }
 }
 
-pub fn hello(session: &str, version: &str) -> String {
+/// The first message. The platform is a parameter because it differs per collector - and because a
+/// hardcoded one silently claims to be Windows from a Linux binary.
+pub fn hello(session: &str, version: &str, platform: &str) -> String {
     format!(
         "{{\"v\":1,\"type\":\"hello\",\"collectorSession\":\"{}\",\"collectorVersion\":\"{}\",\
-         \"platform\":\"win32\",\"arch\":\"{}\",\"capabilities\":[\"app-focus\",\"window-metadata\",\
+         \"platform\":\"{}\",\"arch\":\"{}\",\"capabilities\":[\"app-focus\",\"window-metadata\",\
          \"resource-uri\",\"secure-field-detection\"]}}",
         escape(session),
         escape(version),
+        escape(platform),
         std::env::consts::ARCH,
     )
 }
@@ -208,8 +211,10 @@ mod tests {
 
     #[test]
     fn the_other_messages_match_their_documented_shapes() {
-        assert!(hello("s", "0.1.0").contains("\"type\":\"hello\""));
-        assert!(hello("s", "0.1.0").contains("\"platform\":\"win32\""));
+        assert!(hello("s", "0.1.0", "win32").contains("\"type\":\"hello\""));
+        assert!(hello("s", "0.1.0", "win32").contains("\"platform\":\"win32\""));
+        // The same function must not claim Windows for a Linux binary.
+        assert!(hello("s", "0.1.0", "linux").contains("\"platform\":\"linux\""));
         assert_eq!(configured(3), "{\"v\":1,\"type\":\"configured\",\"revision\":3}");
         assert!(state("running", true, None).contains("\"accessibilityTrusted\":true"));
         assert!(state("permission-required", false, Some("uia unavailable")).contains("uia unavailable"));

@@ -1,20 +1,20 @@
-//! Entry point: the protocol loop, wired to the platform module.
+//! Entry point: the protocol loop, wired to the Linux platform module.
 use std::io::{self, BufRead, Write};
 
 use collector::{platform, protocol};
 
 fn main() {
-    let session = format!("win-{}", std::process::id());
+    let session = format!("linux-{}", std::process::id());
     let mut out = io::stdout();
-    let _ = writeln!(out, "{}", protocol::hello(&session, env!("CARGO_PKG_VERSION"), "win32"));
-    match platform::unavailable_reason() {
-        None => {
-            let _ = writeln!(out, "{}", protocol::state("running", true, None));
-        }
-        Some(reason) => {
-            let _ = writeln!(out, "{}", protocol::state("permission-required", false, Some(reason)));
-            let _ = writeln!(out, "{}", protocol::diagnostic("warn", "uia-unavailable", reason));
-        }
+    let _ = writeln!(out, "{}", protocol::hello(&session, env!("CARGO_PKG_VERSION"), "linux"));
+    let accessibility = platform::accessibility_state();
+    let _ = writeln!(
+        out,
+        "{}",
+        protocol::state(accessibility.state_name(), accessibility.state_name() == "running", accessibility.reason())
+    );
+    if let Some(reason) = accessibility.reason() {
+        let _ = writeln!(out, "{}", protocol::diagnostic("warn", "at-spi-unavailable", reason));
     }
     let _ = out.flush();
 
