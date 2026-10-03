@@ -1,0 +1,16 @@
+[package]
+name = "dsh-computer-history-collector-windows"
+version = "0.1.0"
+edition = "2021"
+description = "Windows collector for DSH Computer History: speaks the collector protocol in docs/collector-protocol.md"
+license = "MIT"
+
+[dependencies]
+
+[lib]
+name = "collector"
+path = "src/lib.rs"
+
+[[bin]]
+name = "dsh-computer-history-collector-windows"
+path = "src/main.rs"
