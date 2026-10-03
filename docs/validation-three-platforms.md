@@ -894,3 +894,39 @@ build: `com.intellij.openapi.startup` ships only project-scoped activities, and 
 `init` to attach from. What is left is the design that does not depend on those hooks at all: report the
 editor the IDE is currently showing on a timer, with the event hooks kept as a latency optimisation rather than
 as the trigger. That is the next change, and the row stays unverified until a run produces it.
+
+### The JetBrains live row
+
+Produced, with the client's own log and the row it wrote:
+
+```
+computer-history: intake answered 201 for /tmp/jb-live/src{"stored":true}
+```
+
+```console
+$ sqlite3 -header "file:/tmp/jb-verify-home/data/history.sqlite?mode=ro" \
+    "select source_provider, source_adapter, bundle_id, surface_kind, workspace_root
+     from observations where source_provider='companion' order by observed_at_ms desc limit 1;"
+source_provider|source_adapter|bundle_id|surface_kind|workspace_root
+companion|jetbrains|com.jetbrains.intellij|editor|/tmp/jb-live/src
+```
+
+The identity is the client's own declaration: `bundle_id` is what the plugin says it is, validated by shape and
+judged by the Host's policy like any other observation, and the row is stored because the declared application
+is allowed. The store is an isolated one (`dataDirectory` of its own, so the capture lock is this Host's), which
+is why the row is not in the shared store the owner's application uses - the same run against that store would
+be refused by the lock, not by the client.
+
+### Correction: the application-scoped listener does attach in this build
+
+The round before this one concluded from a single silent run that the deprecated `applicationListeners`
+registration is ignored by this distribution. **That was wrong**, and the way it was found is worth keeping: the
+conclusion was drawn from an absence, and the same run's log had never been checked for whether the file opened
+at all - "not registered" and "no event" were indistinguishable. The listener now logs unconditionally at the
+top of `editorCreated`, which makes the two separable, and the run that produced the row shows both the open
+file and the listener firing. The registration is deprecated upstream and it works here.
+
+**Measured, with the recipe:** opening a single file puts the IDE in `LightEditProject`, where the project
+activity does not reliably run, so an application-scoped listener is what makes the client dependable; the
+intake only stores for a Host that owns capture (its own `dataDirectory`); and the declared application must be
+allowed, which the shipped preset already does.
