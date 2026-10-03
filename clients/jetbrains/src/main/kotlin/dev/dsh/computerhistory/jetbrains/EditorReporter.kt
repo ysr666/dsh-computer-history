@@ -12,6 +12,10 @@ import com.intellij.openapi.vfs.VirtualFile
  */
 class EditorReporter : FileEditorManagerListener {
     override fun fileOpened(source: FileEditorManager, file: VirtualFile) {
+        // Logged unconditionally for the same reason as the application-scoped class: which hook actually
+        // fires in LightEdit is the question, and an absence of evidence is not an answer to it.
+        java.util.logging.Logger.getLogger("computer-history.jetbrains")
+            .info("computer-history: fileOpened for ${file.path}")
         val root = workspaceRootFor(source.project, file)
         CompanionClient.report(
             workspaceRoot = root,

@@ -917,14 +917,21 @@ is allowed. The store is an isolated one (`dataDirectory` of its own, so the cap
 is why the row is not in the shared store the owner's application uses - the same run against that store would
 be refused by the lock, not by the client.
 
-### Correction: the application-scoped listener does attach in this build
+### Two conclusions drawn from silences, and what logging settled
 
-The round before this one concluded from a single silent run that the deprecated `applicationListeners`
-registration is ignored by this distribution. **That was wrong**, and the way it was found is worth keeping: the
-conclusion was drawn from an absence, and the same run's log had never been checked for whether the file opened
-at all - "not registered" and "no event" were indistinguishable. The listener now logs unconditionally at the
-top of `editorCreated`, which makes the two separable, and the run that produced the row shows both the open
-file and the listener firing. The registration is deprecated upstream and it works here.
+Both wrong turns in this section had the same shape: a run produced nothing, and the nothing was read as
+evidence before it was made unambiguous. Logging every hook unconditionally is what settled it.
+
+1. *"Project-scoped listeners are not registered for the default project."* **Wrong.** The project-scoped
+   `FileEditorManagerListener` is exactly the hook that fires here: `computer-history: fileOpened for
+   /tmp/jb-live/src/Main.kt`, followed by the report that stored the row.
+2. *"The deprecated application-level `applicationListeners` registration is honoured by this build."* **Also
+   wrong.** With the same unconditional logging in place, the application-scoped `editorCreated` never appears,
+   so that registration does not attach here. It has been removed rather than left in as decoration.
+
+What is actually measured: the project-scoped file listener fires in LightEdit and stores the row; the
+project activity does not reliably run there (so it is a latency optimisation, not the trigger); and the
+application-scoped route does not exist in this distribution.
 
 **Measured, with the recipe:** opening a single file puts the IDE in `LightEditProject`, where the project
 activity does not reliably run, so an application-scoped listener is what makes the client dependable; the
