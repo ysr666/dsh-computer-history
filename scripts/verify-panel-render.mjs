@@ -176,6 +176,23 @@ async function main() {
   // dismissal never ran and every later click landed on the overlay - two "failures" that were the harness
   // looking at a screen it had never opened.
   const dialogCount = async () => Number(await evaluate("document.querySelectorAll('[role=\"dialog\"],dialog').length"))
+  // A settings nav item's own text *is* the label, so containment matching (which prefers the shortest
+  // clickable ancestor) can still land on a wrapper. Exact match on the element's own text, smallest first.
+  const clickExact = (label) => evaluate(`(function(){
+    var wanted = ${JSON.stringify(label)};
+    var all = document.querySelectorAll('button,[role="tab"],[role="menuitem"],[role="option"],li,a,[data-slot]');
+    var best = null;
+    for (var i = 0; i < all.length; i++) {
+      var node = all[i];
+      if (node.getClientRects().length === 0) continue;
+      if ((node.textContent || '').trim() !== wanted) continue;
+      if (best === null || (node.textContent || '').length < (best.textContent || '').length) best = node;
+    }
+    if (best === null) return 'missing';
+    best.click();
+    return 'clicked';
+  })()`)
+
   const dismissIntro = async () => {
     for (let attempt = 0; attempt < 8; attempt += 1) {
       if ((await dialogCount()) === 0) return
@@ -279,16 +296,20 @@ async function main() {
   // tabbing in the shell proves nothing about our rows, and the first version of this step reported
   // "never reached our controls" while the dialog was not on screen at all.
   const openSettingsSection = async () => {
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      await clickText('设置', { last: true })
-      await sleep(2200)
+    // Clicking "the last element containing 设置" sometimes picked a different candidate, and the state dump for
+    // this step showed the dialog had never opened at all - the settings nav was simply absent from the text the
+    // page was showing. Every candidate is tried now, and the dialog appearing is what ends the search.
+    const settingsCandidates = Number(await evaluate("(function(){var n=0;var a=document.querySelectorAll('button,[data-slot],li,a');for(var i=0;i<a.length;i++){if(a[i].getClientRects().length&&(a[i].textContent||'').trim()==='设置')n++;}return n;})()"))
+    for (let index = 0; index < Math.max(1, settingsCandidates); index += 1) {
+      await evaluate("(function(){var a=document.querySelectorAll('button,[data-slot],li,a');var seen=0;for(var i=0;i<a.length;i++){if(a[i].getClientRects().length&&(a[i].textContent||'').trim()==='设置'){if(seen===" + index + "){a[i].click();return 'clicked';}seen++;}}return 'missing';})()")
+      await sleep(1800)
       if ((await dialogCount()) > 0) break
     }
     // Every candidate label is tried, and the result is checked: clicking `panelLabels.at(-1)` alone clicked the
     // English name in a Chinese interface and selected nothing, which is why this step measured an absent
     // surface through four versions.
     for (const label of panelLabels) {
-      await clickText(label, { last: true })
+      await clickExact(label)
       await sleep(2000)
       if (Number(await evaluate("document.querySelectorAll('.ch-settings-item').length")) > 0) return true
     }

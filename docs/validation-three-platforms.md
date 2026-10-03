@@ -1001,3 +1001,27 @@ clicking the entry does not render the section. This is now clearly the navigati
 and not anything about the plugin's markup. The keyboard question therefore stays **unverified**, with the
 remaining work named: reach the section in the fresh-page flow (the state dump for that step is
 `.debug/panel-render/focus-by-keyboard.txt`, which shows what was on screen instead).
+
+### The focus step: what the state dumps finally showed
+
+Every attempt to reach the settings section in the *focus* step failed, and the dumps the check writes beside
+each screenshot say why in one line. Compare the two:
+
+```
+# settings-read-failed (the step that works): the settings dialog is open
+… 设置 | 通用设置 | 模型 | 内置插件 | Agent 预设 | 电脑使用记录 | Vision Router | 打开配置文件 | 关闭 |
+  权限 | 语言 | 外观 | 字号大小 | 工作步骤展示 | 快捷键 …
+
+# focus-by-keyboard (the step that fails): no settings dialog at all
+… 设置 | 电脑使用记录 | 这台电脑被用来做了什么，只保存在本机。 | 采集：已停止 …
+```
+
+The section is reachable; the failing step simply never had the dialog open. Two fixes were tried and neither
+was the cause: exact-match nav-item clicking, and trying every candidate element until the dialog appears. The
+difference that does track the two states is that the working step opens settings **without reloading the page**
+first, while the focus step inserts a `Page.reload` before the keyboard walk. So the next attempt reuses the
+working flow and walks the keyboard from there, instead of re-deriving the navigation a fifth time.
+
+Kept because it is the phase's recurring error in its purest form: four rounds of guessing at selectors, when
+the check had been writing the answer next to every screenshot the whole time. The dumps exist for exactly this
+and were read last.

@@ -83,12 +83,11 @@ function appMark(label: string): string {
 }
 
 function resumeSubject(episode: EpisodeSummary): string | undefined {
+  if (episodeApp(episode) === 'Terminal') return undefined
   const resource = episode.lastStrongResource?.displayLabel
     ?? episode.resources[0]?.displayLabel
   if (resource) return resource
-  const workspace = episode.workspace?.title
-  if (workspace && episodeApp(episode) !== 'Terminal') return workspace
-  return undefined
+  return episode.workspace?.title
 }
 
 function formatClock(atMs: number, locale: string): string {
@@ -207,6 +206,10 @@ export function createHistoryPage({
     }
 
     const openEpisode = async (id: string): Promise<void> => {
+      if (String(selected?.id) === id) {
+        setSelected(undefined)
+        return
+      }
       setSelected(await historyApi.getEpisode(id))
     }
 
@@ -348,7 +351,10 @@ export function createHistoryPage({
                         React.createElement(
                           'button', {
                             type: 'button',
-                            className: 'ch-timeline-action',
+                            className: String(selected?.id) === String(item.id)
+                              ? 'ch-timeline-action ch-timeline-action-selected'
+                              : 'ch-timeline-action',
+                            'aria-expanded': String(selected?.id) === String(item.id),
                             onClick: () => { runAction(() => openEpisode(String(item.id))) },
                           },
                           React.createElement('span', { className: 'ch-app-mark', 'aria-hidden': true }, appMark(app)),
