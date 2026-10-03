@@ -1326,3 +1326,18 @@ makes, and it is visible rather than inferred:
 Together with `all-reads-failed.png` this covers both halves of the rule: when everything fails each section says
 so for itself, and when one thing fails the rest keep their content. A single shared error flag could not produce
 either picture.
+
+### `settings-read-failed` does not show what its name promises
+
+The image shows the settings dialog open on the **native** 通用设置 section - 权限 / 语言 / 外观 / 字号大小 /
+工作步骤展示 / 快捷键 - with the panel behind it reporting 电脑使用记录状态暂不可用。 and 时间线暂时不可用。 The
+plugin's rows are not in the picture, so this screenshot does **not** evidence the claim its step is named for
+("a settings surface without a snapshot must not keep its write controls available"). The dump's
+`controls: enabled,enabled,disabled` counted controls across the page, which is the panel's, not the rows'.
+
+What the image does evidence, and is worth keeping: the panel behind a blocked read reports the failure for
+itself while the shell's settings dialog is open on top of it, and the shell's nav lists our 电脑使用记录 entry.
+
+The claim itself is not withdrawn - it is simply not evidenced by this step. The step that can evidence it is the
+keyboard step, which now opens the plugin's own section and leaves it on screen; its screenshot is the next thing
+to read, and if the rows are there with their controls disabled, that is where this acceptance gets its picture.
