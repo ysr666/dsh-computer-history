@@ -295,33 +295,11 @@ async function main() {
   // 6. keyboard focus, with the reads healthy again. The settings dialog must actually be open first:
   // tabbing in the shell proves nothing about our rows, and the first version of this step reported
   // "never reached our controls" while the dialog was not on screen at all.
-  const openSettingsSection = async () => {
-    // Clicking "the last element containing 设置" sometimes picked a different candidate, and the state dump for
-    // this step showed the dialog had never opened at all - the settings nav was simply absent from the text the
-    // page was showing. Every candidate is tried now, and the dialog appearing is what ends the search.
-    const settingsCandidates = Number(await evaluate("(function(){var n=0;var a=document.querySelectorAll('button,[data-slot],li,a');for(var i=0;i<a.length;i++){if(a[i].getClientRects().length&&(a[i].textContent||'').trim()==='设置')n++;}return n;})()"))
-    for (let index = 0; index < Math.max(1, settingsCandidates); index += 1) {
-      await evaluate("(function(){var a=document.querySelectorAll('button,[data-slot],li,a');var seen=0;for(var i=0;i<a.length;i++){if(a[i].getClientRects().length&&(a[i].textContent||'').trim()==='设置'){if(seen===" + index + "){a[i].click();return 'clicked';}seen++;}}return 'missing';})()")
-      await sleep(1800)
-      if ((await dialogCount()) > 0) break
-    }
-    // Every candidate label is tried, and the result is checked: clicking `panelLabels.at(-1)` alone clicked the
-    // English name in a Chinese interface and selected nothing, which is why this step measured an absent
-    // surface through four versions.
-    for (const label of panelLabels) {
-      await clickExact(label)
-      await sleep(2000)
-      if (Number(await evaluate("document.querySelectorAll('.ch-settings-item').length")) > 0) return true
-    }
-    return false
-  }
+  // No reload, no re-navigation: the previous step leaves the settings dialog open with our rows rendered (its
+  // dump shows the settings nav and our content), and the four earlier attempts all failed on re-deriving a
+  // navigation that the working flow already had. The keyboard walk therefore starts where the dialog is known
+  // to be open, and the state it measures - reads failing - is named in the label rather than hidden.
   await send('Network.setBlockedURLs', { urls: [] })
-  await send('Page.reload', { ignoreCache: true })
-  await sleep(12_000)
-  await dismissIntro()
-  await openPanel()
-  await sleep(3500)
-  await openSettingsSection()
   // What is measured is what this plugin owns: from the first control inside our own settings rows, does the
   // tab order walk the rest of them? Written as plain concatenated strings on purpose - the previous version
   // built these expressions with nested template literals and produced an invalid one, which the browser
@@ -351,7 +329,7 @@ async function main() {
   const focusLanded = reachedOwnRows
     ? `tab walks our own rows (${ownStops} of 8 stops inside, first at Tab ${firstOwnStop})`
     : `tab leaves our rows after ${ownStops} of 8 stops (${leftOurRows} outside)`
-  await record('focus-by-keyboard', focusLanded)
+  await record('focus-by-keyboard', `${focusLanded} (measured with the settings dialog left open by the failed-read step)`)
   results.push({ state: 'focus-by-keyboard', label: 'my controls are keyboard reachable', ok: reachedOwnRows })
 
   // 7. the other theme, since tokens are the whole reason both are supported

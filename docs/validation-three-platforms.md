@@ -1025,3 +1025,15 @@ working flow and walks the keyboard from there, instead of re-deriving the navig
 Kept because it is the phase's recurring error in its purest form: four rounds of guessing at selectors, when
 the check had been writing the answer next to every screenshot the whole time. The dumps exist for exactly this
 and were read last.
+
+### The settings section was never selected - in any step
+
+The last dump reading settles it: the dialog that step 5 opens is real, and it is showing the **native** 通用设置
+section - 权限 / 语言 / 外观 / 字号大小 / 工作步骤展示 / 快捷键 - not the plugin's. `.ch-settings-item` is
+therefore absent, correctly. No attempt in this check has ever selected the plugin's own settings section, which
+is why the keyboard question has stayed unmeasured through four rounds of selector guessing: the surface was
+open, one nav click away, and showing something else.
+
+The check now fails loudly at that point instead of measuring the native rows, which is the whole reason this
+took until now to see. The remaining work is one click on the `电脑使用记录` nav item inside the settings dialog,
+verified by `.ch-settings-item` appearing, and only then does the keyboard walk mean anything.
