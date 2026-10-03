@@ -37,6 +37,14 @@ const PANEL_ID = 'computer-history' as MainPanelId
 // that write, so a Chinese interface showed an English panel.
 const interfaceLanguage = (): string =>
   (document.documentElement.lang || navigator.language || 'en').toLowerCase()
+// Server-side messages arrive in English; the ones a person can actually meet get a translation.
+const serverText = (value: string): string => {
+  const port = /port (\d+) is already in use/.exec(value)
+  if (port) return t(`port ${port[1]} is already in use`, `端口 ${port[1]} 已被占用`)
+  if (/companion intake/i.test(value)) return t('the companion listener is unavailable', '伴侣接收端不可用')
+  return value
+}
+
 const t = (en: string, zh: string): string =>
   (interfaceLanguage().startsWith('zh') ? zh : en)
 
@@ -73,7 +81,6 @@ const SPACE = { xs: 4, sm: 8, md: 12, lg: 18, xl: 26 }
 const MUTED_TEXT = 'var(--dsw-alias-label-secondary)'
 const SURFACE = 'var(--dsw-alias-bg-layer-1)'
 const SURFACE_NESTED = 'var(--dsw-alias-bg-layer-2)'
-const RADIUS = 10
 const MUTED = { color: MUTED_TEXT, margin: `0 0 ${SPACE.sm}px`, lineHeight: 1.55 }
 const HAIRLINE = '1px solid var(--dsw-alias-border-l1)'
 const DANGER = 'var(--dsw-alias-state-error-primary)'
@@ -82,17 +89,34 @@ const SECTION = {
   paddingTop: SPACE.lg,
   borderTop: HAIRLINE,
 }
-const BUTTON = {
+// Measured from the interface's own controls rather than invented: the sidebar's buttons are 14px, weight
+// 400-500, 36px tall, radius 12, with **no border** and a translucent fill. The first version of this file
+// drew bordered white boxes, which is exactly the "default browser button" look - the tokens were right and
+// the shape was wrong.
+const BUTTON: React.CSSProperties = {
   font: 'inherit',
-  padding: '5px 10px',
-  borderRadius: RADIUS,
-  border: HAIRLINE,
-  background: 'transparent',
+  fontSize: 14,
+  fontWeight: 500,
+  height: 36,
+  padding: '0 14px',
+  borderRadius: 12,
+  border: 'none',
+  background: SURFACE_NESTED,
   color: 'inherit',
   cursor: 'pointer',
 }
-const BUTTON_PRIMARY = { ...BUTTON, fontWeight: 600, borderColor: 'currentColor' }
-const BUTTON_DANGER = { ...BUTTON, fontWeight: 600, borderColor: DANGER, color: DANGER }
+const BUTTON_PRIMARY: React.CSSProperties = {
+  ...BUTTON,
+  background: 'var(--dsw-alias-brand-primary)',
+  color: '#fff',
+  fontWeight: 600,
+}
+const BUTTON_DANGER: React.CSSProperties = {
+  ...BUTTON,
+  background: 'transparent',
+  color: DANGER,
+  border: HAIRLINE,
+}
 const FIELD_LABEL = {
   display: 'inline-flex', gap: 6, alignItems: 'center', marginRight: SPACE.md,
 }
@@ -355,7 +379,7 @@ function HistoryPage(): React.ReactElement {
             style: {
               margin: 0,
               padding: 8,
-              borderRadius: RADIUS,
+              borderRadius: 10,
               background: SURFACE,
               overflowX: 'auto',
             },
@@ -813,13 +837,16 @@ function HistoryPage(): React.ReactElement {
       'p',
       null,
       !companion
-        ? 'Companion state unavailable on this Host.'
+        ? t('Companion state unavailable on this Host.', '这台宿主上拿不到伴侣状态。')
         : companion.listening
           ? t(
               `Listening on 127.0.0.1:${companion.port} · ${companion.paired ? (companion.lastSeenAtMs === undefined ? 'a token exists, but no client has ever used it' : `paired · last used ${new Date(companion.lastSeenAtMs).toLocaleString()}`) : 'not paired yet'}`,
               `正在监听 127.0.0.1:${companion.port} · ${companion.paired ? (companion.lastSeenAtMs === undefined ? '令牌已生成，但还没有任何客户端用过它' : `已配对 · 最近使用 ${new Date(companion.lastSeenAtMs).toLocaleString()}`) : '还没有配对'}`,
             )
-          : `Companion unavailable${companion.reason ? ': ' + companion.reason : ''}`,
+          : t(
+              `Companion unavailable${companion.reason ? ': ' + companion.reason : ''}`,
+              `伴侣不可用${companion.reason ? '：' + serverText(companion.reason) : ''}`,
+            ),
     ),
     React.createElement(
       'div',
