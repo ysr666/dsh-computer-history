@@ -21,9 +21,24 @@ interface AdapterFixture {
 
 const fixture = JSON.parse(
   readFileSync(new URL('./fixtures/adapters.json', import.meta.url), 'utf8'),
-) as { adapters: readonly AdapterFixture[]; refusals: readonly { case: string; reason: string }[] }
+) as {
+  adapters: readonly AdapterFixture[]
+  refusals: readonly { case: string; reason: string }[]
+  $unverified: Readonly<Record<string, readonly string[]>>
+}
 
 describe('the cross-platform adapter contract', () => {
+  it('says which platforms have never run a collector', () => {
+    // The fixture is a contract for three platforms, and only one of them has been measured. Keeping that
+    // in the data - and asserting it here - makes "unverified" something that has to be deleted on purpose
+    // rather than something that quietly disappears when a machine finally runs it.
+    expect(fixture.$unverified['darwin'] ?? []).toEqual([])
+    // A missing note fails here as well: an absent key reads as nothing verified, which is the direction
+    // this assertion should err in.
+    expect((fixture.$unverified['win32'] ?? []).length).toBeGreaterThan(0)
+    expect((fixture.$unverified['linux'] ?? []).length).toBeGreaterThan(0)
+  })
+
   it('names adapters this build actually has', () => {
     const known = new Set(PHASE1_ADAPTERS.map(adapter => adapter.id))
     for (const entry of fixture.adapters) {

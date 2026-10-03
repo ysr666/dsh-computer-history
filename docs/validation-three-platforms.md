@@ -281,3 +281,45 @@ green again (restored)                5 passed
 `pnpm verify` exits zero **with** lint warnings, so a commit landed carrying one (`flatMap` with a
 spread). The standing rule is zero warnings, and the exit code alone does not catch it - the warning
 count has to be read. Fixed forward in `e30ceee`.
+
+## P5 - the Windows collector, to the line this machine can honestly reach
+
+### Verified here
+
+`native/windows` is a Rust crate whose `platform` module is the only part that touches Windows. The rest
+is the message layer from `docs/collector-protocol.md`, and it is tested wherever Rust exists:
+
+```bash
+pnpm verify:collector-windows
+# windows collector: protocol layer ok (5 tests); UI Automation paths remain unverified without Windows
+```
+
+Five tests: the observation carries the documented fields; **there is no field for content** (asserted
+against the serialised line, so the boundary is a property of the shape); control characters cannot
+synthesise a second message; the other messages match their documented shapes; protected applications are
+recognised case-insensitively. Calibrated in both directions - adding a `selection_text` field and patching
+the serialiser turns the content assertion red, restoring turns it green.
+
+A missing Rust toolchain prints a **skip that says UNVERIFIED**, never a pass.
+
+### Not verified, and what would verify it
+
+Nothing about UI Automation has been run: there is no Windows machine here. The Windows rows in
+`tests/conformance/fixtures/adapters.json` are a mapping the collector is *expected* to produce, and the
+fixture now carries that in its own data (`$unverified.win32`), with a test that fails if the note is
+removed - so "unverified" has to be deleted deliberately rather than quietly.
+
+The recipe, to be run once on a real machine:
+
+```powershell
+cargo build --release --manifest-path native/windows/Cargo.toml
+# the host reads the collector from bin/; point the plugin's collector path at the built binary, then:
+# 1. work in Notepad, Explorer, Windows Terminal and VS Code for a minute each
+# 2. read the rows:   curl -H "$C" "$BASE/recent"
+# 3. expect one row per application, each with the application id and, for the editors, a file
+# 4. open 1Password and confirm the refusal count moves under 'protected-app', with no row stored
+```
+
+Passing means: four rows naming four applications, a `protected-app` refusal that did not store, and the
+same three refusal reason strings the macOS collector produces. Until that run exists, every sentence above
+about Windows behaviour is a design, not a measurement.
