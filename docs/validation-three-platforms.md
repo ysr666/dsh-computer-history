@@ -658,3 +658,19 @@ of the artifact the question was about** - a keyword instead of an owner, a fiel
 carries, a convenient layer instead of the layer the guarantee lives in, part of a function instead of the
 function, and finally a reported state instead of "is anything still observing". Each one produced something
 that looked like evidence and supported nothing, and each was caught by a measurement that took one command.
+
+### CI: what the runners can verify, and what they cannot
+
+`.github/workflows/collectors.yml` runs the message layer on **macos-latest, windows-latest and
+ubuntu-latest** and the whole gate - including `tests/conformance` - on macOS. A Windows or Linux collector
+that cannot speak the protocol fails there, which is the half of the objective's CI item that hardware does
+not gate.
+
+**What a green run would still not be evidence for:** observation through UI Automation or AT-SPI. Those need
+a desktop session with a window to look at, not a runner, so the live rows stay marked unverified in
+`tests/conformance/fixtures/adapters.json` and above. The workflow says this in its own header, so that a green
+badge cannot be read as a measured platform.
+
+**Not run yet:** the workflow has not executed. Writing it is not running it - the same distinction this file
+makes about compiling and running, applied to a file rather than a binary. Its first run needs a push, which
+waits for the owner.
