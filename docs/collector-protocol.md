@@ -69,8 +69,13 @@ This is the boundary (ADR 0002), and it is a requirement on the *shape*, not on 
 - no field may carry screen or window contents, a screenshot, or a recording;
 - no field may carry document text, a selection, a clipboard, a keystroke or a mouse coordinate;
 - no field may carry a terminal buffer, a shell history, or a browser page body;
-- **unknown fields are refused, not ignored** - so adding one is a protocol error rather than a
-  harmless extra - which is what makes this list enforceable by a parser instead of by review;
+- **the companion intake refuses unknown fields; the collector parser does not.** This is measured, not
+  assumed (`tests/conformance/collector-protocol.spec.ts`): an observation carrying an extra field is
+  accepted and the field is dropped, while an unknown *message type* is refused. The extra field cannot
+  reach storage either way, so nothing leaks today - but "silently dropped" means a collector's mistake
+  is invisible, which is the opposite of a boundary a parser enforces. **Making the collector parser
+  strict is a deliberate, open contract decision for the three-platform work**, and until it is taken
+  this document does not claim it;
 - a `protected` or `secure` observation is dropped before storage, and the refusal is counted by reason.
 
 ## Timing, as implemented and measured
@@ -94,6 +99,9 @@ This is the boundary (ADR 0002), and it is a requirement on the *shape*, not on 
 3. **Fixtures**: recorded platform event streams (AX, UIA, AT-SPI) that each collector must turn into
    **the same observations, field by field**.
 
-**Not verified yet:** the suite does not exist. Everything above marked "measured" was measured on
+**What exists so far:** `tests/conformance/collector-protocol.spec.ts`, which measures the enforcement
+above rather than promising it - including the gap: unknown fields are dropped, not refused.
+
+**Not verified yet:** the rest of the suite. Everything above marked "measured" was measured on
 macOS; the message table is a reading of the types and parsers, and the conformance suite - not this
 document - is what will make it checkable.
