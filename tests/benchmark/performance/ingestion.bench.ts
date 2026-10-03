@@ -1,6 +1,7 @@
 import {
   mkdtempSync,
   rmSync,
+  statSync,
 } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -114,9 +115,19 @@ describe('ingestion performance gate', () => {
     `).get()).toEqual({ count: 10_000 })
     expect(durationMs).toBeLessThan(30_000)
 
+    // Three numbers, because the gate's one assertion (under 30s) hides both the throughput a regression
+    // would move and the store growth it would not: the baseline is recorded from these lines.
     console.log(
       'INGEST_10000_MS',
       Math.round(durationMs),
+    )
+    console.log(
+      'INGEST_10000_PER_SEC',
+      Math.round(10_000 / (durationMs / 1000)),
+    )
+    console.log(
+      'INGEST_10000_DB_BYTES',
+      statSync(history.databasePath).size,
     )
     history.close()
   }, 40_000)

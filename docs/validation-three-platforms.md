@@ -761,3 +761,31 @@ Red/green, because a check that has never failed is not a check: editing the mar
 `docs/validation-three-platforms.md says [darwin,linux,win32] but the fixture's $unverified lists say [linux,win32]`
 and exit 1; reverting it returns the green line above. The script also asserts the matrix still names all three
 runners, so a platform cannot quietly leave the workflow while the prose still promises it.
+
+## Ingestion baseline
+
+The benchmark gate asserted one thing - 10k observations ingested in under 30s - which hides both the
+throughput a regression would move and the store growth it would not. It now prints three numbers and the
+baseline is recorded from them. Two runs, same machine, content identical (the store size is byte-for-byte the
+same because the input is deterministic):
+
+| run | ingest 10k | throughput | store after 10k |
+|---|---|---|---|
+| 1 | 11 025 ms | 907 obs/s | 6 295 552 B |
+| 2 | 10 864 ms | 920 obs/s | 6 295 552 B |
+
+Environment: macOS 27.0, node v24.5.0, commit `a623507`.
+
+Reproduce with one command, which prints the same three lines:
+
+```console
+$ pnpm benchmark:ingestion
+INGEST_10000_MS 11025
+INGEST_10000_PER_SEC 907
+INGEST_10000_DB_BYTES 6295552
+```
+
+Reading it: the spread between runs is under 2%, so a future run more than a few percent off is worth looking
+at, and a store that grows per observation faster than ~630 B is a storage-shape change rather than noise. This
+is one machine and one shape of input - it is a baseline, not a bound, and the file says so rather than
+implying a guarantee the measurement cannot make.

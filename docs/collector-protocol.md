@@ -105,3 +105,39 @@ above rather than promising it - including the gap: unknown fields are dropped, 
 **Not verified yet:** the rest of the suite. Everything above marked "measured" was measured on
 macOS; the message table is a reading of the types and parsers, and the conformance suite - not this
 document - is what will make it checkable.
+
+## Open decision: what a parser does with a field it does not know
+
+Measured today, in `tests/conformance/collector-protocol.spec.ts`: an observation carrying an extra field is
+**accepted** and the field is **dropped**, while an unknown *message type* is **refused**. The companion intake
+refuses unknown fields. Two boundaries in one product, and only one of them can be called an enforced boundary.
+
+Why it matters, stated as the failure it produces: a collector that misspells a known field - `observedAtMs` as
+`observedAt` - sends an observation the parser accepts with the timestamp missing. Nothing refuses it, nothing
+counts it, and the row lands with substituted values. The mistake is invisible on both sides, which is the
+opposite of what a protocol boundary is for. The counter-argument is real too: a **newer** collector talking to
+an **older** host sends fields that host has never heard of, and refusing them turns a forward-compatible
+upgrade into an outage.
+
+The three shapes this decision can take, with what each costs:
+
+1. **Refuse, like the companion does.** Symmetric, and a typo fails at the first message instead of appearing as
+   a strange row. Cost: a collector newer than the host is refused outright; every field addition becomes a
+   lockstep release. This is the strict reading of the protocol document.
+2. **Accept, count, and report.** Storage behaviour is unchanged, but the parser counts unknown fields by name
+   and the count is visible where capture health is visible, so "silently dropped" becomes "dropped and seen".
+   Forward compatibility is preserved and the mistake is no longer invisible. Cost: a second state to carry, and
+   a collector cannot tell it is wrong from the protocol alone.
+3. **Refuse everything except a reserved extension prefix** (for instance `x-`). Keeps a door open for future
+   fields without pretending to know them, and keeps typos of *known* names refused. Cost: a naming rule that
+   must be enforced, and every future field has to be classified deliberately.
+
+Whichever is chosen, the collector and the companion must land on the same rule: "which side of the boundary a
+field falls on" is exactly the kind of thing that reads as a bug from the outside when the two disagree.
+
+Red/green calibration for whichever rule is chosen: the fixture in `tests/conformance/collector-protocol.spec.ts`
+already carries both cases side by side (extra field, unknown message type), so the change is a red run of the
+first case followed by a green one after the parser is changed - no new harness needed.
+
+**Decision owner: the repository owner.** This is a compatibility policy, not an implementation detail, and it
+is left open here on purpose rather than settled by the person writing the parser.
