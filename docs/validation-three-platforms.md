@@ -1050,3 +1050,18 @@ invisible to a text match.
 Recorded as the sixth attempt on this one step. What the step does have, and why it is worth keeping: it fails
 loudly at the surface instead of measuring the native rows, and it writes its state and class inventory beside
 the screenshot for exactly this kind of reading.
+
+### The structure dump: the dialog is not there when the keyboard step runs
+
+The dump reports **one** small element and no navigation at all - not the native settings rows, not the plugin's
+entry, nothing. So the dialog the check believes it is measuring is not present when the keyboard step runs: the
+one left open by the previous step does not survive, most likely because this step's first action (unblocking the
+URLs) re-renders that surface out of existence.
+
+That closes the loop on six attempts at one step. Every one of them assumed a dialog that was not on screen:
+first a shell focus ring, then `document` standing in for a dialog, then `.ch-main`, then the native section,
+then a class inventory with no `ch-*` in it, and now a single stray element. The lesson is not about selectors -
+it is that this step never opened its own surface and kept measuring whatever happened to be there.
+
+The next version opens the settings dialog **inside** the keyboard step, asserts the dialog and the plugin's
+section in the same breath, and only then walks the tab order.
