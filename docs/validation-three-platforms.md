@@ -1703,3 +1703,27 @@ thing no file can arrange), re-adding the instance is a two-line change that is 
 
 The alternative remains the cheaper one: pair the Windows or Linux machine under the account this connector already
 holds, and its tools appear beside the current device with no second instance at all.
+
+### The Windows machine is reachable, and what it still needs
+
+The second instance works. Two accounts, two instances in the profile layer (17 entries, no validation errors in an
+isolated boot):
+
+```
+instance 1: jeroysr@gmail.com              -> device ysr.local     (a Mac)
+instance 2: yeshirui@stu.xjtu.edu.cn       -> device computer      (Windows)
+```
+
+`computer` answers `start_process` with `platform: win32, arch: x64, release 10.0.26200, 16 cpus`, shell
+`powershell.exe`. That is the machine the Windows row has been waiting for since the beginning of this phase, and
+it is the first time the UI Automation half of the acceptance has been reachable at all.
+
+Its toolchain, measured rather than assumed: **Node v24.21.0 present** (which is what the pairing agent needs), and
+**cargo, rustc, git and pnpm all absent**, with no `~\Projects` directory. So the work there is: install git, a Rust
+toolchain and pnpm; fetch the repository; run the Windows collector's `cargo test`; run the conformance suite
+against a live collector; capture a live row in that machine's store together with the command that produced it;
+and compare the refusal reasons with macOS. Nothing about that is blocked any more - it is a sequence of steps on a
+machine that answers.
+
+One note kept for whoever reads the logs next: that Windows is a Chinese installation and PowerShell's errors come
+back in GBK, so command output there has to be forced to UTF-8 or the diagnostics are unreadable.
