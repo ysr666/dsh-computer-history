@@ -579,3 +579,35 @@ The lesson is not "read more carefully". It is that I kept measuring the artifac
 the state the interface reports - and never measured the artifact the question was actually about: **is anything
 still observing?** A dead collector and a restarted one report identically from the first, and only the second
 question distinguishes them.
+
+## Gate discipline: the record of being stopped
+
+The standing rule is that a commit is read against the gate before it lands, and that a green exit code is not
+the standard on its own. Both were earned rather than assumed. The table below is extracted from the commit
+messages of this phase - the commits whose own text records the gate refusing the work - and it is generated
+from history rather than written from memory, for the reason every other generated table in this file exists.
+
+| commit | subject | what stopped it |
+|---|---|---|
+| `
+5224b73` | docs: P5 to the line this machine can honestly reach | the gate stopped a commit |
+| `
+194dc6d` | docs: P4 closed - the contract, the suite, and three calibra | the exit code alone was not the standard |
+| `
+e30ceee` | fix: the lint warning the gate tolerated | the exit code alone was not the standard |
+| `
+b8b6ee6` | test: the first conformance artifact measures the parser, an | the gate stopped a commit |
+| `
+496d9f7` | feat: the state reports what the running plugin is | the gate stopped a commit |
+| `
+1b5f7d7` | feat: three button shapes, so primary and destructive action | the type checker refused the change |
+| `
+1b77cd6` | feat: separators, theme radii, and buttons that look like bu | the type checker refused the change |
+| `
+c879ac8` | feat: one spacing scale for the panel, and the five strings  | the type checker refused the change |
+| `
+bec82d7` | feat: the backend can carry the refusal breakdown (T2.9-1/2/ | the type checker refused the change |
+
+What this record is for: every entry is a change that looked finished and was not. The two that mattered most
+were not type errors - a red gate that was read too late, and a commit that carried lint warnings because the
+exit code was zero. Neither would have been caught by running the tests again.
