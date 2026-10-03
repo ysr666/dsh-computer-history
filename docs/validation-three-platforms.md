@@ -1416,3 +1416,19 @@ Six of the seven states have now been read rather than only asserted: ready (lig
 failure, loading, and the settings section with its disabled control. The seventh, `settings-read-failed`, is the one
 whose image shows the native section instead of ours; that step is the next thing to fix, and until it is fixed the
 file says its name promises more than its picture supports.
+
+### `settings-read-failed` fixed: it now shows our section, and one label stays loose
+
+The step selects the plugin's section the same way the keyboard step does (try each candidate label, click the
+element and its closest clickable ancestor, verify `.ch-settings-item` appeared) and its captured text now ends
+with the shell's settings nav followed by **our** content: `无法连接到宿主。` and a 重试 button, with the panel
+behind it reporting 电脑使用记录状态暂不可用。 / 时间线暂时不可用。 So the name and the picture agree at last: the
+settings surface with a failed read renders its own failure copy.
+
+One thing stays loose and is named rather than left: the step's own dump counts `.ch-button,.ch-input` and reports
+`controls: enabled,enabled` - those two are the retry buttons, which *should* be enabled. The acceptance it is
+named for ("no write control stays available without a snapshot") is evidenced elsewhere and better: the disabled
+**记录** switch in `focus-by-keyboard.png`. What this step evidences is the failure copy and the retry path.
+
+Seven of seven states have now been read. Two of them corrected themselves in the process - the loading state and
+this one - and both corrections came from reading the image rather than trusting the step's name.

@@ -283,6 +283,15 @@ async function main() {
   await clickText('设置', { last: true })
   await sleep(2500)
   await clickText(panelLabels.at(-1), { last: true })
+  // Select the plugin's own section and verify it, instead of clicking the English label in a Chinese
+  // interface and photographing whatever section the dialog happened to be showing - which is why this step's
+  // screenshot showed the native rows while its name promised ours.
+  for (const label of panelLabels) {
+    await evaluate("window.__chWanted = " + JSON.stringify(label) + "; 'set'")
+    await evaluate("(function(){var w=window.__chWanted;var a=document.querySelectorAll('button,a,li,[role],[data-slot]');var hits=[];for(var i=0;i<a.length;i++){var n=a[i];if(!n.getClientRects().length)continue;if((n.textContent||'').trim()!==w)continue;hits.push(n);}if(hits.length===0)return 'missing';var last=hits[hits.length-1];last.click();var c=last.closest('button,[role=\"tab\"],[role=\"menuitem\"],li,a,[data-slot]');if(c&&c!==last)c.click();return 'clicked '+hits.length;})()")
+    await sleep(1800)
+    if (Number(await evaluate("document.querySelectorAll('.ch-settings-item').length")) > 0) break
+  }
   await sleep(3000)
   const disabled = await evaluate(`(() => {
     const controls = [...document.querySelectorAll('.ch-button,.ch-input')]
