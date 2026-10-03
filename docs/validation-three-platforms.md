@@ -485,5 +485,25 @@ the host having asked it to. Writing down the shape before writing the code is w
 for - the first three attempts at this measurement all looked like "the interface is wrong somewhere", and the
 line numbers turned it into a five-line change with a test.
 
-**Not yet fixed.** This section states the diagnosis and the fix; the next pass implements it and re-runs the
-same measurement, which is the only thing that will show it works.
+### The fix is installed, and the measurement still fails
+
+`manager.ts:166` used to be `void handle.waitForExit().catch(() => {})` - **an exit observer that threw its
+result away**, which is the whole defect. It now marks degraded and notifies an unexpected exit when the host
+is not the one stopping the child, and the reinstall is verified the way this document prescribes:
+`grep -c collector-exited-unexpectedly` returns 1 in the source, in the built `lib/index.js`, and in the
+profile's installed copy. Not "the install command succeeded" - the marker itself.
+
+```text
+before the kill   capture: running
+28 seconds after  capture: running      (no reason field in the state at all)
+```
+
+So the fix is present and the interface still reports healthy. That leaves two candidates, and they are
+different problems: the listener does not fire (the exit is not reaching it, or a guard swallows it), or it
+fires and **the degraded state is recorded somewhere the state API does not report** - the third of the three
+candidates this section opened with, which the read had left open and which the measurement now points at.
+
+**Not fixed yet, and now narrowed to one question:** does `markDegraded` reach `markDegraded`'s own state, or
+only an internal flag? The next pass answers it by adding a temporary diagnostic rather than by reasoning about
+it - and then re-runs this same measurement, which is still the only thing that will show the interface stops
+saying "running" when nothing is running.

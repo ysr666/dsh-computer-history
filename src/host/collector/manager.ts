@@ -163,7 +163,19 @@ export class CollectorManager {
       } catch {
         // Managed subprocess cleanup remains best-effort here.
       }
-      void handle.waitForExit().catch(() => {})
+      // A collector that dies while the host is not stopping it used to leave the interface saying it was
+      // recording. The degraded path existed, but only inside the handshake and stop sequences, where
+      // something is waiting for the child - and an out-of-band death is the case a user actually meets:
+      // a crash, an out-of-memory kill, or someone killing the process. Observing the exit here is what
+      // closes that gap; swallowing it was the whole defect.
+      void handle
+        .waitForExit()
+        .catch(() => {})
+        .finally(() => {
+          if (this.stopping || this.shutdownRequested) return
+          this.markDegraded('collector-exited-unexpectedly')
+          void this.notifyUnexpectedExit()
+        })
       throw new Error('collector requires piped stdio')
     }
 
