@@ -1233,3 +1233,20 @@ not:
 Worth recording as the phase's shape: the check spent fourteen rounds learning that the dialog opens on someone
 else's section, and this screenshot would have shown it in one look. Reading the images is part of the job, not a
 formality after it.
+
+### The failure state, seen: failure is not rendered as empty
+
+`all-reads-failed.png` is the strongest single piece of evidence for one of this phase's acceptance criteria -
+that loading, empty, unavailable and error are four different product facts. With every history read blocked:
+
+- the status card says 电脑使用记录状态暂不可用。 followed by 时间线暂时不可用。, not "nothing recorded yet";
+- the alert says **无法连接到宿主。** with a 重试 button - localized copy, no `Failed to fetch`, which is the exact
+  regression that reached the reader twice before the mapping work;
+- **each section reports its own failure separately**: 时间线暂时不可用。 重试, 工作线索暂时不可用。 重试, and
+  摘要状态暂不可用。 beside the summary heading. One read failing does not blank the surface, and the sections do
+  not share a single error flag - which is the "independent settled reads" rule made visible;
+- no empty-state wording appears anywhere (no 还没有 / 没有任何记录), so a blocked read cannot be mistaken for a
+  quiet store.
+
+That is what the rendered-state check was for: the assertions say these strings are absent; the image shows what
+is present instead.

@@ -255,26 +255,29 @@ export function createHistoryPage({
       && policy !== undefined
       && policy.rules.every(rule => rule.builtIn)
     const preset = state?.firstRunPreset
-    const presetText = (value: Record<string, string> | undefined): string => {
-      if (!value) return ''
-      const activeLocale = getActiveLocale().toLowerCase()
-      return (activeLocale.startsWith('zh') ? value.zh ?? value.en : value.en ?? value.zh) ?? ''
-    }
     const firstRunSection = isFirstRun
-      ? section(
-          t('startHere'),
-          React.createElement('p', { className: 'ch-muted' }, t('firstRunIntro')),
-          preset
-            ? React.createElement(React.Fragment, null,
-                React.createElement('p', { className: 'ch-row-title' }, presetText(preset.title)),
-                React.createElement('p', { className: 'ch-muted' }, presetText(preset.description)),
-              )
-            : null,
-          React.createElement('p', { className: 'ch-muted' }, t('firstRunPrivacy')),
-          React.createElement('button', {
-            type: 'button', className: 'ch-button', disabled: !preset,
-            onClick: () => { runAction(startRecording) },
-          }, t('startRecording')),
+      ? React.createElement(
+          'section', { className: 'ch-first-run' },
+          React.createElement('div', { className: 'ch-first-run-mark', 'aria-hidden': true }, '◷'),
+          React.createElement('h2', null, t('startHere')),
+          React.createElement('p', { className: 'ch-first-run-lead' }, t('firstRunIntro')),
+          React.createElement(
+            'div', { className: 'ch-first-run-points' },
+            React.createElement('span', null, `✓ ${t('metadataOnly')}`),
+            React.createElement('span', null, `✓ ${t('firstRunPrivacy')}`),
+            React.createElement('span', null, `✓ ${t('firstRunProtected')}`),
+          ),
+          React.createElement(
+            'div', { className: 'ch-first-run-action' },
+            React.createElement('button', {
+              type: 'button', className: 'ch-button', disabled: !preset,
+              onClick: () => { runAction(startRecording) },
+            }, t('startRecording')),
+            preset
+              ? React.createElement('span', { className: 'ch-muted' },
+                  t('firstRunApps', { count: preset.bundles.length }))
+              : null,
+          ),
         )
       : null
 
@@ -590,7 +593,6 @@ export function createHistoryPage({
         ),
       ),
       staleSection,
-      firstRunSection,
       state?.reason
         ? React.createElement('div', { className: 'ch-alert' },
             React.createElement('p', null, reasonText(t, state.reason)))
@@ -609,10 +611,10 @@ export function createHistoryPage({
       actionError
         ? React.createElement('div', { className: 'ch-alert', role: 'alert' }, actionError)
         : null,
-      timelineSection,
-      timeline && timeline.length > 0 ? resumeSection : null,
-      threadSection,
-      semanticSection,
+      isFirstRun ? firstRunSection : timelineSection,
+      !isFirstRun && timeline && timeline.length > 0 ? resumeSection : null,
+      !isFirstRun ? threadSection : null,
+      !isFirstRun ? semanticSection : null,
     )
   }
 }
