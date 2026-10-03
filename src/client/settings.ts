@@ -89,9 +89,9 @@ const url = (path: string): string => historyApiPath(path)
 
 export function createSettingsPage({ t }: SettingsProps): () => React.ReactElement {
   return function SettingsPage(): React.ReactElement {
-    const [state, reloadState] = useJson<ComputerHistoryState | undefined>(url(historyApiPath('/state')), undefined)
-    const [policy] = useJson<PolicySnapshot | undefined>(url(historyApiPath('/policy')), undefined)
-    const [retention, reloadRetention] = useJson<RetentionSettings | undefined>(url(historyApiPath('/retention')), undefined)
+    const [state, reloadState] = useJson<ComputerHistoryState | undefined>(url('/state'), undefined)
+    const [policy] = useJson<PolicySnapshot | undefined>(url('/policy'), undefined)
+    const [retention, reloadRetention] = useJson<RetentionSettings | undefined>(url('/retention'), undefined)
     const [observationHours, setObservationHours] = React.useState('')
     const [episodeDays, setEpisodeDays] = React.useState('')
     const [confirming, setConfirming] = React.useState(false)
@@ -104,7 +104,7 @@ export function createSettingsPage({ t }: SettingsProps): () => React.ReactEleme
 
     const post = React.useCallback(async (path: string, body: unknown): Promise<boolean> => {
       try {
-        const response = await fetch(url(historyApiPath(path)), {
+        const response = await fetch(url(path), {
           method: 'POST',
           credentials: 'same-origin',
           headers: { 'content-type': 'application/json' },
@@ -226,7 +226,7 @@ export function createSettingsPage({ t }: SettingsProps): () => React.ReactEleme
           React.createElement('button', {
             style: BUTTON_PRIMARY,
             onClick: async () => {
-              const response = await fetch(url(historyApiPath('/companion/pair')), { method: 'POST', credentials: 'same-origin' })
+              const response = await fetch(url('/companion/pair'), { method: 'POST', credentials: 'same-origin' })
               if (response.ok) {
                 const body = (await response.json()) as { token?: string }
                 setNote(body.token ? `${t('Pairing token', '配对令牌')}：${body.token}` : undefined)
