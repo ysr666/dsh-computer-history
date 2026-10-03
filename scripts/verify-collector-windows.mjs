@@ -19,10 +19,16 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const CRATE = path.join(REPO, 'native', 'windows')
+// The message layer lives once, in the shared crate, and both platform crates depend on it. Testing the
+// shared crate is what makes "the same fields on every platform" checkable; testing the platform crate is
+// what makes its own module compile.
+const CRATES = [
+  ['collector-protocol', path.join(REPO, 'native', 'collector-protocol')],
+  ['windows', path.join(REPO, 'native', 'windows')],
+].filter(([, dir]) => existsSync(dir))
 
-if (!existsSync(CRATE)) {
-  console.log('windows collector: no crate at native/windows - nothing to verify')
+if (CRATES.length === 0) {
+  console.log('rust collectors: no crates under native/ - nothing to verify')
   process.exit(0)
 }
 
@@ -32,12 +38,19 @@ if (probe.error ?? probe.status !== 0) {
   process.exit(0)
 }
 
-const run = spawnSync('cargo', ['test', '--quiet'], { cwd: CRATE, encoding: 'utf8' })
-const output = `${run.stdout ?? ''}${run.stderr ?? ''}`
-if (run.status !== 0) {
-  console.error(output)
-  console.error('windows collector: the protocol layer failed')
-  process.exit(1)
+let total = 0
+for (const [name, dir] of CRATES) {
+  const run = spawnSync('cargo', ['test', '--quiet'], { cwd: dir, encoding: 'utf8' })
+  const output = `${run.stdout ?? ''}${run.stderr ?? ''}`
+  if (run.status !== 0) {
+    console.error(output)
+    console.error(`rust collector (${name}): failed`)
+    process.exit(1)
+  }
+  const counts = [...output.matchAll(/test result: ok\. (\d+) passed/g)]
+  total += counts.reduce((sum, match) => sum + Number(match[1]), 0)
 }
-const passed = /test result: ok\. (\d+) passed/.exec(output)
-console.log(`windows collector: protocol layer ok (${passed ? passed[1] : '?'} tests); UI Automation paths remain unverified without Windows`)
+console.log(
+  `rust collectors: ${total} tests passed across ${CRATES.map(([name]) => name).join(', ')}; ` +
+  'UI Automation and AT-SPI paths remain unverified without their platforms',
+)

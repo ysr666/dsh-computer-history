@@ -1,0 +1,6 @@
+[package]
+name = "dsh-collector-protocol"
+version = "0.1.0"
+edition = "2021"
+description = "The collector message layer shared by the Windows and Linux collectors: the shapes in docs/collector-protocol.md, once"
+license = "MIT"

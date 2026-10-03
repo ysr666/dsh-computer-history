@@ -6,6 +6,7 @@ description = "Windows collector for DSH Computer History: speaks the collector 
 license = "MIT"
 
 [dependencies]
+dsh-collector-protocol = { path = "../collector-protocol" }
 
 [lib]
 name = "collector"

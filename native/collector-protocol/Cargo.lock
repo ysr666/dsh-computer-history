@@ -5,10 +5,3 @@ version = 4
 [[package]]
 name = "dsh-collector-protocol"
 version = "0.1.0"
-
-[[package]]
-name = "dsh-computer-history-collector-windows"
-version = "0.1.0"
-dependencies = [
- "dsh-collector-protocol",
-]

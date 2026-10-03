@@ -1,8 +1,31 @@
+//! The collector message layer, shared by every non-macOS collector.
+//!
+//! It lives in its own crate so that "the three platforms produce the same fields" is a structural fact
+//! rather than a promise: Windows and Linux depend on this, and the conformance fixtures measure what it
+//! emits. A second copy of these shapes would be a second source of truth, which is the failure this
+//! repository keeps recording.
 //! The message layer: exactly the shapes in `docs/collector-protocol.md`, nothing more.
 //!
 //! There is deliberately **no field** for text, a selection, a clipboard, a keystroke or an image, and a
 //! test asserts that the serialised forms cannot carry one: adding a field is a protocol change, not a
 //! local decision.
+
+/// Applications whose contents must never be recorded, by executable or desktop id.
+///
+/// The macOS collector keeps the same list; a platform that forgets one is a boundary hole, so this is
+/// deliberately a plain list that a test can compare rather than something derived.
+pub const PROTECTED_IDS: &[&str] = &[
+    "1Password.exe",
+    "Bitwarden.exe",
+    "KeePassXC.exe",
+    "Dashlane.exe",
+    "LastPass.exe",
+    "1password.desktop",
+];
+
+pub fn is_protected(application_id: &str) -> bool {
+    PROTECTED_IDS.iter().any(|id| id.eq_ignore_ascii_case(application_id))
+}
 
 /// A collector observation, reduced to the facts the protocol allows.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -195,8 +218,8 @@ mod tests {
 
     #[test]
     fn protected_applications_are_recognised_case_insensitively() {
-        assert!(super::super::is_protected("1password.exe"));
-        assert!(super::super::is_protected("Bitwarden.exe"));
-        assert!(!super::super::is_protected("Microsoft.VisualStudioCode"));
+        assert!(is_protected("1password.exe"));
+        assert!(super::is_protected("Bitwarden.exe"));
+        assert!(!super::is_protected("Microsoft.VisualStudioCode"));
     }
 }
