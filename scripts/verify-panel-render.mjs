@@ -283,38 +283,36 @@ async function main() {
   // navigation that the working flow already had. The keyboard walk therefore starts where the dialog is known
   // to be open, and the state it measures - reads failing - is named in the label rather than hidden.
   await send('Network.setBlockedURLs', { urls: [] })
-  // Selecting the plugin's own settings section. The check had never done this in any version - the dialog was
-  // open and showing the native 通用设置 rows, which is why `.ch-settings-item` was absent for the right reason.
-  // The label is passed through a global rather than interpolated into the expression: an earlier version built
-  // these with nested template literals and produced one the browser refused to deserialize.
-  const selectOwnSection = async () => {
+  // This step opens its own surface. Six earlier versions assumed a dialog someone else had opened and then
+  // measured whatever was on screen - a shell focus ring, `document`, the panel, the native section, a class
+  // inventory with no ch-* in it, one stray element. Nothing here is inherited from the previous step.
+  const openOwnSettings = async () => {
+    await send('Page.reload', { ignoreCache: true })
+    await sleep(12_000)
+    await dismissIntro()
+    await openPanel()
+    await sleep(3500)
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      await clickText('设置', { last: true })
+      await sleep(2200)
+      if ((await dialogCount()) > 0) break
+    }
+    const dialogOpen = (await dialogCount()) > 0
+    let sectionShown = false
     for (const label of panelLabels) {
       await evaluate("window.__chWanted = " + JSON.stringify(label) + "; 'set'")
-      await evaluate("(function(){var wanted=window.__chWanted;var d=document.querySelector('[role=\"dialog\"],dialog')||document;var a=d.querySelectorAll('button,[role=\"tab\"],[role=\"menuitem\"],li,a,[data-slot]');var best=null;for(var i=0;i<a.length;i++){var n=a[i];if(!n.getClientRects().length)continue;if((n.textContent||'').trim()!==wanted)continue;if(best===null||(n.textContent||'').length<(best.textContent||'').length)best=n;}if(!best)return 'missing';best.click();return 'clicked';})()")
-      await sleep(2000)
-      if (Number(await evaluate("document.querySelectorAll('.ch-settings-item').length")) > 0) return true
+      await evaluate("(function(){var w=window.__chWanted;var a=document.querySelectorAll('button,a,li,[role],[data-slot]');var hits=[];for(var i=0;i<a.length;i++){var n=a[i];if(!n.getClientRects().length)continue;if((n.textContent||'').trim()!==w)continue;hits.push(n);}if(hits.length===0)return 'missing';var last=hits[hits.length-1];last.click();var c=last.closest('button,[role=\"tab\"],[role=\"menuitem\"],li,a,[data-slot]');if(c&&c!==last)c.click();return 'clicked '+hits.length;})()")
+      await sleep(1800)
+      if (Number(await evaluate("document.querySelectorAll('.ch-settings-item').length")) > 0) {
+        sectionShown = true
+        break
+      }
     }
-    return false
+    return { dialogOpen, sectionShown }
   }
-
-  // What is measured is what this plugin owns: from the first control inside our own settings rows, does the
-  // tab order walk the rest of them? Written as plain concatenated strings on purpose - the previous version
-  // built these expressions with nested template literals and produced an invalid one, which the browser
-  // refused with "Failed to deserialize params.expression" and which surfaced as a stack trace rather than as
-  // the step failing.
-  // Instead of guessing which class the plugin's settings rows carry, the next run reports what is actually in
-  // the dialog. Five versions of this step failed on a guess; this one asks.
-  const dialogClasses = String(await evaluate("(function(){var d=document.querySelector('[role=\"dialog\"],dialog');if(!d)return 'no dialog';var seen={};var a=d.querySelectorAll('*');for(var i=0;i<a.length;i++){var c=a[i].className;if(typeof c!=='string')continue;var parts=c.split(' ');for(var j=0;j<parts.length;j++){if(parts[j].indexOf('ch-')===0)seen[parts[j]]=1;}}return Object.keys(seen).sort().join(' ');})()"))
-  console.log(`  settings dialog classes: ${dialogClasses.slice(0, 200)}`)
-  if (Number(await evaluate("document.querySelectorAll('.ch-settings-item').length")) === 0) {
-    writeFileSync(path.join(outDir, 'focus-by-keyboard-classes.txt'), dialogClasses)
-  }
-  // The dialog has no ch-* classes, so the next diagnostic is its structure: every small clickable
-  // element with its tag, role, class and text, which is what a text match cannot see through.
-  const navStructure = String(await evaluate("(function(){var d=document.querySelector('[role=\"dialog\"],dialog');if(!d)return 'no dialog';var out=[];var a=d.querySelectorAll('button,a,li,[role],[data-slot],span,div');for(var i=0;i<a.length&&out.length<40;i++){var n=a[i];if(!n.getClientRects().length)continue;var txt=(n.textContent||'').trim();if(txt.length===0||txt.length>30)continue;out.push(n.tagName+'|'+(n.getAttribute('role')||'-')+'|'+(n.className&&typeof n.className==='string'?n.className.slice(0,30):'-')+'|'+txt);}return out.join('\n');})()"))
-  writeFileSync(path.join(outDir, 'focus-by-keyboard-nav.txt'), navStructure)
-  console.log("  settings dialog structure written (" + navStructure.split("\n").length + " candidates)")
-  await selectOwnSection()
+  const own = await openOwnSettings()
+  results.push({ state: 'focus-by-keyboard', label: 'the settings dialog opens in this step', ok: own.dialogOpen })
+  results.push({ state: 'focus-by-keyboard', label: "the plugin's settings rows are shown", ok: own.sectionShown })
   const LIST = ".ch-settings-item"
   const surfaceRows = Number(await evaluate("document.querySelectorAll('" + LIST + "').length"))
   results.push({ state: 'focus-by-keyboard', label: 'the settings surface is showing our rows', ok: surfaceRows > 0 })
