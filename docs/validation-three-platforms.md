@@ -1268,3 +1268,27 @@ The phase therefore reports what is true: its own reproducible checks are green 
 tests and 0 warnings, `pnpm verify:p1` exit 0, the rendered-state check 50/50 with each state's screenshot
 reviewed), the evidence manifest is accepted, and the delivery gate is **not** satisfied. Saying "delivered"
 here would be claiming a check that did not pass.
+
+## Acceptance, command, status - one table
+
+Every row of this phase's acceptance with the command that settles it and where it stands. "Green" means the
+command was run and its result recorded above; "unverified" means no record exists and the file says so rather
+than implying one.
+
+| Acceptance | Command | Status |
+|---|---|---|
+| Three collectors pass one conformance suite | `pnpm test` (`tests/conformance/**`) | green: 374 tests, 0 warnings |
+| The suite runs on three platforms | `.github/workflows/collectors.yml` | **unverified**: no runner has executed it (no git remote) |
+| Every job command actually works | each command run locally with its exit code | green: recorded in this file, Windows crate's `0 passed` on macOS explained |
+| A live record per platform, with the producing command | macOS: `pnpm verify:p1` + the collector's own run; Windows/Linux: none | macOS green; **Windows and Linux unverified** |
+| Identical refusal reasons across platforms | `tests/conformance/**` + the fixture's `$unverified` lists | green for the message layer; live refusals **unverified** |
+| A panel screenshot per platform store | macOS: the self-hosted Host; others: none | macOS green (three states reviewed by eye); others **unverified** |
+| Loading, empty, unavailable and error stay distinct | `node scripts/verify-panel-render.mjs` | green: 50/50, `all-reads-failed.png` reviewed |
+| Copy goes through the locale dictionary | `pnpm test` (`client-locale`, `client-diagnostic-copy`) | green |
+| No diagnostic reaches the reader | `tests/unit/client-diagnostic-copy.spec.ts` | green (guard added after the regression shipped twice) |
+| A live client row from a third end | the JetBrains run: `gradle build` then the IDE with `-Dcomputer-history.*` | green: row `companion\|jetbrains\|com.jetbrains.intellij\|editor` stored, client log `201 {"stored":true}` |
+| A live row from the second browser engine | the staged Firefox window + one paste | **unverified**: Firefox BiDi does not drive privileged pages |
+| Ingestion baseline recorded | `pnpm benchmark:ingestion` | green: 11 025 / 10 864 ms, 907 / 920 obs·s⁻¹, 6 295 552 B |
+| Boundaries cannot drift silently | `pnpm verify:ci-boundaries` | green, with a red run recorded |
+| The unknown-field contract is decided | `docs/collector-protocol.md`, three options and costs | **open**: the decision belongs to the repository owner |
+| Delivery gate | `delivery_check` | **not satisfiable here**: the panel has no page of its own, so its evidence manifest is accepted and its page smoke fails; stated, not worked around |
