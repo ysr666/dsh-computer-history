@@ -52,3 +52,27 @@ What is **not** the way, measured rather than assumed:
   kept rather than rediscovered;
 - `~/.dsh/ext-bridge-token` is the browser bridge's token, not the web session cookie
   (`/state` answers `unauthorized` with it).
+
+## Why an installed bundle can still show no interface
+
+Measured while installing this plugin into a profile as a bundle (`dsh plugin --profile ... add`):
+the host half mounted and answered `/state`, and the panel never appeared, with **no request for
+the client bundle at all** - not a 404, simply nothing. What was ruled out, in order:
+
+| checked | result |
+|---|---|
+| the interface itself | renders; another bundle-installed plugin's panel is alive in the same window, so the environment and the bundle mechanism are fine |
+| the browser console | only 404s from a third plugin's routes (`/memory-evolve/api/*`), unrelated |
+| `package.json` `type` | `module`, same as the working example |
+| `exports["./client"]` | `{ types, default: ./lib/client.js }`, same shape as the working example |
+| `dsh.client` | `{ platform: web, inject: [...] }`, same shape |
+| the built client bundle | correct: `window.__ModuleLoader__.load({ id: "dsh-computer-history", factory })` |
+
+The remaining hypothesis, which the next session should test first rather than re-deriving: the
+**interface discovers client bundles from a list the profile (or the app) composes**, and an entry
+inserted by a *bundle layer* may not reach that list even though the host half loads. The check is
+to read the `web` profile's own configuration for a client-module list and see whether the working
+example appears there - and if it does, how it got there.
+
+The rule this session keeps relearning applies here too: the failure is silent, so every claim above
+is a measurement, not a reading.
