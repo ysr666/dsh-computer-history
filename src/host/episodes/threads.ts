@@ -1,8 +1,10 @@
-import type {
-  EpisodeSummary,
-  ObservationId,
-  ResourceIdentity,
-  WorkThread,
+import {
+  buildTimeline,
+  type EpisodeSummary,
+  type ObservationId,
+  type ResourceIdentity,
+  type WorkThread,
+  type WorkThreadDetail,
 } from '../../shared/index.js'
 
 /**
@@ -97,4 +99,22 @@ export function renderThreadSummary(input: {
     ? 'no resources'
     : labels.join(', ') + (more > 0 ? ` and ${more} more` : '')
   return `${input.episodeCount} episode${input.episodeCount === 1 ? '' : 's'} in ${where}, touching ${touched}.`
+}
+
+
+/** Build one project-history detail from episodes already known to share a thread. */
+export function buildWorkThreadDetail(
+  episodes: readonly EpisodeSummary[],
+): WorkThreadDetail | undefined {
+  if (episodes.length === 0) return undefined
+  const keys = new Set(episodes.map(episode => episode.threadKey).filter(Boolean))
+  if (keys.size !== 1) {
+    throw new Error('thread detail requires exactly one thread key')
+  }
+  const [thread] = buildWorkThreads(episodes, { limit: 1 })
+  if (!thread) return undefined
+  return {
+    thread,
+    timeline: buildTimeline(episodes),
+  }
 }

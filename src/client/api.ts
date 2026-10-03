@@ -9,6 +9,9 @@ import type {
   PairingRotation,
   PolicySnapshot,
   PolicyUpdate,
+  ResumeOpenCapability,
+  ResumeOpenRequest,
+  ResumeOpenResult,
   ResumeResolution,
   RetentionSettings,
   SemanticSummaryState,
@@ -86,6 +89,10 @@ export const historyApi = {
       nowMs: Date.now(),
       turn: 1,
     }),
+  getResumeOpenCapability: (): Promise<ResumeOpenCapability> =>
+    requestJson('/resume/open'),
+  openResume: (request: ResumeOpenRequest): Promise<ResumeOpenResult> =>
+    postJson('/resume/open', request),
   previewSemantic: (scopeKey: string): Promise<MinimisedSummaryPayload> =>
     requestJson(`/semantic/preview?scope=${encodeURIComponent(scopeKey)}`),
   revokeSemantic: (scopeKey: string): Promise<{

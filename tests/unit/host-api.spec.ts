@@ -77,6 +77,10 @@ function harness(overrides: Record<string, unknown> = {}) {
     get(name: string) {
       return name === 'computerHistory' ? computerHistory : undefined
     },
+    subprocess: {
+      resolveExecutable: async (command: string) => command,
+      spawn: () => ({ done: Promise.resolve({ exitCode: 0, signal: null }) }),
+    },
     connection: {
       fetch: {
         register(route: RegisteredRoute) {
@@ -136,6 +140,7 @@ describe('Computer History Host API', () => {
       '/api/computer-history/recent',
       '/api/computer-history/resume',
       '/api/computer-history/resume-hint',
+      '/api/computer-history/resume/open',
       '/api/computer-history/retention',
       '/api/computer-history/search',
       '/api/computer-history/semantic',
@@ -215,6 +220,73 @@ describe('Computer History Host API', () => {
     const unknown = await request('/episode?id=episode%3Aunknown')
     expect(unknown.status).toBe(404)
     expect(unknown.headers.get('cache-control')).toBe('no-store')
+  })
+
+
+
+  it('opens only resources that belong to the named stored episode', async () => {
+    const storedUri = 'file:///tmp/project/report.md'
+    const episode = {
+      id: 'episode:open',
+      startedAtMs: 1,
+      endedAtMs: 2,
+      boundary: { startReason: 'first-observation', endReason: 'timeout' },
+      summaryKind: 'deterministic',
+      summary: 'work',
+      summaryObservationIds: ['observation:1'],
+      lastStrongResource: {
+        kind: 'file',
+        canonicalUri: storedUri,
+        displayLabel: 'report.md',
+      },
+      resources: [{
+        kind: 'file',
+        canonicalUri: storedUri,
+        displayLabel: 'report.md',
+        firstSeenAtMs: 1,
+        lastSeenAtMs: 2,
+        observationCount: 1,
+      }],
+      surfaces: [{
+        bundleId: 'com.microsoft.VSCode',
+        surfaceKind: 'editor',
+        firstSeenAtMs: 1,
+        lastSeenAtMs: 2,
+        observationCount: 1,
+      }],
+      confidence: 1,
+      state: 'closed',
+      observationIds: ['observation:1'],
+    }
+    const api = harness({ getEpisode: async () => episode })
+
+    const capability = await api.request('/resume/open')
+    expect(capability.status).toBe(200)
+    await expect(capability.json()).resolves.toMatchObject({ available: true })
+
+    const opened = await api.request('/resume/open', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        episodeId: 'episode:open',
+        resourceCanonicalUri: storedUri,
+      }),
+    })
+    expect(opened.status).toBe(200)
+    await expect(opened.json()).resolves.toMatchObject({
+      status: 'opened',
+      kind: 'file',
+    })
+
+    const forged = await api.request('/resume/open', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        episodeId: 'episode:open',
+        resourceCanonicalUri: 'file:///tmp/not-recorded.txt',
+      }),
+    })
+    expect(forged.status).toBe(400)
   })
 
   it('maps capture ownership conflicts and collector failures explicitly', async () => {

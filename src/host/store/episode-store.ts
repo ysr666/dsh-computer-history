@@ -604,6 +604,23 @@ export class EpisodeStore {
     `).all(...params).map((row) => this.materialize(row))
   }
 
+  public listByThreadKey(
+    threadKey: string,
+    limit = 1_000,
+  ): readonly EpisodeSummary[] {
+    const key = threadKey.trim()
+    if (!key) return []
+    const bounded = Math.max(1, Math.min(1_000, Math.trunc(limit)))
+    return this.db.prepare(`
+      SELECT e.*
+      FROM episodes e
+      WHERE e.state != 'invalidated'
+        AND e.thread_key = ?
+      ORDER BY e.started_at_ms ASC
+      LIMIT ?
+    `).all(key, bounded).map(row => this.materialize(row))
+  }
+
   public search(
     query: EpisodeSearchQuery,
   ): readonly EpisodeSummary[] {

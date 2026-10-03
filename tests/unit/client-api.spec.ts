@@ -92,6 +92,31 @@ describe('client history API contract', () => {
     expect(fetchMock.mock.calls[0]?.[0]).toBe('api/computer-history/pause')
   })
 
+
+  it('uses the dedicated Resume open action without sending an arbitrary command', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ available: true }))
+      .mockResolvedValueOnce(jsonResponse({ status: 'opened', kind: 'file' }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(historyApi.getResumeOpenCapability()).resolves.toEqual({
+      available: true,
+    })
+    await expect(historyApi.openResume({
+      episodeId: 'episode:1' as never,
+      resourceCanonicalUri: 'file:///tmp/report.md',
+    })).resolves.toEqual({ status: 'opened', kind: 'file' })
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('api/computer-history/resume/open')
+    const [url, init] = fetchMock.mock.calls[1] as [string, RequestInit]
+    expect(url).toBe('api/computer-history/resume/open')
+    expect(init.method).toBe('POST')
+    expect(JSON.parse(String(init.body))).toEqual({
+      episodeId: 'episode:1',
+      resourceCanonicalUri: 'file:///tmp/report.md',
+    })
+  })
+
   it('surfaces a non-2xx Host message', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
       new Response('capture is owned by another Host', { status: 409 }),

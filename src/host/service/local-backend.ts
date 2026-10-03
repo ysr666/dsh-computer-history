@@ -2,6 +2,7 @@ import type {
   PairingRotation,
   PairingState,
   WorkThread,
+  WorkThreadDetail,
   ComputerHistoryServiceContract,
   ComputerHistoryState,
   DeleteHistoryRequest,
@@ -43,7 +44,10 @@ import {
 } from '../semantic/opt-in.js'
 import { buildRedactionPreview } from '../audit/preview.js'
 import { buildTimeline } from '../../shared/audit-view.js'
-import { buildWorkThreads } from '../episodes/threads.js'
+import {
+  buildWorkThreadDetail,
+  buildWorkThreads,
+} from '../episodes/threads.js'
 import { resolveResume } from '../resume/index.js'
 import { phase1AdapterForBundle } from '../ingestion/index.js'
 import { DeletionService } from '../retention/index.js'
@@ -133,13 +137,22 @@ implements ComputerHistoryServiceContract {
     })
   }
 
-  public async threads(
+  public threads(
     request: { readonly limit?: number } = {},
   ): Promise<readonly WorkThread[]> {
-    const episodes = await this.recent({ limit: 200 })
-    return buildWorkThreads(episodes, {
-      limit: boundedLimit(request.limit, 5, 100),
-    })
+    return this.withOperation(() => buildWorkThreads(
+      this.episodes.listRecent({ limit: 1_000 }),
+      { limit: boundedLimit(request.limit, 5, 100) },
+    ))
+  }
+
+  public thread(
+    request: { readonly threadKey: string },
+    _signal?: AbortSignal,
+  ): Promise<WorkThreadDetail | undefined> {
+    return this.withOperation(() => buildWorkThreadDetail(
+      this.episodes.listByThreadKey(request.threadKey, 1_000),
+    ))
   }
 
   public recent(
@@ -444,13 +457,13 @@ implements ComputerHistoryServiceContract {
   }
 
   /** Episodes grouped into the days they happened on, newest first. */
-  public async timeline(
+  public timeline(
     request: { readonly days?: number } = {},
   ): Promise<readonly TimelineDay[]> {
-    const episodes = await this.recent({ limit: 200 })
-    return buildTimeline(episodes, {
-      days: boundedLimit(request.days, 1, 31),
-    })
+    return this.withOperation(() => buildTimeline(
+      this.episodes.listRecent({ limit: 1_000 }),
+      { days: boundedLimit(request.days, 1, 31) },
+    ))
   }
 
   /**

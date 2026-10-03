@@ -3,6 +3,7 @@ import {
   EpisodeId,
   type EpisodeSummary,
   buildTimeline,
+  buildTimelineActivities,
   describeProvenance,
   localDayKey,
 } from '../../src/shared/index.js'
@@ -20,6 +21,60 @@ function episode(id: string, startedAtMs: number, endedAtMs: number): EpisodeSum
     surfaces: [],
     confidence: 0.5,
     state: 'closed',
+  }
+}
+
+
+function workEpisode(input: {
+  readonly id: string
+  readonly startedAtMs: number
+  readonly endedAtMs: number
+  readonly app: string
+  readonly workspaceRoot?: string
+  readonly workspaceTitle?: string
+  readonly threadKey?: string
+  readonly resourceUri?: string
+  readonly resourceLabel?: string
+}): EpisodeSummary {
+  const base = episode(input.id, input.startedAtMs, input.endedAtMs)
+  const resource = input.resourceUri
+    ? {
+        kind: 'file' as const,
+        canonicalUri: input.resourceUri,
+        ...(input.resourceLabel === undefined ? {} : { displayLabel: input.resourceLabel }),
+        firstSeenAtMs: input.startedAtMs,
+        lastSeenAtMs: input.endedAtMs,
+        observationCount: 1,
+      }
+    : undefined
+  return {
+    ...base,
+    ...(input.workspaceRoot === undefined && input.workspaceTitle === undefined
+      ? {}
+      : {
+          workspace: {
+            ...(input.workspaceRoot === undefined ? {} : { root: input.workspaceRoot }),
+            ...(input.workspaceTitle === undefined ? {} : { title: input.workspaceTitle }),
+          },
+        }),
+    ...(input.threadKey === undefined ? {} : { threadKey: input.threadKey }),
+    ...(resource === undefined
+      ? {}
+      : {
+          lastStrongResource: {
+            kind: resource.kind,
+            canonicalUri: resource.canonicalUri,
+            ...(resource.displayLabel === undefined ? {} : { displayLabel: resource.displayLabel }),
+          },
+        }),
+    resources: resource ? [resource] : [],
+    surfaces: [{
+      bundleId: input.app,
+      surfaceKind: input.app.includes('Terminal') ? 'terminal' : 'editor',
+      firstSeenAtMs: input.startedAtMs,
+      lastSeenAtMs: input.endedAtMs,
+      observationCount: 1,
+    }],
   }
 }
 
@@ -51,6 +106,103 @@ describe('timeline', () => {
       episode('b', new Date('2026-10-02T09:00:00').getTime(), 2),
     ], { days: 1 })
     expect(days).toHaveLength(1)
+  })
+
+
+  it('projects nearby episodes in the same app and workspace into one activity', () => {
+    const base = new Date('2026-10-03T15:17:00').getTime()
+    const episodes = [
+      workEpisode({
+        id: 'a', startedAtMs: base, endedAtMs: base + 1_000,
+        app: 'com.microsoft.VSCode', workspaceRoot: '/repo', workspaceTitle: 'repo',
+        resourceUri: 'file:///repo/ui-review.md', resourceLabel: 'ui-review.md',
+      }),
+      workEpisode({
+        id: 'b', startedAtMs: base + 7 * 60_000, endedAtMs: base + 7 * 60_000 + 2_000,
+        app: 'com.microsoft.VSCode', workspaceRoot: '/repo', workspaceTitle: 'repo',
+        resourceUri: 'file:///repo/validation.md', resourceLabel: 'validation.md',
+      }),
+      workEpisode({
+        id: 'c', startedAtMs: base + 9 * 60_000, endedAtMs: base + 9 * 60_000 + 3_000,
+        app: 'com.microsoft.VSCode', workspaceRoot: '/repo', workspaceTitle: 'repo',
+        resourceUri: 'file:///repo/validation.md', resourceLabel: 'validation.md',
+      }),
+    ]
+
+    const activities = buildTimelineActivities(episodes)
+    expect(activities).toHaveLength(1)
+    expect(activities[0]!.episodeIds.map(String)).toEqual(['a', 'b', 'c'])
+    expect(activities[0]!.episodeCount).toBe(3)
+    expect(activities[0]!.observedDurationMs).toBe(6_000)
+    expect(activities[0]!.spanDurationMs).toBe(9 * 60_000 + 3_000)
+    expect(activities[0]!.representativeEpisodeId).toBe(episodes[2]!.id)
+    expect(activities[0]!.resources.map(item => item.displayLabel)).toEqual([
+      'validation.md', 'ui-review.md',
+    ])
+  })
+
+  it('does not merge different apps, workspaces, or long gaps', () => {
+    const base = new Date('2026-10-03T12:00:00').getTime()
+    const activities = buildTimelineActivities([
+      workEpisode({
+        id: 'a', startedAtMs: base, endedAtMs: base + 60_000,
+        app: 'com.microsoft.VSCode', workspaceRoot: '/repo-a',
+      }),
+      workEpisode({
+        id: 'b', startedAtMs: base + 2 * 60_000, endedAtMs: base + 3 * 60_000,
+        app: 'com.apple.Terminal', workspaceRoot: '/repo-a',
+      }),
+      workEpisode({
+        id: 'c', startedAtMs: base + 4 * 60_000, endedAtMs: base + 5 * 60_000,
+        app: 'com.microsoft.VSCode', workspaceRoot: '/repo-b',
+      }),
+      workEpisode({
+        id: 'd', startedAtMs: base + 20 * 60_000, endedAtMs: base + 21 * 60_000,
+        app: 'com.microsoft.VSCode', workspaceRoot: '/repo-b',
+      }),
+    ])
+
+    expect(activities).toHaveLength(4)
+    expect(activities.every(activity => activity.episodeCount === 1)).toBe(true)
+  })
+
+  it('falls back to an exact resource identity when no workspace is known', () => {
+    const base = new Date('2026-10-03T10:00:00').getTime()
+    const activities = buildTimelineActivities([
+      workEpisode({
+        id: 'a', startedAtMs: base, endedAtMs: base + 30_000,
+        app: 'com.apple.Preview', resourceUri: 'file:///tmp/report.pdf', resourceLabel: 'report.pdf',
+      }),
+      workEpisode({
+        id: 'b', startedAtMs: base + 2 * 60_000, endedAtMs: base + 3 * 60_000,
+        app: 'com.apple.Preview', resourceUri: 'file:///tmp/report.pdf', resourceLabel: 'report.pdf',
+      }),
+    ])
+    expect(activities).toHaveLength(1)
+    expect(activities[0]!.episodeCount).toBe(2)
+  })
+
+  it('keeps raw episode counts while exposing the smaller activity count', () => {
+    const base = new Date('2026-10-03T15:00:00').getTime()
+    const days = buildTimeline([
+      workEpisode({
+        id: 'a', startedAtMs: base, endedAtMs: base + 1_000,
+        app: 'com.microsoft.VSCode', workspaceRoot: '/repo',
+      }),
+      workEpisode({
+        id: 'b', startedAtMs: base + 2 * 60_000, endedAtMs: base + 2 * 60_000 + 1_000,
+        app: 'com.microsoft.VSCode', workspaceRoot: '/repo',
+      }),
+      workEpisode({
+        id: 'c', startedAtMs: base + 30 * 60_000, endedAtMs: base + 30 * 60_000 + 1_000,
+        app: 'com.apple.Terminal', workspaceRoot: '/Users/test',
+      }),
+    ])
+
+    expect(days[0]!.episodeCount).toBe(3)
+    expect(days[0]!.activityCount).toBe(2)
+    expect(days[0]!.episodes).toHaveLength(3)
+    expect(days[0]!.activities).toHaveLength(2)
   })
 })
 

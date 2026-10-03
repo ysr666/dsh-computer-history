@@ -1,6 +1,6 @@
 import type { EpisodeSummary } from './episode.js'
 import type { ResourceIdentity } from './resource.js'
-import type { ObservationId } from './ids.js'
+import type { EpisodeId, ObservationId } from './ids.js'
 
 export interface ResumeRequest {
   readonly query: string
@@ -43,4 +43,35 @@ export type ResumeResolution =
   | {
       readonly status: 'none'
       readonly reason: string
+    }
+
+
+export interface ResumeOpenCapability {
+  readonly available: boolean
+  readonly reason?: 'platform-unverified' | 'opener-unavailable'
+}
+
+/**
+ * A Continue request names stored evidence, never an arbitrary local path.
+ * `resourceCanonicalUri`, when present, must exactly match a resource already
+ * attached to that Episode; the Host revalidates this before opening anything.
+ */
+export interface ResumeOpenRequest {
+  readonly episodeId: EpisodeId
+  readonly resourceCanonicalUri?: string
+}
+
+export type ResumeOpenResult =
+  | {
+      readonly status: 'opened'
+      readonly appBundleId?: string
+      readonly kind: ResourceIdentity['kind']
+    }
+  | {
+      readonly status: 'unsupported'
+      readonly reason:
+        | 'platform-unverified'
+        | 'opener-unavailable'
+        | 'no-openable-resource'
+        | 'unsupported-resource'
     }

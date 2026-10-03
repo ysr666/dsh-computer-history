@@ -8,7 +8,7 @@ import type {
   RedactionPreview,
   RetentionSettings,
 } from './audit.js'
-import type { TimelineDay } from './audit-view.js'
+import type { TimelineDay, WorkThreadDetail } from './audit-view.js'
 import type { EpisodeId } from './ids.js'
 import type {
   MinimisedSummaryPayload,
@@ -208,6 +208,12 @@ export interface ComputerHistoryServiceContract {
 
   /** Work threads over stored episodes (ADR 0004 §5: each carries citations). */
   threads(request?: { readonly limit?: number }): Promise<readonly WorkThread[]>
+
+  /** Full reader-facing history for one exact stored work thread. */
+  thread(
+    request: { readonly threadKey: string },
+    signal?: AbortSignal,
+  ): Promise<WorkThreadDetail | undefined>
 
   recent(
     request?: RecentEpisodesRequest,

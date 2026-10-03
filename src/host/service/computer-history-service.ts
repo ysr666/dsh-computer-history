@@ -20,6 +20,7 @@ import type {
   SemanticOptIn,
   SemanticSummaryState,
   WorkThread,
+  WorkThreadDetail,
   PolicyRule,
   PolicySnapshot,
   PolicyUpdate,
@@ -102,6 +103,13 @@ export class ComputerHistoryService
     request: { readonly limit?: number } = {},
   ): Promise<readonly WorkThread[]> {
     return this.backend.threads(request)
+  }
+
+  public thread(
+    request: { readonly threadKey: string },
+    signal?: AbortSignal,
+  ): Promise<WorkThreadDetail | undefined> {
+    return this.backend.thread(request, signal)
   }
 
   public exportAll(): HistoryExport {

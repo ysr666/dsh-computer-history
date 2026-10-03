@@ -3,8 +3,10 @@ import type {
   EpisodeDetail,
   EpisodeSummary,
   PolicySnapshot,
+  ResumeOpenCapability,
   ResumeResolution,
   SemanticSummaryState,
+  TimelineActivity,
   TimelineDay,
   WorkThread,
 } from '../shared/index.js'
@@ -94,7 +96,7 @@ function friendlyAppName(bundleId: string): string {
   return tail && tail.length <= 28 ? tail.replaceAll('-', ' ') : bundleId
 }
 
-function episodeApp(episode: Pick<EpisodeSummary, 'surfaces'>): string {
+function episodeApp(episode: Pick<EpisodeSummary, 'surfaces'> | Pick<TimelineActivity, 'surfaces'>): string {
   const first = episode.surfaces[0]?.bundleId
   return first ? friendlyAppName(first) : '—'
 }
@@ -140,7 +142,7 @@ function resourceLabel(
   return resource.displayLabel ?? resource.canonicalUri
 }
 
-function episodeSubject(t: HistoryTranslate, episode: EpisodeSummary): string {
+function episodeSubject(t: HistoryTranslate, episode: EpisodeSummary | TimelineActivity): string {
   const workspaceTitle = episode.workspace?.title?.trim()
   if (episodeApp(episode) === 'Terminal') {
     const rootParts = episode.workspace?.root?.split('/').filter(Boolean) ?? []
@@ -157,12 +159,12 @@ function episodeSubject(t: HistoryTranslate, episode: EpisodeSummary): string {
   return workspaceTitle
     ?? episode.lastStrongResource?.displayLabel
     ?? episode.resources[0]?.displayLabel
-    ?? episode.summary
+    ?? episodeApp(episode)
 }
 
 function episodeMeta(
   t: HistoryTranslate,
-  episode: EpisodeSummary,
+  episode: EpisodeSummary | TimelineActivity,
   app: string,
 ): string {
   const resource = episode.lastStrongResource ?? episode.resources[0]
@@ -171,6 +173,10 @@ function episodeMeta(
   const subject = episodeSubject(t, episode)
   if (app === 'Terminal' && label === t('homeDirectory')) return label
   return label && label != subject ? `${app} · ${label}` : app
+}
+
+function resumeResourceUri(episode: EpisodeSummary): string | undefined {
+  return (episode.lastStrongResource ?? episode.resources[0])?.canonicalUri
 }
 
 function resumeSubject(episode: EpisodeSummary): string | undefined {
@@ -211,9 +217,22 @@ function formatRelativeAge(t: HistoryTranslate, atMs: number): string {
   return t('daysAgo', { days: Math.floor(hours / 24) })
 }
 
+function activityDisplayDuration(activity: TimelineActivity): number {
+  return activity.episodeCount > 1
+    ? activity.spanDurationMs
+    : activity.observedDurationMs
+}
+
+function activityDurationText(t: HistoryTranslate, activity: TimelineActivity): string {
+  const duration = formatDuration(t, activityDisplayDuration(activity))
+  return activity.episodeCount > 1
+    ? t('approxDuration', { duration })
+    : duration
+}
+
 function dayDuration(day: TimelineDay): number {
-  return day.episodes.reduce(
-    (total, episode) => total + Math.max(0, episode.endedAtMs - episode.startedAtMs),
+  return day.activities.reduce(
+    (total, activity) => total + activityDisplayDuration(activity),
     0,
   )
 }
@@ -252,9 +271,12 @@ export function createHistoryPage({
     const [threads, setThreads] = React.useState<readonly WorkThread[] | null>()
     const [resumeQuery, setResumeQuery] = React.useState('')
     const [hint, setHint] = React.useState<ResumeResolution>()
+    const [resumeOpenCapability, setResumeOpenCapability] = React.useState<ResumeOpenCapability>()
+    const [resumeOpenPending, setResumeOpenPending] = React.useState(false)
     const [semantic, setSemantic] = React.useState<SemanticSummaryState | null>()
     const [timeline, setTimeline] = React.useState<readonly TimelineDay[] | null>()
     const [selected, setSelected] = React.useState<EpisodeDetail>()
+    const [selectedActivity, setSelectedActivity] = React.useState<TimelineActivity>()
     const [preview, setPreview] = React.useState<string>()
     const [contentError, setContentError] = React.useState<string>()
     const [actionError, setActionError] = React.useState<string>()
@@ -285,10 +307,19 @@ export function createHistoryPage({
     React.useEffect(() => {
       void store.load().catch(() => {})
       void refreshContent()
+      void historyApi.getResumeOpenCapability()
+        .then(setResumeOpenCapability)
+        .catch(() => {
+          setResumeOpenCapability({
+            available: false,
+            reason: 'opener-unavailable',
+          })
+        })
     }, [refreshContent, store])
     React.useEffect(() => {
       if (controls.historyRevision <= 0) return
       setSelected(undefined)
+      setSelectedActivity(undefined)
       setHint(undefined)
       setPreview(undefined)
       void refreshContent()
@@ -309,6 +340,29 @@ export function createHistoryPage({
       setHint(await historyApi.resolveResume(resumeQuery))
     }
 
+    const continueRecordedWork = async (
+      episode: EpisodeSummary,
+      resourceCanonicalUri?: string,
+    ): Promise<void> => {
+      setActionError(undefined)
+      setResumeOpenPending(true)
+      try {
+        const result = await historyApi.openResume({
+          episodeId: episode.id,
+          ...(resourceCanonicalUri === undefined
+            ? {}
+            : { resourceCanonicalUri }),
+        })
+        if (result.status === 'unsupported') {
+          setActionError(t('resumeOpenUnavailable'))
+        }
+      } catch {
+        setActionError(t('resumeOpenFailed'))
+      } finally {
+        setResumeOpenPending(false)
+      }
+    }
+
     const revokeScope = async (scopeKey: string): Promise<void> => {
       await historyApi.revokeSemantic(scopeKey)
       setPreview(undefined)
@@ -320,12 +374,15 @@ export function createHistoryPage({
       setPreview(`${scopeKey}\n${JSON.stringify(payload, null, 2)}`)
     }
 
-    const openEpisode = async (id: string): Promise<void> => {
-      if (String(selected?.id) === id) {
+    const openActivity = async (activity: TimelineActivity): Promise<void> => {
+      if (selectedActivity?.activityKey === activity.activityKey) {
         setSelected(undefined)
+        setSelectedActivity(undefined)
         return
       }
-      setSelected(await historyApi.getEpisode(id))
+      const detail = await historyApi.getEpisode(String(activity.representativeEpisodeId))
+      setSelectedActivity(activity)
+      setSelected(detail)
     }
 
     const startRecording = async (): Promise<void> => {
@@ -402,9 +459,21 @@ export function createHistoryPage({
       ? new Set(todayDay.episodes.flatMap(episode => episode.surfaces.map(surface => surface.bundleId))).size
       : 0
     const todayDuration = todayDay ? dayDuration(todayDay) : 0
+    const todayDurationText = todayDay && todayDay.activities.some(activity => activity.episodeCount > 1)
+      ? t('approxDuration', { duration: formatDuration(t, todayDuration) })
+      : formatDuration(t, todayDuration)
     const recentEpisode = timeline && timeline !== null
       ? timeline.flatMap(day => day.episodes).find(episode => resumeSubject(episode) !== undefined)
       : undefined
+    const selectedRawEpisodes = selectedActivity && timeline
+      ? (() => {
+          const ids = new Set(selectedActivity.episodeIds.map(String))
+          return timeline
+            .flatMap(day => day.episodes)
+            .filter(episode => ids.has(String(episode.id)))
+            .toSorted((a, b) => a.startedAtMs - b.startedAtMs)
+        })()
+      : []
 
     const statusDotClass = isFirstRun
       ? 'ch-status-dot'
@@ -432,7 +501,7 @@ export function createHistoryPage({
           ? t('timelineUnavailable')
           : todayDay
             ? t('todayUsage', {
-                duration: formatDuration(t, todayDuration),
+                duration: todayDurationText,
                 apps: todayApps,
               })
             : t('todayUsageNone')
@@ -453,77 +522,104 @@ export function createHistoryPage({
             ? React.createElement('p', { className: 'ch-muted' }, t('timelineEmpty'))
             : React.createElement(
                 'div', { className: 'ch-timeline-shell' },
-                ...timeline.map((day, dayIndex) => React.createElement(
-                  'details', {
-                    key: day.dayKey,
-                    className: 'ch-day',
-                    open: dayIndex === 0 ? true : undefined,
-                  },
-                  React.createElement(
-                    'summary', { className: 'ch-day-summary' },
-                    React.createElement('span', { className: 'ch-day-title' }, dayLabel(t, day.dayKey)),
-                    React.createElement('span', { className: 'ch-day-date' }, formatDayDate(day.dayKey, activeLocale)),
-                    React.createElement('span', { className: 'ch-day-total' },
-                      t('daySummary', {
-                        duration: formatDuration(t, dayDuration(day)),
-                        count: day.episodeCount,
-                      })),
-                    React.createElement('span', { className: 'ch-day-chevron', 'aria-hidden': true }, '⌄'),
-                  ),
-                  React.createElement(
-                    'ul', { className: 'ch-timeline-list' },
-                    ...day.episodes.map(item => {
-                      const app = episodeApp(item)
-                      return React.createElement(
-                        'li', { key: String(item.id), className: 'ch-timeline-item' },
-                        React.createElement('span', { className: 'ch-time' },
-                          `${formatClock(item.startedAtMs, activeLocale)}–${formatClock(item.endedAtMs, activeLocale)}`),
-                        React.createElement(
-                          'button', {
-                            type: 'button',
-                            className: String(selected?.id) === String(item.id)
-                              ? 'ch-timeline-action ch-timeline-action-selected'
-                              : 'ch-timeline-action',
-                            'aria-expanded': String(selected?.id) === String(item.id),
-                            onClick: () => { runAction(() => openEpisode(String(item.id))) },
-                          },
-                          appBadge(app),
+                ...timeline.map((day, dayIndex) => {
+                  const duration = formatDuration(t, dayDuration(day))
+                  const displayDuration = day.activities.some(activity => activity.episodeCount > 1)
+                    ? t('approxDuration', { duration })
+                    : duration
+                  return React.createElement(
+                    'details', {
+                      key: day.dayKey,
+                      className: 'ch-day',
+                      open: dayIndex === 0 ? true : undefined,
+                    },
+                    React.createElement(
+                      'summary', { className: 'ch-day-summary' },
+                      React.createElement('span', { className: 'ch-day-title' }, dayLabel(t, day.dayKey)),
+                      React.createElement('span', { className: 'ch-day-date' }, formatDayDate(day.dayKey, activeLocale)),
+                      React.createElement('span', { className: 'ch-day-total' },
+                        t('daySummary', {
+                          duration: displayDuration,
+                          count: day.activityCount,
+                        })),
+                      React.createElement('span', { className: 'ch-day-chevron', 'aria-hidden': true }, '⌄'),
+                    ),
+                    React.createElement(
+                      'ul', { className: 'ch-timeline-list' },
+                      ...day.activities.map(activity => {
+                        const app = episodeApp(activity)
+                        const isSelected = selectedActivity?.activityKey === activity.activityKey
+                        return React.createElement(
+                          'li', { key: activity.activityKey, className: 'ch-timeline-item' },
+                          React.createElement('span', { className: 'ch-time' },
+                            `${formatClock(activity.startedAtMs, activeLocale)}–${formatClock(activity.endedAtMs, activeLocale)}`),
                           React.createElement(
-                            'span', { className: 'ch-episode-copy' },
-                            React.createElement('span', { className: 'ch-episode-title' }, episodeSubject(t, item)),
-                            React.createElement('span', { className: 'ch-episode-meta' }, episodeMeta(t, item, app)),
+                            'button', {
+                              type: 'button',
+                              className: isSelected
+                                ? 'ch-timeline-action ch-timeline-action-selected'
+                                : 'ch-timeline-action',
+                              'aria-expanded': isSelected,
+                              onClick: () => { runAction(() => openActivity(activity)) },
+                            },
+                            appBadge(app),
+                            React.createElement(
+                              'span', { className: 'ch-episode-copy' },
+                              React.createElement('span', { className: 'ch-episode-title' }, episodeSubject(t, activity)),
+                              React.createElement('span', { className: 'ch-episode-meta' }, episodeMeta(t, activity, app)),
+                            ),
                           ),
-                        ),
-                        React.createElement('span', { className: 'ch-duration' },
-                          formatDuration(t, item.endedAtMs - item.startedAtMs)),
-                      )
-                    }),
-                  ),
-                )),
+                          React.createElement('span', { className: 'ch-duration' },
+                            activityDurationText(t, activity)),
+                        )
+                      }),
+                    ),
+                  )
+                }),
               ),
-      selected
+      selectedActivity && selected
         ? React.createElement(
             'div', { className: 'ch-detail' },
             React.createElement(
               'div', { className: 'ch-detail-head' },
-              appBadge(episodeApp(selected)),
+              appBadge(episodeApp(selectedActivity)),
               React.createElement(
                 'span', { className: 'ch-detail-copy' },
-                React.createElement('span', { className: 'ch-detail-title' }, episodeSubject(t, selected)),
+                React.createElement('span', { className: 'ch-detail-title' }, episodeSubject(t, selectedActivity)),
                 React.createElement('span', { className: 'ch-detail-meta' },
-                  `${episodeApp(selected)} · ${formatClock(selected.startedAtMs, activeLocale)}–${formatClock(selected.endedAtMs, activeLocale)} · ${formatDuration(t, selected.endedAtMs - selected.startedAtMs)}`),
+                  `${episodeApp(selectedActivity)} · ${formatClock(selectedActivity.startedAtMs, activeLocale)}–${formatClock(selectedActivity.endedAtMs, activeLocale)} · ${activityDurationText(t, selectedActivity)}`),
               ),
             ),
+            selectedActivity.episodeCount > 1
+              ? React.createElement('p', { className: 'ch-detail-resource' },
+                  t('mergedActivity', { count: selectedActivity.episodeCount }))
+              : null,
             React.createElement('p', { className: 'ch-detail-resource' },
-              selected.resources.length > 0
+              selectedActivity.resources.length > 0
                 ? t('resources', {
-                    resources: selected.resources
-                      .map(item => resourceLabel(t, item, episodeApp(selected)))
+                    resources: selectedActivity.resources
+                      .map(item => resourceLabel(t, item, episodeApp(selectedActivity)))
                       .join(', '),
                   })
                 : t('noResourceApps', {
-                    apps: selected.surfaces.map(item => friendlyAppName(item.bundleId)).join(', '),
+                    apps: selectedActivity.surfaces.map(item => friendlyAppName(item.bundleId)).join(', '),
                   })),
+            selectedActivity.episodeCount > 1
+              ? React.createElement(
+                  'details', { className: 'ch-inspector' },
+                  React.createElement('summary', null, t('rawEpisodes')),
+                  React.createElement(
+                    'ul', { className: 'ch-segment-list' },
+                    ...selectedRawEpisodes.map(episode => React.createElement(
+                      'li', { key: String(episode.id) },
+                      React.createElement('span', null,
+                        `${formatClock(episode.startedAtMs, activeLocale)}–${formatClock(episode.endedAtMs, activeLocale)}`),
+                      React.createElement('span', { className: 'ch-muted' },
+                        episodeMeta(t, episode, episodeApp(episode))),
+                    )),
+                  ),
+                )
+              : null,
             React.createElement(
               'details', { className: 'ch-inspector' },
               React.createElement('summary', null, t('whyRecorded')),
@@ -587,6 +683,19 @@ export function createHistoryPage({
                     app: episodeApp(recentEpisode),
                   })),
               ),
+              resumeOpenCapability?.available
+                ? React.createElement('button', {
+                    type: 'button',
+                    className: 'ch-button ch-resume-open',
+                    disabled: resumeOpenPending,
+                    onClick: () => {
+                      void continueRecordedWork(
+                        recentEpisode,
+                        resumeResourceUri(recentEpisode),
+                      )
+                    },
+                  }, resumeOpenPending ? t('openingWork') : t('continueWork'))
+                : null,
             )
           : null,
         recentEpisode
@@ -597,7 +706,23 @@ export function createHistoryPage({
             )
           : resumeControls,
         resumeText
-          ? React.createElement('p', { className: 'ch-row-body', role: 'status' }, resumeText)
+          ? React.createElement(
+              'div', { className: 'ch-resume-result', role: 'status' },
+              React.createElement('p', { className: 'ch-row-body' }, resumeText),
+              hint?.status === 'hit' && resumeOpenCapability?.available
+                ? React.createElement('button', {
+                    type: 'button',
+                    className: 'ch-button',
+                    disabled: resumeOpenPending,
+                    onClick: () => {
+                      void continueRecordedWork(
+                        hint.episode,
+                        hint.resource?.canonicalUri,
+                      )
+                    },
+                  }, resumeOpenPending ? t('openingWork') : t('continueWork'))
+                : null,
+            )
           : null,
       ),
     )

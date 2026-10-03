@@ -1,4 +1,5 @@
 import '@deepseek-ai/dsh-client-connection'
+import '@deepseek-ai/dsh-subprocess'
 import type { Context } from '@deepseek-ai/cordis'
 import { EpisodeId } from '../../shared/index.js'
 import {
@@ -10,6 +11,11 @@ import { RetentionSettingsError } from '../store/retention-settings.js'
 import { SummaryProviderError } from '../semantic/provider.js'
 import { computerHistoryService } from '../service/index.js'
 import { browserCompanionSetup } from '../companion/setup.js'
+import {
+  ResumeOpenLaunchError,
+  ResumeOpenRequestError,
+  ResumeResourceOpener,
+} from '../resume/opener.js'
 
 export const HISTORY_API_PREFIX = '/api/computer-history'
 
@@ -85,6 +91,10 @@ function requestFailure(error: unknown): Response {
 
 export function registerHistoryApi(ctx: Context): void {
   const history = computerHistoryService(ctx)
+  const resumeOpener = new ResumeResourceOpener({
+    subprocess: ctx.subprocess,
+    cwd: process.cwd(),
+  })
 
   ctx.effect(() => ctx.connection.fetch.register({
     path: HISTORY_API_PREFIX + '/state',
@@ -342,6 +352,66 @@ export function registerHistoryApi(ctx: Context): void {
         })
         return json(resolution)
       } catch {
+        return textResponse('Request failed.', 500)
+      }
+    },
+  }))
+
+  ctx.effect(() => ctx.connection.fetch.register({
+    path: HISTORY_API_PREFIX + '/resume/open',
+    methods: ['GET', 'POST'],
+    requestBody: 'buffered',
+    fetch: async (request: Request) => {
+      if (request.method === 'GET') {
+        return json(await resumeOpener.capability())
+      }
+      let body: unknown
+      try {
+        body = await request.json()
+      } catch {
+        return textResponse('Invalid JSON.', 400)
+      }
+      const record = body as Partial<{
+        episodeId: unknown
+        resourceCanonicalUri: unknown
+      }>
+      if (
+        typeof record.episodeId !== 'string'
+        || record.episodeId.length === 0
+        || record.episodeId.length > 1_000
+        || (
+          record.resourceCanonicalUri !== undefined
+          && (
+            typeof record.resourceCanonicalUri !== 'string'
+            || record.resourceCanonicalUri.length === 0
+            || record.resourceCanonicalUri.length > 8_192
+          )
+        )
+      ) {
+        return textResponse(
+          'episodeId and an optional bounded resourceCanonicalUri are required.',
+          400,
+        )
+      }
+      try {
+        const episode = await history.getEpisode(
+          EpisodeId(record.episodeId),
+          request.signal,
+        )
+        if (!episode) return textResponse('Not found.', 404)
+        return json(await resumeOpener.openEpisode(
+          episode,
+          typeof record.resourceCanonicalUri === 'string'
+            ? record.resourceCanonicalUri
+            : undefined,
+        ))
+      } catch (error) {
+        if (error instanceof ResumeOpenRequestError) {
+          return textResponse(error.message, 400)
+        }
+        if (error instanceof ResumeOpenLaunchError) {
+          return textResponse('Could not open the recorded resource.', 503)
+        }
         return textResponse('Request failed.', 500)
       }
     },

@@ -281,6 +281,7 @@ describe('Cordis computer history service', () => {
       async resume() {},
       getState() { return state },
       async threads() { return [] },
+      async thread() { return undefined },
       async timeline() { return [] },
       retention() {
         return { observationRetentionHours: 24, episodeRetentionDays: 30, updatedAtMs: 0 }

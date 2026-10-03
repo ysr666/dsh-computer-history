@@ -39,6 +39,41 @@ No release/version/tag/publish/merge action was performed.
 
 Main must not regain Settings-owned controls such as pause/resume, delete-all, app-policy editing, or a second Recent Episodes list. Timeline is the primary history surface.
 
+
+## Phase 2A contract: raw Episodes are evidence; Activities are the reader-facing timeline
+
+The timeline API now carries **both** layers. Do not collapse them back into one concept:
+
+- `TimelineDay.episodes` / `episodeCount` are the unchanged raw audit episodes. They remain available for drill-down and evidence. Main must not render them as the primary timeline rows.
+- `TimelineDay.activities` / `activityCount` are the deterministic reader-facing projection. **Main renders `activities`.**
+- `TimelineActivity.episodeIds` and `representativeEpisodeId` preserve the path back to raw evidence. Clicking a merged Activity must still let a reader inspect the underlying Episode times.
+- Activity merging belongs to `src/shared/audit-view.ts`, not React. A view must not recreate or tweak the merge heuristic locally.
+- The current merge rule is deliberately conservative: same local day + same app + same explicit work identity (`threadKey`, workspace id/root, otherwise exact resource URI) + gap no greater than `TIMELINE_ACTIVITY_MERGE_GAP_MS` (10 minutes).
+- Do not merge on workspace title alone. Titles can collide and Terminal home-directory titles can be usernames.
+- `observedDurationMs` is the sum of time actually present in raw Episodes. `spanDurationMs` is the elapsed first-to-last span of a merged Activity. They are **not interchangeable facts**.
+- The UI may use the span to describe a merged human-scale Activity, but must mark it approximate (`about` / `约`). Exact isolated Episodes use observed duration.
+- Day summaries count Activities, not raw Episodes. If any Activity is merged, the displayed day duration is approximate for the same reason.
+- Tests in `tests/unit/timeline.spec.ts` are the contract for merging, non-merging, resource fallback, and raw-vs-projected counts. Change the rule only by changing these tests deliberately, not by tuning the UI until a screenshot looks nicer.
+
+Current rendered evidence on the user's real Desktop Host: the six raw Episodes from 2026-10-03 project to four Activities. Three VS Code Episodes at 15:17, 15:24 and 15:26 merge into one `15:17–15:26` Activity, while three Terminal Episodes hours apart remain separate. The merged detail still exposes all three original segments.
+
+
+## Phase 2B contract: Continue is an explicit, evidence-bound Host action
+
+Resume is no longer only a hint. The UI now closes the loop with a real `Continue` action, but the opener is intentionally narrower than a general “open this path” API:
+
+- `GET /api/computer-history/resume/open` returns Host capability. Main only renders Continue when the Host explicitly reports `available: true`.
+- `POST /api/computer-history/resume/open` accepts an `episodeId` and an optional `resourceCanonicalUri`. The browser never sends an executable, command line or arbitrary local path.
+- The Host reloads the Episode from stored history. If `resourceCanonicalUri` is present it must exactly match a resource already attached to that Episode; a forged URI is a 400 even on an unsupported platform.
+- With no named resource, the opener may fall back to the Episode's recorded absolute workspace root. It may not infer another path from display text.
+- The verified macOS implementation lives in `src/host/resume/opener.ts` and uses the existing injected `dsh-subprocess` service. `argv` is explicit and never shell-interpreted: `/usr/bin/open -b <stored bundle id> <validated target>`.
+- URL targets are limited to recorded `http:` / `https:` resources. Local targets must be valid `file:` URIs. Unsupported schemes never reach the OS opener.
+- macOS is the only verified platform in Phase 2B. Windows/Linux return `platform-unverified`; do not bolt on `cmd /c start`, `xdg-open`, shell scripts or other guessed launchers without platform-specific evidence/tests.
+- The UI action is user initiated. Reopening a recorded resource is not a new capture primitive and must not weaken the metadata-only boundary.
+- Keep the global capability optional. A broken/unavailable opener must not poison Timeline/Thread loading or turn the page into an error state.
+
+Real Desktop evidence: from the live DSH renderer, `GET /resume/open` returned available; a stored VS Code Episode for `docs/validation-three-platforms.md` was POSTed through the same typed route and returned `opened`; the full UI `Continue` click then moved the foreground application from DeepSeek Harness to Code. VS Code's Accessibility tree showed the active window/resource as `validation-three-platforms.md` at `~/Projects/dsh-computer-history/docs/validation-three-platforms.md`.
+
 ## Platform facts that are now proven on rc.2
 
 `@deepseek-ai/dsh-client-locale` is a real registered client module. Official `dsh-client-ui-layout@0.2.0-rc.2` injects the `locale` Cordis service and its manifest injects this module id. The locale package itself documents and types `ctx.locale.register`, `bind`, `getLocale`, `getSnapshot`, and `subscribe`.
@@ -93,11 +128,17 @@ When proposing any DSH API/module/slot not already proven in this repository, in
 
 ## Next work
 
-The remaining important work is **rendered visual verification**, not another speculative refactor. Load this exact working tree in the user's rc.2 Host and inspect Main + Settings in light and dark themes. Compare spacing, density, hierarchy, focus, disabled, loading and error states against native Host controls. Adjust only from rendered evidence; do not infer “native-looking” from source code alone.
+Phase 2A (Timeline Truth) and Phase 2B (Resume Loop) are complete and verified in the user's real Desktop Host.
 
-Connection-reset invalidation is still a possible improvement, but only after verifying the exact existing client event/service precedent. Do not add polling or a second cache.
+The next product milestone is **Phase 2C — Project Memory**. Keep it small and reader-oriented:
 
-UI-level component tests are useful only if the existing test stack can render these components without adding a runtime dependency. Highest-value cases are loading/error truthfulness, row-local feedback, and two-step destructive confirmation.
+1. Work Threads become navigable project-history objects rather than a static aggregation row. A thread detail should show its own Activity timeline, recent resources, last-active time and a truthful duration metric.
+2. Thread duration must not reuse `endedAtMs - startedAtMs` as “work time”. That is a span. Either compute Activity/episode observed duration or label span explicitly.
+3. Add minimal date navigation to the main history surface: bounded forward/back day movement or “load older”, plus a direct date jump only if it can be implemented without turning Main into a dashboard.
+4. Reuse the Activity projection for thread/date views. Do not introduce another independent merge heuristic.
+5. A thread detail may expose Continue for a stored recent resource through the existing Phase 2B route; it must not invent a second opener.
+
+Still out of scope: productivity scores, app-usage pie charts, heatmaps, AI daily/weekly narratives, and a broad analytics dashboard. Build project memory first.
 
 ## Required verification
 
@@ -122,12 +163,12 @@ Expected: business `fetch` only in `src/client/api.ts`; no DOM-locale observer; 
 ## Verified baseline after AM pass
 
 - `pnpm verify`: green.
-- 60 test files / 361 tests passed.
+- 63 test files / 389 tests passed.
 - lint: 0 warnings / 0 errors.
 - privacy / adapters / store-protection / semantic-boundary / architecture / migrations / native-timeouts / docs / collector checks: green.
 - Focused client contract/state tests are green: API routing/bodies, shared-store folding/coalescing, locale dictionary parity, capture-control state mapping, and stale companion-state replacement.
 - `pnpm build`: green. Existing tsdown CJS/declaration warnings remain informational.
-- Client bundle: 52.35 kB CJS, gzip 13.42 kB. Treat this only as an ownership sanity check.
+- Client bundle after Phase 2B: 104.32 kB CJS, gzip 24.55 kB. Treat this only as an ownership sanity check, not a product KPI.
 - Current `lib/client.js` runtime requires remain platform-owned DSH client modules plus React; repository tests guard externalization/inject/peer ownership.
-- The currently running Desktop Host has a copied installed plugin under `~/.dsh/profiles/desktop/node_modules/dsh-computer-history`, not a symlink to this checkout. This working tree has therefore been code/test/build verified, but the newly edited UI has not been silently installed over the user's live Host for screenshot validation.
+- The Desktop Host uses a copied installed plugin under `~/.dsh/profiles/desktop/node_modules/dsh-computer-history`, not a symlink. For Phase 2A/2B, AM backed up and copied the built `lib/index.js` + `lib/client.js`, restarted the Host, verified Activity projection, and verified the real Continue-to-VS-Code loop in the Desktop UI. This was preview installation only, not a release.
 - No release action has been taken; the working tree remains for review/testing.
