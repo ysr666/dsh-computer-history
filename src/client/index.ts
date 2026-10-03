@@ -28,7 +28,6 @@ import type {
   WorkThread,
 } from '../shared/index.js'
 import { describeProvenance } from '../shared/audit-view.js'
-import { describeHealth } from '../shared/health.js'
 import { historyApiPath } from './api-route.js'
 import { applySettings } from './settings.js'
 
@@ -42,12 +41,6 @@ const PANEL_ID = 'computer-history' as MainPanelId
 const interfaceLanguage = (): string =>
   (document.documentElement.lang || navigator.language || 'en').toLowerCase()
 // Server-side messages arrive in English; the ones a person can actually meet get a translation.
-const serverText = (value: string): string => {
-  const port = /port (\d+) is already in use/.exec(value)
-  if (port) return t(`port ${port[1]} is already in use`, `端口 ${port[1]} 已被占用`)
-  if (/companion intake/i.test(value)) return t('the companion listener is unavailable', '伴侣接收端不可用')
-  return value
-}
 
 const t = (en: string, zh: string): string =>
   (interfaceLanguage().startsWith('zh') ? zh : en)
@@ -121,25 +114,7 @@ const BUTTON_DANGER: React.CSSProperties = {
   color: DANGER,
   border: HAIRLINE,
 }
-const FIELD_LABEL = {
-  display: 'inline-flex', gap: 6, alignItems: 'center', marginRight: SPACE.md,
-}
 
-const HEALTH_TEXT: Record<string, string> = {
-  paused: t('Collection is paused, so nothing new is being recorded.',
-    '采集已暂停，所以不会记录新的内容。'),
-  stopped: t('Collection is stopped, so nothing new is being recorded.',
-    '采集已停止，所以不会记录新的内容。'),
-  degraded: t('Collection is not running normally, so nothing new may be recorded.',
-    '采集运行不正常，可能不会记录新的内容。'),
-  permission: t('macOS has not granted Accessibility to the collector, so nothing can be recorded.',
-    'macOS 还没有授予辅助功能权限，所以现在什么都记录不了。'),
-  'nothing-allowed': t('Nothing is allowed yet, so nothing will be recorded. Add an application below to start.',
-    '还没有允许任何应用，所以什么都不会被记录。在下面添加一个应用即可开始。'),
-  idle: t('Collecting, and ready. Nothing has been recorded yet.',
-    '正在采集，一切就绪；目前还没有记录。'),
-  recording: t('Recording.', '正在记录。'),
-}
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(historyApiPath(path), init)
@@ -161,17 +136,11 @@ function HistoryPage(): React.ReactElement {
   const [hint, setHint] = useState<ResumeResolution>()
   const [semantic, setSemantic] = useState<SemanticSummaryState>()
   const [timeline, setTimeline] = useState<readonly TimelineDay[]>([])
-  const [retention, setRetention] = useState<RetentionSettings>()
-  const [retentionHours, setRetentionHours] = useState('')
-  const [retentionDays, setRetentionDays] = useState('')
   const [selected, setSelected] = useState<EpisodeDetail>()
   const [preview, setPreview] = useState<string>()
   const [policy, setPolicy] = useState<PolicySnapshot>()
   const [bundleId, setBundleId] = useState('')
   const [confirmDeleteAll, setConfirmDeleteAll] = useState(false)
-  const [companionToken, setCompanionToken] = useState<string>()
-  const [copiedToken, setCopiedToken] = useState(false)
-  const [siteOrigin, setSiteOrigin] = useState('')
   const [error, setError] = useState<string>()
 
   const refresh = useCallback(async () => {
@@ -179,7 +148,6 @@ function HistoryPage(): React.ReactElement {
       const [
         nextState, nextEpisodes, nextPolicy, nextThreads, nextSemantics,
         nextTimeline,
-        nextRetention,
       ] = await Promise.all([
           api<ComputerHistoryState>('/state'),
           api<readonly EpisodeSummary[]>('/recent?limit=50'),
@@ -195,9 +163,6 @@ function HistoryPage(): React.ReactElement {
       setThreads(nextThreads)
       setSemantic(nextSemantics)
       setTimeline(nextTimeline)
-      setRetention(nextRetention)
-      setRetentionHours(String(nextRetention.observationRetentionHours))
-      setRetentionDays(String(nextRetention.episodeRetentionDays))
       setError(undefined)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause))
@@ -284,42 +249,7 @@ function HistoryPage(): React.ReactElement {
     await refresh()
   }
 
-  const rotateCompanionToken = async (): Promise<void> => {
-    // The token exists in clear only in this response: the Host keeps a digest
-    // (ADR 0007), so this is the one moment it can be copied.
-    const result = await api<{ token: string }>(
-      '/pairing/rotate',
-      { method: 'POST' },
-    )
-    setCompanionToken(result.token)
-    await refresh()
-  }
 
-  const setSiteRule = async (action: 'allow' | 'deny'): Promise<void> => {
-    const value = siteOrigin.trim().replace(/\/+$/, '')
-    if (!/^https?:\/\/[^/?#]+$/.test(value) || !policy) return
-    const now = Date.now()
-    const rules = policy.rules.filter(rule =>
-      !(rule.dimension === 'resource' && rule.pattern === value),
-    )
-    rules.push({
-      id: ('site:' + value) as never,
-      dimension: 'resource',
-      action,
-      matcher: 'prefix',
-      pattern: value,
-      builtIn: false,
-      createdAtMs: now,
-      updatedAtMs: now,
-    })
-    await api('/policy', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ mode: 'include-only', rules }),
-    })
-    setSiteOrigin('')
-    await refresh()
-  }
 
   const findWhereILeftOff = async (): Promise<void> => {
     const result = await api<ResumeResolution>('/resume-hint', {
@@ -337,14 +267,6 @@ function HistoryPage(): React.ReactElement {
 
   // First thing on the page: whether the product is working at all. An empty
   // timeline has four meanings and only this sentence distinguishes them.
-  const health = describeHealth({
-    capture: state?.capture ?? 'stopped',
-    accessibilityTrusted: state?.accessibilityTrusted ?? false,
-    allowRules: policy?.rules.filter(rule => rule.action === 'allow').length ?? 0,
-    observationCount: episodes.length,
-    newestObservationAtMs: episodes[0]?.startedAtMs,
-    nowMs: Date.now(),
-  })
   // Colours come from the interface, never from constants: the first version of this
   // line hardcoded a cream background with inherited light text and rendered as an
   // empty bar on the dark theme.
@@ -469,25 +391,6 @@ function HistoryPage(): React.ReactElement {
         ),
       )
     : null
-
-  const healthSection = React.createElement(
-    'section',
-    { style: { margin: '0 0 18px' } },
-    React.createElement(
-      'p',
-      {
-        role: 'status',
-        style: {
-          margin: 0,
-          paddingLeft: 10,
-          borderLeft: `3px solid currentColor`,
-          opacity: health.level === 'blocked' ? 1 : 0.75,
-          fontWeight: health.level === 'blocked' ? 600 : 400,
-        },
-      },
-      HEALTH_TEXT[health.code] ?? health.text,
-    ),
-  )
 
   const resumeSection = React.createElement(
     'section',
@@ -617,76 +520,6 @@ function HistoryPage(): React.ReactElement {
       : null,
   )
 
-  const saveRetention = async (): Promise<void> => {
-    const next = await api<RetentionSettings>('/retention', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        observationRetentionHours: Number(retentionHours),
-        episodeRetentionDays: Number(retentionDays),
-      }),
-    })
-    setRetention(next)
-  }
-
-  const retentionSection = React.createElement(
-    'section',
-    { style: SECTION },
-    React.createElement('h2', { style: { margin: `0 0 ${SPACE.sm}px` } }, t('Retention', '保留策略')),
-    retention
-      ? React.createElement(
-          'div',
-          null,
-          React.createElement(
-            'p',
-            { style: MUTED },
-            t(
-              `Raw observations are kept for ${retention.observationRetentionHours} hours `
-              + `and episodes for ${retention.episodeRetentionDays} days. A change applies `
-              + 'to what is recorded from now on; it does not delete history you already have.',
-              `原始记录保留 ${retention.observationRetentionHours} 小时，工作片段保留 `
-              + `${retention.episodeRetentionDays} 天。修改只影响之后记录的内容，`
-              + '不会删除你已经有的历史。',
-            ),
-          ),
-          React.createElement(
-            'label',
-            { style: FIELD_LABEL },
-            t('Observation hours ', '原始记录保留 '),
-            React.createElement('input', {
-              type: 'number',
-              value: retentionHours,
-              min: 1,
-              max: 720,
-              onChange: (event: { target: { value: string } }) => {
-                setRetentionHours(event.target.value)
-              },
-            }),
-          ),
-          ' ',
-          React.createElement(
-            'label',
-            { style: FIELD_LABEL },
-            t('Episode days ', '工作片段保留 '),
-            React.createElement('input', {
-              type: 'number',
-              value: retentionDays,
-              min: 1,
-              max: 365,
-              onChange: (event: { target: { value: string } }) => {
-                setRetentionDays(event.target.value)
-              },
-            }),
-          ),
-          ' ',
-          React.createElement(
-            'button',
-            { type: 'button', style: BUTTON_PRIMARY, onClick: () => { runAction(saveRetention) } },
-            t('Save retention', '保存'),
-          ),
-        )
-      : null,
-  )
 
   const openEpisode = async (id: string): Promise<void> => {
     setSelected(await api<EpisodeDetail>(`/episode?id=${encodeURIComponent(id)}`))
@@ -824,131 +657,6 @@ function HistoryPage(): React.ReactElement {
       : null,
   )
 
-  const companion = state?.companion
-
-  const companionSection = React.createElement(
-    'section',
-    {
-      style: {
-        border: '1px solid #d0d0d0',
-        borderRadius: 8,
-        padding: 12,
-        marginBottom: SPACE.xl,
-      },
-    },
-    React.createElement('h2', { style: { margin: `0 0 ${SPACE.sm}px` } }, t('Browser companion', '浏览器伴侣')),
-    React.createElement(
-      'p',
-      null,
-      !companion
-        ? t('Companion state unavailable on this Host.', '这台宿主上拿不到伴侣状态。')
-        : companion.listening
-          ? t(
-              `Listening on 127.0.0.1:${companion.port} · ${companion.paired ? (companion.lastSeenAtMs === undefined ? 'a token exists, but no client has ever used it' : `paired · last used ${new Date(companion.lastSeenAtMs).toLocaleString()}`) : 'not paired yet'}`,
-              `正在监听 127.0.0.1:${companion.port} · ${companion.paired ? (companion.lastSeenAtMs === undefined ? '令牌已生成，但还没有任何客户端用过它' : `已配对 · 最近使用 ${new Date(companion.lastSeenAtMs).toLocaleString()}`) : '还没有配对'}`,
-            )
-          : t(
-              `Companion unavailable${companion.reason ? ': ' + companion.reason : ''}`,
-              `伴侣不可用${companion.reason ? '：' + serverText(companion.reason) : ''}`,
-            ),
-    ),
-    React.createElement(
-      'div',
-      { style: { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' } },
-      React.createElement(
-        'button',
-        { type: 'button', style: BUTTON_PRIMARY, onClick: () => { runAction(rotateCompanionToken) } },
-        companion?.paired ? t('Rotate pairing token', '重新生成配对令牌') : t('Create pairing token', '生成配对令牌'),
-      ),
-      companionToken
-        ? React.createElement(
-            'code',
-            {
-              style: {
-                padding: '4px 8px',
-                background: SURFACE_NESTED,
-                borderRadius: 4,
-                userSelect: 'all',
-              },
-            },
-            companionToken,
-          )
-        : null,
-    ),
-    companionToken
-      ? React.createElement(
-          'div',
-          null,
-          React.createElement(
-            'p',
-            { style: { color: MUTED_TEXT } },
-            'Only a digest is stored, so this is the one moment it can be copied. Rotating it again stops any client still using the old one.',
-          ),
-          React.createElement(
-            'button',
-            {
-              type: 'button', style: BUTTON,
-              onClick: () => {
-                void navigator.clipboard?.writeText(companionToken).then(
-                  () => { setCopiedToken(true) },
-                  () => { setCopiedToken(false) },
-                )
-              },
-            },
-            copiedToken ? 'Copied' : 'Copy token',
-          ),
-          React.createElement(
-            'ol',
-            { style: { color: MUTED_TEXT, marginTop: 8, paddingLeft: 20 } },
-            React.createElement(
-              'li',
-              null,
-              'Browser: open the extension’s options page and paste it there.',
-            ),
-            React.createElement(
-              'li',
-              null,
-              'VS Code or Cursor: in Settings search for ',
-              React.createElement('code', null, 'computer history'),
-              ', then set the token (and the port ',
-              React.createElement('code', null, String(companion?.port ?? 19388)),
-              ').',
-            ),
-            React.createElement(
-              'li',
-              null,
-              'Then reload that client. If nothing arrives, its own log says why: the editor extension writes one to ',
-              React.createElement('code', null, '~/.dsh/computer-history-editor.log'),
-              '.',
-            ),
-          ),
-        )
-      : null,
-    React.createElement(
-      'div',
-      { style: { display: 'flex', gap: 8, alignItems: 'center', marginTop: 12 } },
-      React.createElement('input', {
-        type: 'text',
-        placeholder: t('https://example.com', '例如 https://example.com'),
-        value: siteOrigin,
-        onChange: (event: { target: { value: string } }) => {
-          setSiteOrigin(event.target.value)
-        },
-        style: { flex: 1, padding: 6 },
-      }),
-      React.createElement(
-        'button',
-        { type: 'button', style: BUTTON_PRIMARY, onClick: () => { runAction(() => setSiteRule('allow')) } },
-        t('Allow site', '允许该网站'),
-      ),
-      React.createElement(
-        'button',
-        { type: 'button', style: BUTTON, onClick: () => { runAction(() => setSiteRule('deny')) } },
-        t('Deny site', '拒绝该网站'),
-      ),
-    ),
-  )
-
   const threadSection = React.createElement(
     'section',
     { style: SECTION },
@@ -990,7 +698,6 @@ function HistoryPage(): React.ReactElement {
     // A brand new store gets the path that makes it useful; everyone else gets the status.
     firstRunSection,
     // First after the title: the one fact that needs an action, before any status.
-    healthSection,
     React.createElement(
       'p',
       null,
@@ -1008,8 +715,6 @@ function HistoryPage(): React.ReactElement {
           t('Status detail: ', '状态详情：') + state.reason,
         )
       : null,
-    companionSection,
-    retentionSection,
     timelineSection,
     semanticSection,
     resumeSection,

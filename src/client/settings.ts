@@ -133,9 +133,18 @@ export function createSettingsPage({ t }: SettingsProps): () => React.ReactEleme
             ? t('This machine is being recorded. Only what you allow, and only metadata.', '正在记录这台电脑的活动。只记你允许的，而且只记元数据。')
             : t('Not recording right now. Nothing new is being written.', '当前没有在记录。新的内容不会被写入。')),
         React.createElement('div', { style: CONTROLS },
-          // Pause exists in the Host service but its route is not confirmed from here, so this page shows the
-          // state and offers the controls whose routes the panel already uses. A button that might 404 is worse
-          // than no button.
+          // The routes are confirmed in src/host/api/routes.ts: `/pause` and `/resume` are POST endpoints, and
+          // pausing stops the companion intake too, which is why one control covers both.
+          React.createElement('button', {
+            style: recording ? BUTTON : BUTTON_PRIMARY,
+            onClick: async () => {
+              const ok = await post(recording ? '/pause' : '/resume', {})
+              setNote(ok
+                ? (recording ? t('Paused.', '已暂停。') : t('Recording.', '已开始记录。'))
+                : t('The Host refused that.', '宿主拒绝了这次操作。'))
+              await reloadState()
+            },
+          }, recording ? t('Pause recording', '暂停记录') : t('Start recording', '开始记录')),
           React.createElement('button', { style: BUTTON, onClick: () => { void reloadState() } },
             t('Refresh', '刷新'))),
         state?.reason
