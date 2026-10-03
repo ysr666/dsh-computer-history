@@ -1563,3 +1563,39 @@ Once the id is known - or the entry is added through the client's own settings s
 connector is `streamable-http` to `https://mcp.desktopcommander.app/mcp` with an `Authorization` header, and the
 remote machine's tools should appear as `mcp__<serverName>__<tool>`. Then the two unverified rows are the next
 thing this file records.
+
+### The bridge is wired; the loader needs one restart, and that is the one thing the agent cannot do
+
+The identifier problem is solved without asking anyone: the application's plugin list **is** its patch layer, and
+the file's own header calls it "your patch layer ... id-targeted config overrides, disables, and insert lists". Its
+convention is visible in the entries it already holds (`ui-settings-account`, `ui-chat`, `ui-settings` - id equals
+the package name without its scope), so the entry is:
+
+```yaml
+- id: dsh-mcp-client
+  name: "@deepseek-ai/dsh-mcp-client"
+  config:
+    servers:
+      - name: desktopcommander
+        transport: streamable-http
+        url: https://mcp.desktopcommander.app/mcp
+        headers:
+          Authorization: "Bearer …"      # from the OAuth flow, file mode 0600, never printed
+```
+
+The whole file was re-parsed afterwards (16 entries, all of them, with the pre-existing `!!js` tags given a
+loader) rather than trusting the append: the entry is present with the right server, transport, URL and header. The
+layer was backed up first, as the application itself does when it writes it.
+
+**What the loader shows, and why a restart is needed:** `dsh-mcp-client` is not among the loaded entries, while
+`mcp-resources` is active - the profile's patch layer is read when the harness boots, so a new entry is not picked
+up by a running process. The plugin page's "installed" means the package is present (it ships inside the
+application bundle), not that an entry exists. Reloading it in place is not possible either: the injector tools
+create entries without configuration, and this entry's whole value is its configuration.
+
+That is the one step this work cannot take from inside the application, because the conversation runs in the very
+process that would have to restart - and restarting is not a question of permission but of self-reference.
+Sessions are durable, so the restart resumes this conversation with the entry loaded.
+
+Also recorded: `ds-harness-remote` is present but **[disabled]** in the loader, which is why the other bridge has
+not been reachable either.
