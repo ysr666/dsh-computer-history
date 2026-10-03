@@ -53,6 +53,53 @@ What is **not** the way, measured rather than assumed:
 - `~/.dsh/ext-bridge-token` is the browser bridge's token, not the web session cookie
   (`/state` answers `unauthorized` with it).
 
+## A Host of your own must be the same DSH version as the interface you compare against
+
+Cost of learning this: eleven rounds.
+
+The panel registers `main` and `sidebar.panellist`. Those slots exist in **0.2.0-rc.2** (what the
+desktop app runs) and **not** in **0.1.2-rc.1** (what `dsh` on `PATH` installs). A Host booted from
+the older CLI therefore renders no such slot, the registration silently does nothing, and the
+symptom is indistinguishable from a broken plugin: the client bundle is in
+`window.__DSH_BOOT__.entries`, its request returns 200, no exception is thrown, and nothing appears.
+
+Check the version before concluding anything about the plugin:
+
+```bash
+node -e 'console.log(require("/opt/homebrew/lib/node_modules/@deepseek-ai/dsh/package.json").version)'
+defaults read "/Applications/DeepSeek Harness.app/Contents/Info.plist" CFBundleShortVersionString
+```
+
+Everything else in this section was measured while chasing that mismatch, and two hypotheses were
+falsified on the way - "the interface does not know about the client half" (it does), and "the
+working example is a valid control" (it registers different slots, so it was not). The ruled-out
+list is still useful, but it was all downstream of the version check that should have come first.
+
+## A Host of your own, with a clean store
+
+Panel work needs a Host you can drive without touching anyone's session, and first-run work
+needs a store that has never recorded anything. Both come from a profile of your own inside
+the real `~/.dsh`, because profile bundles resolve from the installation:
+
+```bash
+cp -R ~/.dsh/profiles/web ~/.dsh/profiles/firstrun    # a profile known to boot
+# then add this plugin as a patch entry with its own dataDirectory, and:
+dsh --profile firstrun web --port 19420                # writes an authenticated URL to stdout
+```
+
+What is **not** the way, measured rather than assumed:
+
+- copying a profile into a **temporary** `DSH_HOME`: the profile's own bundles and its local
+  `file:` dependencies do not resolve there (`cannot resolve profile bundle ...`), and
+  `dsh plugin --profile <name> install` fails on the `file:` dependencies that point at
+  another checkout;
+- reading the auth cookie from `~/.dsh` after the fact: no file under `~/.dsh` holds
+  `dsh-auth-*` - the token exists in the running process and in the browser that opened the URL,
+  which is why a Host of your own is the reliable route, and why the URL from stdout must be
+  kept rather than rediscovered;
+- `~/.dsh/ext-bridge-token` is the browser bridge's token, not the web session cookie
+  (`/state` answers `unauthorized` with it).
+
 ## Why an installed bundle can still show no interface
 
 Measured while installing this plugin into a profile as a bundle (`dsh plugin --profile ... add`):
