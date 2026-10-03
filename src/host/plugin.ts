@@ -10,6 +10,7 @@ import { registerAgentIntegration } from '../agent/index.js'
 import {
   presetBundles,
   readFirstRunPreset,
+  runningRelease,
   type CollectorToHost,
   type ComputerHistoryState,
 } from '../shared/index.js'
@@ -418,6 +419,7 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
         description: { ...preset.description },
       }
     },
+    () => runningRelease(),
   )
 
   // Teardown is registered immediately, before anything that can throw,

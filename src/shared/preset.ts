@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { PHASE1_ADAPTERS } from './constants.js'
@@ -71,6 +71,39 @@ export function readFirstRunPreset(
       readFileSync(path.join(packageRoot(from), 'presets', 'first-run.json'), 'utf8'),
     )
     return isFirstRunPreset(raw) ? raw : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * What the running code is, so "am I running a stale copy" becomes answerable.
+ *
+ * Three facts the plugin can establish about itself: the version it declares, where the module was
+ * loaded from, and when its own built entry was last written. The comparison against a checkout or an
+ * artifact belongs to the caller - this reports, it does not judge.
+ */
+export interface RunningRelease {
+  readonly version: string
+  readonly loadedFrom: string
+  readonly builtAtMs?: number
+}
+
+export function runningRelease(
+  from: string = fileURLToPath(import.meta.url),
+): RunningRelease | undefined {
+  try {
+    const root = packageRoot(from)
+    const manifest: unknown = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'))
+    const version = (manifest as { version?: unknown }).version
+    if (typeof version !== 'string') return undefined
+    let builtAtMs: number | undefined
+    try {
+      builtAtMs = Math.round(statSync(path.join(root, 'lib', 'index.js')).mtimeMs)
+    } catch {
+      builtAtMs = undefined
+    }
+    return { version, loadedFrom: root, ...(builtAtMs === undefined ? {} : { builtAtMs }) }
   } catch {
     return undefined
   }

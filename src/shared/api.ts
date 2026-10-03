@@ -99,6 +99,17 @@ export interface ComputerHistoryState {
    * carrying its own copy of the adapter table. Absent when the preset file is not
    * shipped - the panel then behaves as it did before.
    */
+  /**
+   * What the running plugin is: its declared version, where it was loaded from, and when its built
+   * entry was written. The interface uses it to say "the installed copy is the old code", which is a
+   * failure that otherwise looks exactly like a broken feature.
+   */
+  readonly release?: {
+    readonly version: string
+    readonly loadedFrom: string
+    readonly builtAtMs?: number
+  } | undefined
+
   readonly firstRunPreset?: {
     readonly bundles: readonly string[]
     readonly title: Record<string, string>

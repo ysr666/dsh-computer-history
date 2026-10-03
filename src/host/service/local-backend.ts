@@ -93,6 +93,7 @@ implements ComputerHistoryServiceContract {
      */
     private readonly refusalCounts?: () => ReadonlyMap<string, number>,
     private readonly firstRunPreset?: () => ComputerHistoryState['firstRunPreset'],
+    private readonly release?: () => ComputerHistoryState['release'],
   ) {
     this.now = config.now ?? Date.now
   }
@@ -238,6 +239,7 @@ implements ComputerHistoryServiceContract {
       ...(this.firstRunPreset
         ? { firstRunPreset: this.firstRunPreset() }
         : {}),
+      ...(this.release ? { release: this.release() } : {}),
       observationRetentionHours:
         this.config.observationRetentionHours,
       episodeRetentionDays:
