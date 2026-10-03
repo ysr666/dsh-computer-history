@@ -27,3 +27,28 @@ Follow ARCHITECTURE.md, SECURITY.md, docs/development.md, and the Phase 1 Implem
 ## Local data
 
 Never use real personal Computer History as a normal test fixture. Unit and integration fixtures must be synthetic. Live AX output stays under ignored local directories and must be reviewed before sharing.
+
+## A Host of your own, with a clean store
+
+Panel work needs a Host you can drive without touching anyone's session, and first-run work
+needs a store that has never recorded anything. Both come from a profile of your own inside
+the real `~/.dsh`, because profile bundles resolve from the installation:
+
+```bash
+cp -R ~/.dsh/profiles/web ~/.dsh/profiles/firstrun    # a profile known to boot
+# then add this plugin as a patch entry with its own dataDirectory, and:
+dsh --profile firstrun web --port 19420                # writes an authenticated URL to stdout
+```
+
+What is **not** the way, measured rather than assumed:
+
+- copying a profile into a **temporary** `DSH_HOME`: the profile's own bundles and its local
+  `file:` dependencies do not resolve there (`cannot resolve profile bundle ...`), and
+  `dsh plugin --profile <name> install` fails on the `file:` dependencies that point at
+  another checkout;
+- reading the auth cookie from `~/.dsh` after the fact: no file under `~/.dsh` holds
+  `dsh-auth-*` - the token exists in the running process and in the browser that opened the URL,
+  which is why a Host of your own is the reliable route, and why the URL from stdout must be
+  kept rather than rediscovered;
+- `~/.dsh/ext-bridge-token` is the browser bridge's token, not the web session cookie
+  (`/state` answers `unauthorized` with it).
