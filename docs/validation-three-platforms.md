@@ -363,3 +363,33 @@ curl -H "$C" "$BASE/recent"
 Passing means: three rows naming three applications with the same three refusal reason strings macOS
 produces, and the accessibility-off case reporting a reason rather than silence. Until that run exists,
 every sentence above about Linux behaviour is a design, not a measurement.
+
+## P7 - a third editor, and what can be proven without a JVM
+
+### Verified here
+
+A JetBrains plugin is Kotlin, Gradle and the IntelliJ SDK: it cannot be built or run on this machine, and
+saying otherwise would be the "it compiles, so it works" failure this plan forbids. But the claim P7
+actually rests on is not "I can write Kotlin" - it is **"the endpoint is the same contract for any
+editor"**, and that is measured here.
+
+`tests/unit/companion-intake.spec.ts` now has a third-editor block, against the real intake over HTTP:
+
+```text
+a JetBrains-shaped report satisfying the shape   -> 201 stored, workspaceRoot delivered
+the same report plus a selectionText field       -> 400, nothing delivered
+the same report with no token                    -> 401, nothing delivered
+```
+
+Two things that matter beyond "it works":
+
+- the refusal of an unknown field is the **companion** behaviour, and it is the opposite of the collector
+  parser's, which drops the field - the same asymmetry already recorded as an open contract decision;
+- the editor's claim is not trusted: `app.bundleId` is recorded as a claim from a companion, so the audit
+  can always tell "an editor said it was PyCharm" from "the operating system saw PyCharm".
+
+### Not verified
+
+No JetBrains plugin exists yet, so nothing has run inside an IDE. The recipe for the first real run is
+`docs/editor-companion.md`'s wire format, unchanged: one endpoint, one shape, no token means no request.
+The half that remains is packaging and IDE plumbing, not protocol.

@@ -398,3 +398,63 @@ describe('whether a client is actually connected (ADR 0007)', () => {
     await intake.stop()
   })
 })
+
+// A third editor is the point of a wire format: the intake must not care which editor sent the report,
+// only that the report satisfies the shape. This is what P7's JetBrains client has to clear, and it can be
+// measured here without a JVM - which is the honest half of that work, and the half a document cannot do.
+const jetbrainsReport = (extra: Record<string, unknown> = {}): Record<string, unknown> => ({
+    source: 'editor',
+    app: { bundleId: 'com.jetbrains.pycharm', name: 'PyCharm' },
+    workspaceRoot: '/Users/you/Projects/demo',
+    filePath: '/Users/you/Projects/demo/src/main.py',
+    languageId: 'python',
+    surfaceKind: 'editor',
+    title: 'main.py',
+    editorSession: 'pycharm-run-1',
+    seq: 1,
+    observedAtMs: 1_790_000_000_000,
+  ...extra,
+})
+
+const postReport = async (port: number, token: string, body: unknown) => {
+  const response = await fetch(`http://127.0.0.1:${port}/companion/observation`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-companion-token': token },
+    body: JSON.stringify(body),
+  })
+  return { status: response.status, body: (await response.json()) as Record<string, unknown> }
+}
+
+describe('a third editor, speaking the documented wire format', () => {
+  it('accepts a JetBrains report that satisfies the shape', async () => {
+    const { port, delivered } = await harness()
+    const result = await postReport(port, currentToken(), jetbrainsReport())
+    expect(result.status).toBe(201)
+    expect(result.body.stored).toBe(true)
+    // Delivery is the assertion here; how a workspace is carried and honoured is
+    // tests/integration/companion-workspace.spec.ts's subject, and restating its expectation here would be
+    // a second place to keep in step.
+    expect(delivered).toHaveLength(1)
+  })
+
+  it('refuses a field the shape does not have, rather than ignoring it', async () => {
+    // The boundary that makes "there is no field for text" enforceable: an editor that adds one gets an
+    // error, not a silent success. This is also where the collector parser differs, which is recorded as an
+    // open contract decision in docs/collector-protocol.md.
+    const { port, delivered } = await harness()
+    const result = await postReport(port, currentToken(), jetbrainsReport({ selectionText: 'secret' }))
+    expect(result.status).toBe(400)
+    expect(delivered).toHaveLength(0)
+  })
+
+  it('refuses a report with no token at all', async () => {
+    const { port, delivered } = await harness()
+    const response = await fetch(`http://127.0.0.1:${port}/companion/observation`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(jetbrainsReport()),
+    })
+    expect(response.status).toBe(401)
+    expect(delivered).toHaveLength(0)
+  })
+})
