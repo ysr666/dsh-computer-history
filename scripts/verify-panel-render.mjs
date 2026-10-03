@@ -309,6 +309,11 @@ async function main() {
   if (Number(await evaluate("document.querySelectorAll('.ch-settings-item').length")) === 0) {
     writeFileSync(path.join(outDir, 'focus-by-keyboard-classes.txt'), dialogClasses)
   }
+  // The dialog has no ch-* classes, so the next diagnostic is its structure: every small clickable
+  // element with its tag, role, class and text, which is what a text match cannot see through.
+  const navStructure = String(await evaluate("(function(){var d=document.querySelector('[role=\"dialog\"],dialog');if(!d)return 'no dialog';var out=[];var a=d.querySelectorAll('button,a,li,[role],[data-slot],span,div');for(var i=0;i<a.length&&out.length<40;i++){var n=a[i];if(!n.getClientRects().length)continue;var txt=(n.textContent||'').trim();if(txt.length===0||txt.length>30)continue;out.push(n.tagName+'|'+(n.getAttribute('role')||'-')+'|'+(n.className&&typeof n.className==='string'?n.className.slice(0,30):'-')+'|'+txt);}return out.join('\n');})()"))
+  writeFileSync(path.join(outDir, 'focus-by-keyboard-nav.txt'), navStructure)
+  console.log("  settings dialog structure written (" + navStructure.split("\n").length + " candidates)")
   await selectOwnSection()
   const LIST = ".ch-settings-item"
   const surfaceRows = Number(await evaluate("document.querySelectorAll('" + LIST + "').length"))
