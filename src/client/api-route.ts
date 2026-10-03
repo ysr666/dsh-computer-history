@@ -1,7 +1,9 @@
 export const HISTORY_API_RELATIVE_PREFIX =
   'api/computer-history'
 
-export function historyApiPath(path: string): string {
+export type HistoryApiSuffix = `/${string}`
+
+export function historyApiPath(path: HistoryApiSuffix): string {
   if (!path.startsWith('/')) {
     throw new Error('history API path must start with /')
   }

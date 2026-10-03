@@ -2,13 +2,9 @@ import type { DatabaseSync } from 'node:sqlite'
 import {
   EPISODE_RETENTION_MS,
   OBSERVATION_RETENTION_MS,
+  RETENTION_BOUNDS,
   type RetentionSettings,
 } from '../../shared/index.js'
-
-export const RETENTION_BOUNDS = {
-  observationRetentionHours: { min: 1, max: 720 },
-  episodeRetentionDays: { min: 1, max: 365 },
-} as const
 
 export const DEFAULT_RETENTION: RetentionSettings = {
   observationRetentionHours: OBSERVATION_RETENTION_MS / 3_600_000,

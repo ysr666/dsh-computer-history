@@ -31,6 +31,11 @@ export interface WorkThread {
   readonly episodeCount: number
   readonly startedAtMs: number
   readonly endedAtMs: number
+  /**
+   * The workspace the thread happened in, carried so a view can name it in the
+   * reader's language instead of parsing it back out of `summary`.
+   */
+  readonly workspaceTitle?: string
   readonly resources: readonly ResourceIdentity[]
   readonly summary: string
   readonly summaryObservationIds: readonly ObservationId[]

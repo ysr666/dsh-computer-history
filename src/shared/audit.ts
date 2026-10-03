@@ -39,6 +39,11 @@ export interface RedactionPreview {
   readonly excluded: readonly RedactionPreviewEntry[]
 }
 
+export const RETENTION_BOUNDS = {
+  observationRetentionHours: { min: 1, max: 720 },
+  episodeRetentionDays: { min: 1, max: 365 },
+} as const
+
 /** The user's retention choice, as the panel shows and edits it. */
 export interface RetentionSettings {
   readonly observationRetentionHours: number

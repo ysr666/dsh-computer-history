@@ -14,10 +14,12 @@ const CLIENT_EXTERNALS = [
   'react/jsx-runtime',
   'react-dom',
   'react-dom/client',
+  '@deepseek-ai/dsh-client-locale',
   '@deepseek-ai/dsh-client-ui-slots',
   '@deepseek-ai/dsh-client-ui-renderer',
   '@deepseek-ai/dsh-client-ui-sidebar',
   '@deepseek-ai/dsh-client-ui-layout',
+  '@deepseek-ai/dsh-client-ui-settings',
 ]
 
 export default defineConfig([

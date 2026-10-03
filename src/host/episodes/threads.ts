@@ -68,6 +68,7 @@ export function buildWorkThreads(
       startedAtMs: first.startedAtMs,
       endedAtMs: last.endedAtMs,
       resources: resourceList,
+      ...(first.workspace?.title ? { workspaceTitle: first.workspace.title } : {}),
       summary: renderThreadSummary({
         ...(first.workspace?.title ? { workspaceTitle: first.workspace.title } : {}),
         episodeCount: ordered.length,

@@ -1,5 +1,6 @@
 import {
   readFileSync,
+  readdirSync,
 } from 'node:fs'
 import path from 'node:path'
 import {
@@ -104,23 +105,57 @@ describe('repository scaffold', () => {
     }
   })
 
-  it('uses document-relative browser API routes', () => {
-    const source = readFileSync(
-      new URL('../src/client/index.ts', import.meta.url),
+  it('centralizes document-relative browser API routes', () => {
+    const apiSource = readFileSync(
+      new URL('../src/client/api.ts', import.meta.url),
       'utf8',
     )
+    const clientDirectory = new URL('../src/client/', import.meta.url)
     const routeSource = readFileSync(
       new URL('../src/client/api-route.ts', import.meta.url),
       'utf8',
     )
-    expect(source).toContain(
-      'fetch(historyApiPath(path), init)',
+    expect(apiSource).toContain('fetch(historyApiPath(path)')
+    for (const file of readdirSync(clientDirectory)) {
+      if (!file.endsWith('.ts') || file === 'api.ts') continue
+      expect(
+        readFileSync(new URL(file, clientDirectory), 'utf8'),
+        `${file} must not own HTTP transport`,
+      ).not.toContain('fetch(')
+    }
+    expect(routeSource).toContain("'api/computer-history'")
+    expect(routeSource).not.toContain("'/api/computer-history'")
+  })
+
+  it('keeps locale and DSH runtime modules owned by the platform', () => {
+    const entry = readFileSync(
+      new URL('../src/client/index.ts', import.meta.url),
+      'utf8',
     )
-    expect(routeSource).toContain(
-      "'api/computer-history'",
+    const buildConfig = readFileSync(
+      new URL('../tsdown.config.ts', import.meta.url),
+      'utf8',
     )
-    expect(routeSource).not.toContain(
-      "'/api/computer-history'",
-    )
+    const manifest = JSON.parse(readFileSync(
+      new URL('../package.json', import.meta.url),
+      'utf8',
+    )) as {
+      dsh: { client: { inject: string[] } }
+      peerDependencies: Record<string, string>
+    }
+
+    for (const moduleId of [
+      '@deepseek-ai/dsh-client-locale',
+      '@deepseek-ai/dsh-client-ui-renderer',
+      '@deepseek-ai/dsh-client-ui-sidebar',
+      '@deepseek-ai/dsh-client-ui-slots',
+      '@deepseek-ai/dsh-client-ui-settings',
+    ]) {
+      expect(buildConfig, `${moduleId} must stay external`).toContain(`'${moduleId}'`)
+      expect(manifest.dsh.client.inject).toContain(moduleId)
+      expect(manifest.peerDependencies).toHaveProperty(moduleId)
+    }
+    expect(entry).toContain("ctx.locale.register(HISTORY_LOCALE_NS")
+    expect(entry).not.toMatch(/MutationObserver|document\.documentElement\.lang|navigator\.language/)
   })
 })
