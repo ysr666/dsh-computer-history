@@ -68,11 +68,19 @@ the client bundle at all** - not a 404, simply nothing. What was ruled out, in o
 | `dsh.client` | `{ platform: web, inject: [...] }`, same shape |
 | the built client bundle | correct: `window.__ModuleLoader__.load({ id: "dsh-computer-history", factory })` |
 
-The remaining hypothesis, which the next session should test first rather than re-deriving: the
-**interface discovers client bundles from a list the profile (or the app) composes**, and an entry
-inserted by a *bundle layer* may not reach that list even though the host half loads. The check is
-to read the `web` profile's own configuration for a client-module list and see whether the working
-example appears there - and if it does, how it got there.
+**Falsified by measurement:** the hypothesis that the interface does not know about the client
+half at all. `window.__DSH_BOOT__.entries` contains this plugin, with a client URL of its own:
+
+```text
+{"id":"dsh-computer-history","url":"/plugins/??dsh-computer-history/client.js&rev=...","inject":[...]}
+{"id":"dsh-vision-router",  "url":"/plugins/??dsh-vision-router/client.js&rev=...","inject":[...]}
+```
+
+So the list is composed correctly and the discovery works; the failure is in **fetching or
+executing** that module. A direct request to a hand-rebuilt URL returns 404 for the working plugin
+as well, which makes that test worthless - the next attempt must read the **actual** request from
+the Network events (filter for `computer-history`, log its status and response body) rather than
+rebuilding the URL from the boot entry.
 
 The rule this session keeps relearning applies here too: the failure is silent, so every claim above
 is a measurement, not a reading.
