@@ -407,29 +407,73 @@ suppressed, `explorer.exe` -> `finder` with its title, and **`Notepad.exe` -> `n
 `无标题 - Notepad` and a UI Automation element role - the adapter added earlier the same day, measured on
 the machine instead of declared.
 
-**13 observations reached that machine's own store** (`policy_revision` 2-4) and
-**`/api/computer-history/recent` stayed empty**: zero episodes. Replayed on the development machine through
-`buildEpisodes` and through `IncrementalEpisodeBuilder.push` with `compact`, `boundaries` and `full`
-emission, the same 13 rows produce zero episodes in all four combinations.
+**The first run stored thirteen observations and produced no episode at all.** `/api/computer-history/recent`
+answered `[]`. Replayed on the development machine through `buildEpisodes` and through
+`IncrementalEpisodeBuilder.push` with `compact`, `boundaries` and `full` emission, the same thirteen rows
+produce zero episodes in all four combinations - so the cause was the episode model, not the collector:
+`src/host/episodes/builder.ts` started an episode only for a **strong workspace** or a **resource**, and
+everything else fell through to a tail that merely marks a detour on an episode which must already exist. On
+Windows there is no resource to offer, so no episode was ever started and no boundary could fire.
+`docs/plan-phase2.md` already listed the fix ("observations without a resource or workspace ... should
+aggregate by application/surface instead of fragmenting"); what that run measured is that **the Windows
+unanchored rate is 100%**, so the gap was an empty timeline rather than fragmentation.
 
-The cause is the episode model, not the collector: `src/host/episodes/builder.ts` starts an episode only for
-a **strong workspace** or a **resource**; everything else falls through to a tail that merely marks a detour
-on an episode which must already exist. On Windows there is no resource to offer - no `kAXDocument`
-equivalent, no browser URL while the companion is unpaired, no DSH workspace - so `resource_id` is `null` on
-every row, no episode is ever started, and no boundary can fire. `docs/plan-phase2.md` already lists the fix
-("observations without a resource or workspace ... should aggregate by application/surface instead of
-fragmenting"); what this run adds is the measurement that **on Windows the unanchored rate is 100%**, so the
-gap is an empty timeline rather than fragmentation - and it is what keeps this row from going green.
+**The fix, and the green row.** Resource-less observations now anchor an episode of their own, keyed by
+application and surface: the same pair continues the episode, a different pair closes it with the new
+`app-switch` boundary reason and starts another. An episode that already has a workspace or a resource is
+untouched, so every anchored behaviour - the detour grace, the workspace switch - is exactly as before, and
+the three existing detour cases still pass. The Phase-1 decision this extends is recorded in
+`tests/unit/episode-builder.spec.ts` with its reason, and `tests/unit/episode-unanchored.spec.ts` is the
+failing-first case built from the machine's own rows.
 
-Two ways to close it, both product decisions rather than collector work: aggregate resource-less
-observations by application/surface (as planned), or give the Windows collector an anchor - an editor's
-document text is reachable through UI Automation, which would let the existing per-resource model work for
-Notepad and VS Code.
+The second run on that machine, with the same recipe:
 
-**Smaller findings from the same run.** Every Windows row stores `source_provider: "macos-ax"`
-(`src/host/ingestion/normalize.ts` defaults it, and the provider vocabulary has no Windows value), and
-`refusedByReason` reported `{"unknown":1}` - one refusal whose reason the Host could not name, inside the
-very counter the panel uses to explain an empty timeline.
+```text
+$ curl.exe -s -b jar.txt http://127.0.0.1:19460/api/computer-history/recent
+[{"id":"episode:win-30872:4","boundary":{"startReason":"idle","endReason":"timeout"},
+  "summary":"Recent computer activity.\n\nApplications: explorer.exe","state":"closed",
+  "surfaces":[{"bundleId":"explorer.exe","surfaceKind":"window","observationCount":1}],"resources":[]},
+ ... episode:win-30872:3 WindowsTerminal.exe/terminal, episode:win-30872:2 Notepad.exe/editor,
+ ... episode:win-30872:1 WindowsTerminal.exe/terminal]
+
+$ curl.exe -s -b jar.txt http://127.0.0.1:19460/api/computer-history/state
+"refusedByReason":{"protected-app":1}
+```
+
+Four episodes, produced by the Host on that machine from four stored observations, each with a deterministic
+summary and `state: "closed"`; `resources` is empty on every one of them, which is the honest shape on this
+platform. The refusal half was exercised by replacing Notepad's allow rule with a `protect` rule: the counter
+moved to exactly one `protected-app` and `/recent` grew no Notepad episode.
+
+**What could anchor an observation on Windows, measured rather than assumed.** `anchor_probe` (added for
+this question, run on the machine with each application in the foreground) reads only metadata - the guard
+forbids value, text and selection patterns repo-wide, and a first version of the probe that read the Value
+pattern was rejected by `pnpm verify`, correctly:
+
+| application | window name | the element that could name a location | canonical anchor |
+| --- | --- | --- | --- |
+| Notepad (`Notepad.exe`, WinUI) | `无标题 - Notepad` | document `RichEditD2DPT`, name `文本编辑器` (a localized role), no automation id | none |
+| Explorer | `47209 - 文件资源管理器` | address bar is an Edit with automation id `TextBox` and name `地址栏` (the label); the search box says `在 47209 中搜索` | none - the path is the Value pattern |
+| Windows Terminal | `管理员: Windows PowerShell` | `TermControl`, name = the tab title | none (and titles are suppressed for terminals by design) |
+| Chrome | `<page title> - Google Chrome` | `RootWebArea` name = the page title; omnibox Edit has id `view_1012` and name `地址和搜索栏` | none - the URL is the Value pattern |
+| VS Code (`Code.exe`, measured 2026-10-05) | `probe-note.md - Visual Studio Code [Administrator]` | editor element says *"The editor is not accessible at this time"*; `RootWebArea` name = the window title | none - the file **name** is in the title, not the path |
+
+So the honest conclusion for this platform: **within the privacy boundary, Windows offers no canonical
+document or URL anchor.** The app-and-surface episode plus the window title (already stored on the
+observation) is the ceiling, and reading the address bar or the document value - the only place the URL and
+the path live - is content, which this product refuses to read. The same measurement leaves one question
+open rather than answered: a focused password input in Chrome never appeared in the UI Automation tree at
+all, so whether Chromium answers `IsPassword` is still unmeasured, and browsers keep requiring the paired
+companion for exactly the reason the preset copy gives.
+
+**Two audit columns said the wrong thing, and now do not.** Every Windows row stored
+`source_provider: "macos-ax"` - the collector never said which path produced the observation and the Host
+defaulted to the macOS one - and `refusedByReason` reported one `unknown` with nothing refused. Both are
+fixed: the observation carries `provider`, the Windows collector sends `windows-uia`, and the counter no
+longer counts a re-sent duplicate (nor a deletion-policy block) as unattributed. Evidence boundary: the
+stored row quoted above was written **before** that change, so it still says `macos-ax`; the fix is verified
+by the protocol test that asserts the field on the wire and by two integration cases, not yet by a stored
+row from that machine.
 
 **The command sequence itself was rehearsed** on macOS with a temporary `DSH_HOME` and the tarball built
 from the current tree, because three of its steps are not obvious and the first version of this recipe got
@@ -782,7 +826,7 @@ pnpm verify:p1     # exit 0, native privacy and protocol tests passed
 
 | what | why it is not measured | what would measure it |
 |---|---|---|
-| UI Automation observation on Windows | measured on a real machine 2026-10-04 (four live runs, recorded in the P5 section); what is missing is the Host row in that machine's own store | the recipe in the P5 section |
+| UI Automation observation on Windows | measured on a real machine 2026-10-04 and 2026-10-05 (live runs, a Host with its own `DSH_HOME`, stored episodes and a counted `protected-app` refusal, all recorded in the P5 section) | the recipe in the P5 section |
 | AT-SPI on Linux | no Linux machine, and the `org.a11y.Status` check is not written | the recipe in the P6 section, including the accessibility-off case |
 | a second browser engine | no Firefox or Safari port exists | the privacy matrix in `docs/companion.md`, one cell per promise |
 | a JetBrains plugin | Kotlin, Gradle and the IntelliJ SDK are not part of this checkout | the wire format in `docs/editor-companion.md`, which the intake already accepts (measured) |

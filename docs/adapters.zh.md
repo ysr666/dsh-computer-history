@@ -17,9 +17,9 @@ Phase 1 的每个适配器一行，并附上产生这一行的**真机测量**�
 | `terminal` | `com.apple.Terminal`, `com.googlecode.iterm2` | terminal | 工作目录（`file://…` / 路径） | 不支持（`-25205`） | iTerm2 上可读；Terminal 内为 `-25212` | directory |
 | `preview` | `com.apple.Preview` | document | 打开文档的 `file://…` | 不支持 | 可读 | file |
 | `finder` | `com.apple.finder` | window | 普通窗口为 nil；文件夹窗口为文件夹路径 | 不支持（`-25205` / `-25212`） | 可读（`AXGroup`） | 无或 file |
-| `notepad` | `Notepad.exe`（仅 win32） | editor | 不适用（仅 win32） | 不适用 | 尚未实测 | file |
+| `notepad` | `Notepad.exe`（仅 win32） | editor | 不适用（仅 win32） | 不适用 | 可读（`ControlType.50030`，WinUI 有应答）——2026-10-05 实测 | file |
 
-同一批适配器的 Windows id：`finder` = `explorer.exe`、`terminal` = `WindowsTerminal.exe`，两者都在 2026-10-04 于 Windows 11 26200 上**实测**（`cargo run --release --example foreground_identity` 加真实 collector 运行）；`vscode` = `Code.exe` 属于**预期而非实测**，因为那台机器没有安装 VS Code。实测更正了先前写下的预期值（`Microsoft.WindowsTerminal`、`Microsoft.VisualStudioCode`）：那台机器上实测的两个打包应用（记事本、Windows Terminal）**根本没有上报窗口级 AppUserModelID**，所以 Windows 交给 collector 的是可执行文件名——开始菜单里的 `Microsoft.WindowsTerminal_8wekyb3d8bbwe!App` 并不是窗口属性。这是该次测量的覆盖范围：两个打包应用加一个经典应用，而不是一条关于所有 Windows 应用的规律。
+同一批适配器的 Windows id：`finder` = `explorer.exe`、`terminal` = `WindowsTerminal.exe`、`vscode` = `Code.exe`，三者都**已实测**于 Windows 11 26200——前两者在 2026-10-04（`cargo run --release --example foreground_identity` 加真实 collector 运行），`vscode` 在 2026-10-05（那台机器装上 VS Code 1.140.0 之后；落库的观测里 `bundleId: "Code.exe"`、`surfaceKind: "editor"`、`adapter: "vscode"`）。实测更正了先前写下的预期值（`Microsoft.WindowsTerminal`、`Microsoft.VisualStudioCode`）：那台机器上实测的两个打包应用（记事本、Windows Terminal）**根本没有上报窗口级 AppUserModelID**，所以 Windows 交给 collector 的是可执行文件名——开始菜单里的 `Microsoft.WindowsTerminal_8wekyb3d8bbwe!App` 并不是窗口属性。这是该次测量的覆盖范围：两个打包应用加一个经典应用，而不是一条关于所有 Windows 应用的规律。
 
 同一批适配器的 Linux id 也已在 fixture 中声明——`vscode` = `code.desktop`、`code-insiders.desktop`；`terminal` = `org.gnome.Terminal.desktop`；`finder` = `org.gnome.Nautilus.desktop`——它们进入 Host 表的理由与 win32 id 相同：没有它们，第一条 Linux 观测就会被当成 `not-an-adapter` 拒掉。**它们一个都没有被实测过**，因为还没有 Linux 机器跑过这个 collector；该状态记录在 `docs/validation-three-platforms.md`。
 
@@ -141,7 +141,9 @@ Cursor 3.x 备注：默认的 **"Cursor Agents"** 窗口报告**空的** `kAXDoc
 
 ### `notepad` — Windows 11 记事本
 
-**截至 2026-10-04 未实测。** 这个适配器存在的意义是让该应用**可被记录**：Windows 11 记事本上报 `Notepad.exe`，而开始菜单里的打包 `Microsoft.WindowsNotepad_8wekyb3d8bbwe!App` 尚未被观察到作为窗口属性出现（与 Windows Terminal 同形）。探针命令（等机器恢复后执行）：
+**2026-10-05 已实测**（Windows 11 26200，由那台机器自己的 Host 落库）：观测里 `bundleId: "Notepad.exe"`、`appName: "Notepad"`、`surfaceKind: "editor"`、窗口标题（`无标题 - Notepad`）、`adapter: "notepad"`，元素角色为 `ControlType.50030`（Document，来自 `RichEditD2DPT` 元素）。也就是说身份串、标题、元素状态与 surface 类型都和适配器声明一致，且这个 WinUI 应用**确实回答** UI Automation——原先担心的 fail-closed 没有发生。
+
+记事本给不了的是 resource：`anchor_probe` 显示文档元素的 `Name` 只是本地化角色名（`文本编辑器`）且没有 automation id，文件名只存在于窗口标题里。这是 Windows 的普遍形态——见 `docs/validation-three-platforms.md` 里的锚测量。
 
 ```powershell
 cargo run --release --example foreground_identity -- 20   # 让记事本处于前台

@@ -21,13 +21,13 @@ synthetic fixtures — never a real private file or a real credential.
 | `terminal` | `com.apple.Terminal`, `com.googlecode.iterm2` | terminal | working directory (`file://…` / path) | unsupported (`-25205`) | readable on iTerm2; `-25212` inside Terminal | directory |
 | `preview` | `com.apple.Preview` | document | `file://…` for the open document | unsupported | readable | file |
 | `finder` | `com.apple.finder` | window | nil for plain windows; folder path in folder windows | unsupported (`-25205` / `-25212`) | readable (`AXGroup`) | none or file |
-| `notepad` | `Notepad.exe` (win32 only) | editor | n/a (win32 only) | n/a | not measured yet | file |
+| `notepad` | `Notepad.exe` (win32 only) | editor | n/a (win32 only) | n/a | readable (`ControlType.50030`, WinUI answers) - measured 2026-10-05 | file |
 
-Windows ids for the same adapters: `finder` = `explorer.exe` and `terminal` =
-`WindowsTerminal.exe`, both **measured 2026-10-04** on Windows 11 26200 with
-`cargo run --release --example foreground_identity` plus live collector runs; `vscode` =
-`Code.exe`, which is **expected rather than measured** because VS Code is not installed on that
-machine. The measurement corrected the earlier expected values (`Microsoft.WindowsTerminal`,
+Windows ids for the same adapters: `finder` = `explorer.exe`, `terminal` =
+`WindowsTerminal.exe` and `vscode` = `Code.exe`, all three **measured** on Windows 11 26200 - the first two
+on 2026-10-04 with `cargo run --release --example foreground_identity` plus live collector runs, `vscode` on
+2026-10-05 after VS Code 1.140.0 was installed there (a stored observation names `bundleId: "Code.exe"`,
+`surfaceKind: "editor"` and `adapter: "vscode"`). The measurement corrected the earlier expected values (`Microsoft.WindowsTerminal`,
 `Microsoft.VisualStudioCode`): the packaged applications measured there (Notepad, Windows Terminal)
 reported **no window AppUserModelID at all**, so the executable name is what Windows handed the
 collector - the Start menu's `Microsoft.WindowsTerminal_8wekyb3d8bbwe!App` is not a window property.
@@ -235,20 +235,16 @@ window surface rather than a document surface.
 
 ### `notepad` — Windows 11 Notepad
 
-**Unmeasured as of 2026-10-04.** The adapter exists so the application is recordable at all: Windows 11
-Notepad reports `Notepad.exe`, and the packaged `Microsoft.WindowsNotepad_8wekyb3d8bbwe!App` the Start
-menu publishes has not been seen as a window property (the same shape Windows Terminal showed). The probe,
-for when the machine is back:
+**Measured 2026-10-05** on Windows 11 26200, by the Host on that machine: stored rows carry
+`bundleId: "Notepad.exe"`, `appName: "Notepad"`, `surfaceKind: "editor"`, the window title
+(`无标题 - Notepad`), `adapter: "notepad"` and an element role of `ControlType.50030` (Document) from the
+`RichEditD2DPT` element. So the identity string, the title, the element state and the surface kind are all
+what the adapter declares, and the WinUI application **does** answer UI Automation - the fail-closed worry
+in the original note did not materialise.
 
-```powershell
-cargo run --release --example foreground_identity -- 20   # with Notepad in the foreground
-# then a live collector run with Notepad allowed; one observation should name the adapter:
-#   {"app":{"bundleId":"Notepad.exe"},"window":{"title":"notes.txt - Notepad"},"source":{"adapter":"notepad"}}
-```
-
-What turns this row into a measurement: the identity string, whether the title is recorded, the element
-state (Notepad is a WinUI application, so UI Automation may answer "not supported" for `IsPassword`, which
-the `require` policy treats as fail-closed), and one stored observation whose surface kind is `editor`.
+What Notepad cannot give is a resource: `anchor_probe` shows the document element carrying a localized role
+name (`文本编辑器`) and no automation id, and the file name lives only in the window title. That is the
+general Windows shape - see the anchor measurement in `docs/validation-three-platforms.md`.
 
 ## Adding an adapter does not add policy
 
