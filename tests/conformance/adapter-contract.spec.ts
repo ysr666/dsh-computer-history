@@ -39,7 +39,10 @@ describe('the cross-platform adapter contract', () => {
     // WindowsTerminal.exe, and the notepad and vscode rows were measured the same way. The measured facts
     // live in docs/adapters.md; an entry here would be the stale claim this assertion exists to prevent.
     expect(fixture.$unverified['win32'] ?? []).toEqual([])
-    expect((fixture.$unverified['linux'] ?? []).length).toBeGreaterThan(0)
+    // linux left this list on 2026-10-05, the same way win32 did: a Host stored an episode from a Linux
+    // collector (org.gnome.Terminal.desktop / terminal) and the collector's four protocol lines were
+    // captured into tests/integration/linux-row.spec.ts.
+    expect(fixture.$unverified['linux'] ?? []).toEqual([])
   })
 
   it('names adapters this build actually has', () => {

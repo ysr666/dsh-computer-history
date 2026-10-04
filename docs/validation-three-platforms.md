@@ -606,7 +606,48 @@ active/focused in this harness (`GetState` returned the same value before and af
 "which window is in front" comes from X11 rather than from AT-SPI; on Wayland that route needs a portal and
 is unmeasured.
 
-The recipe for the row once that path exists:
+### The Host row (2026-10-05), and the three defects it found
+
+A Host on the development machine drove the collector inside the VM - the Windows machine's own WSL cannot
+start, because virtualization is disabled in its firmware - and stored the first Linux episode this repository
+has produced:
+
+```text
+/api/computer-history/state
+  capture "running", accessibilityTrusted true, collector {"version":"0.1.0","arch":"arm64"},
+  refusedByReason {}
+
+/api/computer-history/recent
+  [{"id":"episode:linux-52587:1",
+    "boundary":{"startReason":"first-observation","endReason":"timeout"},
+    "summary":"Recent computer activity.\n\nApplications: org.gnome.Terminal.desktop",
+    "surfaces":[{"bundleId":"org.gnome.Terminal.desktop","surfaceKind":"terminal","observationCount":2}],
+    "resources":[],"state":"closed","observationIds":[1,2]}]
+```
+
+Driving it from a host that is not Linux is what made the row useful: three defects came out of it, none of
+which reading had produced.
+
+1. **`linux` was not a platform.** `parseCollectorLine` accepted `darwin` and `win32` and threw
+   `collector platform mismatch` for anything else, and the shared `CollectorPlatform` type said the same, so
+   a Linux collector's `hello` was refused no matter which host spawned it - the row could not exist at all.
+   The protocol, the adapter fixture and this file all named Linux; the host's vocabulary was the only place
+   that did not.
+2. **`at-spi` was not a provider.** `ObservationProvider` and the store's validator knew `macos-ax`,
+   `windows-uia` and `companion`, so a Linux observation would have been refused on its way into the store.
+   The second half of the same mistake, found the same way: by putting a real line through the host's parser.
+3. **A collector on another machine keeps its own clock.** The VM ran 354 ms ahead of its host, so
+   observations arrived a few hundred milliseconds "in the future" and `normalizeObservation` discarded them
+   silently - they were counted as `unknown`, with nothing actually refused. The check now tolerates five
+   seconds of skew and refuses anything beyond that by name (`future-timestamp`), and the retention branch is
+   named (`expired`) for the same reason: the host deciding not to store something should say why.
+
+With the row in place, the fixture's linux `$unverified` list is empty and the CI-boundary marker reads
+`none`: for the first time all three platforms have a live row. What that does **not** claim: the ids this row
+exercised are measured (`org.gnome.Terminal.desktop`), while the others in the Linux table - `code.desktop`,
+`org.gnome.Nautilus.desktop` - stay declared rather than measured, which their comments say.
+
+The recipe this row was built from:
 
 ```bash
 # on a Linux desktop with a session bus
@@ -921,7 +962,7 @@ that looked like evidence and supported nothing, and each was caught by a measur
 
 ### CI: what the runners can verify, and what they cannot
 
-<!-- unverified-platforms: linux -->
+<!-- unverified-platforms: none -->
 <!-- Checked against the workflow header and the conformance fixture by scripts/verify-ci-boundaries.mjs. -->
 
 `.github/workflows/collectors.yml` runs the message layer on **macos-latest, windows-latest and

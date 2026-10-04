@@ -17,14 +17,16 @@ const WORKFLOW = '.github/workflows/collectors.yml'
 const VALIDATION = 'docs/validation-three-platforms.md'
 const FIXTURE = 'tests/conformance/fixtures/adapters.json'
 
-const WORKFLOW_MARKER = /^#\s*unverified-platforms:\s*(.+)$/m
-const DOC_MARKER = /<!--\s*unverified-platforms:\s*(.+?)\s*-->/
+// The list may now be empty - for the first time all three platforms have a live row - so the markers accept
+// an empty tail and the word `none`, which is what a reader would write.
+const WORKFLOW_MARKER = /^#\s*unverified-platforms:\s*(.*)$/m
+const DOC_MARKER = /<!--\s*unverified-platforms:\s*(.*?)\s*-->/
 
 function listed(value) {
   return value
     .split(',')
     .map(entry => entry.trim())
-    .filter(entry => entry.length > 0)
+    .filter(entry => entry.length > 0 && entry !== 'none')
     .toSorted()
 }
 
