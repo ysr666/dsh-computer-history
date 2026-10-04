@@ -448,11 +448,16 @@ describe('document-less observations (Phase 1 validation, seq 1-2)', () => {
   //   seq 1  "Visual Studio Code"  no resource, no workspace
   //   seq 2  "normal-text.html"    no resource, no workspace
   //   seq 3  "normal-text.html"    resource file:///…/normal-text.html
-  // The first two are stored as evidence but anchor no episode: at that moment
-  // the collector had not read a document yet, and the episode must not claim
-  // a workspace it never observed. These tests pin that decision; T2.0-7 owns
-  // the question of whether such an early observation should later be adopted
-  // by the episode its window turns out to belong to.
+  // The first two anchor no *workspace*: at that moment the collector had not read a document yet, and an
+  // episode must not claim a workspace it never observed. These tests pin that decision.
+  //
+  // Extended 2026-10-05, with the reason: they anchor no workspace, but they do anchor an episode of their
+  // own, keyed by application and surface. The Windows run stored thirteen observations and produced **zero**
+  // episodes because every Windows observation is document-less (UI Automation exposes no document path, the
+  // browser companion was unpaired, there is no DSH workspace) - "evidence only" meant an empty timeline
+  // however long the machine ran. `docs/plan-phase2.md` asks for the same thing in its own words: unanchored
+  // activity should aggregate by application/surface instead of fragmenting. What did not change: an anchored
+  // episode stays clean, which the cases below still assert.
   it('keeps an early document-less observation out of the episode its successor anchors', () => {
     const episodes = buildEpisodes([
       observation({ id: 1, atMs: 1_000 }),
@@ -464,14 +469,20 @@ describe('document-less observations (Phase 1 validation, seq 1-2)', () => {
       }),
     ])
 
-    expect(episodes).toHaveLength(1)
-    const episode = episodes[0]!
-    expect(episode.observationIds).toEqual([2])
-    expect(episode.startedAtMs).toBe(6_000)
-    expect(episode.workspace?.root).toBe('/alpha')
-    expect(episode.resources.map(item => item.canonicalUri)).toEqual([
+    const anchored = episodes.filter(episode => episode.workspace !== undefined)
+    expect(anchored).toHaveLength(1)
+    expect(anchored[0]!.observationIds).toEqual([2])
+    expect(anchored[0]!.startedAtMs).toBe(6_000)
+    expect(anchored[0]!.workspace?.root).toBe('/alpha')
+    expect(anchored[0]!.resources.map(item => item.canonicalUri)).toEqual([
       'file:///alpha/src/normal-text.html',
     ])
+
+    // The document-less observation is not promoted into it: it is an unanchored episode of its own.
+    const unanchored = episodes.filter(episode => episode.workspace === undefined)
+    expect(unanchored).toHaveLength(1)
+    expect(unanchored[0]!.observationIds).toEqual([1])
+    expect(unanchored[0]!.resources).toEqual([])
   })
 
   it('treats a document-less observation inside an episode as a detour', () => {

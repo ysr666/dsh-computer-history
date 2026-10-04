@@ -57,6 +57,11 @@ interface MutableEpisode {
   detourStartedAtMs: number | undefined
 }
 
+function isUnanchoredEpisode(episode: MutableEpisode): boolean {
+  return episode.workspace === undefined
+    && episode.resources.size === 0
+}
+
 function resourceKey(resource: ResourceIdentity): string {
   return `${resource.kind}\u0000${resource.canonicalUri}`
 }
@@ -592,10 +597,44 @@ export class IncrementalEpisodeBuilder {
       return changed
     }
 
-    if (
-      this.active
-      && this.active.detourStartedAtMs === undefined
-    ) {
+    // No resource and no strong workspace: the observation still describes work, it just cannot name it.
+    // Windows is made entirely of these - UI Automation exposes no document path, the browser companion may
+    // be unpaired and DSH workspaces do not exist there - and excluding them left the timeline empty however
+    // long the machine ran (thirteen observations, zero episodes, measured 2026-10-05). The application and
+    // the surface are the whole identity available, so they become the thread: the same pair continues the
+    // episode, a different pair starts one.
+    if (this.active && isUnanchoredEpisode(this.active)) {
+      if (this.active.surfaces.has(surfaceKey(observation))) {
+        addObservation(
+          this.active,
+          observation,
+          false,
+        )
+        emitActive()
+        return changed
+      }
+
+      close('app-switch')
+      this.active = startEpisode(
+        observation,
+        startReason,
+        false,
+      )
+      emitActive()
+      return changed
+    }
+
+    if (!this.active) {
+      this.active = startEpisode(
+        observation,
+        startReason,
+        false,
+      )
+      emitActive()
+      return changed
+    }
+
+    if (this.active.detourStartedAtMs === undefined) {
       this.active.detourStartedAtMs =
         observation.observedAtMs
     }

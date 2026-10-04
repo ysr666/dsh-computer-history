@@ -14,6 +14,7 @@ export type EpisodeSummaryKind = 'deterministic' | 'local' | 'remote'
 export type EpisodeBoundaryReason =
   | 'first-observation'
   | 'workspace-switch'
+  | 'app-switch'
   | 'idle'
   | 'sleep'
   | 'pause'
@@ -29,6 +30,13 @@ export interface WorkThread {
   readonly threadKey: string
   readonly episodeIds: readonly string[]
   readonly episodeCount: number
+  /** Reader-facing Activity projection count across this line of work. */
+  readonly activityCount: number
+  /**
+   * Approximate active time used by the timeline: merged Activities use their
+   * wall-clock span while unmerged Activities use observed duration.
+   */
+  readonly approxActiveDurationMs: number
   readonly startedAtMs: number
   readonly endedAtMs: number
   /**

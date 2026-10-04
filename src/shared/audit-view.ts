@@ -19,6 +19,7 @@ import type { ResourceIdentity } from './resource.js'
 const START_REASONS: Record<EpisodeBoundaryReason, string> = {
   'first-observation': 'a supported application became active',
   'workspace-switch': 'the work moved to another workspace',
+  'app-switch': 'the user switched to another application',
   'idle': 'activity resumed after a pause',
   'sleep': 'the machine woke up',
   'pause': 'capture was resumed',
@@ -30,6 +31,7 @@ const START_REASONS: Record<EpisodeBoundaryReason, string> = {
 const END_REASONS: Record<EpisodeBoundaryReason, string> = {
   'first-observation': 'another episode started',
   'workspace-switch': 'the work moved to another workspace',
+  'app-switch': 'the user switched to another application',
   'idle': 'the machine went idle',
   'sleep': 'the machine slept',
   'pause': 'capture was paused',
