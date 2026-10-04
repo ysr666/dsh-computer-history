@@ -55,6 +55,20 @@ fn main() {
         window_title: Some("a\u{7}b".to_string()),
         ..observation()
     };
+    // Backspace and form feed: JSON can spell both as `\u0008`/`\u000c` or as `\b`/`\f`, and the two
+    // encoders chose differently. This is the one place the migration changes bytes rather than values,
+    // which an adversarial re-run found by enumerating 0x00-0x1F; the samples are here so the difference is
+    // visible in the reference instead of waiting to be discovered.
+    let backspace = Observation {
+        seq: 10,
+        window_title: Some("c\u{8}d".to_string()),
+        ..observation()
+    };
+    let form_feed = Observation {
+        seq: 11,
+        window_title: Some("e\u{c}f".to_string()),
+        ..observation()
+    };
 
     println!("{}", hello("win-4242", env!("CARGO_PKG_VERSION"), "win32"));
     println!("{}", configured(3));
@@ -67,4 +81,6 @@ fn main() {
     println!("{}", observation().to_line());
     println!("{}", protected.to_line());
     println!("{}", control.to_line());
+    println!("{}", backspace.to_line());
+    println!("{}", form_feed.to_line());
 }

@@ -52,13 +52,15 @@ const observations = messages.filter(message => message.type === 'observation')
 
 describe('the collector wire format, against the real Host parser', () => {
   it.skipIf(!cargoAvailable)('parses every generated line, in the documented order', () => {
-    expect(lines.length).toBeGreaterThanOrEqual(6)
+    expect(lines.length).toBe(10)
     expect(messages.map(message => message.type)).toEqual([
       'hello',
       'configured',
       'state',
       'state',
       'diagnostic',
+      'observation',
+      'observation',
       'observation',
       'observation',
       'observation',
@@ -78,10 +80,14 @@ describe('the collector wire format, against the real Host parser', () => {
     expect(protectedObservation).toHaveLength(1)
     // The host counts refusals by this string; a doubled key or a mangled one stops capture.
     expect(protectedObservation[0]?.privacy.reason).toBe('protected-app')
-    // No reason means no such key - not null, not empty.
-    for (const message of observations.filter(candidate => !candidate.privacy.protected)) {
-      expect('reason' in message.privacy).toBe(false)
-    }
+    // No reason means no such key - not null, not empty. This has to be asserted on the **wire text**:
+    // the Host parser maps null to undefined (`optionalString`), so a regression that emitted
+    // `"reason":null` would look identical after parsing. An adversarial re-run proved that gap by
+    // mutating the wire and watching the parsed-value assertion pass.
+    const observationLines = lines.filter(line => line.includes('"type":"observation"'))
+    expect(observationLines).toHaveLength(5)
+    expect(observationLines.filter(line => line.includes('"reason":'))).toHaveLength(1)
+    expect(observationLines.some(line => line.includes('"reason":null'))).toBe(false)
   })
 
   it.skipIf(!cargoAvailable)('normalises to one refusal and two stored surfaces', () => {
@@ -119,10 +125,13 @@ describe('the collector wire format, against the real Host parser', () => {
     }
 
     expect(refusals).toEqual(['protected-app'])
-    expect(rows).toHaveLength(2)
+    expect(rows).toHaveLength(4)
     expect(rows.every(row => row.app.bundleId === 'Code.exe')).toBe(true)
-    // The control character survives the encoder, the parser and normalisation: it used to arrive as a
-    // space, which silently changed what was stored.
-    expect(rows.some(row => row.surface.title === 'a\u0007b')).toBe(true)
+    // The control characters survive the encoder, the parser and normalisation: they used to arrive as a
+    // space, and the two spellings of 0x08/0x0C must decode to the same characters the example put in.
+    const titles = rows.map(row => row.surface.title).filter(Boolean)
+    expect(titles).toContain('a\u0007b')
+    expect(titles).toContain('c\u0008d')
+    expect(titles).toContain('e\u000cf')
   })
 })

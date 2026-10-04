@@ -12,10 +12,17 @@
 //! `None` means "not a command this collector knows", and every way of being unintelligible ends there:
 //! unknown fields and unknown `type` values are ignored, a value of the wrong shape fails the line rather
 //! than half-applying it, and nothing here is fatal. That behaviour is the contract, frozen in
-//! `.debug/serde-migration/01-inbound-tolerance.md` and its tests before this parser was rewritten.
+//! `.debug/serde-migration/01-inbound-tolerance.md` and its tests.
 //!
 //! `v` is deliberately absent from the envelope: the host sends it by convention and this parser has never
 //! looked at it, which `the_version_field_is_never_required_or_checked` pins.
+//!
+//! The envelope keeps `revision` and `policy` **untyped on purpose**. Typing them made a `pause` line
+//! unparseable when it carried a junk `revision`, which the hand-written parser never did - and, worse,
+//! `Option<Policy>` accepts a JSON *array* positionally, so `"policy":[]` silently replaced the live policy
+//! with an empty one instead of being refused. Both were found by an adversarial re-run of the rewrite and
+//! are pinned by `a_non_object_policy_is_refused_rather_than_reinterpreted` and
+//! `a_simple_command_ignores_junk_it_does_not_need`.
 
 use serde::Deserialize;
 use serde_json::Value;
@@ -55,13 +62,14 @@ where
 }
 
 /// The command envelope. Unknown fields are ignored by construction: a field that is not named here has
-/// nowhere to land.
+/// nowhere to land. Duplicate fields are refused by serde, which for a duplicate `type` ends in the same
+/// place the hand-written parser ended (no command acted on) for the shapes the host can produce.
 #[derive(Deserialize)]
 struct Envelope {
     #[serde(rename = "type")]
     message_type: Option<String>,
-    revision: Option<u64>,
-    policy: Option<Policy>,
+    revision: Option<Value>,
+    policy: Option<Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -72,16 +80,27 @@ pub enum Command {
     Shutdown,
 }
 
+/// A configure is applied or refused as a whole. A policy that is not a JSON object is refused rather
+/// than reinterpreted: serde would happily read `[]` as a struct with every field missing, which turns a
+/// malformed line into "capture nothing" while looking like a successful configuration.
+fn policy_of(value: Option<Value>) -> Option<Policy> {
+    let value = value?;
+    if !value.is_object() {
+        return None;
+    }
+    serde_json::from_value(value).ok()
+}
+
 /// Parse one line. `None` means the line is not a command this collector knows.
 pub fn parse_command(line: &str) -> Option<Command> {
     let envelope: Envelope = serde_json::from_str(line).ok()?;
     match envelope.message_type.as_deref()? {
-        // A configure without a usable revision or policy is not half-applied: the old parser refused it
-        // and the frozen tests keep that.
         "configure" => Some(Command::Configure {
-            revision: envelope.revision?,
-            policy: envelope.policy?,
+            revision: envelope.revision?.as_u64()?,
+            policy: policy_of(envelope.policy)?,
         }),
+        // The simple commands never look at `revision` or `policy`: a line that carries junk next to a
+        // `pause` still pauses, exactly as it did before the rewrite.
         "pause" => Some(Command::Pause),
         "resume" => Some(Command::Resume),
         "shutdown" => Some(Command::Shutdown),
@@ -185,5 +204,38 @@ mod tests {
         assert!(policy.blocked_bundle_ids.is_empty());
         assert!(policy.protected_bundle_ids.is_empty());
         assert!(policy.protected_path_patterns.is_empty());
+    }
+
+    #[test]
+    fn a_non_object_policy_is_refused_rather_than_reinterpreted() {
+        // serde reads a JSON array as a struct with every field missing, so `"policy":[]` configured an
+        // EMPTY policy: a malformed line silently replacing the live allow-list. Found by an adversarial
+        // re-run of this rewrite; refused now, exactly as the hand-written parser refused it.
+        for line in [
+            r#"{"v":1,"type":"configure","revision":2,"policy":[]}"#,
+            r#"{"v":1,"type":"configure","revision":2,"policy":[["a"],["b"],["c"],["d"]]}"#,
+            r#"{"v":1,"type":"configure","revision":2,"policy":"x"}"#,
+            r#"{"v":1,"type":"configure","revision":2,"policy":5}"#,
+        ] {
+            assert_eq!(parse_command(line), None, "line should be ignored: {line}");
+        }
+    }
+
+    #[test]
+    fn a_simple_command_ignores_junk_it_does_not_need() {
+        // The hand-written parser read `type` and nothing else for pause/resume/shutdown. A fully typed
+        // envelope made a junk `revision` kill the line, which the adversarial re-run also caught.
+        for line in [
+            r#"{"type":"pause","revision":"abc"}"#,
+            r#"{"type":"pause","revision":-1}"#,
+            r#"{"type":"pause","policy":"x"}"#,
+            r#"{"type":"shutdown","policy":[]}"#,
+            r#"{"type":"resume","policy":"x","revision":1.5}"#,
+        ] {
+            assert!(
+                parse_command(line).is_some(),
+                "line should be understood: {line}"
+            );
+        }
     }
 }
