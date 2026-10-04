@@ -21,12 +21,27 @@ export interface HistoryDatabase {
   close(): void
 }
 
+/**
+ * Whether the POSIX mode bits this module hardens and asserts exist on a platform.
+ *
+ * They do not on Windows: `chmod` there only toggles the read-only attribute and `stat` reports a
+ * synthetic `0o666`/`0o444`, so "no broader than 0600" would refuse to open the store at all. The
+ * protection Windows has is the ACL on the data directory, which this check cannot read - ADR 0005
+ * describes the macOS mechanism (FileVault plus a non-synced location) that the hardening belongs to.
+ * The exemption is a recorded gap, not a check that silently passes.
+ */
+export function appliesPosixModes(platform: NodeJS.Platform): boolean {
+  return platform !== 'win32'
+}
+
 function hardenMode(target: string, mode: number): void {
+  if (!appliesPosixModes(process.platform)) return
   if (!existsSync(target)) return
   chmodSync(target, mode)
 }
 
 function assertModeAtMost(target: string, expected: number): void {
+  if (!appliesPosixModes(process.platform)) return
   const actual = statSync(target).mode & 0o777
   if ((actual & ~expected) !== 0) {
     throw new Error(
