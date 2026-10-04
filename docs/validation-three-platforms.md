@@ -339,13 +339,40 @@ Host, so nothing has been stored yet; that is the one step between these measure
 row. The recipe, still to run:
 
 ```powershell
-cargo build --release --manifest-path native/windows/Cargo.toml
-# the host reads the collector from bin/; point the plugin's collector path at the built binary, then:
-# 1. work in Explorer and Windows Terminal for a minute each
-# 2. read the rows:   curl -H "$C" "$BASE/recent"
-# 3. expect one row per application, naming its adapter and application id
-# 4. make a protected application the foreground window and confirm the refusal count moves under
-#    'protected-app', with no row stored
+# 1. the collector (already built and tested on that machine - see the section above)
+cargo build --release --manifest-path native\windows\Cargo.toml
+
+# 2. a Host of its own, so nothing of the user's profile is touched. `plugin add` initializes the
+#    profile itself; the app bundle has to be in it, or the plugin waits forever with
+#    "pending (waiting for services: connection, workspaceRegistry)" - measured during the rehearsal.
+$env:DSH_HOME = "$env:USERPROFILE\dsh-ch-tmp\dsh-home"
+node $env:USERPROFILE\dsh-ch-tmp\dsh-cli\node_modules\.bin\dsh plugin --profile winrow add .\dsh-computer-history-<version>.tgz
+# the plugin's default collector path is the macOS wrapper the package ships, so on Windows this
+# override is required. A profile layer's config replaces the bundle layer's, hence enabled: true.
+@'
+- id: computer-history
+  config:
+    enabled: true
+    collectorExecutable: 'C:\Users\<user>\dsh-ch-tmp\native\windows\target\release\dsh-computer-history-collector-windows.exe'
+'@ | Set-Content "$env:DSH_HOME\profiles\winrow\cordis.patch.yml" -Encoding utf8
+
+# 3. boot; the line it prints carries the token the API wants
+node $env:USERPROFILE\dsh-ch-tmp\dsh-cli\node_modules\.bin\dsh --profile winrow --port 19460 --no-open
+#    dsh web: http://127.0.0.1:19460/?token=<token>
+
+# 4. work in Explorer and Windows Terminal for a minute each, then read the rows. One request to the
+#    boot URL exchanges the token for the session cookie (verified: 303 plus a dsh-auth-* cookie).
+$base = 'http://127.0.0.1:19460'
+curl.exe -s -c "$env:TEMP\dsh-jar.txt" -o NUL "$base/?token=<token>"
+curl.exe -s -b "$env:TEMP\dsh-jar.txt" "$base/api/computer-history/recent"
+curl.exe -s -b "$env:TEMP\dsh-jar.txt" "$base/api/computer-history/state"   # refusedByReason is here
+
+# 5. make a protected application the foreground window (1Password if it is installed, otherwise a
+#    protect rule for something that is) and confirm refusedByReason moves under 'protected-app'
+#    while /recent does not grow.
+
+# 6. confirm the reason the store's POSIX check is skipped here (expected 40666; macOS reports 40700):
+node -e "console.log(require('node:fs').statSync(process.env.USERPROFILE).mode.toString(8))"
 ```
 
 Two of the four applications the first version of this recipe named cannot be measured on that machine:
