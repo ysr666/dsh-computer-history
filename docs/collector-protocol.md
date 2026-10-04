@@ -64,6 +64,32 @@ Acknowledgement is not optional: the host treats a missing, mismatched, unexpect
 `configured` as a failure and stops the collector, because "the policy may not have arrived" is not a
 state capture is allowed to run in.
 
+### What the collector does with a line it does not understand
+
+Every way of being unintelligible ends in the same place: the line is **ignored**, never fatal, and nothing
+is half-applied. The rules are pinned by tests in `native/windows/src/command.rs` (see their names below),
+because "ignore it" is a contract only if the cases are written down.
+
+| input | behaviour |
+| --- | --- |
+| empty line, `not json`, truncated JSON, a valid object followed by junk | ignored |
+| unknown `type`, missing `type` | ignored |
+| `configure` with no `revision`, a revision that is not a non-negative integer, no `policy`, or a `policy` that is not a JSON object | ignored - a malformed configure never replaces the live policy with an empty one |
+| unknown fields, anywhere | ignored; the command still parses |
+| an array field the host did not send | empty, not an error |
+| a member of a policy array that is not a string | dropped |
+| `v` | never read: the host sends it by convention |
+| `revision`/`policy` next to `pause`/`resume`/`shutdown` | ignored; the simple commands never look at them |
+
+Two deltas remain against the hand-written parser the Windows collector used before it spoke serde. Both
+are unreachable with the real host (`src/host/collector/manager.ts` builds canonical objects and sends small
+counter revisions), and both are listed rather than assumed away:
+
+| delta | before | now | why it cannot fire |
+| --- | --- | --- | --- |
+| duplicate keys in one object | first value won | the whole line is rejected | the host never emits a duplicate key |
+| a number literal JSON does not accept as an integer - a fraction, an exponent, an underflowing `1e-400`, leading zeros, `-0` | the scanner's `i64` read sometimes accepted it (`007` → 7, `-0` → 0) and sometimes refused it; a fraction anywhere made the line unparseable | fractions and exponents parse (in fields nobody reads), `007`/`-0` are refused | the host writes `String(revision)` for a counter and `JSON.stringify` for everything else, so those literals never appear |
+
 ## What must never appear
 
 This is the boundary (ADR 0002), and it is a requirement on the *shape*, not on discipline:
