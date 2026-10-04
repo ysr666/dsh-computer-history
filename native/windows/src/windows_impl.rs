@@ -11,10 +11,11 @@
 
 use windows::core::{Interface, PWSTR};
 use windows::Win32::Foundation::{CloseHandle, HWND};
-use windows::Win32::UI::Accessibility::{IUIAutomation, UIA_E_NOTSUPPORTED};
+use windows::Win32::UI::Accessibility::{IUIAutomation, IUIAutomationElement, UIA_E_NOTSUPPORTED};
 
 use crate::platform::{
-    Availability, ElementState, ForegroundIdentity, ObservationSource, PlatformObservation,
+    Availability, ElementCandidate, ElementState, ForegroundIdentity, ObservationSource,
+    PlatformObservation,
 };
 
 /// The same bound the macOS collector applies to every Accessibility round trip.
@@ -28,26 +29,11 @@ pub struct WindowsSource {
 impl WindowsSource {
     pub fn new() -> Self {
         unsafe {
-            use windows::Win32::System::Com::{
-                CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_MULTITHREADED,
-            };
-            use windows::Win32::UI::Accessibility::{CUIAutomation, IUIAutomation2};
-
-            // S_FALSE (already initialized on this thread) is fine; the HRESULT is ignored on purpose.
-            let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
-            let created: windows::core::Result<IUIAutomation> =
-                CoCreateInstance(&CUIAutomation, None, CLSCTX_ALL);
-            match created {
-                Ok(automation) => {
-                    if let Ok(automation2) = automation.cast::<IUIAutomation2>() {
-                        let _ = automation2.SetConnectionTimeout(UIA_TIMEOUT_MS);
-                        let _ = automation2.SetTransactionTimeout(UIA_TIMEOUT_MS);
-                    }
-                    Self {
-                        automation: Some(automation),
-                        unavailable: None,
-                    }
-                }
+            match automation_instance() {
+                Ok(automation) => Self {
+                    automation: Some(automation),
+                    unavailable: None,
+                },
                 Err(error) => Self {
                     automation: None,
                     unavailable: Some(format!("UI Automation could not start: {error}")),
@@ -255,4 +241,138 @@ fn display_name_of(file_name: &str) -> String {
     } else {
         file_name.to_string()
     }
+}
+
+/// The COM entry point, shared by the collector and by the measurement probe so both see the same timeouts.
+unsafe fn automation_instance() -> windows::core::Result<IUIAutomation> {
+    use windows::Win32::System::Com::{
+        CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_MULTITHREADED,
+    };
+    use windows::Win32::UI::Accessibility::{CUIAutomation, IUIAutomation2};
+
+    // S_FALSE (already initialized on this thread) is fine; the HRESULT is ignored on purpose.
+    let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+    let automation: IUIAutomation = CoCreateInstance(&CUIAutomation, None, CLSCTX_ALL)?;
+    if let Ok(automation2) = automation.cast::<IUIAutomation2>() {
+        let _ = automation2.SetConnectionTimeout(UIA_TIMEOUT_MS);
+        let _ = automation2.SetTransactionTimeout(UIA_TIMEOUT_MS);
+    }
+    Ok(automation)
+}
+
+/// What UI Automation exposes around the foreground window that could anchor an observation.
+///
+/// Bounded on purpose: the focused element and three ancestors, then a breadth-first walk that keeps only
+/// the elements which can carry a location (Edit, Document, ComboBox) until `limit` results, twenty times
+/// that many visited nodes, or two seconds have passed. Nothing here is used by the collector yet.
+pub fn anchor_candidates(limit: usize) -> Vec<ElementCandidate> {
+    unsafe { anchor_candidates_impl(limit) }
+}
+
+unsafe fn anchor_candidates_impl(limit: usize) -> Vec<ElementCandidate> {
+    use std::time::{Duration, Instant};
+    use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
+
+    let Ok(automation) = automation_instance() else {
+        return Vec::new();
+    };
+    let hwnd = GetForegroundWindow();
+    if hwnd.0.is_null() {
+        return Vec::new();
+    }
+    let Ok(root) = automation.ElementFromHandle(hwnd) else {
+        return Vec::new();
+    };
+    let Ok(walker) = automation.RawViewWalker() else {
+        return Vec::new();
+    };
+
+    let mut out = Vec::new();
+    push_candidate(&mut out, &root, "window");
+
+    if let Ok(focused) = automation.GetFocusedElement() {
+        push_candidate(&mut out, &focused, "focused");
+        let mut node = focused;
+        for _ in 0..3 {
+            let Ok(parent) = walker.GetParentElement(&node) else {
+                break;
+            };
+            push_candidate(&mut out, &parent, "ancestor");
+            node = parent;
+        }
+    }
+
+    let deadline = Instant::now() + Duration::from_secs(2);
+    let mut queue = vec![root];
+    let mut visited = 0usize;
+    while let Some(element) = queue.pop() {
+        if visited >= limit.saturating_mul(20) || out.len() >= limit || Instant::now() > deadline {
+            break;
+        }
+        visited += 1;
+        let mut child = walker.GetFirstChildElement(&element);
+        while let Ok(node) = child {
+            if is_location_bearing(&node) {
+                push_candidate(&mut out, &node, "descendant");
+            }
+            queue.push(node.clone());
+            child = walker.GetNextSiblingElement(&node);
+        }
+    }
+
+    out
+}
+
+/// The control types that can name where the user is: an editor's document, a browser's or Explorer's
+/// address bar, a combo box that shows a folder.
+unsafe fn is_location_bearing(element: &IUIAutomationElement) -> bool {
+    use windows::Win32::UI::Accessibility::{
+        UIA_ComboBoxControlTypeId, UIA_DocumentControlTypeId, UIA_EditControlTypeId,
+    };
+
+    match element.CurrentControlType() {
+        Ok(control_type) => {
+            control_type == UIA_EditControlTypeId
+                || control_type == UIA_DocumentControlTypeId
+                || control_type == UIA_ComboBoxControlTypeId
+        }
+        Err(_) => false,
+    }
+}
+
+unsafe fn push_candidate(
+    out: &mut Vec<ElementCandidate>,
+    element: &IUIAutomationElement,
+    relation: &'static str,
+) {
+    out.push(ElementCandidate {
+        relation,
+        control_type: element
+            .CurrentControlType()
+            .ok()
+            .map(|control_type| format!("ControlType.{}", control_type.0)),
+        name: text_of(element.CurrentName()),
+        automation_id: text_of(element.CurrentAutomationId()),
+        class_name: text_of(element.CurrentClassName()),
+        help_text: text_of(element.CurrentHelpText()),
+        value: value_of(element),
+        is_password: element.CurrentIsPassword().ok().map(|value| value.as_bool()),
+    });
+}
+
+/// A UIA string property, with "the provider returned an empty string" treated as "no value".
+fn text_of(value: windows::core::Result<windows::core::BSTR>) -> Option<String> {
+    value
+        .ok()
+        .map(|value| value.to_string())
+        .filter(|value| !value.is_empty())
+}
+
+/// The Value pattern's text, which is where an address bar keeps the URL and a document keeps its path.
+unsafe fn value_of(element: &IUIAutomationElement) -> Option<String> {
+    use windows::Win32::UI::Accessibility::{IUIAutomationValuePattern, UIA_ValuePatternId};
+
+    let pattern = element.GetCurrentPattern(UIA_ValuePatternId).ok()?;
+    let value: IUIAutomationValuePattern = pattern.cast().ok()?;
+    text_of(value.CurrentValue())
 }
