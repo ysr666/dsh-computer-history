@@ -27,8 +27,11 @@ Windows ids for the same adapters: `finder` = `explorer.exe` and `terminal` =
 `cargo run --release --example foreground_identity` plus live collector runs; `vscode` =
 `Code.exe`, which is **expected rather than measured** because VS Code is not installed on that
 machine. The measurement corrected the earlier expected values (`Microsoft.WindowsTerminal`,
-`Microsoft.VisualStudioCode`): a packaged Windows application does not carry its AppUserModelID as a
-window property, so the executable name is what Windows reports to the collector.
+`Microsoft.VisualStudioCode`): the packaged applications measured there (Notepad, Windows Terminal)
+reported **no window AppUserModelID at all**, so the executable name is what Windows handed the
+collector - the Start menu's `Microsoft.WindowsTerminal_8wekyb3d8bbwe!App` is not a window property.
+That is the scope of the measurement: two packaged applications and one classic one, not a rule about
+every Windows application.
 
 Linux ids for the same adapters are declared in the fixture as well - `vscode` = `code.desktop`,
 `code-insiders.desktop`; `terminal` = `org.gnome.Terminal.desktop`; `finder` =

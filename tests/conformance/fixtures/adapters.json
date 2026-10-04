@@ -103,7 +103,7 @@
   "$unverified": {
     "darwin": [],
     "win32": [
-      "measured 2026-10-04 on Windows 11 26200 with native/windows/examples/foreground_identity.rs and live collector runs: Windows reports the executable name (explorer.exe, WindowsTerminal.exe, Notepad.exe) - a packaged application does not carry its AppUserModelID as a window property on that machine",
+      "measured 2026-10-04 on Windows 11 26200 with native/windows/examples/foreground_identity.rs and live collector runs: Windows reports the executable name (explorer.exe, WindowsTerminal.exe, Notepad.exe). The two packaged applications measured there (Notepad, Windows Terminal) reported no window AppUserModelID - that is the scope of the statement, not a rule about every Windows application",
       "Code.exe is the expected shape, not a measurement: VS Code is not installed on that machine"
     ],
     "linux": [

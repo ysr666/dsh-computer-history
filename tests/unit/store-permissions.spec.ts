@@ -3,9 +3,12 @@ import { appliesPosixModes } from '../../src/host/store/database.js'
 
 /**
  * The store hardens its directory to 0700 and its files to 0600, then asserts the modes it read back.
- * That assertion is a POSIX idea: on Windows Node synthesises the mode (0666 for a writable file, 0777
- * for a writable directory) and `chmod` only toggles the read-only attribute, so "no broader than 0600"
- * would refuse to open the store at all - the Host would not start, and no collector could run.
+ * That assertion is a POSIX idea: Node documents that on Windows `chmod` only toggles the read-only
+ * attribute and that `stat` reports a synthetic mode (0666 for a writable file, 0777 for a writable
+ * directory), so "no broader than 0600" would refuse to open the store at all - the Host would not
+ * start, and no collector could run. The behaviour is documented rather than measured on a Windows
+ * machine here; the row confirms it, and the exemption is safe even if the synthetic value differs,
+ * because nothing is asserted where the bits are not real.
  *
  * The platform cannot be switched inside a test, so the decision is a function and this is its guard:
  * the Windows Host row depends on it returning false there, and on it staying true everywhere the

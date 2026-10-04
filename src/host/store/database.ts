@@ -24,9 +24,14 @@ export interface HistoryDatabase {
 /**
  * Whether the POSIX mode bits this module hardens and asserts exist on a platform.
  *
- * They do not on Windows: `chmod` there only toggles the read-only attribute and `stat` reports a
- * synthetic `0o666`/`0o444`, so "no broader than 0600" would refuse to open the store at all. The
- * protection Windows has is the ACL on the data directory, which this check cannot read - ADR 0005
+ * They do not on Windows. Node documents that `chmod` there only toggles the read-only attribute and
+ * that `stat` reports a synthetic mode; the value this store would read back (0666/0777 for a writable
+ * file/directory) is what makes "no broader than 0600" refuse to open the store at all, so the Host
+ * would not start and no collector could run. That value is **documented, not measured here yet** - the
+ * Windows row confirms it with `statSync(process.env.USERPROFILE).mode.toString(8)` - and the decision
+ * does not depend on the exact number: nothing is asserted where the bits are not real.
+ *
+ * The protection Windows has is the ACL on the data directory, which this check cannot read - ADR 0005
  * describes the macOS mechanism (FileVault plus a non-synced location) that the hardening belongs to.
  * The exemption is a recorded gap, not a check that silently passes.
  */
