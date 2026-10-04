@@ -35,15 +35,41 @@ function sourceFiles(root, extensions = ['.ts']) {
   return found
 }
 
-/** Imports that would point from the contract layer back into an implementation. */
-const LAYER_ESCAPE = /from\s+['"][^'"]*\/(host|client|extension|extension-editor)\/[^'"]*['"]/
+/**
+ * The implementation layers the contract layer must not reach into.
+ */
+const IMPLEMENTATION_LAYERS = new Set([
+  'host',
+  'client',
+  'extension',
+  'extension-editor',
+])
+
+/**
+ * True when a line references an implementation layer through a relative module path.
+ *
+ * The check reads the path, not the keyword in front of it: the first version matched only
+ * `from '…'`, so `await import('../host/x.js')` walked straight through it, and a regex that insisted
+ * on a segment *before* the layer name missed the plain `../host/…` shape (its own self-check caught
+ * that immediately). Any relative literal whose segments include one of the layer names counts, whatever
+ * syntax produced it; a URL cannot match because a relative path has to start with `./` or `../`.
+ */
+function escapesLayer(line) {
+  for (const match of line.matchAll(/['"]\.\.?\/[^'"]+['"]/g)) {
+    const segments = match[0].slice(1, -1).split('/')
+    if (segments.some(segment => IMPLEMENTATION_LAYERS.has(segment))) {
+      return true
+    }
+  }
+  return false
+}
 
 const sharedFiles = sourceFiles(SHARED)
 const escapes = []
 for (const file of sharedFiles) {
   const text = readFileSync(file, 'utf8')
   text.split('\n').forEach((line, index) => {
-    if (LAYER_ESCAPE.test(line)) {
+    if (escapesLayer(line)) {
       escapes.push(`${path.relative(REPO, file)}:${index + 1}: ${line.trim()}`)
     }
   })
@@ -91,11 +117,24 @@ for (const [name, declaredIn] of exported) {
 {
   const goodEscape = "import x from '../host/store/index.js'"
   const fine = "import type { EpisodeId } from './ids.js'"
-  if (!LAYER_ESCAPE.test(goodEscape)) {
+  if (!escapesLayer(goodEscape)) {
     problems.push('the layering rule no longer catches an escape - this guard proves nothing')
   }
-  if (LAYER_ESCAPE.test(fine)) {
+  if (escapesLayer(fine)) {
     problems.push('the layering rule flags an import that stays inside the layer')
+  }
+  // The shapes the first version of the rule could not see.
+  if (!escapesLayer("const mod = await import('../host/store/index.js')")) {
+    problems.push('the layering rule misses a dynamic import of an implementation layer')
+  }
+  if (!escapesLayer("const mod = require('../client/panel.js')")) {
+    problems.push('the layering rule misses a require of an implementation layer')
+  }
+  if (!escapesLayer("const deep = await import('../vision/client/panel.js')")) {
+    problems.push('the layering rule only looks at the first path segment')
+  }
+  if (escapesLayer("const url = 'https://example.com/host/page'")) {
+    problems.push('the layering rule flags a URL that happens to contain a layer name')
   }
   if (sharedFiles.length === 0) {
     problems.push('no files were read in src/shared - this guard proves nothing')
