@@ -481,7 +481,12 @@ fn children_of(bus: &str, destination: &str, path: &str) -> Vec<(String, String)
     parse_children(&output)
 }
 
-/// `([(':1.0', objectpath '/org/a11y/atspi/accessible/root')],)` -> `[(":1.0", "/org/…")]`.
+/// `([(':1.0', objectpath '/org/a11y/atspi/accessible/root'), (':1.1', '/org/…')],)` -> the pairs.
+///
+/// GVariant prints a type annotation **once per array**: the first element carries `objectpath` and the rest
+/// do not. Measured 2026-10-05 - requiring it on every element silently dropped every application after the
+/// first, so the collector could not find the one in front and produced no observation at all, while the
+/// registry was answering correctly the whole time.
 fn parse_children(output: &str) -> Vec<(String, String)> {
     let mut children = Vec::new();
     let mut rest = output;
@@ -489,16 +494,22 @@ fn parse_children(output: &str) -> Vec<(String, String)> {
         let after = &rest[start + 2..];
         let Some(name_end) = after.find('\'') else { break };
         let name = &after[..name_end];
-        let Some(path_start) = after.find("objectpath '") else { break };
-        let path_rest = &after[path_start + "objectpath '".len()..];
-        let Some(path_end) = path_rest.find('\'') else { break };
-        let path = &path_rest[..path_end];
+        let tail = &after[name_end + 1..];
+        let Some(path) = quoted(tail) else { break };
         if !name.is_empty() && !path.is_empty() {
             children.push((name.to_string(), path.to_string()));
         }
-        rest = &path_rest[path_end..];
+        rest = tail;
     }
     children
+}
+
+/// The first single-quoted string in `text`.
+fn quoted(text: &str) -> Option<&str> {
+    let open = text.find('\'')?;
+    let rest = &text[open + 1..];
+    let close = rest.find('\'')?;
+    Some(&rest[..close])
 }
 
 fn connection_pid(bus: &str, name: &str) -> Option<i32> {
@@ -769,6 +780,17 @@ mod tests {
             vec![
                 (":1.0".to_string(), "/org/a11y/atspi/accessible/root".to_string()),
                 (":1.2".to_string(), "/org/gnome/Zenity/a11y/abc".to_string()),
+            ],
+        );
+        // The spelling the registry really uses: the type annotation appears once, so every later element
+        // has none. This is the line that failed on a real desktop.
+        let measured = "([(':1.2', objectpath '/org/a11y/atspi/accessible/root'), \
+                         (':1.1', '/org/a11y/atspi/accessible/root')],)";
+        assert_eq!(
+            parse_children(measured),
+            vec![
+                (":1.2".to_string(), "/org/a11y/atspi/accessible/root".to_string()),
+                (":1.1".to_string(), "/org/a11y/atspi/accessible/root".to_string()),
             ],
         );
         assert!(parse_children("()").is_empty());
