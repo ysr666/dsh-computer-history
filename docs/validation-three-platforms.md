@@ -529,9 +529,41 @@ Sharing the layer produced two findings that separate copies would have hidden:
   platform as a parameter, with a test asserting a Linux binary does not claim `win32`.
 - the protected-application list moved into the shared crate, so a platform cannot quietly drop one.
 
+### The run on a real Linux (2026-10-05)
+
+A Linux VM (Ubuntu 24.04.4 LTS, kernel 6.8.0-117-generic, aarch64, four cores) built and ran the collector
+with cargo 1.99.0 - the same toolchain the other platforms use, because the distro's own cargo 1.75 cannot
+read this repository's `Cargo.lock` (version 4). Measured, verbatim:
+
+```text
+collector-protocol: 19 passed;  linux: 3 passed
+binary: 648208 bytes, sha256 3d3596b830ed37f63f47fd2cf6018cc9…
+hello:  {"platform":"linux","arch":"arm64","capabilities":["app-focus","window-metadata","secure-field-detection"]}
+state:  "permission-required" + "AT-SPI availability has not been read on this build: the session-bus
+        check is not implemented yet"
+configure rev 1 -> configured revision 1;  pause -> state paused;  resume -> permission-required;
+configure rev 2 -> configured revision 2
+```
+
+So the rule this crate exists to honour is measured rather than designed: on a real Linux the collector fails
+closed **with a reason**, and the shared command layer answers `configure`, `pause` and `resume` with the same
+shapes Windows emits - one parser, two platforms.
+
+The Windows machine's own WSL could not be used for this: `wsl --status` reports that virtualization is not
+enabled on that computer, and the distribution import failed with `Hcs/E_SERVICE_NOT_AVAILABLE`. Enabling it
+is a firmware setting and a reboot, which belongs to the machine's owner rather than to this validation.
+
 ### Not verified, and what would verify it
 
-No Linux machine has run this, and the accessibility check itself is not written. The recipe:
+**No observation exists yet, so this row is still not green.** AT-SPI is not implemented: the collector has
+nothing to observe and emits none, which is why the fixture keeps its linux `$unverified` list - a live row
+means a stored observation, and there is none to store.
+
+Two steps, in order of size: the session-bus check (`org.a11y.Status`'s `IsEnabled` and
+`ScreenReaderEnabled` - a minimal Ubuntu image does not even have `gdbus`, so the check cannot assume an
+accessibility stack is present), and then the observation path itself (at-spi2 over D-Bus: application,
+window, focused element, document), which is the same shape `native/macos` implements through AX. The recipe
+for the row once those exist:
 
 ```bash
 # on a Linux desktop with a session bus
