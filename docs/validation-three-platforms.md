@@ -291,13 +291,13 @@ is the message layer from `docs/collector-protocol.md`, and it is tested whereve
 
 ```bash
 pnpm verify:collector-windows
-# rust collectors: 28 tests passed across collector-protocol, windows, linux; these tests do not
+# rust collectors: 34 tests passed across collector-protocol, windows, linux; these tests do not
 # exercise UI Automation or AT-SPI - only a live run counts, and docs/validation-three-platforms.md
 # records which platforms have one
 ```
 
-The Windows crate contributes 20 of those tests (the observation engine, the host-command parser and the
-adapter table), the shared message layer 8, the Linux crate 3. A missing Rust toolchain prints a **skip
+The Windows crate contributes 22 of those tests (the observation engine, the host-command parser and the
+adapter table), the shared message layer 9, the Linux crate 3. A missing Rust toolchain prints a **skip
 that says UNVERIFIED**, never a pass.
 
 Calibrated in both directions: the content boundary is asserted against the serialised line (adding a
@@ -315,6 +315,14 @@ cargo test               # collector-protocol 8 passed, windows 20 passed, linux
 cargo build --release    # exit 0 in 18.4 s
 # exe sha256 7f1f565d08ba416bbc6bb6c5a086ce1166fda57d6f27de2494b1bb8951889a3d
 ```
+
+Those are the counts as that run measured them. **That tree and that binary predate the review fixes in
+`9c18008` and `33f5b5f`** - `native/windows/src/{collector,platform,windows_impl}.rs` and the shared
+crate changed afterwards - so the machine's build has to be refreshed before the row is produced, and the
+row records the binary it actually used. The review fixes also changed what the crate does: the collector
+now matches either identity Windows reports (AppUserModelID or executable name) and reports the candidate
+that satisfies both the policy and the adapter table, and `describe` compares the window handle rather
+than the pid.
 
 That build is also the first compile of `windows_impl.rs` against the real `windows` crate 0.62.2 on the
 target it is written for. Four live collector runs then produced, verbatim:
@@ -375,8 +383,25 @@ curl.exe -s -b "$env:TEMP\dsh-jar.txt" "$base/api/computer-history/state"   # re
 node -e "console.log(require('node:fs').statSync(process.env.USERPROFILE).mode.toString(8))"
 ```
 
-Two of the four applications the first version of this recipe named cannot be measured on that machine:
-**VS Code is not installed**, so the `vscode` adapter stays an expectation (`Code.exe`, the user-installer
+**The command sequence itself was rehearsed** on macOS with a temporary `DSH_HOME` and the tarball built
+from the current tree, because three of its steps are not obvious and the first version of this recipe got
+each of them wrong: `plugin add` initializes the profile; the profile needs an app bundle or the plugin
+waits on `connection`/`workspaceRegistry`; and the profile layer's config **replaces** the bundle layer's,
+so `enabled: true` has to be repeated. Measured: `{"enabled":false,"capture":"stopped"}` without that
+line, then
+
+```json
+{"enabled":true,"capture":"running","accessibilityTrusted":true,
+ "collector":{"version":"0.1.0","arch":"arm64"},"companion":{"listening":true,"port":19498,"paired":false},
+ "refusedByReason":{}}
+```
+
+with it - which is also the host accepting a collector's hello line. `/api/computer-history/recent`
+(empty) and `/api/computer-history/state` both answered, and the store opened with the real schema. The
+rehearsal recorded nothing, which is the correct behaviour: an untouched profile allows nothing, and the
+macOS collector is not the code under test.
+
+Two of the four applications the first version of this recipe named cannot be measured on that machine:**VS Code is not installed**, so the `vscode` adapter stays an expectation (`Code.exe`, the user-installer
 executable name), and **1Password is not installed**, so the built-in protected list is unmeasured - the
 policy-protected path was exercised instead. **Notepad has no adapter at all** (it reports `Notepad.exe`);
 adding a Windows-only adapter to a cross-platform table is a product decision, not a measurement, so it
