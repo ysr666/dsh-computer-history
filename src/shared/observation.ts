@@ -29,6 +29,9 @@ export type ObservationAdapter =
 export type ObservationProvider =
   | 'macos-ax'
   | 'windows-uia'
+  /** The Linux Accessibility path (AT-SPI over D-Bus). Added 2026-10-05: the collector sends it, the store
+   * refused it, and the row that found this is the same row that found the missing `linux` platform. */
+  | 'at-spi'
   | 'companion'
 
 export interface ActivityObservation {

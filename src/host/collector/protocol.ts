@@ -122,7 +122,11 @@ function parseHello(message: RecordValue): CollectorToHost {
   })
 
   const platform = string(message.platform, 'hello platform')
-  if (platform !== 'darwin' && platform !== 'win32') {
+  // The platforms this product ships a collector for. Linux was missing until 2026-10-05, and the effect was
+  // not subtle: a Linux collector's `hello` was rejected with "platform mismatch" no matter which host
+  // spawned it, so the Linux row could not exist at all. The check is about the vocabulary, not about the
+  // host's own platform - a collector is allowed to run where its host does not.
+  if (platform !== 'darwin' && platform !== 'win32' && platform !== 'linux') {
     throw new Error('collector platform mismatch')
   }
 

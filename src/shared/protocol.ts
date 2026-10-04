@@ -4,7 +4,12 @@ export type CollectorCapability =
   | 'resource-uri'
   | 'secure-field-detection'
 
-export type CollectorPlatform = 'darwin' | 'win32'
+/**
+ * The platforms this product ships a collector for. `linux` was missing until 2026-10-05, in the type and in
+ * the parser that reads the same vocabulary - a Linux collector's `hello` was refused as a "platform
+ * mismatch" even though the protocol, the adapter fixture and the validation file all named Linux.
+ */
+export type CollectorPlatform = 'darwin' | 'win32' | 'linux'
 
 export interface CollectorHello {
   readonly v: 1

@@ -58,11 +58,16 @@ describe('collector field bounds', () => {
     // failure this vocabulary exists to avoid.
     expect(parseCollectorLine(hello('win32', 'x86')))
       .toMatchObject({ platform: 'win32', arch: 'x86' })
+    // Every platform this product ships a collector for is accepted, Linux included: it was missing from
+    // this vocabulary until 2026-10-05, and a Linux collector's hello was refused as a "platform mismatch"
+    // even though the protocol, the fixture and the validation file all named Linux.
+    expect(parseCollectorLine(hello('linux', 'arm64')))
+      .toMatchObject({ platform: 'linux', arch: 'arm64' })
     // rustc's own arch words are not the host's vocabulary...
     expect(() => parseCollectorLine(hello('win32', 'x86_64')))
       .toThrow(/architecture/)
-    // ...and an unknown platform is still refused.
-    expect(() => parseCollectorLine(hello('linux', 'x64')))
+    // ...and a platform no collector claims is still refused.
+    expect(() => parseCollectorLine(hello('freebsd', 'x64')))
       .toThrow(/platform/)
   })
 })

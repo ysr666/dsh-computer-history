@@ -101,6 +101,7 @@ function provider(value: string): ObservationProvider {
   if (
     value === 'macos-ax'
     || value === 'windows-uia'
+    || value === 'at-spi'
     || value === 'companion'
   ) return value
   throw new Error(`invalid observation provider: ${value}`)
