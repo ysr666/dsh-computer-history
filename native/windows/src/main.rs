@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 
 use collector::platform::DefaultSource;
 use collector::collector::{Collector, HEARTBEAT_SECONDS};
-use collector::command::{self, Command};
+use collector::protocol::command::{self, Command};
 
 fn main() {
     let session = format!("win-{}", std::process::id());

@@ -7,7 +7,6 @@
 
 pub mod adapters;
 pub mod collector;
-pub mod command;
 pub mod platform;
 
 #[cfg(windows)]

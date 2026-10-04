@@ -11,7 +11,7 @@ use std::collections::HashSet;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::adapters::{Adapter, FocusPolicy};
-use crate::command::Policy;
+use crate::protocol::command::Policy;
 use crate::platform::{Availability, ElementState, ObservationSource};
 use crate::protocol;
 

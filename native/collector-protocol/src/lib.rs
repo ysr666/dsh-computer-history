@@ -17,6 +17,8 @@
 
 use serde::Serialize;
 
+pub mod command;
+
 /// Applications whose contents must never be recorded, by executable or desktop id.
 ///
 /// This is the shape Windows and Linux see (an executable name or a `.desktop` id); macOS keeps its

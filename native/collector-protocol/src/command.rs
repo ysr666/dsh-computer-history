@@ -1,5 +1,11 @@
 //! Host-to-collector commands, parsed from the newline-delimited JSON written to stdin.
 //!
+//! This lives beside the message layer because both collectors read the same stdin: the Windows and the
+//! Linux collector must agree about a line, and the only way to guarantee that is for one function to
+//! decide. The Linux collector used to scan for the substring `"configure"`, which acked `revision 0` for
+//! a `pause` whose note happened to contain that word (found by an adversarial re-run of the serde
+//! migration; verified by driving the real binary).
+//!
 //! The host's shapes (`src/host/collector/manager.ts`):
 //!
 //! ```jsonc
@@ -204,6 +210,24 @@ mod tests {
         assert!(policy.blocked_bundle_ids.is_empty());
         assert!(policy.protected_bundle_ids.is_empty());
         assert!(policy.protected_path_patterns.is_empty());
+    }
+
+    #[test]
+    fn a_word_inside_an_unread_field_is_not_a_command() {
+        // The Linux collector used to scan for the substring `"configure"`, so this line acked
+        // `configured revision 0` - a false positive that also silently truncated long revisions. Both
+        // were found by driving the real binary; the shared parser reads `type` and nothing else.
+        assert_eq!(
+            parse_command(r#"{"type":"pause","note":"a \"configure\" b"}"#),
+            Some(Command::Pause)
+        );
+        assert_eq!(
+            parse_command(
+                r#"{"type":"configure","revision":123456789012345678901234567890,"policy":{}}"#
+            ),
+            None,
+            "a revision JSON cannot represent as an integer is not a revision"
+        );
     }
 
     #[test]
