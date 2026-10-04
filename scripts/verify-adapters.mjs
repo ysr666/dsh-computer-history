@@ -48,7 +48,7 @@ for (const id of adapterIds) {
   if (!/20\d\d-\d\d-\d\d/.test(section)) {
     problems.push(`${README}: adapter "${id}" section has no measurement date`)
   }
-  if (!/live-probe|ax-probe|activate/.test(section)) {
+  if (!/live-probe|ax-probe|activate|foreground_identity/.test(section)) {
     problems.push(`${README}: adapter "${id}" section has no probe command`)
   }
 }

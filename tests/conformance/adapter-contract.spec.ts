@@ -60,12 +60,14 @@ describe('the cross-platform adapter contract', () => {
   it('carries this platform\u2019s ids for every adapter it claims to cover', () => {
     const known = new Set(PHASE1_ADAPTERS.flatMap(adapter => adapter.bundleIds))
     for (const entry of fixture.adapters) {
-      const darwin = entry.ids.darwin ?? []
-      expect(darwin.length).toBeGreaterThan(0)
-      for (const id of darwin) expect(known.has(id)).toBe(true)
-      // The win32 half of the mapping must be in the Host table as well, so the
-      // fixture cannot declare an id the Windows collector is unable to resolve.
-      for (const id of entry.ids.win32 ?? []) expect(known.has(id)).toBe(true)
+      // An adapter is covered when it names at least one id on some platform. A Windows-only adapter
+      // (notepad) has no darwin ids, and that is a fact about the application rather than a missing
+      // measurement - the old rule required darwin ids from every entry.
+      const declared = ['darwin', 'win32', 'linux'].flatMap(
+        platform => entry.ids[platform] ?? [],
+      )
+      expect(declared.length).toBeGreaterThan(0)
+      for (const id of declared) expect(known.has(id)).toBe(true)
     }
   })
 

@@ -176,6 +176,21 @@ export const PHASE1_ADAPTERS: readonly Phase1AdapterDefinition[] = [
     documentResourceKind: 'file',
     focusedElementPolicy: 'require',
   },
+  {
+    id: 'notepad',
+    bundleIds: [
+      // win32 only: Windows 11 Notepad reports its executable name (the packaged
+      // `Microsoft.WindowsNotepad_8wekyb3d8bbwe!App` the Start menu publishes is not a window property -
+      // measured for Windows Terminal, same shape). Declared 2026-10-04, **not yet measured**: without
+      // an entry the collector would ignore the application silently, which is not a fail-closed
+      // decision but an invisible one.
+      'Notepad.exe',
+    ],
+    surfaceKind: 'editor',
+    suppressesWindowTitle: false,
+    documentResourceKind: 'file',
+    focusedElementPolicy: 'require',
+  },
 ]
 
 /**

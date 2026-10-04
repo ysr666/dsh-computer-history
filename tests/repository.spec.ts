@@ -131,7 +131,15 @@ describe('repository scaffold', () => {
       },
     )
 
-    expect(nativeAdapters.length).toBe(PHASE1_ADAPTERS.length)
+    // The Swift table carries exactly the adapters that have darwin ids. A win32-only adapter (notepad)
+    // has no macOS counterpart to compare, and demanding an empty entry for it would be dead data - the
+    // rule is per platform, not "every table carries every adapter".
+    const darwinCapable = PHASE1_ADAPTERS.filter(
+      adapter => declaredDarwin(adapter.id).length > 0,
+    )
+    expect(nativeAdapters.map(entry => entry.id).toSorted()).toEqual(
+      darwinCapable.map(adapter => adapter.id).toSorted(),
+    )
 
     const nativeBundles = nativeAdapters.flatMap(
       adapter => adapter.bundleIds,
@@ -146,7 +154,7 @@ describe('repository scaffold', () => {
     // Field-by-field: a bundle that maps to a different adapter id, or an
     // adapter whose surface kind or title policy differs between the two
     // languages, would silently change what the Host stores.
-    for (const adapter of PHASE1_ADAPTERS) {
+    for (const adapter of darwinCapable) {
       const native = nativeAdapters.find(entry => entry.id === adapter.id)
       expect(native, `native adapter ${adapter.id}`).toBeDefined()
       // The Swift table stays darwin-only: win32 ids live in the Host table and in the Windows

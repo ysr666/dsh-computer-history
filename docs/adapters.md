@@ -21,6 +21,7 @@ synthetic fixtures — never a real private file or a real credential.
 | `terminal` | `com.apple.Terminal`, `com.googlecode.iterm2` | terminal | working directory (`file://…` / path) | unsupported (`-25205`) | readable on iTerm2; `-25212` inside Terminal | directory |
 | `preview` | `com.apple.Preview` | document | `file://…` for the open document | unsupported | readable | file |
 | `finder` | `com.apple.finder` | window | nil for plain windows; folder path in folder windows | unsupported (`-25205` / `-25212`) | readable (`AXGroup`) | none or file |
+| `notepad` | `Notepad.exe` (win32 only) | editor | n/a (win32 only) | n/a | not measured yet | file |
 
 Windows ids for the same adapters: `finder` = `explorer.exe` and `terminal` =
 `WindowsTerminal.exe`, both **measured 2026-10-04** on Windows 11 26200 with
@@ -231,6 +232,23 @@ download window, a desktop window), so those observations carry no resource.
 The Host stored seven Finder observations during the Phase 1 validation and all
 seven had an empty `resource_id`, which is why the roadmap treats Finder as a
 window surface rather than a document surface.
+
+### `notepad` — Windows 11 Notepad
+
+**Unmeasured as of 2026-10-04.** The adapter exists so the application is recordable at all: Windows 11
+Notepad reports `Notepad.exe`, and the packaged `Microsoft.WindowsNotepad_8wekyb3d8bbwe!App` the Start
+menu publishes has not been seen as a window property (the same shape Windows Terminal showed). The probe,
+for when the machine is back:
+
+```powershell
+cargo run --release --example foreground_identity -- 20   # with Notepad in the foreground
+# then a live collector run with Notepad allowed; one observation should name the adapter:
+#   {"app":{"bundleId":"Notepad.exe"},"window":{"title":"notes.txt - Notepad"},"source":{"adapter":"notepad"}}
+```
+
+What turns this row into a measurement: the identity string, whether the title is recorded, the element
+state (Notepad is a WinUI application, so UI Automation may answer "not supported" for `IsPassword`, which
+the `require` policy treats as fail-closed), and one stored observation whose surface kind is `editor`.
 
 ## Adding an adapter does not add policy
 

@@ -23,6 +23,7 @@ export type ObservationAdapter =
   | 'terminal'
   | 'preview'
   | 'finder'
+  | 'notepad'
 
 /** Who produced the observation. */
 export type ObservationProvider = 'macos-ax' | 'companion'

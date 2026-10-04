@@ -17,6 +17,7 @@ Phase 1 的每个适配器一行，并附上产生这一行的**真机测量**�
 | `terminal` | `com.apple.Terminal`, `com.googlecode.iterm2` | terminal | 工作目录（`file://…` / 路径） | 不支持（`-25205`） | iTerm2 上可读；Terminal 内为 `-25212` | directory |
 | `preview` | `com.apple.Preview` | document | 打开文档的 `file://…` | 不支持 | 可读 | file |
 | `finder` | `com.apple.finder` | window | 普通窗口为 nil；文件夹窗口为文件夹路径 | 不支持（`-25205` / `-25212`） | 可读（`AXGroup`） | 无或 file |
+| `notepad` | `Notepad.exe`（仅 win32） | editor | 不适用（仅 win32） | 不适用 | 尚未实测 | file |
 
 同一批适配器的 Windows id：`finder` = `explorer.exe`、`terminal` = `WindowsTerminal.exe`，两者都在 2026-10-04 于 Windows 11 26200 上**实测**（`cargo run --release --example foreground_identity` 加真实 collector 运行）；`vscode` = `Code.exe` 属于**预期而非实测**，因为那台机器没有安装 VS Code。实测更正了先前写下的预期值（`Microsoft.WindowsTerminal`、`Microsoft.VisualStudioCode`）：那台机器上实测的两个打包应用（记事本、Windows Terminal）**根本没有上报窗口级 AppUserModelID**，所以 Windows 交给 collector 的是可执行文件名——开始菜单里的 `Microsoft.WindowsTerminal_8wekyb3d8bbwe!App` 并不是窗口属性。这是该次测量的覆盖范围：两个打包应用加一个经典应用，而不是一条关于所有 Windows 应用的规律。
 
@@ -137,6 +138,18 @@ Cursor 3.x 备注：默认的 **"Cursor Agents"** 窗口报告**空的** `kAXDoc
 ```
 
 没有 `document` 也没有 `url`：普通 Finder 窗口（下载窗口、桌面窗口）的 `kAXDocument` 是 nil，所以那些观测不带资源。Phase 1 验证期间宿主存下**七条** Finder 观测，**七条的 `resource_id` 都是空的** —— 这就是路线图把 Finder 当作**窗口表面**而不是文档表面的原因。
+
+### `notepad` — Windows 11 记事本
+
+**截至 2026-10-04 未实测。** 这个适配器存在的意义是让该应用**可被记录**：Windows 11 记事本上报 `Notepad.exe`，而开始菜单里的打包 `Microsoft.WindowsNotepad_8wekyb3d8bbwe!App` 尚未被观察到作为窗口属性出现（与 Windows Terminal 同形）。探针命令（等机器恢复后执行）：
+
+```powershell
+cargo run --release --example foreground_identity -- 20   # 让记事本处于前台
+# 再跑一次允许记事本的 collector；应当有一条观测点名该适配器：
+#   {"app":{"bundleId":"Notepad.exe"},"window":{"title":"notes.txt - Notepad"},"source":{"adapter":"notepad"}}
+```
+
+把这一行变成实测需要四样东西：身份字符串、标题是否被记录、元素状态（记事本是 WinUI 应用，UIA 可能对 `IsPassword` 回"不支持"，而 `require` 策略会把这种情况按 fail-closed 处理），以及一条 surface kind 为 `editor` 的落库观测。
 
 ## 新增适配器不会新增策略
 

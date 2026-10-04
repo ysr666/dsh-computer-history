@@ -51,6 +51,14 @@ pub const ADAPTERS: &[Adapter] = &[
         suppresses_window_title: false,
         focus_policy: FocusPolicy::Require,
     },
+    Adapter {
+        id: "notepad",
+        // Windows 11 Notepad reports its executable name; declared 2026-10-04, measured when the machine
+        // row runs. Its title carries a file name and nothing else, so it is recorded like an editor's.
+        ids: &["Notepad.exe"],
+        suppresses_window_title: false,
+        focus_policy: FocusPolicy::Require,
+    },
 ];
 
 /// Resolve an application id. Windows ids are compared case-insensitively: executable names vary in

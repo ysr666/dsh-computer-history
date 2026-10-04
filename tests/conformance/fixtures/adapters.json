@@ -81,6 +81,18 @@
         "surfaceKind": "browser",
         "titleRecorded": true
       }
+    },
+    {
+      "adapter": "notepad",
+      "ids": {
+        "win32": [
+          "Notepad.exe"
+        ]
+      },
+      "expect": {
+        "surfaceKind": "editor",
+        "titleRecorded": true
+      }
     }
   ],
   "refusals": [
