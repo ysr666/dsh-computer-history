@@ -35,4 +35,26 @@ describe('collector field bounds', () => {
       }),
     ))).toThrow(/exceeds 4096 bytes/)
   })
+
+  it('accepts the hello platform and arch words the collectors send', () => {
+    const hello = (platform: string, arch: string): string => JSON.stringify({
+      v: 1,
+      type: 'hello',
+      collectorSession: 's1',
+      collectorVersion: '0.1.0',
+      platform,
+      arch,
+      capabilities: ['app-focus'],
+    })
+    expect(parseCollectorLine(hello('darwin', 'arm64')))
+      .toMatchObject({ platform: 'darwin', arch: 'arm64' })
+    expect(parseCollectorLine(hello('win32', 'x64')))
+      .toMatchObject({ platform: 'win32', arch: 'x64' })
+    // rustc's own arch words are not the host's vocabulary...
+    expect(() => parseCollectorLine(hello('win32', 'x86_64')))
+      .toThrow(/architecture/)
+    // ...and an unknown platform is still refused.
+    expect(() => parseCollectorLine(hello('linux', 'x64')))
+      .toThrow(/platform/)
+  })
 })

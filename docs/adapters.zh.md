@@ -18,6 +18,8 @@ Phase 1 的每个适配器一行，并附上产生这一行的**真机测量**�
 | `preview` | `com.apple.Preview` | document | 打开文档的 `file://…` | 不支持 | 可读 | file |
 | `finder` | `com.apple.finder` | window | 普通窗口为 nil；文件夹窗口为文件夹路径 | 不支持（`-25205` / `-25212`） | 可读（`AXGroup`） | 无或 file |
 
+同一批适配器的 Windows id：`finder` = `explorer.exe`、`terminal` = `WindowsTerminal.exe`，两者都在 2026-10-04 于 Windows 11 26200 上**实测**（`cargo run --release --example foreground_identity` 加真实 collector 运行）；`vscode` = `Code.exe` 属于**预期而非实测**，因为那台机器没有安装 VS Code。实测更正了先前写下的预期值（`Microsoft.WindowsTerminal`、`Microsoft.VisualStudioCode`）：打包应用不会把 AppUserModelID 作为窗口属性暴露，所以 Windows 交给 collector 的是可执行文件名。
+
 ## 各行明细
 
 ### `vscode` — VS Code 1.140.0 与 Cursor 3.23.12

@@ -22,6 +22,14 @@ synthetic fixtures — never a real private file or a real credential.
 | `preview` | `com.apple.Preview` | document | `file://…` for the open document | unsupported | readable | file |
 | `finder` | `com.apple.finder` | window | nil for plain windows; folder path in folder windows | unsupported (`-25205` / `-25212`) | readable (`AXGroup`) | none or file |
 
+Windows ids for the same adapters: `finder` = `explorer.exe` and `terminal` =
+`WindowsTerminal.exe`, both **measured 2026-10-04** on Windows 11 26200 with
+`cargo run --release --example foreground_identity` plus live collector runs; `vscode` =
+`Code.exe`, which is **expected rather than measured** because VS Code is not installed on that
+machine. The measurement corrected the earlier expected values (`Microsoft.WindowsTerminal`,
+`Microsoft.VisualStudioCode`): a packaged Windows application does not carry its AppUserModelID as a
+window property, so the executable name is what Windows reports to the collector.
+
 ## Rows
 
 ### `vscode` — VS Code 1.140.0 and Cursor 3.23.12

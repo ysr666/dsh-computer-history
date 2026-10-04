@@ -4,12 +4,14 @@ export type CollectorCapability =
   | 'resource-uri'
   | 'secure-field-detection'
 
+export type CollectorPlatform = 'darwin' | 'win32'
+
 export interface CollectorHello {
   readonly v: 1
   readonly type: 'hello'
   readonly collectorSession: string
   readonly collectorVersion: string
-  readonly platform: 'darwin'
+  readonly platform: CollectorPlatform
   readonly arch: 'arm64' | 'x64'
   readonly capabilities: readonly CollectorCapability[]
 }

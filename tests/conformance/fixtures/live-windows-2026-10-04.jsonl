@@ -1,0 +1,14 @@
+{"v":1,"type":"hello","collectorSession":"win-3900","collectorVersion":"0.1.0","platform":"win32","arch":"x64","capabilities":["app-focus","window-metadata","resource-uri","secure-field-detection"]}
+{"v":1,"type":"state","state":"running","accessibilityTrusted":true}
+{"v":1,"type":"configured","revision":1}
+{"v":1,"type":"observation","collectorSession":"win-3900","seq":1,"observedAtMs":1791102062745,"app":{"pid":31560,"bundleId":"explorer.exe","name":"explorer"},"window":{"title":"47209 - 文件资源管理器","document":null,"url":null},"element":{"role":"ControlType.50007","subrole":null,"identifier":null},"privacy":{"secure":false,"protected":false},"source":{"adapter":"finder"},"activity":{"idleSeconds":5549}}
+{"v":1,"type":"hello","collectorSession":"win-21500","collectorVersion":"0.1.0","platform":"win32","arch":"x64","capabilities":["app-focus","window-metadata","resource-uri","secure-field-detection"]}
+{"v":1,"type":"state","state":"running","accessibilityTrusted":true}
+{"v":1,"type":"configured","revision":1}
+{"v":1,"type":"observation","collectorSession":"win-21500","seq":1,"observedAtMs":1791102116666,"app":{"pid":31560,"bundleId":"explorer.exe","name":"explorer"},"window":{"title":"47209 - 文件资源管理器","document":null,"url":null},"element":{"role":"ControlType.50007","subrole":null,"identifier":null},"privacy":{"secure":false,"protected":false},"source":{"adapter":"finder"},"activity":{"idleSeconds":5603}}
+{"v":1,"type":"observation","collectorSession":"win-21500","seq":2,"observedAtMs":1791102131677,"app":{"pid":29384,"bundleId":"Notepad.exe","name":null},"window":{"title":null,"document":null,"url":null},"element":{"role":null,"subrole":null,"identifier":null},"privacy":{"secure":false,"protected":true,"reason":"protected-app"},"source":{"adapter":"protected"}}
+{"v":1,"type":"hello","collectorSession":"win-16512","collectorVersion":"0.1.0","platform":"win32","arch":"x64","capabilities":["app-focus","window-metadata","resource-uri","secure-field-detection"]}
+{"v":1,"type":"state","state":"running","accessibilityTrusted":true}
+{"v":1,"type":"configured","revision":1}
+{"v":1,"type":"observation","collectorSession":"win-16512","seq":1,"observedAtMs":1791102363536,"app":{"pid":28196,"bundleId":"explorer.exe","name":"explorer"},"window":{"title":"47209 - 文件资源管理器","document":null,"url":null},"element":{"role":"ControlType.50007","subrole":null,"identifier":null},"privacy":{"secure":false,"protected":false},"source":{"adapter":"finder"},"activity":{"idleSeconds":5849}}
+{"v":1,"type":"observation","collectorSession":"win-16512","seq":2,"observedAtMs":1791102373576,"app":{"pid":23200,"bundleId":"WindowsTerminal.exe","name":"WindowsTerminal"},"window":{"title":null,"document":null,"url":null},"element":{"role":"ControlType.50020","subrole":null,"identifier":null},"privacy":{"secure":false,"protected":false},"source":{"adapter":"terminal"},"activity":{"idleSeconds":5859}}

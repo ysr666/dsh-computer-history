@@ -42,6 +42,9 @@ export const PHASE1_ADAPTERS: readonly Phase1AdapterDefinition[] = [
     bundleIds: [
       'com.microsoft.VSCode',
       'com.todesktop.230313mzl4w4u92',
+      // win32: the executable name Windows reports for the foreground window. Measured 2026-10-04 for
+      // Windows Terminal and Explorer; `Code.exe` is the expected shape for a VS Code user install.
+      'Code.exe',
     ],
     surfaceKind: 'editor',
     suppressesWindowTitle: false,
@@ -134,6 +137,9 @@ export const PHASE1_ADAPTERS: readonly Phase1AdapterDefinition[] = [
     bundleIds: [
       'com.apple.Terminal',
       'com.googlecode.iterm2',
+      // win32: measured 2026-10-04 - the Windows Terminal window reports its executable name, not the
+      // packaged AppUserModelID (Microsoft.WindowsTerminal_8wekyb3d8bbwe!App) the Start menu publishes.
+      'WindowsTerminal.exe',
     ],
     surfaceKind: 'terminal',
     suppressesWindowTitle: true,
@@ -150,7 +156,12 @@ export const PHASE1_ADAPTERS: readonly Phase1AdapterDefinition[] = [
   },
   {
     id: 'finder',
-    bundleIds: ['com.apple.finder'],
+    bundleIds: [
+      'com.apple.finder',
+      // win32: Explorer has no AppUserModelID, so its executable name is the identity
+      // (expected mapping, see the vscode note).
+      'explorer.exe',
+    ],
     surfaceKind: 'window',
     suppressesWindowTitle: false,
     documentResourceKind: 'file',

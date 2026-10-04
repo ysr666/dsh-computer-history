@@ -12,7 +12,31 @@ const forbidden = [
   'addGlobalMonitorForEvents',
   'AVAudioEngine',
   'AVCaptureSession',
+  // Windows UI Automation content surfaces: a value/text/selection pattern read is content, and the
+  // key/screenshot APIs are outside ADR 0002 exactly like their macOS counterparts are.
+  'ValuePattern',
+  'TextPattern',
+  'SelectionPattern',
+  'CurrentValue',
+  'GetCurrentPattern',
+  'DocumentRange',
+  'GetClipboardData',
+  'keybd_event',
+  'BitBlt',
+  'PrintWindow',
 ]
+
+// Build outputs are not source: an .rmeta file contains every API name of its dependencies, so
+// scanning them would report a violation for every token the dependency defines.
+const skipDirectories = new Set([
+  'node_modules',
+  'target',
+  'dist',
+  'coverage',
+  '.build',
+  '.swiftpm',
+  '.git',
+])
 
 // This file defines the denylist, so it necessarily contains the tokens it
 // forbids. It is the only file exempt from its own scan: the check would
@@ -23,9 +47,11 @@ async function walk(dir) {
   const entries = await readdir(dir, { withFileTypes: true })
   const nested = await Promise.all(entries.map(async (entry) => {
     const full = path.join(dir, entry.name)
-    if (entry.isDirectory()) return walk(full)
+    if (entry.isDirectory()) {
+      return skipDirectories.has(entry.name) ? [] : walk(full)
+    }
     if (entry.name === SELF) return []
-    return /\.(swift|ts|tsx|js|mjs)$/.test(entry.name) ? [full] : []
+    return /\.(swift|ts|tsx|js|mjs|rs)$/.test(entry.name) ? [full] : []
   }))
   return nested.flat()
 }
@@ -96,6 +122,9 @@ for (const [file, text] of extensionSources) {
   const catches = sample => forbidden.some(token => sample.includes(token))
   if (!catches('const value = element.AXValue')) {
     violations.push('the denylist no longer catches a forbidden API - this guard proves nothing')
+  }
+  if (!catches('let pattern = element.GetCurrentPattern(PATTERN)')) {
+    violations.push('the denylist no longer catches a UIA content API - this guard proves nothing')
   }
   if (catches('const value = element.AXTitle')) {
     violations.push('the denylist catches a token it should not')

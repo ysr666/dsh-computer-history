@@ -122,7 +122,7 @@ function parseHello(message: RecordValue): CollectorToHost {
   })
 
   const platform = string(message.platform, 'hello platform')
-  if (platform !== 'darwin') {
+  if (platform !== 'darwin' && platform !== 'win32') {
     throw new Error('collector platform mismatch')
   }
 
@@ -142,7 +142,7 @@ function parseHello(message: RecordValue): CollectorToHost {
       message.collectorVersion,
       'hello collectorVersion',
     ),
-    platform: 'darwin',
+    platform,
     arch,
     capabilities: parsed,
   }

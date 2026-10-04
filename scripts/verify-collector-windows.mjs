@@ -53,5 +53,6 @@ for (const [name, dir] of CRATES) {
 }
 console.log(
   `rust collectors: ${total} tests passed across ${CRATES.map(([name]) => name).join(', ')}; ` +
-  'UI Automation and AT-SPI paths remain unverified without their platforms',
+  'these tests do not exercise UI Automation or AT-SPI - only a live run counts, and ' +
+  'docs/validation-three-platforms.md records which platforms have one',
 )

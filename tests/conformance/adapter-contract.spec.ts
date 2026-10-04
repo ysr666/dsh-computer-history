@@ -63,6 +63,9 @@ describe('the cross-platform adapter contract', () => {
       const darwin = entry.ids.darwin ?? []
       expect(darwin.length).toBeGreaterThan(0)
       for (const id of darwin) expect(known.has(id)).toBe(true)
+      // The win32 half of the mapping must be in the Host table as well, so the
+      // fixture cannot declare an id the Windows collector is unable to resolve.
+      for (const id of entry.ids.win32 ?? []) expect(known.has(id)).toBe(true)
     }
   })
 

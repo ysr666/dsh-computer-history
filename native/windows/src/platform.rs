@@ -1,22 +1,21 @@
-//! The only module that knows about Windows.
+//! The seam between the collector engine and the platform it runs on.
 //!
-//! On Windows it will call UI Automation. Everywhere else it reports that it cannot, which is what makes
-//! the rest of the crate testable on a machine that is not Windows - and it is also the honest answer a
-//! Windows collector must give when UIA is unavailable, rather than silence.
+//! `collector.rs` holds every decision that does not need Windows - policy gates, fingerprinting, the
+//! heartbeat, the protocol messages. This module hands it the raw facts, and it is the only module that
+//! knows how to read a foreground window.
 
-/// Whether this build can observe anything at all.
-#[cfg(windows)]
-pub const AVAILABLE: bool = true;
-#[cfg(not(windows))]
-pub const AVAILABLE: bool = false;
-
-/// Why observation is unavailable, in the shape `diagnostic` wants.
-pub fn unavailable_reason() -> Option<&'static str> {
-    if AVAILABLE {
-        None
-    } else {
-        Some("this collector was built for win32; UI Automation is not reachable from this platform")
-    }
+/// What the focused element says about a surface where secrets may be typed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ElementState {
+    /// A readable element that is positively not a secure field.
+    NotSecure,
+    /// A readable secure field: the surface is withheld.
+    Secure,
+    /// The application exposes no queryable element (ADR 0006: a window-only adapter may still record
+    /// window metadata; every other adapter fails closed).
+    Unqueryable,
+    /// We could not ask (timeout, invalid element, API failure): fail closed.
+    Unreadable,
 }
 
 /// The raw facts a platform hands over, before policy.
@@ -28,5 +27,76 @@ pub struct PlatformObservation {
     pub window_title: Option<String>,
     pub document: Option<String>,
     pub element_role: Option<String>,
-    pub secure: bool,
+    pub element_state: ElementState,
 }
+
+/// Whether observation is possible at all right now.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Availability {
+    Available,
+    Unavailable(String),
+}
+
+/// The foreground application's identity, read before any policy decision.
+///
+/// The collector must know *which* application is in front to apply the include-only policy, and it
+/// must not read a protected or blocked application's window beyond that identity. macOS has the same
+/// ordering: Collector.swift guards adapter + protected + blocked + allowed before any AX read.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ForegroundIdentity {
+    pub pid: i32,
+    pub application_id: String,
+    pub application_name: Option<String>,
+}
+
+/// Everything the engine needs from a platform.
+pub trait ObservationSource {
+    /// Whether observation is possible right now, and why not when it is not.
+    fn availability(&mut self) -> Availability;
+    /// The foreground application's identity only: no title, no element, no document.
+    fn foreground(&mut self) -> Option<ForegroundIdentity>;
+    /// The window metadata for `identity`, called only after the policy gate passed. A `None` here
+    /// means the surface could not be read (or the foreground changed) and nothing is recorded.
+    fn describe(&mut self, identity: &ForegroundIdentity) -> Option<PlatformObservation>;
+    /// Seconds since the last user input, when the platform can tell.
+    fn idle_seconds(&mut self) -> Option<u64>;
+}
+
+/// The source used by a build that cannot observe: it reports the reason rather than silence.
+pub struct UnsupportedSource;
+
+impl UnsupportedSource {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl ObservationSource for UnsupportedSource {
+    fn availability(&mut self) -> Availability {
+        Availability::Unavailable(
+            "this collector was built for win32; UI Automation is not reachable from this platform"
+                .to_string(),
+        )
+    }
+
+    fn foreground(&mut self) -> Option<ForegroundIdentity> {
+        None
+    }
+
+    fn describe(&mut self, _identity: &ForegroundIdentity) -> Option<PlatformObservation> {
+        None
+    }
+
+    fn idle_seconds(&mut self) -> Option<u64> {
+        None
+    }
+}
+
+#[cfg(windows)]
+pub use crate::windows_impl::WindowsSource;
+
+/// The source this build actually uses: UI Automation on Windows, the reason everywhere else.
+#[cfg(windows)]
+pub type DefaultSource = WindowsSource;
+#[cfg(not(windows))]
+pub type DefaultSource = UnsupportedSource;

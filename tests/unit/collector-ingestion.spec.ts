@@ -164,6 +164,34 @@ describe('live privacy normalization', () => {
     }), policy, 2_000)).toBeUndefined()
   })
 
+  it('counts a protected application under its own reason, not as a secure field', () => {
+    // The collector marks a protected application with `privacy.protected` and the reason the
+    // protocol documents. Calling that a secure field would make the refusal breakdown
+    // incomparable with the names the cross-platform fixture declares.
+    const protectedRefusal: RefusalReport = {}
+    expect(normalizeObservation(native({
+      privacy: { secure: false, protected: true, reason: 'protected-app' },
+    }), policy, 2_000, undefined, undefined, undefined, protectedRefusal))
+      .toBeUndefined()
+    expect(protectedRefusal.reason).toBe('protected-app')
+
+    // An unreadable secure surface keeps the secure-field name.
+    const secureRefusal: RefusalReport = {}
+    expect(normalizeObservation(native({
+      privacy: { secure: true, protected: false, reason: 'secure-field' },
+    }), policy, 2_000, undefined, undefined, undefined, secureRefusal))
+      .toBeUndefined()
+    expect(secureRefusal.reason).toBe('secure-field')
+
+    // A protected observation without the documented reason stays in the secure-field bucket.
+    const unnamedRefusal: RefusalReport = {}
+    expect(normalizeObservation(native({
+      privacy: { secure: false, protected: true },
+    }), policy, 2_000, undefined, undefined, undefined, unnamedRefusal))
+      .toBeUndefined()
+    expect(unnamedRefusal.reason).toBe('secure-field')
+  })
+
   it('rejects protected file patterns before persistence', () => {
     expect(normalizeObservation(native({
       window: {

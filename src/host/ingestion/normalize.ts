@@ -241,6 +241,13 @@ export function normalizeObservation(
     return undefined
   }
 
+  // A protected collector observation carries the reason the protocol documents; without this the
+  // refusal breakdown calls every protected application a secure field, which is the label the
+  // fixture reserves for an unreadable secure surface (tests/conformance/fixtures/adapters.json).
+  if (
+    message.privacy.protected
+    && message.privacy.reason === 'protected-app'
+  ) return refuse('protected-app')
   if (message.privacy.secure || message.privacy.protected) return refuse('secure-field')
   if (PROTECTED_BUNDLES.has(message.app.bundleId)) return refuse('protected-app')
   if (isProtectedMetadata(message, policy)) return refuse('protected-metadata')

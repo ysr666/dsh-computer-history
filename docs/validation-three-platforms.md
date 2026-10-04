@@ -291,38 +291,70 @@ is the message layer from `docs/collector-protocol.md`, and it is tested whereve
 
 ```bash
 pnpm verify:collector-windows
-# windows collector: protocol layer ok (5 tests); UI Automation paths remain unverified without Windows
+# rust collectors: 28 tests passed across collector-protocol, windows, linux; these tests do not
+# exercise UI Automation or AT-SPI - only a live run counts, and docs/validation-three-platforms.md
+# records which platforms have one
 ```
 
-Five tests: the observation carries the documented fields; **there is no field for content** (asserted
-against the serialised line, so the boundary is a property of the shape); control characters cannot
-synthesise a second message; the other messages match their documented shapes; protected applications are
-recognised case-insensitively. Calibrated in both directions - adding a `selection_text` field and patching
-the serialiser turns the content assertion red, restoring turns it green.
+The Windows crate contributes 20 of those tests (the observation engine, the host-command parser and the
+adapter table), the shared message layer 8, the Linux crate 3. A missing Rust toolchain prints a **skip
+that says UNVERIFIED**, never a pass.
 
-A missing Rust toolchain prints a **skip that says UNVERIFIED**, never a pass.
+Calibrated in both directions: the content boundary is asserted against the serialised line (adding a
+`selection_text` field and patching the serialiser turns it red), the cross-platform adapter guard fails
+when a win32 entry is deleted, commented out or renamed, and the host's refusal naming was calibrated by
+neutralising the reason mapping (red) and restoring it (green).
 
-### Not verified, and what would verify it
+### Verified on a real machine - 2026-10-04
 
-Nothing about UI Automation has been run: there is no Windows machine here. The Windows rows in
-`tests/conformance/fixtures/adapters.json` are a mapping the collector is *expected* to produce, and the
-fixture now carries that in its own data (`$unverified.win32`), with a test that fails if the note is
-removed - so "unverified" has to be deleted deliberately rather than quietly.
+Windows 11 Pro 10.0.26200, rustc 1.99.0, MSVC 17.14.41 (Visual Studio Build Tools 2022), node 24.21.0.
+The working tree was transferred to `~\dsh-ch-tmp` (sha256 `c2d63e64…`, 566 files) and built there:
 
-The recipe, to be run once on a real machine:
+```powershell
+cargo test               # collector-protocol 8 passed, windows 20 passed, linux 3 passed, every exit 0
+cargo build --release    # exit 0 in 18.4 s
+# exe sha256 7f1f565d08ba416bbc6bb6c5a086ce1166fda57d6f27de2494b1bb8951889a3d
+```
+
+That build is also the first compile of `windows_impl.rs` against the real `windows` crate 0.62.2 on the
+target it is written for. Four live collector runs then produced, verbatim:
+
+- `explorer.exe` -> adapter `finder`, with the window title and a `ControlType` element role;
+- `WindowsTerminal.exe` -> adapter `terminal`, **with the title suppressed on the wire** (`title: null`)
+  while the element role is still present;
+- a policy-protected `Notepad.exe` -> identity only (pid and executable name), no title, no element,
+  `privacy.reason: "protected-app"`, adapter `protected`.
+
+The same runs corrected the fixture's win32 ids, which is what the fixture's `$unverified.win32` note was
+for: a packaged Windows application does not carry its AppUserModelID as a window property, so Windows
+reports the executable name (`native/windows/examples/foreground_identity.rs` prints the identity the
+collector's own `platform` seam sees). `terminal` is `WindowsTerminal.exe` and `finder` is
+`explorer.exe`, both measured; the earlier expected value `Microsoft.WindowsTerminal` matched nothing -
+the packaged `Microsoft.WindowsTerminal_8wekyb3d8bbwe!App` never appears as a window identity.
+
+### Still unverified, and what would verify it
+
+**The live row in that machine's own store.** The runs above drove the collector directly, not through the
+Host, so nothing has been stored yet; that is the one step between these measurements and a green Windows
+row. The recipe, still to run:
 
 ```powershell
 cargo build --release --manifest-path native/windows/Cargo.toml
 # the host reads the collector from bin/; point the plugin's collector path at the built binary, then:
-# 1. work in Notepad, Explorer, Windows Terminal and VS Code for a minute each
+# 1. work in Explorer and Windows Terminal for a minute each
 # 2. read the rows:   curl -H "$C" "$BASE/recent"
-# 3. expect one row per application, each with the application id and, for the editors, a file
-# 4. open 1Password and confirm the refusal count moves under 'protected-app', with no row stored
+# 3. expect one row per application, naming its adapter and application id
+# 4. make a protected application the foreground window and confirm the refusal count moves under
+#    'protected-app', with no row stored
 ```
 
-Passing means: four rows naming four applications, a `protected-app` refusal that did not store, and the
-same three refusal reason strings the macOS collector produces. Until that run exists, every sentence above
-about Windows behaviour is a design, not a measurement.
+Two of the four applications the first version of this recipe named cannot be measured on that machine:
+**VS Code is not installed**, so the `vscode` adapter stays an expectation (`Code.exe`, the user-installer
+executable name), and **1Password is not installed**, so the built-in protected list is unmeasured - the
+policy-protected path was exercised instead. **Notepad has no adapter at all** (it reports `Notepad.exe`);
+adding a Windows-only adapter to a cross-platform table is a product decision, not a measurement, so it
+was not invented here. The explorer document source is still `None`: UI Automation has no `kAXDocument`
+equivalent and the address bar has not been probed.
 
 ## P6 - the Linux collector, and the rule it exists to honour
 
@@ -641,7 +673,7 @@ pnpm verify:p1     # exit 0, native privacy and protocol tests passed
 
 | what | why it is not measured | what would measure it |
 |---|---|---|
-| UI Automation observation on Windows | no Windows machine | the recipe in the P5 section, four rows and a `protected-app` refusal |
+| UI Automation observation on Windows | measured on a real machine 2026-10-04 (four live runs, recorded in the P5 section); what is missing is the Host row in that machine's own store | the recipe in the P5 section |
 | AT-SPI on Linux | no Linux machine, and the `org.a11y.Status` check is not written | the recipe in the P6 section, including the accessibility-off case |
 | a second browser engine | no Firefox or Safari port exists | the privacy matrix in `docs/companion.md`, one cell per promise |
 | a JetBrains plugin | Kotlin, Gradle and the IntelliJ SDK are not part of this checkout | the wire format in `docs/editor-companion.md`, which the intake already accepts (measured) |
@@ -734,16 +766,21 @@ whole point of the table: a command that "should work" is not a command that wor
 
 | job | command | exit | what it printed |
 |---|---|---|---|
-| protocol | `cargo test --manifest-path native/collector-protocol/Cargo.toml` | 0 | `5 passed; 0 failed` |
+| protocol | `cargo test --manifest-path native/collector-protocol/Cargo.toml` | 0 | `8 passed; 0 failed` |
 | protocol | `cargo test --manifest-path native/linux/Cargo.toml` | 0 | `3 passed; 0 failed` |
-| protocol | `cargo test --manifest-path native/windows/Cargo.toml` | 0 | `0 passed; 0 failed` |
+| protocol | `cargo test --manifest-path native/windows/Cargo.toml` | 0 | `20 passed; 0 failed` |
 | suite | `pnpm install --frozen-lockfile` | 0 | lockfile in sync, nothing to change |
-| suite | `pnpm verify` | 0 | 61 files / 371 tests, lint 0 warnings |
+| suite | `pnpm verify` | 0 | 63 files / 390 tests, lint 0 warnings |
 
-The Windows row is the one to read twice. `0 passed` is not a failure and not a pass: the Windows crate's
-tests are `cfg`-gated to Windows, so on macOS the crate compiles and contributes no cases. On `windows-latest`
-the same command runs them. Writing that down matters because "the Windows job is green" and "the Windows
-collector was exercised" are different claims, and only the second one is about UI Automation.
+**Correction (2026-10-04).** This table first recorded `0 passed; 0 failed` for the Windows crate and
+explained it as `cfg`-gating: "the Windows crate's tests are `cfg`-gated to Windows, so on macOS the crate
+compiles and contributes no cases". That explanation was wrong. The crate had no tests - and it had none on
+Windows either, which a run on the real machine then showed; the run that "would exercise them on
+`windows-latest`" would have contributed nothing. It now has 20 tests (the observation engine, the host
+command parser and the adapter table) and they run wherever Rust does. The distinction the old paragraph
+was reaching for is still the right one: "the Windows job is green" and "the Windows collector was
+exercised" are different claims, and only the second one is about UI Automation - which is why the live
+runs are recorded separately, in the P5 section.
 
 ## The boundary between "verified by a runner" and "needs a desktop"
 
@@ -1718,12 +1755,17 @@ instance 2: yeshirui@stu.xjtu.edu.cn       -> device computer      (Windows)
 `powershell.exe`. That is the machine the Windows row has been waiting for since the beginning of this phase, and
 it is the first time the UI Automation half of the acceptance has been reachable at all.
 
-Its toolchain, measured rather than assumed: **Node v24.21.0 present** (which is what the pairing agent needs), and
-**cargo, rustc, git and pnpm all absent**, with no `~\Projects` directory. So the work there is: install git, a Rust
-toolchain and pnpm; fetch the repository; run the Windows collector's `cargo test`; run the conformance suite
-against a live collector; capture a live row in that machine's store together with the command that produced it;
-and compare the refusal reasons with macOS. Nothing about that is blocked any more - it is a sequence of steps on a
-machine that answers.
+Its toolchain, re-measured on 2026-10-04: **git 2.55.0, cargo/rustc 1.99.0, node 24.21.0 and python 3.13.9
+present, pnpm absent, and MSVC now linked through Visual Studio Build Tools 2022 (17.14.41)** - that last
+piece was what made `cargo test` fail with `linker link.exe not found` before. The working tree was transferred
+to `~\dsh-ch-tmp`, `cargo test` and `cargo build --release` ran there (the P5 section records the transcripts
+and hashes), and four live collector runs produced observations for Explorer, Windows Terminal and a
+policy-protected Notepad.
+
+What is still missing there is the Host row: the plugin has not been built, installed and driven on that
+machine, so nothing has been stored yet. The remaining sequence is to build the plugin, point its
+`collectorExecutable` at the built binary, drive the two recordable applications, read the rows back with the
+command recorded, and then remove the temporary tree, the temporary profiles and the windows the run opened.
 
 One note kept for whoever reads the logs next: that Windows is a Chinese installation and PowerShell's errors come
 back in GBK, so command output there has to be forced to UTF-8 or the diagnostics are unreadable.

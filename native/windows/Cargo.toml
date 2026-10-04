@@ -8,6 +8,23 @@ license = "MIT"
 [dependencies]
 dsh-collector-protocol = { path = "../collector-protocol" }
 
+# UI Automation and the Win32 calls that go with it. Target-scoped so a macOS build never pays for it.
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62.2", features = [
+    "Win32_Foundation",
+    "Win32_Storage_EnhancedStorage",
+    "Win32_System_Com",
+    "Win32_System_Com_StructuredStorage",
+    "Win32_System_SystemInformation",
+    "Win32_System_Threading",
+    "Win32_System_Variant",
+    "Win32_UI_Accessibility",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_Shell",
+    "Win32_UI_Shell_PropertiesSystem",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
 [lib]
 name = "collector"
 path = "src/lib.rs"

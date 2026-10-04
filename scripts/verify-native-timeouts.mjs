@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Every accessibility read in the native collector must be bounded.
+// Every accessibility read in the native collectors must be bounded.
 //
 //   pnpm verify:native-timeouts
 //
@@ -16,6 +16,11 @@
 // sets it on the element, so a helper that receives an element from a caller which
 // bounded it is correct even though its own body never calls the helper. A guard that
 // insisted otherwise would fail on correct code.
+//
+// The Windows collector has the same rule in UIA's vocabulary: a file that performs a
+// UI Automation read must also set the automation object's connection and transaction
+// timeouts (IUIAutomation2), because the host stops the collector when a configure
+// acknowledgement is missed, and an unresponsive provider is how that happens.
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 
@@ -24,19 +29,23 @@ const ROOT = path.join(REPO, 'native', 'macos', 'Sources')
 const HELPER = 'applyMessagingTimeout'
 const READ = /AXUIElementCopyAttributeValue\s*\(/g
 
+const RUST_ROOT = path.join(REPO, 'native', 'windows', 'src')
+const RUST_READ = /(GetFocusedElement|CurrentIsPassword|CurrentControlType|SHGetPropertyStoreForWindow)\b/g
+const RUST_BOUNDS = ['SetConnectionTimeout', 'SetTransactionTimeout']
+
 const problems = []
 
-function swiftFiles(dir) {
+function sourceFiles(dir, extension) {
   const found = []
   for (const entry of readdirSync(dir)) {
     const full = path.join(dir, entry)
-    if (statSync(full).isDirectory()) found.push(...swiftFiles(full))
-    else if (entry.endsWith('.swift')) found.push(full)
+    if (statSync(full).isDirectory()) found.push(...sourceFiles(full, extension))
+    else if (entry.endsWith(extension)) found.push(full)
   }
   return found
 }
 
-const files = swiftFiles(ROOT)
+const files = sourceFiles(ROOT, '.swift')
 let readSites = 0
 let boundingFiles = 0
 for (const file of files) {
@@ -55,6 +64,26 @@ for (const file of files) {
   }
 }
 
+const rustFiles = sourceFiles(RUST_ROOT, '.rs')
+let rustReadSites = 0
+let rustBoundingFiles = 0
+for (const file of rustFiles) {
+  const text = readFileSync(file, 'utf8')
+  RUST_READ.lastIndex = 0
+  const reads = [...text.matchAll(RUST_READ)].length
+  if (reads === 0) continue
+  rustReadSites += reads
+  const missing = RUST_BOUNDS.filter(token => !text.includes(token))
+  if (missing.length > 0) {
+    problems.push(
+      `${path.relative(REPO, file)} performs ${reads} UI Automation read(s) but never sets `
+      + `${missing.join(' / ')} - an unresponsive provider would hang the heartbeat`,
+    )
+  } else {
+    rustBoundingFiles += 1
+  }
+}
+
 // --- self-checks: the detector must still recognise what it catches -----------
 {
   READ.lastIndex = 0
@@ -65,18 +94,25 @@ for (const file of files) {
   if (READ.test('AXUIElementCopyAttributeValues(element, key, 0, 1, &out)')) {
     problems.push('the read detector matches a different API')
   }
-  if (!'func f(element: AXUIElement) { AXUIElementCopyAttributeValue(element, key, &out) }'.includes(HELPER)) {
-    // A file-level rule is the strongest one a text check can prove: whether a given
-    // read is bounded depends on which element object it receives, and that is a
-    // data flow, not a line.
-  } else {
-    problems.push('the bounding check is fooled by a read that never bounds anything')
-  }
   if (files.length === 0) {
     problems.push('no Swift files were read - this guard proves nothing')
   }
   if (readSites === 0) {
     problems.push('no accessibility reads were found at all - this guard proves nothing')
+  }
+  RUST_READ.lastIndex = 0
+  if (!RUST_READ.test('let element = automation.GetFocusedElement()')) {
+    problems.push('the Rust read detector no longer matches a UIA read - this guard proves nothing')
+  }
+  RUST_READ.lastIndex = 0
+  if (RUST_READ.test('let title = window_text(hwnd)')) {
+    problems.push('the Rust read detector matches a call that is not a UIA read')
+  }
+  if (rustFiles.length === 0) {
+    problems.push('no Rust collector files were read - this guard proves nothing')
+  }
+  if (rustReadSites === 0) {
+    problems.push('no UI Automation reads were found at all - this guard proves nothing')
   }
 }
 
@@ -86,6 +122,7 @@ if (problems.length > 0) {
 }
 
 console.log(
-  `native accessibility reads are bounded: ${readSites} read(s) across ${files.length} `
-  + `Swift file(s); every file that reads also calls ${HELPER} (${boundingFiles} of them)`,
+  `native accessibility reads are bounded: ${readSites} Swift read(s) across ${files.length} `
+  + `file(s) (${boundingFiles} bounded) and ${rustReadSites} UIA read(s) across ${rustFiles.length} `
+  + `Rust file(s) (${rustBoundingFiles} bounded)`,
 )

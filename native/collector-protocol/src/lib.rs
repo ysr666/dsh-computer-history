@@ -12,8 +12,10 @@
 
 /// Applications whose contents must never be recorded, by executable or desktop id.
 ///
-/// The macOS collector keeps the same list; a platform that forgets one is a boundary hole, so this is
-/// deliberately a plain list that a test can compare rather than something derived.
+/// This is the shape Windows and Linux see (an executable name or a `.desktop` id); macOS keeps its
+/// own bundle-id list in `native/macos/Sources/ComputerHistoryCollector/Privacy.swift`, because a
+/// macOS collector never sees an executable name. A platform that forgets one is a boundary hole, so
+/// the list stays plain data with its own tests rather than something derived.
 pub const PROTECTED_IDS: &[&str] = &[
     "1Password.exe",
     "Bitwarden.exe",
@@ -42,6 +44,10 @@ pub struct Observation {
     pub adapter: String,
     pub secure: bool,
     pub protected: bool,
+    /// Why a secure or protected observation is withheld, in the protocol's own reason strings.
+    /// The host counts refusals by reason, so `protected-app` and `secure-field` have to stay
+    /// distinguishable on the wire instead of collapsing into one bucket.
+    pub privacy_reason: Option<String>,
     pub idle_seconds: Option<u64>,
     pub selection_text: Option<String>,
 }
@@ -95,16 +101,35 @@ impl Observation {
                 "\"url\":null",
             ),
             format!("\"element\":{{{},\"subrole\":null,\"identifier\":null}}", optional("role", &self.element_role)),
-            format!(
-                "\"privacy\":{{\"secure\":{},\"protected\":{}}}",
-                self.secure, self.protected
-            ),
+            {
+                let reason = match self.privacy_reason.as_deref() {
+                    Some(reason) if !reason.is_empty() => {
+                        format!(",{}", field("reason", reason))
+                    }
+                    _ => String::new(),
+                };
+                format!(
+                    "\"privacy\":{{\"secure\":{},\"protected\":{}{}}}",
+                    self.secure, self.protected, reason
+                )
+            },
             format!("\"source\":{{{}}}", field("adapter", &self.adapter)),
         ];
         if let Some(idle) = self.idle_seconds {
             parts.push(format!("\"activity\":{{\"idleSeconds\":{}}}", idle));
         }
         format!("{{{}}}", parts.join(","))
+    }
+}
+
+/// The architecture value the host's vocabulary uses. macOS emits `arm64`/`x64`; rustc's own
+/// `std::env::consts::ARCH` says `aarch64`/`x86_64`, and the host rejects those on the hello line.
+pub fn arch() -> &'static str {
+    match std::env::consts::ARCH {
+        "x86_64" => "x64",
+        "aarch64" => "arm64",
+        "x86" => "x86",
+        other => other,
     }
 }
 
@@ -118,7 +143,7 @@ pub fn hello(session: &str, version: &str, platform: &str) -> String {
         escape(session),
         escape(version),
         escape(platform),
-        std::env::consts::ARCH,
+        arch(),
     )
 }
 
@@ -164,6 +189,7 @@ mod tests {
             adapter: "vscode".into(),
             secure: false,
             protected: false,
+            privacy_reason: None,
             idle_seconds: Some(0),
             selection_text: Some("secret".into()),
         }
@@ -210,6 +236,34 @@ mod tests {
     }
 
     #[test]
+    fn the_privacy_reason_is_carried_only_when_present() {
+        // The host counts refusals by reason, so the reason has to be in the line where it exists -
+        // and an unset reason must stay absent rather than becoming an empty string. The whole
+        // privacy object is asserted, because a doubled key (`"reason":"reason":"...`) is still a
+        // substring match for the reason but is invalid JSON, and the host stops capture on it.
+        let mut observation = sample();
+        observation.privacy_reason = Some("protected-app".into());
+        let line = observation.to_line();
+        assert!(
+            line.contains(
+                "\"privacy\":{\"secure\":false,\"protected\":false,\"reason\":\"protected-app\"}",
+            ),
+            "{line}"
+        );
+        assert_eq!(line.matches("\"reason\":").count(), 1, "{line}");
+        assert!(!line.contains("\"reason\":\"reason\""), "{line}");
+        assert!(!sample().to_line().contains("\"reason\""));
+    }
+
+    #[test]
+    fn the_arch_value_speaks_the_hosts_vocabulary() {
+        // The host accepts arm64/x64 (the words the macOS collector emits), not rustc's
+        // target_arch names such as x86_64 or aarch64.
+        assert!(matches!(arch(), "x64" | "arm64" | "x86"), "{}", arch());
+        assert!(hello("s", "0.1.0", "win32").contains(&format!("\"arch\":\"{}\"", arch())));
+    }
+
+    #[test]
     fn the_other_messages_match_their_documented_shapes() {
         assert!(hello("s", "0.1.0", "win32").contains("\"type\":\"hello\""));
         assert!(hello("s", "0.1.0", "win32").contains("\"platform\":\"win32\""));
@@ -226,5 +280,19 @@ mod tests {
         assert!(is_protected("1password.exe"));
         assert!(super::is_protected("Bitwarden.exe"));
         assert!(!super::is_protected("Microsoft.VisualStudioCode"));
+    }
+
+    #[test]
+    fn the_protected_list_is_plain_data() {
+        assert!(!PROTECTED_IDS.is_empty());
+        let mut sorted = PROTECTED_IDS.to_vec();
+        sorted.sort_unstable();
+        sorted.dedup();
+        assert_eq!(sorted.len(), PROTECTED_IDS.len(), "duplicate protected id");
+        assert!(PROTECTED_IDS.iter().all(|id| !id.is_empty()));
+        assert!(
+            PROTECTED_IDS.iter().any(|id| id.to_lowercase().ends_with(".exe")),
+            "the Windows executable shape is missing from the protected list"
+        );
     }
 }
