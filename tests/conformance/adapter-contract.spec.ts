@@ -35,7 +35,10 @@ describe('the cross-platform adapter contract', () => {
     expect(fixture.$unverified['darwin'] ?? []).toEqual([])
     // A missing note fails here as well: an absent key reads as nothing verified, which is the direction
     // this assertion should err in.
-    expect((fixture.$unverified['win32'] ?? []).length).toBeGreaterThan(0)
+    // win32 left this list on 2026-10-05: the Host on that machine stored episodes for explorer.exe and
+    // WindowsTerminal.exe, and the notepad and vscode rows were measured the same way. The measured facts
+    // live in docs/adapters.md; an entry here would be the stale claim this assertion exists to prevent.
+    expect(fixture.$unverified['win32'] ?? []).toEqual([])
     expect((fixture.$unverified['linux'] ?? []).length).toBeGreaterThan(0)
   })
 

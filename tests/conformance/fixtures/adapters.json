@@ -114,10 +114,7 @@
   ],
   "$unverified": {
     "darwin": [],
-    "win32": [
-      "measured 2026-10-04 on Windows 11 26200 with native/windows/examples/foreground_identity.rs and live collector runs: Windows reports the executable name (explorer.exe, WindowsTerminal.exe, Notepad.exe). The two packaged applications measured there (Notepad, Windows Terminal) reported no window AppUserModelID - that is the scope of the statement, not a rule about every Windows application",
-      "Code.exe is the expected shape, not a measurement: VS Code is not installed on that machine"
-    ],
+    "win32": [],
     "linux": [
       "the session-bus check for org.a11y.Status (IsEnabled, ScreenReaderEnabled) is not written yet, so the collector reports permission-required with a reason rather than running",
       "no Linux machine has run the collector: the ids below are the mapping the Linux collector is expected to produce, not something measured"

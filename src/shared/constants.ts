@@ -42,8 +42,11 @@ export const PHASE1_ADAPTERS: readonly Phase1AdapterDefinition[] = [
     bundleIds: [
       'com.microsoft.VSCode',
       'com.todesktop.230313mzl4w4u92',
-      // win32: the executable name Windows reports for the foreground window. Measured 2026-10-04 for
-      // Windows Terminal and Explorer; `Code.exe` is the expected shape for a VS Code user install.
+      // win32: the executable name Windows reports for the foreground window. Measured 2026-10-05: with
+      // VS Code 1.140.0 installed on that machine, a stored observation says bundleId "Code.exe",
+      // surfaceKind "editor" and adapter "vscode" - so this is the shape a VS Code user install produces,
+      // not an expectation. (The editor element itself is not exposed to UI Automation unless VS Code's
+      // screen-reader mode is on; the file name comes from the window title.)
       'Code.exe',
       // linux: the .desktop ids tests/conformance/fixtures/adapters.json declares. They are the
       // Linux collector's expected mapping, not a measurement - the row in
@@ -181,9 +184,9 @@ export const PHASE1_ADAPTERS: readonly Phase1AdapterDefinition[] = [
     bundleIds: [
       // win32 only: Windows 11 Notepad reports its executable name (the packaged
       // `Microsoft.WindowsNotepad_8wekyb3d8bbwe!App` the Start menu publishes is not a window property -
-      // measured for Windows Terminal, same shape). Declared 2026-10-04, **not yet measured**: without
-      // an entry the collector would ignore the application silently, which is not a fail-closed
-      // decision but an invisible one.
+      // measured for Windows Terminal, same shape). Measured 2026-10-05: stored rows carry
+      // bundleId "Notepad.exe", surfaceKind "editor", the window title and adapter "notepad"; the WinUI
+      // application answers UI Automation (element role ControlType.50030).
       'Notepad.exe',
     ],
     surfaceKind: 'editor',

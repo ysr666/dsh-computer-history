@@ -13,7 +13,7 @@
 #   reads it as if it were.
 # A platform whose live row does not exist yet is listed here and in the fixture and the
 # validation file; scripts/verify-ci-boundaries.mjs fails when the three disagree.
-# unverified-platforms: win32, linux
+# unverified-platforms: linux
 name: collectors
 
 on:

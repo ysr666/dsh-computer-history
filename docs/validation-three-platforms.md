@@ -846,7 +846,7 @@ that looked like evidence and supported nothing, and each was caught by a measur
 
 ### CI: what the runners can verify, and what they cannot
 
-<!-- unverified-platforms: win32, linux -->
+<!-- unverified-platforms: linux -->
 <!-- Checked against the workflow header and the conformance fixture by scripts/verify-ci-boundaries.mjs. -->
 
 `.github/workflows/collectors.yml` runs the message layer on **macos-latest, windows-latest and
