@@ -356,6 +356,14 @@ adding a Windows-only adapter to a cross-platform table is a product decision, n
 was not invented here. The explorer document source is still `None`: UI Automation has no `kAXDocument`
 equivalent and the address bar has not been probed.
 
+**One element-state question is still open.** It is not known whether a Chromium/Electron window answers
+UI Automation's `IsPassword` query at all: the documented vocabulary makes that property optional, and a
+provider that answers "not supported" makes the collector withhold the whole observation (fail-closed,
+`Require` policy) - the same false positive macOS measured and fixed when Terminal dropped out of
+capture. VS Code is the application that would answer it, and it is not installed on that machine.
+`native/windows/examples/foreground_identity.rs` prints the element state per foreground window, so one
+command answers it once such an application is there.
+
 ## P6 - the Linux collector, and the rule it exists to honour
 
 ### Verified here
