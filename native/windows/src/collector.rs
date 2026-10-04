@@ -18,6 +18,10 @@ use crate::protocol;
 pub const HEARTBEAT_SECONDS: u64 = 5;
 const IDLE_BOUNDARY_SECONDS: u64 = 8 * 60;
 
+/// What produced an observation on this platform. The host stores this verbatim and audits read it, so
+/// it has to name the real path rather than defaulting to the macOS one.
+const PROVIDER: &str = "windows-uia";
+
 const REASON_SECURE_FIELD: &str = "secure-field";
 const REASON_UNREADABLE: &str = "unreadable-focused-element";
 const REASON_UNQUERYABLE: &str = "focused-element-unqueryable";
@@ -210,6 +214,7 @@ impl<S: ObservationSource> Collector<S> {
                     document: None,
                     element_role: None,
                     adapter: adapter_id.unwrap_or(PROTECTED_ADAPTER_MARKER).to_string(),
+                    provider: PROVIDER,
                     secure: false,
                     protected: true,
                     privacy_reason: Some(REASON_PROTECTED.to_string()),
@@ -317,6 +322,7 @@ impl<S: ObservationSource> Collector<S> {
                 document: truncated(document, 4_096),
                 element_role: truncated(element_role, 2_048),
                 adapter: adapter.id.to_string(),
+                provider: PROVIDER,
                 secure,
                 protected: false,
                 privacy_reason: reason.map(str::to_string),

@@ -194,6 +194,12 @@ export type RefusalReason =
   | 'unlocatable-name'
   | 'secure-path'
   | 'policy'
+  /**
+   * A browser seen through Accessibility while no companion is paired: the path cannot tell a private
+   * window from a normal one (ADR 0007), so nothing is stored. Named rather than silent, because the
+   * advice is "pair the companion" and an unattributed count cannot say that.
+   */
+  | 'browser-unpaired'
   /** A refusal nothing attributed: visible rather than silent. */
   | 'unknown'
 
@@ -265,7 +271,7 @@ export function normalizeObservation(
   if (
     resource?.kind === 'url'
     && provider !== 'companion'
-  ) return undefined
+  ) return refuse('browser-unpaired')
   if (
     resource?.kind === 'file'
     || resource?.kind === 'directory'

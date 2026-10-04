@@ -61,7 +61,7 @@ Two things in this store can look alike and are not: an application the
 
 | | where it shows |
 |---|---|
-| `observations.source_provider` | `'macos-ax'` for what the system saw, `'companion'` for what a paired companion claimed |
+| `observations.source_provider` | `'macos-ax'` for what the macOS Accessibility path saw, `'windows-uia'` for what UI Automation saw, `'companion'` for what a paired companion claimed |
 | the audit export | every observation row carries `source_provider`, so a reader can tell them apart without trusting the panel |
 | the allow-list | applies identically to both: a declared identity the user has not allowed stores nothing |
 

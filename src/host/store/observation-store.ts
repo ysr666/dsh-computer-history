@@ -98,7 +98,11 @@ function workspaceSource(value: string): WorkspaceSource {
  * copy of the table: an unknown value is a corrupt row and must fail loudly.
  */
 function provider(value: string): ObservationProvider {
-  if (value === 'macos-ax' || value === 'companion') return value
+  if (
+    value === 'macos-ax'
+    || value === 'windows-uia'
+    || value === 'companion'
+  ) return value
   throw new Error(`invalid observation provider: ${value}`)
 }
 

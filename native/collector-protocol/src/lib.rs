@@ -51,6 +51,10 @@ pub struct Observation {
     pub document: Option<String>,
     pub element_role: Option<String>,
     pub adapter: String,
+    /// Which accessibility path produced this observation. The host stores it on every row, and until
+    /// this field existed the host's default labelled Windows rows `macos-ax` - a wrong provenance in
+    /// the very column an audit reads.
+    pub provider: &'static str,
     pub secure: bool,
     pub protected: bool,
     /// Why a secure or protected observation is withheld, in the protocol's own reason strings.
@@ -155,6 +159,7 @@ struct Privacy<'a> {
 #[derive(Serialize)]
 struct Source<'a> {
     adapter: &'a str,
+    provider: &'a str,
 }
 
 #[derive(Serialize)]
@@ -213,6 +218,7 @@ impl Observation {
             },
             source: Source {
                 adapter: &self.adapter,
+                provider: self.provider,
             },
             activity: self.idle_seconds.map(|idle_seconds| Activity { idle_seconds }),
         })
@@ -288,6 +294,7 @@ mod tests {
 
     fn sample() -> Observation {
         Observation {
+            provider: "windows-uia",
             collector_session: "win-1".into(),
             seq: 7,
             observed_at_ms: 1_791_011_759_552,
@@ -378,6 +385,14 @@ mod tests {
         // the macOS one, and it sends its own list.
         assert!(hello_line.contains("\"capabilities\":[\"app-focus\",\"window-metadata\",\"secure-field-detection\"]"), "{hello_line}");
         assert!(!hello_line.contains("resource-uri"), "{hello_line}");
+
+        // The provenance travels on every observation: the host stores it and the audit reads it, and a
+        // Windows row labelled `macos-ax` was a real defect before this field existed.
+        let observed = sample().to_line();
+        assert!(
+            observed.contains("\"provider\":\"windows-uia\""),
+            "{observed}",
+        );
     }
 
     #[test]

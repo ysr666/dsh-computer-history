@@ -26,7 +26,10 @@ export type ObservationAdapter =
   | 'notepad'
 
 /** Who produced the observation. */
-export type ObservationProvider = 'macos-ax' | 'companion'
+export type ObservationProvider =
+  | 'macos-ax'
+  | 'windows-uia'
+  | 'companion'
 
 export interface ActivityObservation {
   readonly id?: ObservationId

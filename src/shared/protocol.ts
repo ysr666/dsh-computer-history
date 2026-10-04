@@ -60,7 +60,8 @@ export interface NativeObservation {
     readonly adapter: string
     /**
      * Where the observation came from. The wire parser never sets it, so an
-     * observation decoded from the collector is 'macos-ax'; the companion
+     * observation decoded from a collector that does not say is 'macos-ax' (the
+     * Accessibility path on macOS); the Windows collector sends 'windows-uia', and the companion
      * intake sets 'companion' on the messages it builds locally (ADR 0007).
      */
     readonly provider?: ObservationProvider

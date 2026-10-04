@@ -131,6 +131,13 @@ export class IngestionService {
    */
   private readonly refusals = new Map<RefusalReason, number>()
 
+  /**
+   * Observations the Host deliberately did not store and did not refuse - a duplicate the collector
+   * re-sent, for instance. Counting those under 'unknown' told the panel that something was refused for
+   * an unknown reason when nothing had been refused at all.
+   */
+  private silentDrops = 0
+
   public refusedSinceStart(): number {
     let total = 0
     for (const count of this.refusals.values()) total += count
@@ -155,11 +162,17 @@ export class IngestionService {
     message: NativeObservation,
   ): Promise<boolean> {
     const before = this.refusedSinceStart()
+    const droppedBefore = this.silentDrops
     const running = this.ingestNow(message)
     void running.then((stored) => {
       // Refusals that named their reason are already counted; the rest are visible
-      // as unattributed rather than missing from the total.
-      if (!stored && this.refusedSinceStart() === before) {
+      // as unattributed rather than missing from the total - except the ones the Host dropped on
+      // purpose, which are not refusals at all.
+      if (
+        !stored
+        && this.refusedSinceStart() === before
+        && this.silentDrops === droppedBefore
+      ) {
         this.refusals.set('unknown', (this.refusals.get('unknown') ?? 0) + 1)
       }
     })
@@ -187,6 +200,7 @@ export class IngestionService {
         message.seq,
       )
     ) {
+      this.silentDrops += 1
       return false
     }
 
@@ -249,6 +263,7 @@ export class IngestionService {
           message.seq,
         )
       ) {
+        this.silentDrops += 1
         this.db.exec('COMMIT')
         return false
       }
@@ -273,7 +288,8 @@ export class IngestionService {
         bundleId: observation.app.bundleId,
       })) {
         this.db.exec('COMMIT')
-        return false
+        // The user deleted this range: that is a policy decision, not an unattributed refusal.
+        return this.refuse('policy')
       }
 
       const outOfOrder =

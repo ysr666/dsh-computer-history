@@ -112,6 +112,45 @@ describe('the first-run preset, applied the way the panel applies it', () => {
     history.db.close()
   })
 
+  it('does not count a duplicate the collector re-sent as a refusal', async () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'preset-'))
+    roots.push(root)
+    const { history, policies, ingestion } = harness(root)
+    applyPreset(policies, shippedPresetBundles())
+
+    expect(await ingestion.ingest(native('com.microsoft.VSCode'))).toBe(true)
+    // The collector re-sends the same (session, seq) when a tick repeats: nothing is stored and nothing
+    // is refused, so the panel must not report a refusal for it.
+    expect(await ingestion.ingest(native('com.microsoft.VSCode'))).toBe(false)
+
+    expect(Object.fromEntries(ingestion.refusalCounts())).toEqual({})
+    const rows = history.db
+      .prepare('SELECT COUNT(*) AS n FROM observations')
+      .get() as { n: number }
+    expect(rows.n).toBe(1)
+    history.db.close()
+  })
+
+  it('names a browser seen through Accessibility without the companion', async () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'preset-'))
+    roots.push(root)
+    const { history, policies, ingestion } = harness(root)
+    applyPreset(policies, shippedPresetBundles())
+
+    // The shape a buggy or hostile collector could send: an http(s) document from the Accessibility
+    // path. Only a paired companion may claim a URL (ADR 0007).
+    const browser: NativeObservation = {
+      ...native('com.microsoft.VSCode'),
+      window: { title: 'Inbox', url: 'https://example.com/inbox' },
+    }
+    expect(await ingestion.ingest(browser)).toBe(false)
+
+    // Not a silent skip: the advice is "pair the companion", and an unattributed count cannot say that.
+    expect(ingestion.refusalCounts().get('browser-unpaired')).toBe(1)
+    expect(ingestion.refusalCounts().get('unknown')).toBeUndefined()
+    history.db.close()
+  })
+
   it('records nothing outside the preset', async () => {
     const root = mkdtempSync(path.join(os.tmpdir(), 'preset-'))
     roots.push(root)
