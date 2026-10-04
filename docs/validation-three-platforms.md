@@ -340,11 +340,25 @@ collector's own `platform` seam sees). `terminal` is `WindowsTerminal.exe` and `
 `explorer.exe`, both measured; the earlier expected value `Microsoft.WindowsTerminal` matched nothing -
 the packaged `Microsoft.WindowsTerminal_8wekyb3d8bbwe!App` never appears as a window identity.
 
-### Still unverified, and what would verify it
+### The Host run on the real machine (2026-10-05)
 
-**The live row in that machine's own store.** The runs above drove the collector directly, not through the
-Host, so nothing has been stored yet; that is the one step between these measurements and a green Windows
-row. The recipe, still to run:
+The recipe below was executed on that machine with the tree at `3f57487`. It produced a working Host, a live
+collector and **13 stored observations** - and **no episode row**, for a reason that is not a Windows
+collector bug. Both halves are recorded here.
+
+**Two deviations from the recipe, both forced and both cheaper than the alternative:**
+
+- the machine has **no pnpm**, and `dsh plugin add` requires it. Instead of installing a global tool, the
+  profile was populated with npm (`npm install <plugin.tgz>` and
+  `npm install @deepseek-ai/dsh-web-app@0.2.0-rc.2` inside the profile directory), then both names were added
+  to `dsh.profile.bundles`. No `pnpm approve-builds` gate, no global install.
+- `Set-Content -Encoding utf8` writes a **BOM**, and the loader's `JSON.parse` rejects the profile's
+  `package.json` (`Unexpected token '\uFEFF'`). Profile JSON has to be written with
+  `[System.IO.File]::WriteAllText($path, $json, New-Object System.Text.UTF8Encoding($false))`. The same
+  encoding trap runs the other way for scripts: Windows PowerShell 5.1 reads `.ps1` as ANSI, so a non-ASCII
+  literal in a script breaks its parse.
+
+The recipe, with both corrections folded in:
 
 ```powershell
 # 1. the collector (already built and tested on that machine - see the section above)
@@ -383,6 +397,40 @@ curl.exe -s -b "$env:TEMP\dsh-jar.txt" "$base/api/computer-history/state"   # re
 node -e "console.log(require('node:fs').statSync(process.env.USERPROFILE).mode.toString(8))"
 ```
 
+**What the run produced.** `cargo test` on that machine: collector-protocol **19**, windows **18**, linux
+**3** - forty tests, all green - and a release binary of **420,352 B**, sha256
+`3233a7e39a00b941639dabfc915ff79a4c27bb59ea3f6c0561dea9272f892114`. The Host accepted the collector's
+hello (`{"version":"0.1.0","arch":"x64"}`), reported `capture: "running"`, `accessibilityTrusted: true`, and
+spawned the collector through `collectorExecutable`. A live run driven by the exact line
+`src/host/collector/manager.ts` builds recorded `WindowsTerminal.exe` -> `terminal` with its title
+suppressed, `explorer.exe` -> `finder` with its title, and **`Notepad.exe` -> `notepad`** with
+`无标题 - Notepad` and a UI Automation element role - the adapter added earlier the same day, measured on
+the machine instead of declared.
+
+**13 observations reached that machine's own store** (`policy_revision` 2-4) and
+**`/api/computer-history/recent` stayed empty**: zero episodes. Replayed on the development machine through
+`buildEpisodes` and through `IncrementalEpisodeBuilder.push` with `compact`, `boundaries` and `full`
+emission, the same 13 rows produce zero episodes in all four combinations.
+
+The cause is the episode model, not the collector: `src/host/episodes/builder.ts` starts an episode only for
+a **strong workspace** or a **resource**; everything else falls through to a tail that merely marks a detour
+on an episode which must already exist. On Windows there is no resource to offer - no `kAXDocument`
+equivalent, no browser URL while the companion is unpaired, no DSH workspace - so `resource_id` is `null` on
+every row, no episode is ever started, and no boundary can fire. `docs/plan-phase2.md` already lists the fix
+("observations without a resource or workspace ... should aggregate by application/surface instead of
+fragmenting"); what this run adds is the measurement that **on Windows the unanchored rate is 100%**, so the
+gap is an empty timeline rather than fragmentation - and it is what keeps this row from going green.
+
+Two ways to close it, both product decisions rather than collector work: aggregate resource-less
+observations by application/surface (as planned), or give the Windows collector an anchor - an editor's
+document text is reachable through UI Automation, which would let the existing per-resource model work for
+Notepad and VS Code.
+
+**Smaller findings from the same run.** Every Windows row stores `source_provider: "macos-ax"`
+(`src/host/ingestion/normalize.ts` defaults it, and the provider vocabulary has no Windows value), and
+`refusedByReason` reported `{"unknown":1}` - one refusal whose reason the Host could not name, inside the
+very counter the panel uses to explain an empty timeline.
+
 **The command sequence itself was rehearsed** on macOS with a temporary `DSH_HOME` and the tarball built
 from the current tree, because three of its steps are not obvious and the first version of this recipe got
 each of them wrong: `plugin add` initializes the profile; the profile needs an app bundle or the plugin
@@ -403,10 +451,11 @@ macOS collector is not the code under test.
 
 Two of the four applications the first version of this recipe named cannot be measured on that machine:**VS Code is not installed**, so the `vscode` adapter stays an expectation (`Code.exe`, the user-installer
 executable name), and **1Password is not installed**, so the built-in protected list is unmeasured - the
-policy-protected path was exercised instead. **Notepad has no adapter at all** (it reports `Notepad.exe`);
-adding a Windows-only adapter to a cross-platform table is a product decision, not a measurement, so it
-was not invented here. The explorer document source is still `None`: UI Automation has no `kAXDocument`
-equivalent and the address bar has not been probed.
+policy-protected path was exercised instead. **Notepad now has an adapter** - a product decision taken on
+2026-10-05 and measured on the machine the same day (identity `Notepad.exe`, title recorded, element role
+present), so that is no longer an expectation. The explorer document source is still `None`: UI Automation
+has no `kAXDocument` equivalent and the address bar has not been probed - which is the same fact that makes
+every Windows observation unanchored, and therefore the reason above that the timeline stays empty.
 
 **One element-state question is still open.** It is not known whether a Chromium/Electron window answers
 UI Automation's `IsPassword` query at all: the documented vocabulary makes that property optional, and a
