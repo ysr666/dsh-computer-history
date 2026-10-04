@@ -21,6 +21,19 @@ function observation(overrides: Record<string, unknown> = {}) {
   }
 }
 
+/** A hello line with the platform and arch under test. */
+function hello(platform: string, arch: string): string {
+  return JSON.stringify({
+    v: 1,
+    type: 'hello',
+    collectorSession: 's1',
+    collectorVersion: '0.1.0',
+    platform,
+    arch,
+    capabilities: ['app-focus'],
+  })
+}
+
 describe('collector field bounds', () => {
   it('rejects oversized bounded metadata fields', () => {
     expect(() => parseCollectorLine(JSON.stringify(
@@ -37,15 +50,6 @@ describe('collector field bounds', () => {
   })
 
   it('accepts the hello platform and arch words the collectors send', () => {
-    const hello = (platform: string, arch: string): string => JSON.stringify({
-      v: 1,
-      type: 'hello',
-      collectorSession: 's1',
-      collectorVersion: '0.1.0',
-      platform,
-      arch,
-      capabilities: ['app-focus'],
-    })
     expect(parseCollectorLine(hello('darwin', 'arm64')))
       .toMatchObject({ platform: 'darwin', arch: 'arm64' })
     expect(parseCollectorLine(hello('win32', 'x64')))
