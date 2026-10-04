@@ -13,11 +13,18 @@ const README = 'docs/adapters.md'
 const TABLE = 'src/shared/constants.ts'
 
 const tableSource = readFileSync(TABLE, 'utf8')
+// Full-line comments are removed before anything is parsed: a comment inside a bundleIds array is not
+// an id, and this extractor read them as ids twice - once through an apostrophe in prose, once through
+// a quote pair spanning a comment - which failed the evidence check for text that is not evidence.
+const table = tableSource
+  .split('\n')
+  .filter(line => !line.trimStart().startsWith('//'))
+  .join('\n')
 // Entries are indented objects whose bundleIds array spans several lines, so
 // the patterns match on content rather than on exact indentation.
-const adapterIds = [...tableSource.matchAll(/id: '([a-z0-9-]+)'/g)]
+const adapterIds = [...table.matchAll(/id: '([a-z0-9-]+)'/g)]
   .map(match => match[1])
-const bundleIds = [...tableSource.matchAll(/bundleIds: \[([\s\S]*?)\]/g)]
+const bundleIds = [...table.matchAll(/bundleIds: \[([\s\S]*?)\]/g)]
   .flatMap(match => [...match[1].matchAll(/'([^']+)'/g)].map(inner => inner[1]))
 
 const markdown = readFileSync(README, 'utf8')

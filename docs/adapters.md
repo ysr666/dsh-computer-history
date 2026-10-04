@@ -30,6 +30,13 @@ machine. The measurement corrected the earlier expected values (`Microsoft.Windo
 `Microsoft.VisualStudioCode`): a packaged Windows application does not carry its AppUserModelID as a
 window property, so the executable name is what Windows reports to the collector.
 
+Linux ids for the same adapters are declared in the fixture as well - `vscode` = `code.desktop`,
+`code-insiders.desktop`; `terminal` = `org.gnome.Terminal.desktop`; `finder` =
+`org.gnome.Nautilus.desktop` - and they are in the Host table for the same reason the win32 ids are:
+without them the first Linux observation would be refused as `not-an-adapter`. **None of them has been
+measured**, because no Linux machine has run the collector; `docs/validation-three-platforms.md` records
+that state.
+
 ## Rows
 
 ### `vscode` — VS Code 1.140.0 and Cursor 3.23.12

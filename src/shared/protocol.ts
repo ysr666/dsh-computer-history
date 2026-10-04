@@ -12,7 +12,7 @@ export interface CollectorHello {
   readonly collectorSession: string
   readonly collectorVersion: string
   readonly platform: CollectorPlatform
-  readonly arch: 'arm64' | 'x64'
+  readonly arch: 'arm64' | 'x64' | 'x86'
   readonly capabilities: readonly CollectorCapability[]
 }
 

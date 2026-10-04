@@ -8,6 +8,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
+  appliesPosixModes,
   latestSchemaVersion,
   openHistoryDatabase,
 } from '../../src/host/store/index.js'
@@ -34,12 +35,17 @@ describe('history database', () => {
       nowMs: 1234,
     })
 
-    expect(statSync(history.dataDirectory).mode & 0o777).toBe(0o700)
-    expect(statSync(history.databasePath).mode & 0o777).toBe(0o600)
-    for (const suffix of ['-wal', '-shm']) {
-      const sidecar = `${history.databasePath}${suffix}`
-      if (existsSync(sidecar)) {
-        expect(statSync(sidecar).mode & 0o777).toBe(0o600)
+    // Windows has no POSIX mode bits (chmod only toggles read-only, stat reports a synthetic
+    // 0666/0777), so the modes can only be asserted where they exist. The store's own rule for that is
+    // appliesPosixModes, and this test asks the same function instead of duplicating the platform list.
+    if (appliesPosixModes(process.platform)) {
+      expect(statSync(history.dataDirectory).mode & 0o777).toBe(0o700)
+      expect(statSync(history.databasePath).mode & 0o777).toBe(0o600)
+      for (const suffix of ['-wal', '-shm']) {
+        const sidecar = `${history.databasePath}${suffix}`
+        if (existsSync(sidecar)) {
+          expect(statSync(sidecar).mode & 0o777).toBe(0o600)
+        }
       }
     }
 

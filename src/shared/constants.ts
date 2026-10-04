@@ -45,6 +45,12 @@ export const PHASE1_ADAPTERS: readonly Phase1AdapterDefinition[] = [
       // win32: the executable name Windows reports for the foreground window. Measured 2026-10-04 for
       // Windows Terminal and Explorer; `Code.exe` is the expected shape for a VS Code user install.
       'Code.exe',
+      // linux: the .desktop ids tests/conformance/fixtures/adapters.json declares. They are the
+      // Linux collector's expected mapping, not a measurement - the row in
+      // docs/validation-three-platforms.md stays unverified until a Linux machine produces it - but
+      // the Host has to know them or the first Linux observation would be refused as not-an-adapter.
+      'code.desktop',
+      'code-insiders.desktop',
     ],
     surfaceKind: 'editor',
     suppressesWindowTitle: false,
@@ -140,6 +146,8 @@ export const PHASE1_ADAPTERS: readonly Phase1AdapterDefinition[] = [
       // win32: measured 2026-10-04 - the Windows Terminal window reports its executable name, not the
       // packaged AppUserModelID (Microsoft.WindowsTerminal_8wekyb3d8bbwe!App) the Start menu publishes.
       'WindowsTerminal.exe',
+      // linux: declared, not measured (see the vscode note).
+      'org.gnome.Terminal.desktop',
     ],
     surfaceKind: 'terminal',
     suppressesWindowTitle: true,
@@ -158,9 +166,10 @@ export const PHASE1_ADAPTERS: readonly Phase1AdapterDefinition[] = [
     id: 'finder',
     bundleIds: [
       'com.apple.finder',
-      // win32: Explorer has no AppUserModelID, so its executable name is the identity
-      // (expected mapping, see the vscode note).
+      // win32: Explorer has no AppUserModelID, so its executable name is the identity (measured).
       'explorer.exe',
+      // linux: declared, not measured (see the vscode note).
+      'org.gnome.Nautilus.desktop',
     ],
     surfaceKind: 'window',
     suppressesWindowTitle: false,

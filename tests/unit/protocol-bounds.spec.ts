@@ -50,6 +50,10 @@ describe('collector field bounds', () => {
       .toMatchObject({ platform: 'darwin', arch: 'arm64' })
     expect(parseCollectorLine(hello('win32', 'x64')))
       .toMatchObject({ platform: 'win32', arch: 'x64' })
+    // A 32-bit collector sends x86; refusing it would kill that build on its first line, which is the
+    // failure this vocabulary exists to avoid.
+    expect(parseCollectorLine(hello('win32', 'x86')))
+      .toMatchObject({ platform: 'win32', arch: 'x86' })
     // rustc's own arch words are not the host's vocabulary...
     expect(() => parseCollectorLine(hello('win32', 'x86_64')))
       .toThrow(/architecture/)

@@ -40,6 +40,14 @@ function defaultStorePath() {
 const storePath = path.resolve(argument('--store') ?? defaultStorePath())
 const problems = []
 
+// ADR 0005's mechanism is macOS-shaped: POSIX modes, a non-synced location, FileVault. Windows has no
+// POSIX mode bits (chmod toggles read-only, stat reports a synthetic 0666/0777), so asserting them
+// there would fail on a directory that is already private. The parts that do not exist on a platform
+// are named instead of being silently skipped - a check that cannot run must not look like one that
+// passed.
+const posixModes = process.platform !== 'win32'
+const macos = process.platform === 'darwin'
+
 function modeOf(target) {
   return statSync(target).mode & 0o777
 }
@@ -49,7 +57,12 @@ if (path.isAbsolute(storePath) === false) {
 }
 
 // 1. permissions
-if (existsSync(storePath)) {
+if (!posixModes) {
+  console.log(
+    `${process.platform}: POSIX mode checks unavailable; the store relies on the directory ACL, `
+    + 'which this check cannot read (see the note in src/host/store/database.ts)',
+  )
+} else if (existsSync(storePath)) {
   const directoryMode = modeOf(storePath)
   if ((directoryMode & 0o077) !== 0) {
     problems.push(
@@ -89,7 +102,7 @@ if (normalized.startsWith('/Volumes/')) {
 }
 
 // 3. FileVault
-if (process.platform === 'darwin') {
+if (macos) {
   const status = spawnSync('/usr/bin/fdesetup', ['status'], {
     encoding: 'utf8',
   })
@@ -120,6 +133,9 @@ if (process.platform === 'darwin') {
     problems.push('the sync-folder check flags a path that is not synced')
   }
 
+  if (!posixModes) {
+    // Nothing to calibrate where the thing being calibrated does not exist.
+  } else {
   const probe = mkdtempSync(path.join(os.tmpdir(), 'dsh-store-mode-'))
   try {
     chmodSync(probe, 0o755)
@@ -132,6 +148,7 @@ if (process.platform === 'darwin') {
     }
   } finally {
     rmSync(probe, { recursive: true, force: true })
+  }
   }
 }
 

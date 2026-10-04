@@ -26,7 +26,7 @@ Every message carries `v: 1` and a `type`.
 
 `platform` is `darwin` on macOS and `win32` on Windows (the host accepts both; a Linux collector adds
 `linux` to this table rather than sending something else). `arch` uses the same words on every
-platform: `arm64` or `x64` - not rustc's `aarch64`/`x86_64`, which the host rejects. Both were
+platform: `arm64`, `x64` or `x86` - not rustc's `aarch64`/`x86_64`, which the host rejects. Both were
 measured: the first Windows collector sent `win32`/`x86_64` and the host stopped it on the hello line.
 
 ### `observation`

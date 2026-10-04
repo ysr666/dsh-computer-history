@@ -61,7 +61,7 @@ fn escape(value: &str) -> String {
             '\n' => out.push_str("\\n"),
             '\r' => out.push_str("\\r"),
             '\t' => out.push_str("\\t"),
-            c if (c as u32) < 0x20 => out.push(' '),
+            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
             c => out.push(c),
         }
     }
@@ -122,6 +122,16 @@ impl Observation {
     }
 }
 
+/// The capabilities the Rust collectors can actually back. `resource-uri` is deliberately absent: a
+/// resource URI needs a document, and on Windows `document` is always null (UI Automation has no
+/// `kAXDocument` equivalent). The macOS collector has its own list because it can produce one; claiming
+/// it here would be the same "capabilities it cannot back" the live Windows row exists to remove.
+pub const CAPABILITIES: &[&str] = &[
+    "app-focus",
+    "window-metadata",
+    "secure-field-detection",
+];
+
 /// The architecture value the host's vocabulary uses. macOS emits `arm64`/`x64`; rustc's own
 /// `std::env::consts::ARCH` says `aarch64`/`x86_64`, and the host rejects those on the hello line.
 pub fn arch() -> &'static str {
@@ -136,14 +146,19 @@ pub fn arch() -> &'static str {
 /// The first message. The platform is a parameter because it differs per collector - and because a
 /// hardcoded one silently claims to be Windows from a Linux binary.
 pub fn hello(session: &str, version: &str, platform: &str) -> String {
+    let capabilities = CAPABILITIES
+        .iter()
+        .map(|capability| format!("\"{}\"", capability))
+        .collect::<Vec<_>>()
+        .join(",");
     format!(
         "{{\"v\":1,\"type\":\"hello\",\"collectorSession\":\"{}\",\"collectorVersion\":\"{}\",\
-         \"platform\":\"{}\",\"arch\":\"{}\",\"capabilities\":[\"app-focus\",\"window-metadata\",\
-         \"resource-uri\",\"secure-field-detection\"]}}",
+         \"platform\":\"{}\",\"arch\":\"{}\",\"capabilities\":[{}]}}",
         escape(session),
         escape(version),
         escape(platform),
         arch(),
+        capabilities,
     )
 }
 
@@ -257,10 +272,27 @@ mod tests {
 
     #[test]
     fn the_arch_value_speaks_the_hosts_vocabulary() {
-        // The host accepts arm64/x64 (the words the macOS collector emits), not rustc's
-        // target_arch names such as x86_64 or aarch64.
+        // The host accepts arm64/x64/x86 (the words a collector may send), not rustc's target_arch
+        // names such as x86_64 or aarch64 - a build whose arch word the host rejects dies on the hello
+        // line, which is what happened to the first Windows collector.
         assert!(matches!(arch(), "x64" | "arm64" | "x86"), "{}", arch());
-        assert!(hello("s", "0.1.0", "win32").contains(&format!("\"arch\":\"{}\"", arch())));
+        let hello_line = hello("s", "0.1.0", "win32");
+        assert!(hello_line.contains(&format!("\"arch\":\"{}\"", arch())));
+        // The capabilities are the ones the Rust collectors can back; a document-bearing collector is
+        // the macOS one, and it sends its own list.
+        assert!(hello_line.contains("\"capabilities\":[\"app-focus\",\"window-metadata\",\"secure-field-detection\"]"), "{hello_line}");
+        assert!(!hello_line.contains("resource-uri"), "{hello_line}");
+    }
+
+    #[test]
+    fn control_characters_are_escaped_rather_than_replaced() {
+        // A control character in a window title used to arrive as a space, which silently changed what
+        // was stored; the line is JSON, so it can carry the character as an escape instead.
+        let mut observation = sample();
+        observation.window_title = Some("a\u{7}b".into());
+        let line = observation.to_line();
+        assert!(line.contains("a\\u0007b"), "{line}");
+        assert!(!line.contains('\u{7}'), "{line}");
     }
 
     #[test]

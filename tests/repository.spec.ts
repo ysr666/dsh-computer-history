@@ -15,7 +15,6 @@ import {
 } from '../src/index.js'
 import {
   PHASE1_ADAPTERS,
-  PHASE1_SUPPORTED_BUNDLE_IDS,
 } from '../src/shared/index.js'
 
 const originalDshHome = process.env.DSH_HOME
@@ -67,10 +66,43 @@ describe('repository scaffold', () => {
     })).toBe('/tmp/explicit-history')
   })
 
-  it('keeps the macOS adapter table identical to the Host table on the darwin ids', () => {
-    const windowsIds = new Set(
-      fixtureAdapters().flatMap(entry => entry.ids.win32 ?? []),
-    )
+  it('keeps the macOS adapter table identical to the fixture darwin ids', () => {
+    const fixture = fixtureAdapters()
+    const platformIds = (platform: string): readonly string[] =>
+      fixture.flatMap(entry => entry.ids[platform] ?? [])
+    // The fixture's platform lists are the contract for which id belongs to which platform. If an id
+    // could appear in two of them, a table could pass this guard by carrying another platform's id.
+    const darwin = platformIds('darwin')
+    const win32 = platformIds('win32')
+    const linux = platformIds('linux')
+    expect(darwin.filter(id => win32.includes(id))).toEqual([])
+    expect(darwin.filter(id => linux.includes(id))).toEqual([])
+    expect(win32.filter(id => linux.includes(id))).toEqual([])
+    // For an adapter the fixture names, the shared table must be exactly its platform lists. An id
+    // quietly dropped from the fixture - the way a macOS id was relabelled win32 during review, which
+    // removed it from the Swift comparison - then has nowhere to hide, and an extra shared id has to
+    // be declared on a platform.
+    for (const entry of fixture) {
+      const shared = PHASE1_ADAPTERS.find(
+        candidate => candidate.id === entry.adapter,
+      )
+      expect(shared, `fixture adapter ${entry.adapter}`).toBeDefined()
+      const declared = ['darwin', 'win32', 'linux'].flatMap(
+        platform => entry.ids[platform] ?? [],
+      )
+      expect(shared!.bundleIds.toSorted()).toEqual([...declared].toSorted())
+    }
+    // An adapter the fixture names must match the fixture's own darwin list - deriving "darwin ids"
+    // from the shared table minus the win32 ones would let a fixture relabel a macOS id as win32 and
+    // drop it from this comparison silently. An adapter the fixture does not name falls back to the
+    // shared table, which is the only list that can speak for it.
+    const declaredDarwin = (adapterId: string): readonly string[] => {
+      const entry = fixture.find(candidate => candidate.adapter === adapterId)
+      if (entry) return entry.ids.darwin ?? []
+      const shared = PHASE1_ADAPTERS.find(candidate => candidate.id === adapterId)
+      expect(shared, `adapter ${adapterId} is in neither the fixture nor the table`).toBeDefined()
+      return shared!.bundleIds
+    }
     const swift = readFileSync(
       new URL(
         '../native/macos/Sources/ComputerHistoryCollector/SupportedApps.swift',
@@ -106,9 +138,7 @@ describe('repository scaffold', () => {
     ).toSorted()
     expect(nativeBundles.length).toBeGreaterThan(0)
     expect(nativeBundles).toEqual(
-      [...PHASE1_SUPPORTED_BUNDLE_IDS]
-        .filter(id => !windowsIds.has(id))
-        .toSorted(),
+      PHASE1_ADAPTERS.flatMap(adapter => declaredDarwin(adapter.id)).toSorted(),
     )
     expect(nativeBundles).not.toContain('com.google.Chrome')
     expect(nativeBundles).not.toContain('com.apple.Safari')
@@ -122,9 +152,7 @@ describe('repository scaffold', () => {
       // The Swift table stays darwin-only: win32 ids live in the Host table and in the Windows
       // collector, and the fixture declares which ids are whose.
       expect(native!.bundleIds.toSorted()).toEqual(
-        adapter.bundleIds
-          .filter(id => !windowsIds.has(id))
-          .toSorted(),
+        declaredDarwin(adapter.id).toSorted(),
       )
       expect(native!.surfaceKind).toBe(adapter.surfaceKind)
       expect(native!.suppressesWindowTitle).toBe(
@@ -145,12 +173,19 @@ describe('repository scaffold', () => {
       'utf8',
     )
     // Line comments are stripped first: a commented-out entry is not a live entry, and treating it
-    // as one is how this guard was first bypassed.
+    // as one is how this guard was first bypassed. The split then accepts any spacing - `Adapter{`,
+    // a tab, deeper indentation - because the exact bytes were how it was bypassed the second time:
+    // an entry the regex could not see kept its `suppresses_window_title: false` and the collector
+    // leaked the terminal's title. The count assertion is what makes a hidden entry fail rather than
+    // vanish: every declared `id` field must belong to a parsed entry.
     const active = rust
       .split('\n')
       .filter(line => !line.trimStart().startsWith('//'))
       .join('\n')
-    const windowsAdapters = active.split('\n    Adapter {').slice(1).map(
+    const entryChunks = active.split(/\n\s+Adapter\s*\{/).slice(1)
+    const declaredIds = [...active.matchAll(/\bid:\s*"/g)].length
+    expect(entryChunks).toHaveLength(declaredIds)
+    const windowsAdapters = entryChunks.map(
       (chunk) => {
         const id = /id:\s*"([^"]+)"/.exec(chunk)
         const idsBlock = /ids:\s*&\[([^\]]*)\]/.exec(chunk)

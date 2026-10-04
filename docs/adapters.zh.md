@@ -20,6 +20,8 @@ Phase 1 的每个适配器一行，并附上产生这一行的**真机测量**�
 
 同一批适配器的 Windows id：`finder` = `explorer.exe`、`terminal` = `WindowsTerminal.exe`，两者都在 2026-10-04 于 Windows 11 26200 上**实测**（`cargo run --release --example foreground_identity` 加真实 collector 运行）；`vscode` = `Code.exe` 属于**预期而非实测**，因为那台机器没有安装 VS Code。实测更正了先前写下的预期值（`Microsoft.WindowsTerminal`、`Microsoft.VisualStudioCode`）：打包应用不会把 AppUserModelID 作为窗口属性暴露，所以 Windows 交给 collector 的是可执行文件名。
 
+同一批适配器的 Linux id 也已在 fixture 中声明——`vscode` = `code.desktop`、`code-insiders.desktop`；`terminal` = `org.gnome.Terminal.desktop`；`finder` = `org.gnome.Nautilus.desktop`——它们进入 Host 表的理由与 win32 id 相同：没有它们，第一条 Linux 观测就会被当成 `not-an-adapter` 拒掉。**它们一个都没有被实测过**，因为还没有 Linux 机器跑过这个 collector；该状态记录在 `docs/validation-three-platforms.md`。
+
 ## 各行明细
 
 ### `vscode` — VS Code 1.140.0 与 Cursor 3.23.12

@@ -110,13 +110,19 @@ unsafe fn foreground_identity() -> Option<ForegroundIdentity> {
         .as_deref()
         .and_then(file_name_of)
         .map(str::to_string);
-    // The window's AppUserModelID is the stable identity packaged applications declare; the executable
-    // name is the fallback Windows itself offers for classic applications (explorer.exe, notepad.exe).
-    let application_id = app_user_model_id(hwnd).or_else(|| file_name.clone())?;
     let application_name = file_name.as_deref().map(display_name_of);
+    // The window's AppUserModelID is the identity packaged applications *may* declare; the executable
+    // name is what Windows reports for classic applications (explorer.exe, notepad.exe) and the
+    // fallback here. Both are kept, because a rule or adapter table that knows only one of them must
+    // still be able to match the window.
+    let application_id = app_user_model_id(hwnd).or_else(|| file_name.clone())?;
+    let application_executable = file_name
+        .filter(|executable| !executable.eq_ignore_ascii_case(&application_id));
     Some(ForegroundIdentity {
         pid,
+        window: hwnd.0 as isize,
         application_id,
+        application_executable,
         application_name,
     })
 }
@@ -125,17 +131,12 @@ unsafe fn describe_foreground(
     automation: &IUIAutomation,
     identity: &ForegroundIdentity,
 ) -> Option<PlatformObservation> {
-    use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId};
+    use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
 
     let hwnd = GetForegroundWindow();
-    if hwnd.0.is_null() {
-        return None;
-    }
-    let mut process_id: u32 = 0;
-    GetWindowThreadProcessId(hwnd, Some(&mut process_id as *mut u32));
-    // The foreground can change between the gate and this read; recording a new window against the
-    // identity that was gated would be worse than recording nothing.
-    if i32::try_from(process_id).ok()? != identity.pid {
+    // The window handle, not the pid: a switch between two windows of the same process between the
+    // gate and this read would otherwise pair one window's title with the other's identity.
+    if hwnd.0.is_null() || hwnd.0 as isize != identity.window {
         return None;
     }
 
@@ -176,7 +177,9 @@ unsafe fn process_image_path(process_id: u32) -> Option<String> {
     };
 
     let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, process_id).ok()?;
-    let mut buffer = [0u16; 512];
+    // Windows paths can exceed the classic MAX_PATH; a buffer that is too small makes the call fail
+    // and the application silently loses its identity fallback.
+    let mut buffer = vec![0u16; 32_768];
     let mut size = buffer.len() as u32;
     let result = QueryFullProcessImageNameW(
         handle,
@@ -197,7 +200,14 @@ unsafe fn app_user_model_id(hwnd: HWND) -> Option<String> {
 
     let store: IPropertyStore = SHGetPropertyStoreForWindow(hwnd).ok()?;
     let mut value = store.GetValue(&PKEY_AppUserModel_ID).ok()?;
-    let text = PropVariantToStringAlloc(&value).ok()?;
+    let text = match PropVariantToStringAlloc(&value) {
+        Ok(text) => text,
+        Err(_) => {
+            // The PROPVARIANT is owned by this process whether or not the string conversion worked.
+            let _ = PropVariantClear(&mut value);
+            return None;
+        }
+    };
     let result = text.to_string().ok().filter(|text| !text.is_empty());
     // Both allocations belong to this process: the PROPVARIANT and the string it produced.
     let _ = PropVariantClear(&mut value);

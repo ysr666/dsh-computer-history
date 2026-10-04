@@ -45,8 +45,30 @@ pub enum Availability {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ForegroundIdentity {
     pub pid: i32,
+    /// The window handle. `describe` compares it, so metadata can never be attributed to a different
+    /// window than the one the policy gate saw - not even another window of the same process.
+    pub window: isize,
+    /// The identity Windows reports: the window's AppUserModelID when it carries one, otherwise the
+    /// executable name.
     pub application_id: String,
+    /// The executable name, when it differs from `application_id`. Both are candidates for the policy
+    /// and adapter match: a window that reports an AppUserModelID no rule knows would otherwise be
+    /// silently unobservable, which is a silent gap rather than a fail-closed decision.
+    pub application_executable: Option<String>,
     pub application_name: Option<String>,
+}
+
+impl ForegroundIdentity {
+    /// The ids this window could be known by, most specific first.
+    pub fn candidates(&self) -> Vec<&str> {
+        let mut ids = vec![self.application_id.as_str()];
+        if let Some(executable) = self.application_executable.as_deref() {
+            if !executable.eq_ignore_ascii_case(&self.application_id) {
+                ids.push(executable);
+            }
+        }
+        ids
+    }
 }
 
 /// Everything the engine needs from a platform.

@@ -161,8 +161,11 @@ impl<S: ObservationSource> Collector<S> {
             self.last_fingerprint = None;
             return lines;
         };
-        let key = identity.application_id.to_lowercase();
-        if self.blocked.contains(&key) {
+        let candidates = identity.candidates();
+        if candidates
+            .iter()
+            .any(|id| self.blocked.contains(&id.to_lowercase()))
+        {
             self.last_fingerprint = None;
             return lines;
         }
@@ -171,11 +174,14 @@ impl<S: ObservationSource> Collector<S> {
         // by reason (docs/collector-protocol.md); no window metadata is read for it. This is a
         // deliberate divergence from the macOS collector, which emits nothing for a protected
         // application - the protocol document promises the count and the acceptance asks for it.
-        if protocol::is_protected(&identity.application_id) || self.protected.contains(&key) {
-            let adapter_id = self.adapter_id(&identity.application_id);
+        let protected_id = candidates.iter().find(|id| {
+            protocol::is_protected(id) || self.protected.contains(&id.to_lowercase())
+        });
+        if let Some(protected_id) = protected_id {
+            let adapter_id = self.adapter_id(protected_id);
             let fingerprint = Fingerprint {
                 pid: identity.pid,
-                application_id: identity.application_id.clone(),
+                application_id: (*protected_id).to_string(),
                 application_name: None,
                 adapter: adapter_id,
                 title: None,
@@ -197,7 +203,7 @@ impl<S: ObservationSource> Collector<S> {
                     seq: self.seq,
                     observed_at_ms: (self.clock)(),
                     pid: identity.pid,
-                    application_id: truncated(Some(identity.application_id), 512)
+                    application_id: truncated(Some((*protected_id).to_string()), 512)
                         .unwrap_or_default(),
                     application_name: None,
                     window_title: None,
@@ -215,16 +221,25 @@ impl<S: ObservationSource> Collector<S> {
             return lines;
         }
 
-        if !self.allowed.contains(&key) {
-            self.last_fingerprint = None;
-            return lines;
-        }
-        let Some(adapter) = self.adapters.iter().find(|adapter| {
-            adapter
-                .ids
+        // The reported id has to satisfy both gates at once: the host resolves the adapter from it and
+        // applies its own policy to it, so an id the allow list knows but the adapter table does not
+        // (or the reverse) is not usable. A window whose AppUserModelID no rule knows is still observed
+        // through its executable name, instead of disappearing without a trace.
+        let matched = candidates.iter().find_map(|id| {
+            if !self.allowed.contains(&id.to_lowercase()) {
+                return None;
+            }
+            self.adapters
                 .iter()
-                .any(|id| id.eq_ignore_ascii_case(&identity.application_id))
-        }) else {
+                .find(|adapter| {
+                    adapter
+                        .ids
+                        .iter()
+                        .any(|known| known.eq_ignore_ascii_case(id))
+                })
+                .map(|adapter| (*id, adapter))
+        });
+        let Some((reported_id, adapter)) = matched else {
             self.last_fingerprint = None;
             return lines;
         };
@@ -272,7 +287,7 @@ impl<S: ObservationSource> Collector<S> {
 
         let fingerprint = Fingerprint {
             pid: facts.pid,
-            application_id: facts.application_id.clone(),
+            application_id: reported_id.to_string(),
             application_name: facts.application_name.clone(),
             adapter: Some(adapter.id),
             title: title.clone(),
@@ -294,13 +309,13 @@ impl<S: ObservationSource> Collector<S> {
                 seq: self.seq,
                 observed_at_ms: (self.clock)(),
                 pid: facts.pid,
-                application_id: truncated(Some(facts.application_id), 512).unwrap_or_default(),
+                application_id: truncated(Some(reported_id.to_string()), 512).unwrap_or_default(),
                 // The host refuses lines whose fields exceed its own bounds, and a refusal on the wire
                 // is fatal; the collector is where an application's own long title gets cut.
                 application_name: truncated(facts.application_name, 512),
                 window_title: truncated(title, 4_096),
                 document: truncated(document, 4_096),
-                element_role: truncated(element_role, 512),
+                element_role: truncated(element_role, 2_048),
                 adapter: adapter.id.to_string(),
                 secure,
                 protected: false,
@@ -463,13 +478,13 @@ mod tests {
     const TEST_ADAPTERS: &[Adapter] = &[
         Adapter {
             id: "vscode",
-            ids: &["Microsoft.VisualStudioCode"],
+            ids: &["Code.exe"],
             suppresses_window_title: false,
             focus_policy: FocusPolicy::Require,
         },
         Adapter {
             id: "terminal",
-            ids: &["Microsoft.WindowsTerminal"],
+            ids: &["WindowsTerminal.exe"],
             suppresses_window_title: true,
             focus_policy: FocusPolicy::Require,
         },
@@ -495,6 +510,9 @@ mod tests {
         pending: Option<Option<PlatformObservation>>,
         idle: Option<u64>,
         describes: usize,
+        /// The second identity candidate: a window that reports an AppUserModelID while the rules and
+        /// the adapter table know its executable name, which is what Windows does for packaged apps.
+        executable: Option<String>,
     }
 
     impl FakeSource {
@@ -505,6 +523,7 @@ mod tests {
                 pending: None,
                 idle: Some(0),
                 describes: 0,
+                executable: None,
             }
         }
     }
@@ -521,7 +540,9 @@ mod tests {
             match self.pending.as_ref() {
                 Some(Some(facts)) => Some(ForegroundIdentity {
                     pid: facts.pid,
+                    window: facts.pid as isize,
                     application_id: facts.application_id.clone(),
+                    application_executable: self.executable.clone(),
                     application_name: facts.application_name.clone(),
                 }),
                 _ => None,
@@ -579,6 +600,52 @@ mod tests {
     }
 
     #[test]
+    fn a_window_whose_reported_id_is_unknown_is_matched_by_its_executable_name() {
+        // Windows may report an AppUserModelID for a window whose policy rules and adapter entry are the
+        // executable name. The engine tries both candidates and reports the one that satisfies both
+        // gates, because the host resolves the adapter from the reported id - reporting the unknown id
+        // would be refused as not-an-adapter and the application would be unobservable without a trace.
+        let mut collector = collector(vec![Some(facts(
+            "Microsoft.WindowsTerminal_8wekyb3d8bbwe!App",
+        ))]);
+        collector.source.executable = Some("WindowsTerminal.exe".to_string());
+        let lines = configure(&mut collector, &["WindowsTerminal.exe"]);
+        let parsed = observations(&lines);
+        assert_eq!(parsed.len(), 1, "{lines:?}");
+        assert!(
+            parsed[0].contains("\"bundleId\":\"WindowsTerminal.exe\""),
+            "{}",
+            parsed[0]
+        );
+        assert!(parsed[0].contains("\"adapter\":\"terminal\""), "{}", parsed[0]);
+    }
+
+    #[test]
+    fn protection_and_blocking_match_the_executable_candidate_too() {
+        let mut protected = collector(vec![Some(facts("Some.Packaged.Id"))]);
+        protected.source.executable = Some("1Password.exe".to_string());
+        let lines = protected.tick();
+        assert_eq!(observations(&lines).len(), 1, "{lines:?}");
+        assert!(lines.iter().any(|line| line.contains("\"protected\":true")));
+        assert!(lines.iter().any(|line| line.contains("\"reason\":\"protected-app\"")));
+        // Identity only: no window metadata was read for it.
+        assert_eq!(protected.source.describes, 0);
+
+        let mut blocked = collector(vec![Some(facts("Some.Packaged.Id"))]);
+        blocked.source.executable = Some("WindowsTerminal.exe".to_string());
+        let lines = blocked.configure(
+            2,
+            Policy {
+                allowed_bundle_ids: vec!["WindowsTerminal.exe".to_string()],
+                blocked_bundle_ids: vec!["WindowsTerminal.exe".to_string()],
+                ..Policy::default()
+            },
+        );
+        assert!(observations(&lines).is_empty(), "{lines:?}");
+        assert_eq!(blocked.source.describes, 0);
+    }
+
+    #[test]
     fn start_sends_hello_first_then_the_running_state() {
         let mut collector = collector(vec![]);
         let lines = collector.start();
@@ -592,12 +659,12 @@ mod tests {
 
     #[test]
     fn an_allowed_adapter_is_observed_once_and_deduplicated() {
-        let mut collector = collector(vec![Some(facts("Microsoft.VisualStudioCode")); 2]);
-        let lines = configure(&mut collector, &["Microsoft.VisualStudioCode"]);
+        let mut collector = collector(vec![Some(facts("Code.exe")); 2]);
+        let lines = configure(&mut collector, &["Code.exe"]);
         assert!(lines[0].contains("\"type\":\"configured\""), "{lines:?}");
         let observed = observations(&lines);
         assert_eq!(observed.len(), 1);
-        assert!(observed[0].contains("\"bundleId\":\"Microsoft.VisualStudioCode\""));
+        assert!(observed[0].contains("\"bundleId\":\"Code.exe\""));
         assert!(observed[0].contains("\"adapter\":\"vscode\""));
         assert!(observed[0].contains("\"document\":\"file:///C:/work/provider.ts\""));
 
@@ -607,10 +674,10 @@ mod tests {
 
     #[test]
     fn a_changed_fingerprint_produces_the_next_observation() {
-        let mut changed = facts("Microsoft.VisualStudioCode");
+        let mut changed = facts("Code.exe");
         changed.window_title = Some("other.ts".to_string());
-        let mut collector = collector(vec![Some(facts("Microsoft.VisualStudioCode")), Some(changed)]);
-        configure(&mut collector, &["Microsoft.VisualStudioCode"]);
+        let mut collector = collector(vec![Some(facts("Code.exe")), Some(changed)]);
+        configure(&mut collector, &["Code.exe"]);
         let lines = collector.tick();
         let observed = observations(&lines);
         assert_eq!(observed.len(), 1);
@@ -620,11 +687,11 @@ mod tests {
 
     #[test]
     fn policy_decides_before_anything_is_observed() {
-        let mut collector = collector(vec![Some(facts("Microsoft.VisualStudioCode")); 3]);
+        let mut collector = collector(vec![Some(facts("Code.exe")); 3]);
         collector.start();
         // Nothing is allowed yet: include-only means no observation.
         assert!(observations(&collector.tick()).is_empty());
-        let allowed = configure(&mut collector, &["Microsoft.VisualStudioCode"]);
+        let allowed = configure(&mut collector, &["Code.exe"]);
         assert_eq!(observations(&allowed).len(), 1);
         // The same state after the policy stops allowing it is not observed.
         assert!(observations(&configure(&mut collector, &[])).is_empty());
@@ -632,11 +699,11 @@ mod tests {
 
     #[test]
     fn a_blocked_application_is_not_observed_and_not_described() {
-        let mut collector = collector(vec![Some(facts("Microsoft.VisualStudioCode"))]);
+        let mut collector = collector(vec![Some(facts("Code.exe"))]);
         let lines = collector.configure(
             2,
             Policy {
-                blocked_bundle_ids: vec!["Microsoft.VisualStudioCode".to_string()],
+                blocked_bundle_ids: vec!["Code.exe".to_string()],
                 ..Policy::default()
             },
         );
@@ -668,10 +735,10 @@ mod tests {
 
     #[test]
     fn a_secure_element_withholds_the_window_but_is_still_reported() {
-        let mut secure = facts("Microsoft.VisualStudioCode");
+        let mut secure = facts("Code.exe");
         secure.element_state = ElementState::Secure;
         let mut collector = collector(vec![Some(secure)]);
-        let lines = configure(&mut collector, &["Microsoft.VisualStudioCode"]);
+        let lines = configure(&mut collector, &["Code.exe"]);
         let observed = observations(&lines);
         assert_eq!(observed.len(), 1);
         assert!(observed[0].contains("\"secure\":true"));
@@ -682,10 +749,10 @@ mod tests {
 
     #[test]
     fn an_unreadable_element_fails_closed() {
-        let mut unreadable = facts("Microsoft.VisualStudioCode");
+        let mut unreadable = facts("Code.exe");
         unreadable.element_state = ElementState::Unreadable;
         let mut collector = collector(vec![Some(unreadable)]);
-        let lines = configure(&mut collector, &["Microsoft.VisualStudioCode"]);
+        let lines = configure(&mut collector, &["Code.exe"]);
         let observed = observations(&lines);
         assert_eq!(observed.len(), 1);
         assert!(observed[0].contains("\"reason\":\"unreadable-focused-element\""));
@@ -708,10 +775,10 @@ mod tests {
 
     #[test]
     fn a_required_element_that_is_unqueryable_withholds_the_window() {
-        let mut unqueryable = facts("Microsoft.VisualStudioCode");
+        let mut unqueryable = facts("Code.exe");
         unqueryable.element_state = ElementState::Unqueryable;
         let mut collector = collector(vec![Some(unqueryable)]);
-        let lines = configure(&mut collector, &["Microsoft.VisualStudioCode"]);
+        let lines = configure(&mut collector, &["Code.exe"]);
         let observed = observations(&lines);
         assert_eq!(observed.len(), 1);
         assert!(observed[0].contains("\"reason\":\"focused-element-unqueryable\""));
@@ -720,10 +787,10 @@ mod tests {
 
     #[test]
     fn a_terminal_title_is_never_recorded() {
-        let mut terminal = facts("Microsoft.WindowsTerminal");
+        let mut terminal = facts("WindowsTerminal.exe");
         terminal.window_title = Some("secret-project - pwsh".to_string());
         let mut collector = collector(vec![Some(terminal)]);
-        let lines = configure(&mut collector, &["Microsoft.WindowsTerminal"]);
+        let lines = configure(&mut collector, &["WindowsTerminal.exe"]);
         let observed = observations(&lines);
         assert_eq!(observed.len(), 1);
         assert!(observed[0].contains("\"title\":null"), "terminal title leaked");
@@ -732,13 +799,13 @@ mod tests {
 
     #[test]
     fn protected_paths_withhold_the_observation() {
-        let mut secret = facts("Microsoft.VisualStudioCode");
+        let mut secret = facts("Code.exe");
         secret.document = Some("file:///C:/Users/47209/secrets/keys.txt".to_string());
         let mut collector = collector(vec![Some(secret)]);
         let lines = collector.configure(
             1,
             Policy {
-                allowed_bundle_ids: vec!["Microsoft.VisualStudioCode".to_string()],
+                allowed_bundle_ids: vec!["Code.exe".to_string()],
                 protected_path_patterns: vec!["C:/Users/47209/secrets/*".to_string()],
                 ..Policy::default()
             },
@@ -748,8 +815,8 @@ mod tests {
 
     #[test]
     fn pause_and_resume_keep_the_state_messages() {
-        let mut collector = collector(vec![Some(facts("Microsoft.VisualStudioCode")); 3]);
-        configure(&mut collector, &["Microsoft.VisualStudioCode"]);
+        let mut collector = collector(vec![Some(facts("Code.exe")); 3]);
+        configure(&mut collector, &["Code.exe"]);
         let paused = collector.set_paused(true);
         assert!(paused[0].contains("\"state\":\"paused\""), "{paused:?}");
         assert!(collector.tick().is_empty());
@@ -775,8 +842,8 @@ mod tests {
 
     #[test]
     fn the_idle_boundary_is_part_of_the_fingerprint() {
-        let mut collector = collector(vec![Some(facts("Microsoft.VisualStudioCode")); 3]);
-        configure(&mut collector, &["Microsoft.VisualStudioCode"]);
+        let mut collector = collector(vec![Some(facts("Code.exe")); 3]);
+        configure(&mut collector, &["Code.exe"]);
         assert_eq!(observations(&collector.tick()).len(), 0); // same idle, deduplicated
         collector.source.idle = Some(IDLE_BOUNDARY_SECONDS + 1);
         let lines = collector.tick();

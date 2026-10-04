@@ -30,8 +30,26 @@ const HELPER = 'applyMessagingTimeout'
 const READ = /AXUIElementCopyAttributeValue\s*\(/g
 
 const RUST_ROOT = path.join(REPO, 'native', 'windows', 'src')
-const RUST_READ = /(GetFocusedElement|CurrentIsPassword|CurrentControlType|SHGetPropertyStoreForWindow)\b/g
-const RUST_BOUNDS = ['SetConnectionTimeout', 'SetTransactionTimeout']
+const RUST_READ = /(GetFocusedElement|CurrentIsPassword|CurrentControlType|SHGetPropertyStoreForWindow)\s*\(/g
+// Call shape, not token presence: a name mentioned in a comment is not a call, and this guard was
+// satisfied by a file whose only "timeout" was the word in a comment. Strings are blanked first so a
+// documented name cannot pass either.
+const RUST_BOUNDS = [/SetConnectionTimeout\s*\(/, /SetTransactionTimeout\s*\(/]
+
+/**
+ * Code without comments or string literals, for guards that must not read a mention as a call.
+ *
+ * Line comments are removed first, then Rust string literals are blanked. A `//` inside a string
+ * literal would truncate that line, which can only hide a call (making the guard stricter, never
+ * laxer) - and every call this guard looks for is written in code, not in a URL.
+ */
+function codeOnly(text) {
+  return text
+    .split('\n')
+    .map(line => line.replace(/\/\/.*$/, ''))
+    .join('\n')
+    .replace(/"(?:[^"\\]|\\.)*"/g, '""')
+}
 
 const problems = []
 
@@ -49,12 +67,12 @@ const files = sourceFiles(ROOT, '.swift')
 let readSites = 0
 let boundingFiles = 0
 for (const file of files) {
-  const text = readFileSync(file, 'utf8')
+  const text = codeOnly(readFileSync(file, 'utf8'))
   READ.lastIndex = 0
   const reads = [...text.matchAll(READ)].length
   if (reads === 0) continue
   readSites += reads
-  if (!text.includes(HELPER)) {
+  if (!new RegExp(`${HELPER}\\s*\\(`).test(text)) {
     problems.push(
       `${path.relative(REPO, file)} reads ${reads} accessibility attribute(s) but never `
       + `calls ${HELPER} - nothing in that file bounds an unresponsive application`,
@@ -68,16 +86,16 @@ const rustFiles = sourceFiles(RUST_ROOT, '.rs')
 let rustReadSites = 0
 let rustBoundingFiles = 0
 for (const file of rustFiles) {
-  const text = readFileSync(file, 'utf8')
+  const text = codeOnly(readFileSync(file, 'utf8'))
   RUST_READ.lastIndex = 0
   const reads = [...text.matchAll(RUST_READ)].length
   if (reads === 0) continue
   rustReadSites += reads
-  const missing = RUST_BOUNDS.filter(token => !text.includes(token))
-  if (missing.length > 0) {
+  if (!RUST_BOUNDS.every(pattern => pattern.test(text))) {
     problems.push(
       `${path.relative(REPO, file)} performs ${reads} UI Automation read(s) but never sets `
-      + `${missing.join(' / ')} - an unresponsive provider would hang the heartbeat`,
+      + 'the automation object timeouts (IUIAutomation2 SetConnectionTimeout / '
+      + 'SetTransactionTimeout) - an unresponsive provider would hang the heartbeat',
     )
   } else {
     rustBoundingFiles += 1
@@ -107,6 +125,15 @@ for (const file of rustFiles) {
   RUST_READ.lastIndex = 0
   if (RUST_READ.test('let title = window_text(hwnd)')) {
     problems.push('the Rust read detector matches a call that is not a UIA read')
+  }
+  // A file whose only "timeouts" are names in a comment must not count as bounded; that was the shape
+  // this rule was fooled by.
+  const commentOnly = codeOnly(
+    '// SetConnectionTimeout(500) and SetTransactionTimeout(500)\n'
+    + 'fn f(automation: &IUIAutomation) { let _ = automation.GetFocusedElement(); }',
+  )
+  if (RUST_BOUNDS.every(pattern => pattern.test(commentOnly))) {
+    problems.push('a comment satisfies the timeout rule - this guard proves nothing')
   }
   if (rustFiles.length === 0) {
     problems.push('no Rust collector files were read - this guard proves nothing')

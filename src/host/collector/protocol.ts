@@ -127,7 +127,7 @@ function parseHello(message: RecordValue): CollectorToHost {
   }
 
   const arch = string(message.arch, 'hello arch')
-  if (arch !== 'arm64' && arch !== 'x64') {
+  if (arch !== 'arm64' && arch !== 'x64' && arch !== 'x86') {
     throw new Error('unsupported collector architecture')
   }
 
