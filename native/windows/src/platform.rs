@@ -129,7 +129,7 @@ pub struct ElementCandidate {
     pub automation_id: Option<String>,
     pub class_name: Option<String>,
     pub help_text: Option<String>,
-    pub value: Option<String>,
+    pub item_status: Option<String>,
     pub is_password: Option<bool>,
 }
 
@@ -137,6 +137,9 @@ pub struct ElementCandidate {
 ///
 /// `limit` bounds both the walk and the result: an unresponsive provider, or a window whose tree has
 /// thousands of nodes, must not turn a measurement into a hang.
+///
+/// Nothing here reads a value, text or selection pattern - that is content, forbidden repo-wide by
+/// `scripts/verify-privacy-boundary.mjs`, and a location has to be found in metadata if it is found at all.
 #[cfg(windows)]
 pub use crate::windows_impl::anchor_candidates;
 

@@ -355,7 +355,7 @@ unsafe fn push_candidate(
         automation_id: text_of(element.CurrentAutomationId()),
         class_name: text_of(element.CurrentClassName()),
         help_text: text_of(element.CurrentHelpText()),
-        value: value_of(element),
+        item_status: text_of(element.CurrentItemStatus()),
         is_password: element.CurrentIsPassword().ok().map(|value| value.as_bool()),
     });
 }
@@ -368,11 +368,3 @@ fn text_of(value: windows::core::Result<windows::core::BSTR>) -> Option<String> 
         .filter(|value| !value.is_empty())
 }
 
-/// The Value pattern's text, which is where an address bar keeps the URL and a document keeps its path.
-unsafe fn value_of(element: &IUIAutomationElement) -> Option<String> {
-    use windows::Win32::UI::Accessibility::{IUIAutomationValuePattern, UIA_ValuePatternId};
-
-    let pattern = element.GetCurrentPattern(UIA_ValuePatternId).ok()?;
-    let value: IUIAutomationValuePattern = pattern.cast().ok()?;
-    text_of(value.CurrentValue())
-}

@@ -9,9 +9,11 @@
 //! instance, same 0.5 s timeouts - so what it prints is what the collector could see, not what a second
 //! implementation happens to expose.
 //!
-//! It reads nothing that the collector does not already read except the Value pattern, the AutomationId and
-//! the HelpText of elements that can carry a location; it never writes, and it skips the policy gate on
-//! purpose, because "what does the platform expose" and "what may be recorded" are different questions.
+//! The Value pattern is deliberately not read, here or anywhere else in this repository: an address bar's
+//! value is a URL and a document's value is its text, and `scripts/verify-privacy-boundary.mjs` forbids
+//! content patterns repo-wide. What the probe reads is metadata - control type, name, automation id, class
+//! name, help text, item status, password flag - which is where a location has to come from if it can come
+//! from anywhere at all.
 
 use std::thread::sleep;
 use std::time::Duration;
@@ -31,14 +33,14 @@ fn main() {
         }
         for candidate in candidates {
             println!(
-                "{:<10} type={:?} id={:?} class={:?} name={:?} value={:?} help={:?} password={:?}",
+                "{:<10} type={:?} id={:?} class={:?} name={:?} help={:?} status={:?} password={:?}",
                 candidate.relation,
                 candidate.control_type,
                 candidate.automation_id,
                 candidate.class_name,
                 candidate.name,
-                candidate.value,
                 candidate.help_text,
+                candidate.item_status,
                 candidate.is_password,
             );
         }
