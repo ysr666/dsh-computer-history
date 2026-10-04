@@ -1,37 +1,16 @@
-//! Which application ids this collector understands, and what the adapter table guarantees about them.
+//! The win32 half of the shared adapter table.
 //!
-//! The single source of truth is `src/shared/constants.ts`. This table is compared with it in
-//! `tests/repository.spec.ts`, because the collector has to resolve an id before the host sees anything
-//! and cannot import TypeScript. Adding an adapter is a data change on both sides plus an evidence row
-//! in `docs/adapters.md`.
+//! The shape lives in `dsh_collector_protocol::adapters` because one engine reads it; what is Windows
+//! here is which ids Windows reports and what each adapter guarantees.
 
-/// What the adapter's application guarantees about focused elements.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum FocusPolicy {
-    /// The focused element must be queryable, or the observation is withheld (fail closed).
-    Require,
-    /// The application exposes no queryable element and renders its own fields; window metadata may be
-    /// recorded without element fields (ADR 0006).
-    WindowOnly,
-}
-
-/// One surface adapter, as far as the Windows collector needs it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Adapter {
-    pub id: &'static str,
-    pub ids: &'static [&'static str],
-    /// Terminal windows carry the working directory and the running command, so their titles are never
-    /// recorded.
-    pub suppresses_window_title: bool,
-    pub focus_policy: FocusPolicy,
-}
+pub use dsh_collector_protocol::adapters::{Adapter, FocusPolicy};
 
 /// The win32 half of the shared adapter table.
 pub const ADAPTERS: &[Adapter] = &[
     Adapter {
         id: "vscode",
-        // Expected, not measured: VS Code is not installed on the machine that produced the Windows
-        // row, and this is the executable name of the user-installer build.
+        // Measured 2026-10-05: with VS Code 1.140.0 installed on that machine, a stored observation says
+        // bundleId "Code.exe" with adapter "vscode".
         ids: &["Code.exe"],
         suppresses_window_title: false,
         focus_policy: FocusPolicy::Require,
@@ -53,8 +32,9 @@ pub const ADAPTERS: &[Adapter] = &[
     },
     Adapter {
         id: "notepad",
-        // Windows 11 Notepad reports its executable name; declared 2026-10-04, measured when the machine
-        // row runs. Its title carries a file name and nothing else, so it is recorded like an editor's.
+        // Measured 2026-10-05: Windows 11 Notepad reports its executable name, answers UI Automation
+        // (ControlType.50030) and its title carries a file name and nothing else, so it is recorded like an
+        // editor's.
         ids: &["Notepad.exe"],
         suppresses_window_title: false,
         focus_policy: FocusPolicy::Require,

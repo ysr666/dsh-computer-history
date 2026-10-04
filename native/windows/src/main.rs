@@ -7,13 +7,14 @@ use std::io::{self, BufRead, Write};
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::time::{Duration, Instant};
 
+use collector::adapters;
 use collector::platform::DefaultSource;
 use collector::collector::{Collector, HEARTBEAT_SECONDS};
 use collector::protocol::command::{self, Command};
 
 fn main() {
     let session = format!("win-{}", std::process::id());
-    let mut collector = Collector::new(session, DefaultSource::new());
+    let mut collector = Collector::new(session, DefaultSource::new(), adapters::ADAPTERS);
 
     let (sender, receiver) = mpsc::channel::<Command>();
     std::thread::spawn(move || {

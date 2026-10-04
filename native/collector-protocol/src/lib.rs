@@ -1,4 +1,4 @@
-//! The collector message layer, shared by every non-macOS collector.
+//! The collector message layer and the engine that uses it, shared by every non-macOS collector.
 //!
 //! It lives in its own crate so that "the three platforms produce the same fields" is a structural fact
 //! rather than a promise: Windows and Linux depend on this, and the conformance fixtures measure what it
@@ -17,7 +17,15 @@
 
 use serde::Serialize;
 
+pub mod adapters;
 pub mod command;
+pub mod engine;
+pub mod platform;
+
+pub use engine::{Collector, HEARTBEAT_SECONDS};
+pub use platform::{
+    Availability, ElementState, ForegroundIdentity, ObservationSource, PlatformObservation,
+};
 
 /// Applications whose contents must never be recorded, by executable or desktop id.
 ///

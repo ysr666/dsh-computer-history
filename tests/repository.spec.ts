@@ -255,8 +255,11 @@ describe('repository scaffold', () => {
   })
 
   it('keeps the collector refusal reasons aligned with the fixture', () => {
+    // The reasons are defined by the shared engine - one engine, three platforms - so this reads the
+    // engine rather than a platform crate. It read `native/windows/src/collector.rs` until 2026-10-05,
+    // when that file stopped existing and the same strings moved to the crate both collectors use.
     const collector = readFileSync(
-      new URL('../native/windows/src/collector.rs', import.meta.url),
+      new URL('../native/collector-protocol/src/engine.rs', import.meta.url),
       'utf8',
     )
     const fixture = JSON.parse(

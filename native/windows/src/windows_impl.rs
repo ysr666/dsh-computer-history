@@ -44,6 +44,16 @@ impl WindowsSource {
 }
 
 impl ObservationSource for WindowsSource {
+    fn platform(&self) -> &'static str {
+        "win32"
+    }
+
+    fn provider(&self) -> &'static str {
+        // Measured on the machine: this is what produced the stored Windows rows, and the host stores it
+        // verbatim, so it names UI Automation rather than defaulting to the macOS path.
+        "windows-uia"
+    }
+
     fn availability(&mut self) -> Availability {
         match (&self.automation, &self.unavailable) {
             (Some(_), _) => Availability::Available,

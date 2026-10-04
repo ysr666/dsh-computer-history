@@ -1,9 +1,18 @@
-//! The Linux collector: the shared message layer plus one platform module.
+//! The Linux collector: the shared engine and message layer plus one platform module.
 //!
-//! Everything except `platform` is shared with the Windows collector, so "the same fields on every
-//! platform" is what the dependency graph says rather than what a reviewer has to check.
+//! The engine, the message layer and the platform seam come from `dsh_collector_protocol` - the same code
+//! the Windows collector runs - so "the same fields on every platform" is what the dependency graph says
+//! rather than what a reviewer has to check.
+//!
+//! `platform` is the only Linux-specific module, and it is not finished: it answers whether AT-SPI may be
+//! used, and the observation source itself (X11 foreground window, AT-SPI tree, `.desktop` identity) is the
+//! next piece. Until it exists this binary reports its state and answers commands, and produces no
+//! observation - which is what the row in `docs/validation-three-platforms.md` records.
 
 pub mod platform;
+
+/// The shared engine, under the name the Windows collector uses for it.
+pub use dsh_collector_protocol::engine;
 
 pub use dsh_collector_protocol as protocol;
 pub use dsh_collector_protocol::{is_protected, PROTECTED_IDS};

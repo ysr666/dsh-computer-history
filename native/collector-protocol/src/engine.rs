@@ -1,26 +1,23 @@
-//! The platform-independent collector engine.
+//! The collector engine, shared by every platform.
 //!
 //! Mirrors `native/macos/Sources/ComputerHistoryCollector/Collector.swift`: a 5 s heartbeat reconciles
 //! the foreground state, an unchanged fingerprint does not produce a second observation, policy decides
 //! what is eligible before anything is read, and a secure or protected surface is reported so the host can
 //! count the refusal instead of losing it.
 //!
-//! Nothing here knows about Windows; `platform.rs` hands over the facts and `command.rs` the policy.
+//! Nothing here knows about a platform: `platform.rs` hands over the facts, `command.rs` the policy, and
+//! each collector passes its own adapter table.
 
 use std::collections::HashSet;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::adapters::{Adapter, FocusPolicy};
-use crate::protocol::command::Policy;
+use crate::command::Policy;
 use crate::platform::{Availability, ElementState, ObservationSource};
-use crate::protocol;
+use crate as protocol;
 
 pub const HEARTBEAT_SECONDS: u64 = 5;
 const IDLE_BOUNDARY_SECONDS: u64 = 8 * 60;
-
-/// What produced an observation on this platform. The host stores this verbatim and audits read it, so
-/// it has to name the real path rather than defaulting to the macOS one.
-const PROVIDER: &str = "windows-uia";
 
 const REASON_SECURE_FIELD: &str = "secure-field";
 const REASON_UNREADABLE: &str = "unreadable-focused-element";
@@ -72,8 +69,12 @@ pub struct Collector<S: ObservationSource> {
 }
 
 impl<S: ObservationSource> Collector<S> {
-    pub fn new(session: String, source: S) -> Self {
-        Self::create(session, source, crate::adapters::ADAPTERS, system_now_ms)
+    pub fn new(
+        session: String,
+        source: S,
+        adapters: &'static [Adapter],
+    ) -> Self {
+        Self::create(session, source, adapters, system_now_ms)
     }
 
     fn create(
@@ -103,7 +104,7 @@ impl<S: ObservationSource> Collector<S> {
         let mut lines = vec![protocol::hello(
             &self.session,
             env!("CARGO_PKG_VERSION"),
-            "win32",
+            self.source.platform(),
         )];
         let availability = self.update_availability(&mut lines);
         if matches!(availability, Availability::Available) {
@@ -214,7 +215,7 @@ impl<S: ObservationSource> Collector<S> {
                     document: None,
                     element_role: None,
                     adapter: adapter_id.unwrap_or(PROTECTED_ADAPTER_MARKER).to_string(),
-                    provider: PROVIDER,
+                    provider: self.source.provider(),
                     secure: false,
                     protected: true,
                     privacy_reason: Some(REASON_PROTECTED.to_string()),
@@ -322,7 +323,7 @@ impl<S: ObservationSource> Collector<S> {
                 document: truncated(document, 4_096),
                 element_role: truncated(element_role, 2_048),
                 adapter: adapter.id.to_string(),
-                provider: PROVIDER,
+                provider: self.source.provider(),
                 secure,
                 protected: false,
                 privacy_reason: reason.map(str::to_string),
@@ -535,6 +536,16 @@ mod tests {
     }
 
     impl ObservationSource for FakeSource {
+        fn platform(&self) -> &'static str {
+            // The engine takes the word from the source; the test pins one so a change to the hello
+            // handshake shows up here rather than on a machine.
+            "test"
+        }
+
+        fn provider(&self) -> &'static str {
+            "test-path"
+        }
+
         fn availability(&mut self) -> Availability {
             self.availability.clone()
         }
