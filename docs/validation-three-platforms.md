@@ -520,8 +520,8 @@ about AT-SPI at all:
 > **a collector that cannot observe must say why, because silence is indistinguishable from a machine
 > nobody used.**
 
-Until the session-bus check for `org.a11y.Status` is written and run, the crate reports
-`permission-required` with a reason rather than `running` with silence.
+The crate reports `permission-required` with a reason rather than `running` with silence; since 2026-10-05
+that reason comes from an actual `org.a11y.Status` query (see below) instead of "not implemented yet".
 
 Sharing the layer produced two findings that separate copies would have hidden:
 
@@ -555,15 +555,28 @@ is a firmware setting and a reboot, which belongs to the machine's owner rather 
 
 ### Not verified, and what would verify it
 
-**No observation exists yet, so this row is still not green.** AT-SPI is not implemented: the collector has
-nothing to observe and emits none, which is why the fixture keeps its linux `$unverified` list - a live row
-means a stored observation, and there is none to store.
+**No observation exists yet, so this row is still not green.** The observation path itself - at-spi2 over
+D-Bus: application, window, focused element, document, the same shape `native/macos` implements through AX -
+is not written, so the collector has nothing to observe and emits none. That is why the fixture keeps its
+linux `$unverified` list: a live row means a stored observation, and there is none to store.
 
-Two steps, in order of size: the session-bus check (`org.a11y.Status`'s `IsEnabled` and
-`ScreenReaderEnabled` - a minimal Ubuntu image does not even have `gdbus`, so the check cannot assume an
-accessibility stack is present), and then the observation path itself (at-spi2 over D-Bus: application,
-window, focused element, document), which is the same shape `native/macos` implements through AX. The recipe
-for the row once those exist:
+**The session-bus check is written and measured (2026-10-05).** It asks `org.a11y.Bus` for the AT-SPI bus
+address and then reads `IsEnabled` and `ScreenReaderEnabled` from `org.a11y.Status`, through `gdbus` - no new
+Rust dependency, and every call is bounded at 1.5 s so a wedged bus cannot hold the hello budget. On the same
+Ubuntu 24.04 VM, in three configurations, the reason strings were accurate each time:
+
+| configuration | what the collector reported |
+| --- | --- |
+| no session bus at all | `the AT-SPI bus is not running on this session: org.a11y.Bus did not answer` |
+| a session bus, but `at-spi2-core` not installed and no AT-SPI socket | `the AT-SPI bus answered without an address` / `the AT-SPI bus is not running …` |
+| a session bus where `org.a11y.Bus` answered `('unix:path=/run/user/501/at-spi/bus,guid=…',)` | `the AT-SPI bus answered but org.a11y.Status did not` |
+
+The second and third lines are the honest shape of a headless VM: D-Bus activates `org.a11y.Bus`, which
+publishes an address, but the launcher behind it has no session to serve. The `Enabled` and `Disabled` legs
+therefore stay unmeasured - they need a desktop session with a live AT-SPI bus, which is also what the
+observation path will need. Four unit tests cover the two parsers (GVariant text for the address and for a
+boolean) and the rule that a non-running state always carries a reason. The recipe for the row once the
+observation path exists:
 
 ```bash
 # on a Linux desktop with a session bus

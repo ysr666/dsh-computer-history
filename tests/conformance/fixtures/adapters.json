@@ -116,8 +116,8 @@
     "darwin": [],
     "win32": [],
     "linux": [
-      "the session-bus check for org.a11y.Status (IsEnabled, ScreenReaderEnabled) is not written yet, so the collector reports permission-required with a reason rather than running",
-      "no Linux machine has run the collector: the ids below are the mapping the Linux collector is expected to produce, not something measured"
+      "the observation path itself (at-spi2 over D-Bus: application, window, focused element, document) is not written, so the collector has nothing to observe - a live row means a stored observation and there is none; measured 2026-10-05: the binary builds and runs on Ubuntu 24.04 (kernel 6.8, aarch64), reports permission-required with an accurate reason in three configurations (no session bus, a bus published without a live socket, and a bus the collector could parse the address from), and answers configure/pause/resume with the shapes Windows emits",
+      "the ids below are the mapping the Linux collector is expected to produce, not something measured against a real AT-SPI tree"
     ]
   }
 }
