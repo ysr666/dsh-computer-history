@@ -587,11 +587,26 @@ applications. The earlier configurations, with the reason each produced now that
 Four unit tests cover the two parsers (`(<true>,)` GVariant text and `gsettings`'s `true`/`'true'`) and the
 rule that a non-running state always carries a reason.
 
-**What the observation path will read, measured rather than remembered:** on the AT-SPI bus,
-`org.a11y.atspi.Registry` answers at `/org/a11y/atspi/accessible/root`, `GetChildren` returns `(bus name,
-object path)` pairs, each node exposes `org.a11y.atspi.Accessible` (`Name`, `Description`, `Parent`,
-`ChildCount`, `Locale`, `AccessibleId`, `HelpText`), and geometry sits on `Component`. The recipe for the row
-once that path exists:
+**What the observation path will read, measured rather than remembered** (Ubuntu 24.04 VM, Xvfb, openbox, a
+GTK application, 2026-10-05):
+
+| what an observation needs | where it comes from | measured value |
+| --- | --- | --- |
+| the foreground window | X11 `_NET_ACTIVE_WINDOW`, then `_NET_WM_NAME` / `_NET_WM_PID` on that id (`xprop`, or `xdotool getactivewindow`) | `0x400004` -> `"Probe Window"`, pid `7369` |
+| the application's pid, from AT-SPI | `org.freedesktop.DBus.GetConnectionUnixProcessID` on the bus name the registry hands out | `:1.0` -> `7856` |
+| the application id the adapter table matches | the pid's executable, then the `.desktop` file whose `Exec=` names it | `/proc/7856/exe` -> `/usr/bin/zenity` -> `org.gnome.Zenity` |
+| the window title and role | the application root's child, `org.a11y.atspi.Accessible` `Name` and `GetRoleName` | `"Probe Window"`, `dialog` |
+| the toolkit | `org.a11y.atspi.Application` `ToolkitName` / `Version` | `GTK` / `4.14.5` |
+| the tree itself | `org.a11y.atspi.Registry` at `/org/a11y/atspi/accessible/root`; `GetChildren` returns `(bus name, object path)` pairs; geometry sits on `Component` | measured |
+
+Two things that measurement ruled out, which is why they are written down: `org.a11y.atspi.Accessible.Role`
+is **not** a property (the method is `GetRoleName`), and `org.a11y.atspi.Application.Id` answered **0** rather
+than a pid - the bus-name lookup above is the reliable route. The frame's state bits did not carry
+active/focused in this harness (`GetState` returned the same value before and after activating a window), so
+"which window is in front" comes from X11 rather than from AT-SPI; on Wayland that route needs a portal and
+is unmeasured.
+
+The recipe for the row once that path exists:
 
 ```bash
 # on a Linux desktop with a session bus
