@@ -9,6 +9,13 @@
 //! There is deliberately **no field** for text, a selection, a clipboard, a keystroke or an image, and a
 //! test asserts that the serialised forms cannot carry one: adding a field is a protocol change, not a
 //! local decision.
+//!
+//! The messages are serde structs rather than assembled strings. The sibling macOS collector already
+//! encodes with `Codable`/`JSONEncoder`, and the two defects this layer produced - a doubled `reason` key
+//! that made the line invalid JSON, and control characters silently replaced by spaces - were both
+//! encoder bugs rather than logic bugs. A derive cannot make either mistake.
+
+use serde::Serialize;
 
 /// Applications whose contents must never be recorded, by executable or desktop id.
 ///
@@ -52,73 +59,161 @@ pub struct Observation {
     pub selection_text: Option<String>,
 }
 
-fn escape(value: &str) -> String {
-    let mut out = String::with_capacity(value.len() + 2);
-    for ch in value.chars() {
-        match ch {
-            '"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
-            c => out.push(c),
-        }
-    }
-    out
+/// Serialise one message.
+///
+/// The types below are structs of scalars, options and slices, which `serde_json` cannot fail on; a
+/// failure would mean the shape itself changed. A collector that cannot speak is better off stopping
+/// than emitting a line the host will reject, so this is the one place a `Result` is turned into a panic
+/// with a message that says what happened.
+fn line<T: Serialize>(message: &T) -> String {
+    serde_json::to_string(message).expect("the message layer serialises structs of plain values")
 }
 
-fn field(name: &str, value: &str) -> String {
-    format!("\"{}\":\"{}\"", name, escape(value))
+/// `hello`: what the collector is, before it says anything else.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Hello<'a> {
+    v: u8,
+    #[serde(rename = "type")]
+    message_type: &'static str,
+    collector_session: &'a str,
+    collector_version: &'a str,
+    platform: &'a str,
+    arch: &'static str,
+    capabilities: &'static [&'static str],
 }
 
-fn optional(name: &str, value: &Option<String>) -> String {
-    match value {
-        Some(text) => field(name, text),
-        None => format!("\"{}\":null", name),
-    }
+/// `configured`: the policy revision the collector is now honouring.
+#[derive(Serialize)]
+struct Configured {
+    v: u8,
+    #[serde(rename = "type")]
+    message_type: &'static str,
+    revision: u64,
+}
+
+/// `state`: availability, with the reason omitted (not null) when there is none.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct State<'a> {
+    v: u8,
+    #[serde(rename = "type")]
+    message_type: &'static str,
+    state: &'a str,
+    accessibility_trusted: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reason: Option<&'a str>,
+}
+
+/// `diagnostic`: something the operator should know, without stopping capture.
+#[derive(Serialize)]
+struct Diagnostic<'a> {
+    v: u8,
+    #[serde(rename = "type")]
+    message_type: &'static str,
+    level: &'a str,
+    code: &'a str,
+    message: &'a str,
+}
+
+#[derive(Serialize)]
+struct App<'a> {
+    pid: i32,
+    #[serde(rename = "bundleId")]
+    bundle_id: &'a str,
+    name: Option<&'a str>,
+}
+
+/// `url`, `subrole` and `identifier` are reserved: always null from a collector that has nothing to put
+/// there, kept because the protocol is one shape across platforms.
+#[derive(Serialize)]
+struct Window<'a> {
+    title: Option<&'a str>,
+    document: Option<&'a str>,
+    url: Option<&'a str>,
+}
+
+#[derive(Serialize)]
+struct Element<'a> {
+    role: Option<&'a str>,
+    subrole: Option<&'a str>,
+    identifier: Option<&'a str>,
+}
+
+/// The refusal vocabulary. `reason` is omitted when there is none - never null, never empty: the host
+/// counts refusals by reading it.
+#[derive(Serialize)]
+struct Privacy<'a> {
+    secure: bool,
+    protected: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reason: Option<&'a str>,
+}
+
+#[derive(Serialize)]
+struct Source<'a> {
+    adapter: &'a str,
+}
+
+#[derive(Serialize)]
+struct Activity {
+    #[serde(rename = "idleSeconds")]
+    idle_seconds: u64,
+}
+
+/// `observation`: what was in the foreground, and nothing else.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ObservationMessage<'a> {
+    v: u8,
+    #[serde(rename = "type")]
+    message_type: &'static str,
+    collector_session: &'a str,
+    seq: u64,
+    observed_at_ms: i64,
+    app: App<'a>,
+    window: Window<'a>,
+    element: Element<'a>,
+    privacy: Privacy<'a>,
+    source: Source<'a>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    activity: Option<Activity>,
 }
 
 impl Observation {
     /// The line this observation becomes, field for field as the protocol documents it.
     pub fn to_line(&self) -> String {
-        let mut parts = vec![
-            "\"v\":1".to_string(),
-            field("type", "observation"),
-            field("collectorSession", &self.collector_session),
-            format!("\"seq\":{}", self.seq),
-            format!("\"observedAtMs\":{}", self.observed_at_ms),
-            format!(
-                "\"app\":{{\"pid\":{},{},{}}}",
-                self.pid,
-                field("bundleId", &self.application_id),
-                optional("name", &self.application_name),
-            ),
-            format!(
-                "\"window\":{{{},{},{}}}",
-                optional("title", &self.window_title),
-                optional("document", &self.document),
-                "\"url\":null",
-            ),
-            format!("\"element\":{{{},\"subrole\":null,\"identifier\":null}}", optional("role", &self.element_role)),
-            {
-                let reason = match self.privacy_reason.as_deref() {
-                    Some(reason) if !reason.is_empty() => {
-                        format!(",{}", field("reason", reason))
-                    }
-                    _ => String::new(),
-                };
-                format!(
-                    "\"privacy\":{{\"secure\":{},\"protected\":{}{}}}",
-                    self.secure, self.protected, reason
-                )
+        line(&ObservationMessage {
+            v: 1,
+            message_type: "observation",
+            collector_session: &self.collector_session,
+            seq: self.seq,
+            observed_at_ms: self.observed_at_ms,
+            app: App {
+                pid: self.pid,
+                bundle_id: &self.application_id,
+                name: self.application_name.as_deref(),
             },
-            format!("\"source\":{{{}}}", field("adapter", &self.adapter)),
-        ];
-        if let Some(idle) = self.idle_seconds {
-            parts.push(format!("\"activity\":{{\"idleSeconds\":{}}}", idle));
-        }
-        format!("{{{}}}", parts.join(","))
+            window: Window {
+                title: self.window_title.as_deref(),
+                document: self.document.as_deref(),
+                url: None,
+            },
+            element: Element {
+                role: self.element_role.as_deref(),
+                subrole: None,
+                identifier: None,
+            },
+            privacy: Privacy {
+                secure: self.secure,
+                protected: self.protected,
+                reason: self.privacy_reason.as_deref().filter(|reason| !reason.is_empty()),
+            },
+            source: Source {
+                adapter: &self.adapter,
+            },
+            activity: self.idle_seconds.map(|idle_seconds| Activity { idle_seconds }),
+        })
     }
 }
 
@@ -146,44 +241,43 @@ pub fn arch() -> &'static str {
 /// The first message. The platform is a parameter because it differs per collector - and because a
 /// hardcoded one silently claims to be Windows from a Linux binary.
 pub fn hello(session: &str, version: &str, platform: &str) -> String {
-    let capabilities = CAPABILITIES
-        .iter()
-        .map(|capability| format!("\"{}\"", capability))
-        .collect::<Vec<_>>()
-        .join(",");
-    format!(
-        "{{\"v\":1,\"type\":\"hello\",\"collectorSession\":\"{}\",\"collectorVersion\":\"{}\",\
-         \"platform\":\"{}\",\"arch\":\"{}\",\"capabilities\":[{}]}}",
-        escape(session),
-        escape(version),
-        escape(platform),
-        arch(),
-        capabilities,
-    )
+    line(&Hello {
+        v: 1,
+        message_type: "hello",
+        collector_session: session,
+        collector_version: version,
+        platform,
+        arch: arch(),
+        capabilities: CAPABILITIES,
+    })
 }
 
 pub fn state(state: &str, accessibility_trusted: bool, reason: Option<&str>) -> String {
-    match reason {
-        Some(text) => format!(
-            "{{\"v\":1,\"type\":\"state\",\"state\":\"{}\",\"accessibilityTrusted\":{},\"reason\":\"{}\"}}",
-            escape(state), accessibility_trusted, escape(text)
-        ),
-        None => format!(
-            "{{\"v\":1,\"type\":\"state\",\"state\":\"{}\",\"accessibilityTrusted\":{}}}",
-            escape(state), accessibility_trusted
-        ),
-    }
+    line(&State {
+        v: 1,
+        message_type: "state",
+        state,
+        accessibility_trusted,
+        reason,
+    })
 }
 
 pub fn configured(revision: u64) -> String {
-    format!("{{\"v\":1,\"type\":\"configured\",\"revision\":{}}}", revision)
+    line(&Configured {
+        v: 1,
+        message_type: "configured",
+        revision,
+    })
 }
 
 pub fn diagnostic(level: &str, code: &str, message: &str) -> String {
-    format!(
-        "{{\"v\":1,\"type\":\"diagnostic\",\"level\":\"{}\",\"code\":\"{}\",\"message\":\"{}\"}}",
-        escape(level), escape(code), escape(message)
-    )
+    line(&Diagnostic {
+        v: 1,
+        message_type: "diagnostic",
+        level,
+        code,
+        message,
+    })
 }
 
 #[cfg(test)]

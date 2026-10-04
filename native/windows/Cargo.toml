@@ -7,6 +7,10 @@ license = "MIT"
 
 [dependencies]
 dsh-collector-protocol = { path = "../collector-protocol" }
+# The host command stream is JSON; the shapes are typed structs so that an unknown field is ignored by
+# construction rather than by a hand-written scanner nobody can review.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 
 # UI Automation and the Win32 calls that go with it. Target-scoped so a macOS build never pays for it.
 [target.'cfg(windows)'.dependencies]
