@@ -5,6 +5,9 @@
 //! silent. A collector that says nothing is indistinguishable from a machine nobody used, and that
 //! ambiguity is what this module exists to remove.
 //!
+//! The observation source itself lives in `atspi.rs`; this module is what every build can answer - may this
+//! collector observe, and if not, why.
+//!
 //! The check shells out to `gdbus` rather than linking a D-Bus client: the collector's whole dependency
 //! list is the shared protocol crate, `gdbus` ships with GLib on every desktop this runs on, and a
 //! subprocess is bounded and easy to fail closed. When a tool is missing the collector says so - it does
@@ -250,3 +253,10 @@ mod tests {
         assert!(state.reason().unwrap().contains("toolkit-accessibility"));
     }
 }
+
+/// The source this build uses. The Windows collector has the same shape: the platform module names one
+/// implementation and the engine takes it.
+pub use crate::atspi::AtspiSource;
+
+/// The source the binary uses.
+pub type DefaultSource = AtspiSource;

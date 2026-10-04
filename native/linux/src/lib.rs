@@ -4,11 +4,13 @@
 //! the Windows collector runs - so "the same fields on every platform" is what the dependency graph says
 //! rather than what a reviewer has to check.
 //!
-//! `platform` is the only Linux-specific module, and it is not finished: it answers whether AT-SPI may be
-//! used, and the observation source itself (X11 foreground window, AT-SPI tree, `.desktop` identity) is the
-//! next piece. Until it exists this binary reports its state and answers commands, and produces no
-//! observation - which is what the row in `docs/validation-three-platforms.md` records.
+//! What is Linux here: `platform` (may this collector observe, and why not) and `atspi` (the observation
+//! source: the foreground window from X11, the tree from AT-SPI, the application id from the `.desktop`
+//! file that names the process). Every route in that source was measured before it was written - see the
+//! module comment for the two obvious routes that are wrong on this platform.
 
+pub mod adapters;
+pub mod atspi;
 pub mod platform;
 
 /// The shared engine, under the name the Windows collector uses for it.
