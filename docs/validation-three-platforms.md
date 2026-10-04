@@ -560,23 +560,38 @@ D-Bus: application, window, focused element, document, the same shape `native/ma
 is not written, so the collector has nothing to observe and emits none. That is why the fixture keeps its
 linux `$unverified` list: a live row means a stored observation, and there is none to store.
 
-**The session-bus check is written and measured (2026-10-05).** It asks `org.a11y.Bus` for the AT-SPI bus
-address and then reads `IsEnabled` and `ScreenReaderEnabled` from `org.a11y.Status`, through `gdbus` - no new
-Rust dependency, and every call is bounded at 1.5 s so a wedged bus cannot hold the hello budget. On the same
-Ubuntu 24.04 VM, in three configurations, the reason strings were accurate each time:
+**The accessibility gate is written and measured in both directions (2026-10-05).** It reads `IsEnabled`
+and `ScreenReaderEnabled` from `org.a11y.Status` on the session bus and falls back to the dconf key GNOME's
+GTK applications themselves read, `org.gnome.desktop.interface toolkit-accessibility`, through `gdbus` and
+`gsettings` - no new Rust dependency, every call bounded at 1.5 s so a wedged bus cannot hold the hello
+budget. Measured in a real session (Ubuntu 24.04 VM, Xvfb, session bus, a GTK application running):
+
+```text
+toolkit-accessibility true   -> {"state":"running","accessibilityTrusted":true}
+toolkit-accessibility false  -> {"state":"permission-required", "reason":"… turn on \"toolkit
+                                 accessibility\" (gsettings set org.gnome.desktop.interface
+                                 toolkit-accessibility true) or run a screen reader"}
+true again                   -> running
+```
+
+The first version of that check asked the **AT-SPI bus** for `org.a11y.Status` and was wrong: measured, that
+name answers on the session bus and not there, while the AT-SPI bus carries `org.a11y.atspi.Registry` and the
+applications. The earlier configurations, with the reason each produced now that the source is right:
 
 | configuration | what the collector reported |
 | --- | --- |
-| no session bus at all | `the AT-SPI bus is not running on this session: org.a11y.Bus did not answer` |
-| a session bus, but `at-spi2-core` not installed and no AT-SPI socket | `the AT-SPI bus answered without an address` / `the AT-SPI bus is not running …` |
-| a session bus where `org.a11y.Bus` answered `('unix:path=/run/user/501/at-spi/bus,guid=…',)` | `the AT-SPI bus answered but org.a11y.Status did not` |
+| no session bus and no dconf | `neither org.a11y.Status nor the toolkit-accessibility setting answered, so whether AT-SPI may be used is unknown` |
+| session bus with `at-spi2-core`, key `false` | `permission-required` with the actionable reason above |
+| the same session, key `true` | `running` |
 
-The second and third lines are the honest shape of a headless VM: D-Bus activates `org.a11y.Bus`, which
-publishes an address, but the launcher behind it has no session to serve. The `Enabled` and `Disabled` legs
-therefore stay unmeasured - they need a desktop session with a live AT-SPI bus, which is also what the
-observation path will need. Four unit tests cover the two parsers (GVariant text for the address and for a
-boolean) and the rule that a non-running state always carries a reason. The recipe for the row once the
-observation path exists:
+Four unit tests cover the two parsers (`(<true>,)` GVariant text and `gsettings`'s `true`/`'true'`) and the
+rule that a non-running state always carries a reason.
+
+**What the observation path will read, measured rather than remembered:** on the AT-SPI bus,
+`org.a11y.atspi.Registry` answers at `/org/a11y/atspi/accessible/root`, `GetChildren` returns `(bus name,
+object path)` pairs, each node exposes `org.a11y.atspi.Accessible` (`Name`, `Description`, `Parent`,
+`ChildCount`, `Locale`, `AccessibleId`, `HelpText`), and geometry sits on `Component`. The recipe for the row
+once that path exists:
 
 ```bash
 # on a Linux desktop with a session bus

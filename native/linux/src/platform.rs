@@ -7,8 +7,19 @@
 //!
 //! The check shells out to `gdbus` rather than linking a D-Bus client: the collector's whole dependency
 //! list is the shared protocol crate, `gdbus` ships with GLib on every desktop this runs on, and a
-//! subprocess is bounded and easy to fail closed. When it is missing the collector says so - it does not
-//! guess.
+//! subprocess is bounded and easy to fail closed. When a tool is missing the collector says so - it does
+//! not guess.
+//!
+//! **Measured 2026-10-05, on Ubuntu 24.04 in a VM with Xvfb, a session bus, `at-spi2-core` and a GTK
+//! application running.** Two facts came out of that run and both changed this file:
+//!
+//! * `org.a11y.Status` is **not** on the AT-SPI bus. It did not answer there, and in a headless session it
+//!   did not answer on the session bus either - a desktop session exports it, a headless one does not.
+//! * the setting that actually gates a GTK application exporting its tree is the dconf key
+//!   `org.gnome.desktop.interface toolkit-accessibility`, and `gsettings get` reads it reliably (`true` in
+//!   that session, with `gdbus` present and the AT-SPI bus alive).
+//!
+//! So the enable state is read from `org.a11y.Status` when it answers, and from that key when it does not.
 
 #[cfg(target_os = "linux")]
 pub const BUILT_FOR_LINUX: bool = true;
@@ -16,10 +27,6 @@ pub const BUILT_FOR_LINUX: bool = true;
 pub const BUILT_FOR_LINUX: bool = false;
 
 /// Whether AT-SPI is reachable *and* enabled, as far as this process can tell.
-///
-/// Measured on a real Linux (Ubuntu 24.04 in a VM, kernel 6.8) through a session bus: the bus answers
-/// `org.a11y.Bus.GetAddress`, and `org.a11y.Status` answers `IsEnabled`; with no accessibility stack
-/// installed at all the collector reports that, which is the whole point of the reason strings.
 pub fn accessibility_state() -> AccessibilityState {
     if !BUILT_FOR_LINUX {
         return AccessibilityState::Unavailable(
@@ -27,82 +34,98 @@ pub fn accessibility_state() -> AccessibilityState {
         );
     }
 
-    let address = match run_gdbus(&[
-        "call",
-        "--session",
-        "--dest",
-        "org.a11y.Bus",
-        "--object-path",
-        "/org/a11y/bus",
-        "--method",
-        "org.a11y.Bus.GetAddress",
-    ]) {
-        Ok(output) => match parse_bus_address(&output) {
-            Some(address) => address,
-            None => {
-                return AccessibilityState::Unknown(
-                    "the AT-SPI bus answered without an address",
-                )
+    let status = status_flags();
+    match status {
+        Ok((enabled, screen_reader)) => {
+            return if enabled || screen_reader {
+                AccessibilityState::Enabled
+            } else {
+                AccessibilityState::Disabled(TURN_IT_ON)
             }
-        },
-        Err(Failure::NoGdbus) => {
-            return AccessibilityState::Unavailable(NO_GDBUS)
         }
-        Err(_) => {
-            return AccessibilityState::Unknown(
-                "the AT-SPI bus is not running on this session: org.a11y.Bus did not answer",
-            )
-        }
-    };
+        Err(Failure::NoGdbus) => return AccessibilityState::Unavailable(NO_GDBUS),
+        // The canonical source did not answer; the setting GTK itself reads is the next best thing.
+        Err(_) => {}
+    }
 
-    let enabled = match status_property(&address, "IsEnabled") {
-        Ok(value) => value,
-        Err(Failure::NoGdbus) => {
-            return AccessibilityState::Unavailable(NO_GDBUS)
-        }
-        Err(_) => {
-            return AccessibilityState::Unknown(
-                "the AT-SPI bus answered but org.a11y.Status did not",
-            )
-        }
-    };
-    // A screen reader turns the tree on by itself, so either flag means there is something to observe.
-    let screen_reader =
-        status_property(&address, "ScreenReaderEnabled").unwrap_or(false);
-
-    if enabled || screen_reader {
-        AccessibilityState::Enabled
-    } else {
-        AccessibilityState::Disabled(
-            "accessibility is switched off for this session: turn on \"toolkit accessibility\" \
-             (gsettings set org.gnome.desktop.interface toolkit-accessibility true) or run a screen reader",
-        )
+    match toolkit_accessibility() {
+        Ok(true) => AccessibilityState::Enabled,
+        Ok(false) => AccessibilityState::Disabled(TURN_IT_ON),
+        Err(Failure::NoGdbus) => AccessibilityState::Unavailable(NO_GDBUS),
+        Err(_) => AccessibilityState::Unknown(NO_SOURCE),
     }
 }
 
-const NO_GDBUS: &str =
-    "gdbus is not installed (it ships with GLib), and it is how this collector asks AT-SPI whether it may observe";
+const TURN_IT_ON: &str =
+    "accessibility is switched off for this session: turn on \"toolkit accessibility\" \
+     (gsettings set org.gnome.desktop.interface toolkit-accessibility true) or run a screen reader";
 
-/// Why a single `gdbus` call did not produce a value.
+const NO_GDBUS: &str = "gdbus is not installed (it ships with GLib), and it is how this collector asks \
+                        the session whether it may observe";
+
+const NO_SOURCE: &str = "neither org.a11y.Status nor the toolkit-accessibility setting answered, so \
+                         whether AT-SPI may be used is unknown";
+
+/// Why a single subprocess did not produce a value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Failure {
-    /// The `gdbus` binary is not on PATH.
+    /// The binary is not on PATH.
     NoGdbus,
-    /// It ran, but not successfully: no session bus, no such name, or it took too long.
+    /// It ran, but not successfully: no bus, no such name, or it took too long.
     NoAnswer,
     /// It answered with something this parser does not recognise.
     Unintelligible,
 }
 
 /// The macOS collector bounds every Accessibility round trip at 0.5 s; a subprocess is bounded here.
-const GDBUS_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(1_500);
+const TOOL_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(1_500);
 
-fn run_gdbus(args: &[&str]) -> Result<String, Failure> {
+/// `IsEnabled` and `ScreenReaderEnabled` from `org.a11y.Status` on the session bus.
+///
+/// Measured: a desktop session exports this name; a headless one does not, which is why the caller falls
+/// back to the dconf key instead of reporting a failure.
+fn status_flags() -> Result<(bool, bool), Failure> {
+    let enabled = status_property("IsEnabled")?;
+    // A screen reader turns the tree on by itself, so either flag means there is something to observe.
+    let screen_reader = status_property("ScreenReaderEnabled").unwrap_or(false);
+    Ok((enabled, screen_reader))
+}
+
+fn status_property(name: &str) -> Result<bool, Failure> {
+    let output = run(&[
+        "gdbus",
+        "call",
+        "--session",
+        "--dest",
+        "org.a11y.Status",
+        "--object-path",
+        "/org/a11y/Status",
+        "--method",
+        "org.freedesktop.DBus.Properties.Get",
+        "org.a11y.Status",
+        name,
+    ])?;
+    parse_boolean(&output).ok_or(Failure::Unintelligible)
+}
+
+/// The dconf key GNOME's GTK applications read before exporting their tree.
+fn toolkit_accessibility() -> Result<bool, Failure> {
+    let output = run(&[
+        "gsettings",
+        "get",
+        "org.gnome.desktop.interface",
+        "toolkit-accessibility",
+    ])?;
+    parse_gsettings_boolean(&output).ok_or(Failure::Unintelligible)
+}
+
+fn run(argv: &[&str]) -> Result<String, Failure> {
     use std::io::Read;
     use std::process::{Command, Stdio};
     use std::time::Instant;
 
-    let mut child = match Command::new("gdbus")
+    let (program, args) = argv.split_first().ok_or(Failure::NoAnswer)?;
+    let mut child = match Command::new(program)
         .args(args)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -116,7 +139,7 @@ fn run_gdbus(args: &[&str]) -> Result<String, Failure> {
         Err(_) => return Err(Failure::NoAnswer),
     };
 
-    let deadline = Instant::now() + GDBUS_TIMEOUT;
+    let deadline = Instant::now() + TOOL_TIMEOUT;
     loop {
         match child.try_wait() {
             Ok(Some(status)) if status.success() => break,
@@ -140,32 +163,6 @@ fn run_gdbus(args: &[&str]) -> Result<String, Failure> {
     Ok(output)
 }
 
-fn status_property(address: &str, name: &str) -> Result<bool, Failure> {
-    let output = run_gdbus(&[
-        "call",
-        "--address",
-        address,
-        "--dest",
-        "org.a11y.Status",
-        "--object-path",
-        "/org/a11y/Status",
-        "--method",
-        "org.freedesktop.DBus.Properties.Get",
-        "org.a11y.Status",
-        name,
-    ])?;
-    parse_boolean(&output).ok_or(Failure::Unintelligible)
-}
-
-/// `('unix:path=/run/user/1000/at-spi/bus_0',)` -> the address.
-fn parse_bus_address(output: &str) -> Option<String> {
-    let start = output.find('\'')? + 1;
-    let rest = &output[start..];
-    let end = rest.find('\'')?;
-    let address = &rest[..end];
-    (!address.is_empty()).then(|| address.to_string())
-}
-
 /// `(<true>,)` -> `true`. gdbus prints GVariant text, which is where these two spellings come from.
 fn parse_boolean(output: &str) -> Option<bool> {
     if output.contains("<true>") {
@@ -174,6 +171,16 @@ fn parse_boolean(output: &str) -> Option<bool> {
         Some(false)
     } else {
         None
+    }
+}
+
+/// `gsettings get` prints `true`, `false`, or the same wrapped in quotes.
+fn parse_gsettings_boolean(output: &str) -> Option<bool> {
+    let trimmed = output.trim().trim_matches('\'').trim_matches('"');
+    match trimmed {
+        "true" => Some(true),
+        "false" => Some(false),
+        _ => None,
     }
 }
 
@@ -212,20 +219,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_bus_address_is_read_out_of_the_gvariant_text() {
-        assert_eq!(
-            parse_bus_address("('unix:path=/run/user/1000/at-spi/bus_0',)"),
-            Some("unix:path=/run/user/1000/at-spi/bus_0".to_string()),
-        );
-        assert_eq!(parse_bus_address("()"), None);
-        assert_eq!(parse_bus_address("('',)"), None);
-    }
-
-    #[test]
     fn the_two_gvariant_spellings_of_a_boolean_are_both_understood() {
         assert_eq!(parse_boolean("(<true>,)"), Some(true));
         assert_eq!(parse_boolean("(<false>,)"), Some(false));
         assert_eq!(parse_boolean("(error)"), None);
+    }
+
+    #[test]
+    fn the_dconf_answers_are_understood_in_both_spellings() {
+        assert_eq!(parse_gsettings_boolean("true\n"), Some(true));
+        assert_eq!(parse_gsettings_boolean("false"), Some(false));
+        assert_eq!(parse_gsettings_boolean("'true'"), Some(true));
+        assert_eq!(parse_gsettings_boolean("'custom'\n"), None);
     }
 
     #[test]
@@ -240,8 +245,8 @@ mod tests {
 
     #[test]
     fn a_disabled_session_tells_the_user_how_to_turn_it_on() {
-        let state = AccessibilityState::Disabled("turn on toolkit accessibility");
+        let state = AccessibilityState::Disabled(TURN_IT_ON);
         assert_eq!(state.state_name(), "permission-required");
-        assert_eq!(state.reason(), Some("turn on toolkit accessibility"));
+        assert!(state.reason().unwrap().contains("toolkit-accessibility"));
     }
 }
