@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, rmSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { openHistoryDatabase, EpisodeStore } from '../../src/host/store/index.js'
@@ -66,5 +66,7 @@ describe('recent lists episodes, and a deletion removes one', () => {
     expect(after.map(episode => episode.id)).not.toContain(victim.id)
     expect(after.length).toBe(listed.length - 1)
     handle.close()
+    // Leave nothing behind: a test that runs on every `pnpm verify` must not fill the temp directory.
+    rmSync(dir, { recursive: true, force: true })
   })
 })
