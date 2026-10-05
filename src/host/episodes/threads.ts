@@ -63,10 +63,20 @@ export function buildWorkThreads(
     }
 
     const resourceList = [...resources.values()]
+    const timeline = buildTimeline(ordered)
+    const activities = timeline.flatMap(day => day.activities)
+    const approxActiveDurationMs = activities.reduce(
+      (total, activity) => total + (activity.episodeCount > 1
+        ? activity.spanDurationMs
+        : activity.observedDurationMs),
+      0,
+    )
     threads.push({
       threadKey,
       episodeIds: ordered.map(episode => String(episode.id)),
       episodeCount: ordered.length,
+      activityCount: activities.length,
+      approxActiveDurationMs,
       startedAtMs: first.startedAtMs,
       endedAtMs: last.endedAtMs,
       resources: resourceList,
