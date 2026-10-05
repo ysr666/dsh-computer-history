@@ -254,6 +254,21 @@ describe('repository scaffold', () => {
     }
   })
 
+  it('renders an episode title through the shared rule, with no second copy of it', () => {
+    // The surface title reaches the panel only if the row asks `episodeSubject`, and that rule exists once -
+    // in `episode-subject.ts`, where it is tested with the real shapes. Measured on the Windows machine: with
+    // no resource on any row, the subject was the bare application name, so the timeline could not tell two
+    // Notepad windows apart even though the title was stored.
+    const panel = readFileSync(new URL('../src/client/panel.ts', import.meta.url), 'utf8')
+    expect(panel).toContain('episodeSubject(t, activity)')
+    expect(panel).not.toContain('function episodeSubject(')
+    expect(panel).not.toContain('function friendlyAppName(')
+    expect(panel).not.toContain('function isHomeDirectoryResource(')
+    const rule = readFileSync(new URL('../src/client/episode-subject.ts', import.meta.url), 'utf8')
+    expect(rule).toContain('export function episodeSubject(')
+    expect(rule).toContain('export function surfaceTitle(')
+  })
+
   it('keeps the collector refusal reasons aligned with the fixture', () => {
     // The reasons are defined by the shared engine - one engine, three platforms - so this reads the
     // engine rather than a platform crate. It read `native/windows/src/collector.rs` until 2026-10-05,
