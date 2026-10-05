@@ -5,10 +5,14 @@ import type {
   DeleteHistoryRequest,
   EditorCompanionInstallCapability,
   PolicySnapshot,
+  RedactionPreview,
+  RedactionReason,
 } from '../shared/index.js'
 import { COMPANION_BUNDLE_ID } from '../shared/constants.js'
 import { RETENTION_BOUNDS } from '../shared/audit.js'
 import { historyApi } from './api.js'
+import { friendlyAppName } from './episode-subject.js'
+import { ApplicationIcon } from './app-identity.js'
 import { downloadHistoryRoute } from './download.js'
 import {
   captureLabel,
@@ -20,6 +24,20 @@ import type {
   HistoryControlSnapshot,
   HistoryControlStore,
 } from './store.js'
+
+
+function redactionReasonText(t: HistoryTranslate, reason: RedactionReason): string {
+  switch (reason) {
+    case 'built-in-protected-app': return t('privacyReasonBuiltIn')
+    case 'policy-disallowed': return t('privacyReasonPolicy')
+    case 'secure-path': return t('privacyReasonSecurePath')
+    case 'unreadable-resource': return t('privacyReasonUnreadable')
+    case 'protected-title': return t('privacyReasonProtectedTitle')
+    case 'protected-metadata': return t('privacyReasonProtectedMetadata')
+    case 'browser-unpaired': return t('privacyReasonBrowserUnpaired')
+    case 'unlocatable-file-name': return t('privacyReasonUnlocatable')
+  }
+}
 
 type Feedback = {
   readonly kind: 'success' | 'error'
@@ -139,22 +157,6 @@ export function captureControlMode(
   return 'unavailable'
 }
 
-function friendlyBundleName(bundleId: string): string {
-  const known: Record<string, string> = {
-    'com.apple.Notes': 'Notes',
-    'com.apple.Preview': 'Preview',
-    'com.apple.Terminal': 'Terminal',
-    'com.apple.finder': 'Finder',
-    'com.apple.Safari': 'Safari',
-    'com.google.Chrome': 'Google Chrome',
-    'com.microsoft.VSCode': 'VS Code',
-    'com.microsoft.edgemac': 'Microsoft Edge',
-    'com.openai.chat': 'ChatGPT',
-  }
-  if (known[bundleId]) return known[bundleId]
-  const tail = bundleId.split('.').findLast(part => part.length > 0)
-  return tail && tail.length <= 28 ? tail.replaceAll('-', ' ') : bundleId
-}
 
 function allowRuleUpdate(
   policy: PolicySnapshot,
@@ -361,9 +363,14 @@ export function ApplicationsRow({
         : React.createElement('ul', { className: 'ch-list' },
             ...visibleAllowed.map(rule => React.createElement(
               'li', { key: rule.id },
+              React.createElement(ApplicationIcon, {
+                app: friendlyAppName(rule.pattern, installedNames.get(rule.pattern)),
+                bundleId: rule.pattern,
+                compact: true,
+              }),
               React.createElement(
                 'span', { className: 'ch-app-rule-copy' },
-                React.createElement('span', { className: 'ch-app-rule-title' }, installedNames.get(rule.pattern) ?? friendlyBundleName(rule.pattern)),
+                React.createElement('span', { className: 'ch-app-rule-title' }, friendlyAppName(rule.pattern, installedNames.get(rule.pattern))),
               ),
               React.createElement('button', {
                 type: 'button', className: 'ch-button', disabled: pending,
@@ -391,9 +398,14 @@ export function ApplicationsRow({
                 'ul', { className: 'ch-list' },
                 ...availableApps.map(app => React.createElement(
                   'li', { key: app.bundleId },
+                  React.createElement(ApplicationIcon, {
+                    app: friendlyAppName(app.bundleId, app.name),
+                    bundleId: app.bundleId,
+                    compact: true,
+                  }),
                   React.createElement(
                     'span', { className: 'ch-app-rule-copy' },
-                    React.createElement('span', { className: 'ch-app-rule-title' }, app.name),
+                    React.createElement('span', { className: 'ch-app-rule-title' }, friendlyAppName(app.bundleId, app.name)),
                   ),
                   React.createElement('button', {
                     type: 'button', className: 'ch-button', disabled: pending || !policy,
@@ -581,7 +593,7 @@ export function deleteHistoryRequest(
   }
 }
 
-export function DataRow({ t, store }: SettingsRowProps): React.ReactElement {
+export function DataRow({ t, store, snapshot }: SettingsRowProps): React.ReactElement {
   const inputRef = React.useRef<HTMLInputElement>(null)
   const [exportPending, setExportPending] = React.useState(false)
   const [importPending, setImportPending] = React.useState(false)
@@ -589,7 +601,48 @@ export function DataRow({ t, store }: SettingsRowProps): React.ReactElement {
     readonly name: string
     readonly document: unknown
   }>()
+  const [privacyApps, setPrivacyApps] = React.useState<readonly { readonly bundleId: string, readonly name: string }[]>([])
+  const [privacyBundleId, setPrivacyBundleId] = React.useState('')
+  const [privacyPreview, setPrivacyPreview] = React.useState<RedactionPreview>()
+  const [privacyPending, setPrivacyPending] = React.useState(false)
   const [feedback, setFeedback] = React.useState<Feedback>()
+
+  React.useEffect(() => {
+    let disposed = false
+    void historyApi.getRedactionApplications()
+      .then(recorded => {
+        if (disposed) return
+        const apps = recorded
+          .map(app => ({
+            bundleId: app.bundleId,
+            name: friendlyAppName(app.bundleId, app.displayName),
+          }))
+          .toSorted((left, right) => left.name.localeCompare(right.name))
+        setPrivacyApps(apps)
+        setPrivacyBundleId(current => current && apps.some(app => app.bundleId === current)
+          ? current
+          : apps[0]?.bundleId ?? '')
+        setPrivacyPreview(undefined)
+      })
+      .catch(() => {
+        if (!disposed) setPrivacyApps([])
+      })
+    return () => { disposed = true }
+  }, [snapshot.historyRevision])
+
+  const checkPrivacy = async (): Promise<void> => {
+    if (!privacyBundleId) return
+    setPrivacyPending(true)
+    setFeedback(undefined)
+    try {
+      setPrivacyPreview(await historyApi.getRedactionPreview(`app:${privacyBundleId}`))
+    } catch (cause) {
+      setPrivacyPreview(undefined)
+      setFeedback({ kind: 'error', text: failureText(t, cause) })
+    } finally {
+      setPrivacyPending(false)
+    }
+  }
 
   const exportHistory = async (): Promise<void> => {
     setExportPending(true)
@@ -641,6 +694,75 @@ export function DataRow({ t, store }: SettingsRowProps): React.ReactElement {
     t('dataDescriptionShort'),
     value('', { chevron: true }),
     detail(
+      React.createElement(
+        'section', { className: 'ch-setup-step' },
+        React.createElement('h4', null, t('privacyCheck')),
+        React.createElement('p', { className: 'ch-row-body' }, t('privacyCheckBody')),
+        privacyApps.length > 0
+          ? React.createElement(
+              React.Fragment,
+              null,
+              controls(
+                React.createElement(
+                  'select',
+                  {
+                    className: 'ch-input ch-privacy-select',
+                    value: privacyBundleId,
+                    'aria-label': t('privacyCheckChooseApp'),
+                    onChange: (event: React.ChangeEvent<HTMLSelectElement>) => {
+                      setPrivacyBundleId(event.target.value)
+                      setPrivacyPreview(undefined)
+                    },
+                  },
+                  ...privacyApps.map(app => React.createElement(
+                    'option', { key: app.bundleId, value: app.bundleId }, app.name,
+                  )),
+                ),
+                React.createElement('button', {
+                  type: 'button', className: 'ch-button', disabled: privacyPending || !privacyBundleId,
+                  onClick: () => { void checkPrivacy() },
+                }, privacyPending ? t('privacyCheckRunning') : t('privacyCheckRun')),
+              ),
+              privacyPreview
+                ? React.createElement(
+                    'div', { className: 'ch-privacy-result', role: 'status' },
+                    React.createElement('p', { className: 'ch-row-body' },
+                      privacyPreview.excluded.length === 0
+                        ? t('privacyCheckKept', { checked: privacyPreview.checked })
+                        : t('privacyCheckExcluded', {
+                            checked: privacyPreview.checked,
+                            excluded: privacyPreview.excluded.length,
+                          })),
+                    privacyPreview.excluded.length > 0
+                      ? React.createElement(
+                          'ul', { className: 'ch-privacy-reasons' },
+                          ...Object.entries(
+                            privacyPreview.excluded.reduce<Record<string, number>>((counts, entry) => {
+                              counts[entry.reason] = (counts[entry.reason] ?? 0) + 1
+                              return counts
+                            }, {}),
+                          ).map(([reason, count]) => React.createElement(
+                            'li', { key: reason }, t('privacyReasonCount', {
+                              reason: redactionReasonText(t, reason as RedactionReason),
+                              count,
+                            }),
+                          )),
+                        )
+                      : null,
+                    React.createElement(
+                      'details', { className: 'ch-inspector' },
+                      React.createElement('summary', null, t('technicalDetails')),
+                      React.createElement('p', { className: 'ch-muted' }, t('privacyTechnicalMeta', {
+                        revision: privacyPreview.policyRevision,
+                        bundles: privacyPreview.rulesInForce.protectedBundleIds.length,
+                        patterns: privacyPreview.rulesInForce.protectedPatterns.length,
+                      })),
+                    ),
+                  )
+                : null,
+            )
+          : React.createElement('p', { className: 'ch-row-body' }, t('privacyCheckNoHistory')),
+      ),
       React.createElement(
         'section', { className: 'ch-setup-step' },
         React.createElement('h4', null, t('exportHistory')),

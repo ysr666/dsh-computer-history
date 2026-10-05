@@ -19,6 +19,7 @@ import {
   type CaptureController,
 } from '../../src/host/service/index.js'
 import { DeletionService } from '../../src/host/retention/index.js'
+import { SemanticOptInStore } from '../../src/host/semantic/opt-in.js'
 import {
   EpisodeStore,
   ObservationStore,
@@ -142,6 +143,43 @@ class FakeCapture implements CaptureController {
 }
 
 describe('local computer history backend', () => {
+  it('reports semantic provider readiness and refuses opt-in to an unavailable provider', () => {
+    const history = openTempDatabase()
+    const policies = new PolicyStore(history.db)
+    policies.ensureInitial(100)
+    const base = {
+      observationRetentionHours: 24,
+      episodeRetentionDays: 30,
+      autoResume: false,
+      now: () => 10_000,
+    }
+    const unavailable = new LocalComputerHistoryBackend(
+      new EpisodeStore(history.db),
+      policies,
+      new DeletionService(history.db),
+      new FakeCapture(),
+      base,
+      undefined,
+      new SemanticOptInStore(history.db),
+      history.db,
+    )
+
+    expect(unavailable.semanticState()).toMatchObject({
+      active: 'deterministic',
+      providers: {
+        local: { available: false, reason: 'not-wired' },
+        remote: { available: false, reason: 'not-wired' },
+      },
+      scopes: [],
+    })
+    expect(() => unavailable.grantSemanticOptIn({
+      scopeKey: 'app:com.microsoft.VSCode',
+      providerKind: 'local',
+    })).toThrow(/local summary provider is not available/)
+
+    expect(new SemanticOptInStore(history.db).list()).toEqual([])
+    history.close()
+  })
   it('composes store, resume, policy, capture, and deletion behavior', async () => {
     const history = openTempDatabase()
     const episodeId = seedEpisode(history)
@@ -161,7 +199,17 @@ describe('local computer history backend', () => {
         autoResume: false,
         now: () => 10_000,
       },
+      undefined,
+      undefined,
+      history.db,
     )
+
+    expect(backend.redactionApplications()).toEqual([
+      { bundleId: 'com.microsoft.VSCode' },
+    ])
+    expect(backend.redactionPreview({
+      scopeKey: 'app:com.microsoft.VSCode',
+    }).checked).toBe(1)
 
     expect(await backend.recent()).toHaveLength(1)
     expect(
@@ -292,6 +340,7 @@ describe('Cordis computer history service', () => {
       setRetention() {
         return { observationRetentionHours: 24, episodeRetentionDays: 30, updatedAtMs: 1 }
       },
+      redactionApplications() { return [] },
       redactionPreview() {
         return {
           scopeKey: 'app:x',
@@ -306,7 +355,7 @@ describe('Cordis computer history service', () => {
       },
       importAll() { return { imported: {} } },
       semanticState() {
-        return { active: 'deterministic', localProviderConfigured: false, scopes: [] }
+        return { active: 'deterministic', providers: { local: { available: false, reason: 'not-wired' }, remote: { available: false, reason: 'not-wired' } }, scopes: [] }
       },
       semanticPreview() { return undefined },
       grantSemanticOptIn(request) {

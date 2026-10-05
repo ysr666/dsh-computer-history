@@ -14,12 +14,27 @@ export interface HistoryExport {
   readonly tables: Record<string, readonly Record<string, unknown>[]>
 }
 
+export interface RecordedApplicationIdentity {
+  readonly bundleId: string
+  readonly displayName?: string
+}
+
+export type RedactionReason =
+  | 'built-in-protected-app'
+  | 'policy-disallowed'
+  | 'secure-path'
+  | 'unreadable-resource'
+  | 'protected-title'
+  | 'protected-metadata'
+  | 'browser-unpaired'
+  | 'unlocatable-file-name'
+
 /** One row the current policy would not have kept. */
 export interface RedactionPreviewEntry {
   readonly observationId: number
   readonly label: string
   readonly bundleId: string
-  readonly reason: string
+  readonly reason: RedactionReason
 }
 
 /**

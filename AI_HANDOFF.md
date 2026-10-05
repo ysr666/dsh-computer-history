@@ -220,3 +220,10 @@ Expected: business `fetch` only in `src/client/api.ts`; no DOM-locale observer; 
 - The Desktop Host uses a copied installed plugin under `~/.dsh/profiles/desktop/node_modules/dsh-computer-history`, not a symlink. AM copied the final clean-worktree Phase 2 `lib/client.js` + `lib/index.js` into that preview installation **without restarting the user's live Desktop process**, so the next normal restart will load Phase 2C without interrupting current work.
 - Phase 2C was rendered and interaction-checked in an isolated real DSH `uiqa` profile against the same Computer History store; the synthetic older-history check intercepted only the read response and wrote no history data.
 - No release action has been taken; the working tree remains for review/testing.
+
+### Productization contracts added 2026-10-05
+
+- Capture recovery is a fixed Host capability, not a shell/restart recipe. `recover()` must reacquire capture ownership first and must not resolve until the new collector has acknowledged its desired state **and** the current policy configuration. Multi-Host contention must remain fail-closed.
+- Semantic/model UI must be driven by Host provider readiness. A provider that is not wired/configured must not accept an opt-in or be presented as enabled. Deterministic summaries remain truthful fallback.
+- App identity has one client naming source. On macOS, system app icons come only from the fixed supported installed bundle-id inventory; the renderer never supplies or receives app filesystem paths. The icon endpoint accepts bundle IDs only and text badges remain the cross-platform fallback.
+- Settings → Data → Privacy check is explanatory only. It reuses `/audit/preview` / ingestion predicates, shows human reason categories and counts, and must not expose scope keys, observation IDs or raw policy strings in the default UI. Do not turn it into a second policy editor.

@@ -20,6 +20,7 @@ function observation(input: {
   bundleId: string
   title?: string
   uri?: string
+  elementIdentifier?: string
 }): ActivityObservation {
   return {
     collectorSessionId: CollectorSessionId('preview-1'),
@@ -30,6 +31,9 @@ function observation(input: {
       kind: 'editor',
       ...(input.title ? { title: input.title } : {}),
     },
+    ...(input.elementIdentifier
+      ? { element: { identifier: input.elementIdentifier } }
+      : {}),
     ...(input.uri
       ? {
           resource: {
@@ -49,7 +53,7 @@ function observation(input: {
   }
 }
 
-function store() {
+function store(extra: readonly ActivityObservation[] = []) {
   const root = mkdtempSync(path.join(os.tmpdir(), 'dsh-ch-preview-'))
   roots.push(root)
   const history = openHistoryDatabase({
@@ -63,6 +67,7 @@ function store() {
     observation({ seq: 2, bundleId: 'com.microsoft.VSCode', uri: 'file:///alpha/.env' }),
     observation({ seq: 3, bundleId: 'com.apple.Terminal', title: 'zsh' }),
     observation({ seq: 4, bundleId: 'com.microsoft.VSCode', title: 'notes.txt' }),
+    ...extra,
   ]
   for (const value of values) {
     const resourceId = value.resource
@@ -103,7 +108,43 @@ describe('redaction preview', () => {
     expect(preview.checked).toBe(4)
     expect(reasons.some(entry => entry.includes('zsh'))).toBe(true)
     expect(reasons.some(entry => entry.includes('.env'))).toBe(true)
+    expect(preview.excluded.map(entry => entry.reason)).toEqual(
+      expect.arrayContaining(['secure-path', 'policy-disallowed']),
+    )
     expect(preview.rulesInForce.hasProtectRule).toBe(false)
+    history.close()
+  })
+
+
+  it('uses the same title and metadata predicates as ingestion', () => {
+    const { history, observations } = store([
+      // The secure-path heuristic deliberately does not apply to descriptive
+      // titles with whitespace. Preview used to call isProtectedText directly
+      // and falsely claimed this row would be excluded.
+      observation({
+        seq: 5,
+        bundleId: 'com.microsoft.VSCode',
+        title: 'secrets project notes',
+      }),
+      // Element identifiers are screened by ingestion too. The old preview
+      // ignored them, so an imported/legacy row could be reported as safe.
+      observation({
+        seq: 6,
+        bundleId: 'com.microsoft.VSCode',
+        title: 'ordinary window',
+        elementIdentifier: '.env',
+      }),
+    ])
+    const preview = buildRedactionPreview({
+      scopeKey: 'app:com.microsoft.VSCode',
+      policy: policy([allowVscode]),
+      observations,
+    })
+
+    expect(preview.excluded.some(entry => entry.label === 'secrets project notes')).toBe(false)
+    expect(preview.excluded.some(entry =>
+      entry.label === 'ordinary window' && entry.reason === 'protected-metadata',
+    )).toBe(true)
     history.close()
   })
 

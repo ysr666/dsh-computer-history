@@ -89,24 +89,14 @@ export function isProtectedTitle(
   return isProtectedText(title, policy)
 }
 
-function isProtectedMetadata(
+function hasProtectedRawResourceMetadata(
   message: NativeObservation,
   policy: PolicySnapshot,
 ): boolean {
-  for (
-    const value of [
-      message.window?.document,
-      message.window?.url,
-      message.element?.identifier,
-    ]
-  ) {
+  for (const value of [message.window?.document, message.window?.url]) {
     if (value && isProtectedText(value, policy)) return true
   }
-
-  return Boolean(
-    message.window?.title
-    && isProtectedTitle(message.window.title, policy),
-  )
+  return false
 }
 
 function resourceOf(
@@ -196,6 +186,7 @@ export type RefusalReason =
   | 'unknown-adapter'
   | 'unlocatable-name'
   | 'secure-path'
+  | 'unreadable-resource'
   | 'policy'
   /**
    * A browser seen through Accessibility while no companion is paired: the path cannot tell a private
@@ -235,17 +226,103 @@ export interface RefusalReport {
  * under one of them, so the name is not stored. This only ever drops an
  * observation: nothing becomes storable that was not storable before.
  */
+function isUnlocatableTitle(
+  title: string | undefined,
+  resource: ResourceIdentity | undefined,
+  policy: PolicySnapshot,
+): boolean {
+  if (resource) return false
+  if (!title || !looksLikeBareFileName(title)) return false
+  return policy.rules.some(rule =>
+    rule.dimension === 'resource' && rule.action !== 'allow',
+  )
+}
+
 export function isUnlocatableFileName(
   message: NativeObservation,
   resource: ResourceIdentity | undefined,
   policy: PolicySnapshot,
 ): boolean {
-  if (resource) return false
-  const title = message.window?.title
-  if (!title || !looksLikeBareFileName(title)) return false
-  return policy.rules.some(rule =>
-    rule.dimension === 'resource' && rule.action !== 'allow',
-  )
+  return isUnlocatableTitle(message.window?.title, resource, policy)
+}
+
+export type PrivacyMetadataExclusionReason =
+  | 'protected-app'
+  | 'protected-title'
+  | 'protected-metadata'
+
+export type PrivacyPolicyExclusionReason =
+  | PrivacyMetadataExclusionReason
+  | 'unlocatable-name'
+  | 'browser-unpaired'
+  | 'secure-path'
+  | 'unreadable-resource'
+  | 'policy'
+
+export interface PrivacyPolicyCandidate {
+  readonly bundleId: string
+  readonly title?: string
+  readonly elementIdentifier?: string
+  readonly resource?: ResourceIdentity
+  readonly provider: NonNullable<NativeObservation['source']>['provider']
+}
+
+export function classifyPrivacyMetadataExclusion(
+  candidate: Pick<
+    PrivacyPolicyCandidate,
+    'bundleId' | 'title' | 'elementIdentifier'
+  >,
+  policy: PolicySnapshot,
+): PrivacyMetadataExclusionReason | undefined {
+  if (PROTECTED_BUNDLES.has(candidate.bundleId)) return 'protected-app'
+  if (candidate.title && isProtectedTitle(candidate.title, policy)) {
+    return 'protected-title'
+  }
+  if (
+    candidate.elementIdentifier
+    && isProtectedText(candidate.elementIdentifier, policy)
+  ) {
+    return 'protected-metadata'
+  }
+  return undefined
+}
+
+/**
+ * One source of truth for the privacy/policy decisions that can be re-run over
+ * already-normalised metadata. Ingestion calls this before storing; the Privacy
+ * Check calls the same function over stored rows. Raw collector-only fields and
+ * retention/clock checks remain outside because they cannot be reconstructed
+ * from a stored observation and are not policy-preview questions.
+ */
+export function classifyPrivacyPolicyExclusion(
+  candidate: PrivacyPolicyCandidate,
+  policy: PolicySnapshot,
+): PrivacyPolicyExclusionReason | undefined {
+  const metadataReason = classifyPrivacyMetadataExclusion(candidate, policy)
+  if (metadataReason) return metadataReason
+  if (isUnlocatableTitle(candidate.title, candidate.resource, policy)) {
+    return 'unlocatable-name'
+  }
+  if (candidate.resource?.kind === 'url' && candidate.provider !== 'companion') {
+    return 'browser-unpaired'
+  }
+  if (
+    candidate.resource?.kind === 'file'
+    || candidate.resource?.kind === 'directory'
+  ) {
+    try {
+      const pathname = decodeURIComponent(
+        new URL(candidate.resource.canonicalUri).pathname,
+      )
+      if (SECURE_PATH.test(pathname)) return 'secure-path'
+    } catch {
+      return 'unreadable-resource'
+    }
+  }
+  if (!policyAllows(candidate.bundleId, candidate.resource, policy)) {
+    return 'policy'
+  }
+  return undefined
 }
 
 export function normalizeObservation(
@@ -277,32 +354,47 @@ export function normalizeObservation(
     && message.privacy.reason === 'protected-app'
   ) return refuse('protected-app')
   if (message.privacy.secure || message.privacy.protected) return refuse('secure-field')
-  if (PROTECTED_BUNDLES.has(message.app.bundleId)) return refuse('protected-app')
-  if (isProtectedMetadata(message, policy)) return refuse('protected-metadata')
+  if (hasProtectedRawResourceMetadata(message, policy)) {
+    return refuse('protected-metadata')
+  }
+  const metadataExclusion = classifyPrivacyMetadataExclusion({
+    bundleId: message.app.bundleId,
+    ...(message.window?.title ? { title: message.window.title } : {}),
+    ...(message.element?.identifier
+      ? { elementIdentifier: message.element.identifier }
+      : {}),
+  }, policy)
+  if (metadataExclusion === 'protected-app') return refuse('protected-app')
+  if (metadataExclusion) return refuse('protected-metadata')
+
   const safeAdapter = phase1AdapterForBundle(message.app.bundleId)
   if (!safeAdapter) return refuse('not-an-adapter')
   const adapter = phase1AdapterDefinition(safeAdapter)
   if (!adapter) return refuse('unknown-adapter')
   const resource = resourceOverride
     ?? resourceOf(message, adapter)
-  if (isUnlocatableFileName(message, resource, policy)) return refuse('unlocatable-name')
-  // A URL resource is accepted only from the paired companion (ADR 0007). The
-  // Accessibility path still cannot tell a private window from a normal one, so
-  // a browser seen through AX keeps contributing nothing.
   const provider = message.source.provider ?? 'macos-ax'
-  if (
-    resource?.kind === 'url'
-    && provider !== 'companion'
-  ) return refuse('browser-unpaired')
-  if (
-    resource?.kind === 'file'
-    || resource?.kind === 'directory'
-  ) {
-    try {
-      if (SECURE_PATH.test(decodeURIComponent(new URL(resource.canonicalUri).pathname))) return refuse('secure-path')
-    } catch { return undefined }
+  const privacyPolicyExclusion = classifyPrivacyPolicyExclusion({
+    bundleId: message.app.bundleId,
+    ...(message.window?.title ? { title: message.window.title } : {}),
+    ...(message.element?.identifier
+      ? { elementIdentifier: message.element.identifier }
+      : {}),
+    ...(resource ? { resource } : {}),
+    provider,
+  }, policy)
+  if (privacyPolicyExclusion) {
+    switch (privacyPolicyExclusion) {
+      case 'protected-app': return refuse('protected-app')
+      case 'protected-title':
+      case 'protected-metadata': return refuse('protected-metadata')
+      case 'unlocatable-name': return refuse('unlocatable-name')
+      case 'browser-unpaired': return refuse('browser-unpaired')
+      case 'secure-path': return refuse('secure-path')
+      case 'unreadable-resource': return refuse('unreadable-resource')
+      case 'policy': return refuse('policy')
+    }
   }
-  if (!policyAllows(message.app.bundleId, resource, policy)) return refuse('policy')
 
   // A collector on another machine keeps its own clock, so "in the future" has to mean "beyond what skew
   // explains" rather than "any millisecond ahead of mine". The same-machine collectors never trip this; the

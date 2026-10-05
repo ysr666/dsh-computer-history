@@ -252,6 +252,47 @@ export class ObservationStore {
     `).all(episodeId).map((row) => this.materialize(row))
   }
 
+  public listForBundle(
+    bundleId: string,
+  ): readonly PersistedActivityObservation[] {
+    return this.db.prepare(`
+      SELECT o.*, r.kind AS resource_kind, r.canonical_uri AS resource_uri,
+        r.display_label AS resource_label
+      FROM observations o
+      LEFT JOIN resources r ON r.id = o.resource_id
+      WHERE o.bundle_id = ?
+      ORDER BY o.observed_at_ms, o.collector_session, o.collector_seq
+    `).all(bundleId).map((row) => this.materialize(row))
+  }
+
+  public listForWorkspace(
+    workspaceId: string,
+  ): readonly PersistedActivityObservation[] {
+    return this.db.prepare(`
+      SELECT o.*, r.kind AS resource_kind, r.canonical_uri AS resource_uri,
+        r.display_label AS resource_label
+      FROM observations o
+      LEFT JOIN resources r ON r.id = o.resource_id
+      WHERE o.workspace_id = ?
+      ORDER BY o.observed_at_ms, o.collector_session, o.collector_seq
+    `).all(workspaceId).map((row) => this.materialize(row))
+  }
+
+  public listRecordedApplications(): readonly {
+    readonly bundleId: string
+    readonly displayName?: string
+  }[] {
+    const rows = this.db.prepare(`
+      SELECT bundle_id, MAX(NULLIF(app_name, '')) AS app_name
+      FROM observations
+      GROUP BY bundle_id
+      ORDER BY bundle_id
+    `).all() as Array<{ bundle_id: string, app_name: string | null }>
+    return rows.map(row => row.app_name === null
+      ? { bundleId: row.bundle_id }
+      : { bundleId: row.bundle_id, displayName: row.app_name })
+  }
+
   public listAll(): readonly PersistedActivityObservation[] {
     return this.db.prepare(`
       SELECT o.*, r.kind AS resource_kind, r.canonical_uri AS resource_uri,

@@ -62,6 +62,7 @@ function harness(overrides: Record<string, unknown> = {}) {
     async pause() {},
     async resume() {},
     async recover() {},
+    redactionApplications: () => [],
     getPolicy: () => policy,
     async replacePolicy(update: unknown) {
       calls.policy = update
@@ -136,6 +137,7 @@ describe('Computer History Host API', () => {
   it('registers the stable route set and preserves no-store responses', async () => {
     const { request, routes } = harness()
     expect([...routes.keys()].toSorted()).toEqual([
+      '/api/computer-history/audit/applications',
       '/api/computer-history/audit/preview',
       '/api/computer-history/companion/editor',
       '/api/computer-history/companion/setup',
@@ -161,11 +163,16 @@ describe('Computer History Host API', () => {
       '/api/computer-history/semantic/revoke',
       '/api/computer-history/state',
       '/api/computer-history/system/accessibility',
+      '/api/computer-history/system/application-icon',
       '/api/computer-history/system/applications',
       '/api/computer-history/thread',
       '/api/computer-history/threads',
       '/api/computer-history/timeline',
     ])
+
+    const auditApplications = await request('/audit/applications')
+    expect(auditApplications.status).toBe(200)
+    await expect(auditApplications.json()).resolves.toEqual([])
 
     const response = await request('/state')
     expect(response.status).toBe(200)
@@ -185,6 +192,11 @@ describe('Computer History Host API', () => {
     expect(opened.status).toBe(200)
     const result = await opened.json() as { status?: unknown }
     expect(['opened', 'unsupported']).toContain(result.status)
+
+
+    const unknownIcon = await request('/system/application-icon?bundleId=not.supported')
+    expect(unknownIcon.status).toBe(404)
+    expect(await unknownIcon.text()).toBe('Application icon is unavailable.')
   })
 
   it('serves Desktop-safe export and diagnostics downloads', async () => {
@@ -415,10 +427,10 @@ describe('Computer History Host API', () => {
     if (process.platform === 'darwin') {
       expect(openedBody).toMatchObject({ status: 'opened', kind: 'file' })
     } else {
-      // The same darwin-only capability: off macOS the route answers `unsupported` rather than pretending to
-      // have opened anything. The rest of the test - a resource outside the stored episode is refused - is
-      // platform-independent and still exercised below.
-      expect(openedBody).toMatchObject({ status: 'unsupported', reason: 'platform-unverified' })
+      expect(openedBody).toMatchObject({
+        status: 'unsupported',
+        reason: 'platform-unverified',
+      })
     }
 
     const forged = await api.request('/resume/open', {

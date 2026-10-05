@@ -16,6 +16,7 @@ import type {
   PolicyUpdate,
   RecentEpisodesRequest,
   RedactionPreview,
+  RecordedApplicationIdentity,
   RetentionSettings,
   TimelineDay,
   SemanticOptIn,
@@ -293,7 +294,14 @@ implements ComputerHistoryServiceContract {
   public semanticState(): SemanticSummaryState {
     return {
       active: 'deterministic',
-      localProviderConfigured: false,
+      // Readiness is an execution fact. This Host does not yet attach a local
+      // or remote executor to the service, so a model-shaped config value must
+      // never make the UI claim that summaries can run. When an executor is
+      // wired, this state must be sourced from that same runtime object.
+      providers: {
+        local: { available: false, reason: 'not-wired' },
+        remote: { available: false, reason: 'not-wired' },
+      },
       scopes: this.semanticOptIns?.list() ?? [],
     }
   }
@@ -402,15 +410,20 @@ implements ComputerHistoryServiceContract {
   public grantSemanticOptIn(request: {
     readonly scopeKey: string
     readonly providerKind: 'local' | 'remote'
-    readonly model?: string
   }): SemanticOptIn {
     if (!this.semanticOptIns) {
-      throw new Error('semantic summaries are unavailable')
+      throw new SummaryProviderError('semantic summaries are unavailable')
+    }
+    const provider = this.semanticState().providers[request.providerKind]
+    if (!provider.available) {
+      throw new SummaryProviderError(
+        `${request.providerKind} summary provider is not available on this Host`,
+      )
     }
     return this.semanticOptIns.grant(
       parseScopeKey(request.scopeKey),
       request.providerKind,
-      request.model,
+      provider.model,
       this.now(),
     )
   }
@@ -472,15 +485,19 @@ implements ComputerHistoryServiceContract {
    * What the current policy would not have kept for this scope, computed by the
    * ingestion predicates themselves (see audit/preview.ts).
    */
+  public redactionApplications(): readonly RecordedApplicationIdentity[] {
+    return new ObservationStore(this.requireDb()).listRecordedApplications()
+  }
+
   public redactionPreview(request: {
     readonly scopeKey: string
   }): RedactionPreview {
     const [kind, ...rest] = request.scopeKey.split(':')
     const id = rest.join(':')
-    const observations = new ObservationStore(this.requireDb()).listAll()
+    const observations = new ObservationStore(this.requireDb())
     const scoped = kind === 'app'
-      ? observations.filter(item => item.app.bundleId === id)
-      : observations.filter(item => item.workspace.id === id)
+      ? observations.listForBundle(id)
+      : observations.listForWorkspace(id)
     return buildRedactionPreview({
       scopeKey: request.scopeKey,
       policy: this.policies.get(),

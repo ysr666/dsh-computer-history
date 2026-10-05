@@ -167,6 +167,29 @@ export function registerHistoryApi(ctx: Context): void {
     fetch: async () => json(await applications.read()),
   }))
 
+
+  ctx.effect(() => ctx.connection.fetch.register({
+    path: HISTORY_API_PREFIX + '/system/application-icon',
+    methods: ['GET'],
+    requestBody: 'buffered',
+    fetch: async (request: Request) => {
+      try {
+        const bundleId = requiredQueryText(new URL(request.url), 'bundleId', 160)
+        const icon = await applications.readIcon(bundleId)
+        if (!icon) return textResponse('Application icon is unavailable.', 404)
+        return new Response(Uint8Array.from(icon).buffer, {
+          status: 200,
+          headers: {
+            'cache-control': 'private, max-age=3600',
+            'content-type': 'image/png',
+          },
+        })
+      } catch (error) {
+        return requestFailure(error)
+      }
+    },
+  }))
+
   // One registration per path: the connection registry keys routes by exact
   // path, so a second register() for the same path throws during setup and
   // takes the whole plugin down with it. Method dispatch happens inside.
@@ -230,6 +253,13 @@ export function registerHistoryApi(ctx: Context): void {
         return textResponse('Request failed.', 500)
       }
     },
+  }))
+
+  ctx.effect(() => ctx.connection.fetch.register({
+    path: HISTORY_API_PREFIX + '/audit/applications',
+    methods: ['GET'],
+    requestBody: 'buffered',
+    fetch: () => Promise.resolve(json(history.redactionApplications())),
   }))
 
   ctx.effect(() => ctx.connection.fetch.register({
@@ -345,7 +375,6 @@ export function registerHistoryApi(ctx: Context): void {
       const record = body as Partial<{
         scopeKey: unknown
         providerKind: unknown
-        model: unknown
       }>
       if (
         typeof record.scopeKey !== 'string'
@@ -357,7 +386,6 @@ export function registerHistoryApi(ctx: Context): void {
         return json(history.grantSemanticOptIn({
           scopeKey: record.scopeKey,
           providerKind: record.providerKind,
-          ...(typeof record.model === 'string' ? { model: record.model } : {}),
         }))
       } catch (error) {
         if (error instanceof SummaryProviderError) {

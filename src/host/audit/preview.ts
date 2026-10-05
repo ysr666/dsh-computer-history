@@ -2,13 +2,12 @@ import type {
   PolicySnapshot,
   RedactionPreview,
   RedactionPreviewEntry,
+  RedactionReason,
 } from '../../shared/index.js'
 import {
+  classifyPrivacyPolicyExclusion,
   PROTECTED_BUNDLES,
-  SECURE_PATH,
-  isProtectedText,
-  isUnlocatableFileName,
-  policyAllows,
+  type PrivacyPolicyExclusionReason,
 } from '../ingestion/normalize.js'
 import type { PersistedActivityObservation } from '../episodes/builder.js'
 
@@ -60,56 +59,33 @@ export function buildRedactionPreview(input: {
   }
 }
 
+function redactionReason(
+  reason: PrivacyPolicyExclusionReason,
+): RedactionReason {
+  switch (reason) {
+    case 'protected-app': return 'built-in-protected-app'
+    case 'protected-title': return 'protected-title'
+    case 'protected-metadata': return 'protected-metadata'
+    case 'unlocatable-name': return 'unlocatable-file-name'
+    case 'browser-unpaired': return 'browser-unpaired'
+    case 'secure-path': return 'secure-path'
+    case 'unreadable-resource': return 'unreadable-resource'
+    case 'policy': return 'policy-disallowed'
+  }
+}
+
 function exclusionReason(
   observation: PersistedActivityObservation,
   policy: PolicySnapshot,
-): string | undefined {
-  if (PROTECTED_BUNDLES.has(observation.app.bundleId)) {
-    return 'the application is protected by a built-in rule'
-  }
-  if (!policyAllows(observation.app.bundleId, observation.resource, policy)) {
-    return 'the policy does not allow this application or resource'
-  }
-  // The same secure-path screen ingestion applies to a resource, so the preview
-  // cannot miss a row that ingestion would have dropped.
-  const uri = observation.resource?.canonicalUri
-  if (uri) {
-    try {
-      if (SECURE_PATH.test(decodeURIComponent(new URL(uri).pathname))) {
-        return 'the path is protected by the secure-path rule'
-      }
-    } catch {
-      return 'the resource could not be read, so it would have been dropped'
-    }
-  }
-  const title = observation.surface.title
-  if (title && isProtectedText(title, policy)) {
-    return 'the title matches a protected pattern'
-  }
-  if (
-    isUnlocatableFileName(
-      {
-        v: 1,
-        type: 'observation',
-        collectorSession: '',
-        seq: 0,
-        observedAtMs: observation.observedAtMs,
-        app: {
-          pid: observation.app.pid,
-          bundleId: observation.app.bundleId,
-        },
-        ...(title ? { window: { title } } : {}),
-        privacy: {
-          secure: observation.privacy.secure,
-          protected: observation.privacy.protected,
-        },
-        source: { adapter: observation.source.adapter },
-      },
-      observation.resource,
-      policy,
-    )
-  ) {
-    return 'the window offered a file name the Host cannot place (ADR 0008)'
-  }
-  return undefined
+): RedactionReason | undefined {
+  const reason = classifyPrivacyPolicyExclusion({
+    bundleId: observation.app.bundleId,
+    ...(observation.surface.title ? { title: observation.surface.title } : {}),
+    ...(observation.element?.identifier
+      ? { elementIdentifier: observation.element.identifier }
+      : {}),
+    ...(observation.resource ? { resource: observation.resource } : {}),
+    provider: observation.source.provider,
+  }, policy)
+  return reason ? redactionReason(reason) : undefined
 }

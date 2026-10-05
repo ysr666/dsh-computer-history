@@ -13,6 +13,7 @@ import type {
 } from '../shared/index.js'
 import { localDayKey, TIMELINE_ACTIVITY_MERGE_GAP_MS } from '../shared/audit-view.js'
 import { historyApi } from './api.js'
+import { ApplicationIcon } from './app-identity.js'
 import {
   episodeApp,
   episodeSubject,
@@ -86,32 +87,6 @@ function threadSkeleton(label: string): React.ReactElement {
   )
 }
 
-function appMark(label: string): string {
-  const known: Record<string, string> = {
-    Terminal: '>_',
-    'VS Code': 'VS',
-    Xcode: 'X',
-    Finder: 'F',
-    Preview: 'P',
-    Notes: 'N',
-    Safari: 'S',
-    'Google Chrome': 'GC',
-    'Microsoft Edge': 'E',
-    ChatGPT: '✦',
-  }
-  if (known[label]) return known[label]
-  const parts = label.trim().split(/\s+/).filter(Boolean)
-  const initials = parts.slice(0, 2).map(part => part[0]).join('')
-  return (initials || '•').toUpperCase()
-}
-
-function appBadge(app: string): React.ReactElement {
-  return React.createElement(
-    'span',
-    { className: 'ch-app-mark', 'aria-hidden': true, title: app },
-    appMark(app),
-  )
-}
 
 function resourceLabel(
   t: HistoryTranslate,
@@ -697,7 +672,7 @@ export function createHistoryPage({
                               'aria-expanded': isSelected,
                               onClick: () => { runAction(() => openActivity(activity)) },
                             },
-                            appBadge(app),
+                            React.createElement(ApplicationIcon, { app, bundleId: activity.surfaces[0]?.bundleId }),
                             React.createElement(
                               'span', { className: 'ch-episode-copy' },
                               React.createElement('span', { className: 'ch-episode-title' }, episodeSubject(t, activity)),
@@ -728,7 +703,7 @@ export function createHistoryPage({
             'div', { className: 'ch-detail' },
             React.createElement(
               'div', { className: 'ch-detail-head' },
-              appBadge(episodeApp(selectedActivity)),
+              React.createElement(ApplicationIcon, { app: episodeApp(selectedActivity), bundleId: selectedActivity.surfaces[0]?.bundleId }),
               React.createElement(
                 'span', { className: 'ch-detail-copy' },
                 React.createElement('span', { className: 'ch-detail-title' }, episodeSubject(t, selectedActivity)),
@@ -830,7 +805,7 @@ export function createHistoryPage({
         recentEpisode
           ? React.createElement(
               'div', { className: 'ch-resume-suggestion' },
-              appBadge(episodeApp(recentEpisode)),
+              React.createElement(ApplicationIcon, { app: episodeApp(recentEpisode), bundleId: recentEpisode.surfaces[0]?.bundleId }),
               React.createElement(
                 'span', { className: 'ch-resume-copy' },
                 React.createElement('span', { className: 'ch-resume-title' }, resumeSubject(recentEpisode) ?? episodeSubject(t, recentEpisode)),
@@ -1146,7 +1121,13 @@ export function createHistoryPage({
             )
           : semantic === undefined || semantic === null
             ? null
-            : React.createElement('p', { className: 'ch-muted' }, t('noModelScope')),
+            : React.createElement(
+                'p',
+                { className: 'ch-muted' },
+                !semantic.providers.local.available && !semantic.providers.remote.available
+                  ? t('noSummaryProvider')
+                  : t('noModelScope'),
+              ),
         preview
           ? React.createElement(
               'details', { className: 'ch-inspector', open: true },

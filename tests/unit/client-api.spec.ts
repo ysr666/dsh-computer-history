@@ -62,6 +62,40 @@ describe('client history API contract', () => {
     expect(init.body).toBeUndefined()
   })
 
+  it('reads the complete recorded-application set from the audit route', async () => {
+    const apps = [{ bundleId: 'com.microsoft.VSCode', displayName: 'Code' }]
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(apps))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(historyApi.getRedactionApplications()).resolves.toEqual(apps)
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      'api/computer-history/audit/applications',
+    )
+  })
+
+  it('encodes the privacy-preview scope on the fixed audit route', async () => {
+    const preview = {
+      scopeKey: 'app:com.microsoft.VSCode',
+      policyRevision: 3,
+      rulesInForce: {
+        protectedBundleIds: [],
+        protectedPatterns: [],
+        hasProtectRule: false,
+      },
+      checked: 2,
+      excluded: [],
+    }
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(preview))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(
+      historyApi.getRedactionPreview('app:com.microsoft.VSCode'),
+    ).resolves.toEqual(preview)
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      'api/computer-history/audit/preview?scope=app%3Acom.microsoft.VSCode',
+    )
+  })
+
   it('posts retention to the registered route', async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
       observationRetentionHours: 48,

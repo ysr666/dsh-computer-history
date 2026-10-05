@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { episodeApp, episodeSubject, surfaceTitle } from '../../src/client/episode-subject.js'
+import { episodeApp, episodeSubject, friendlyAppName, surfaceTitle } from '../../src/client/episode-subject.js'
 import { en, type HistoryTranslate } from '../../src/client/locale.js'
 import type { EpisodeSummary } from '../../src/shared/index.js'
 
@@ -32,6 +32,15 @@ function episode(overrides: Partial<EpisodeSummary> & { surfaces: EpisodeSummary
 }
 
 describe('the episode subject', () => {
+  it('does not expose synthetic or JetBrains bundle tails as app names', () => {
+    expect(friendlyAppName('companion.browser')).toBe('Browser')
+    expect(friendlyAppName('com.jetbrains.intellij.ce')).toBe('IntelliJ IDEA')
+    expect(friendlyAppName('com.jetbrains.pycharm.ce')).toBe('PyCharm')
+    expect(friendlyAppName('com.google.android.studio')).toBe('Android Studio')
+    expect(friendlyAppName('com.googlecode.iterm2')).toBe('iTerm2')
+    expect(friendlyAppName('com.kingsoft.wpsoffice.mac', 'wpsoffice')).toBe('WPS Office')
+    expect(friendlyAppName('org.example.Custom', 'My Custom App')).toBe('My Custom App')
+  })
   it('prefers a workspace, then a resource, then the surface title, then the app', () => {
     const surfaces = [{ bundleId: 'Notepad.exe', surfaceKind: 'editor' as const, title: '无标题 - Notepad', firstSeenAtMs: 0, lastSeenAtMs: 1, observationCount: 1 }]
 

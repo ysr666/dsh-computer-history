@@ -15,6 +15,7 @@ import type {
   MinimisedSummaryPayload,
   PairingRotation,
   RedactionPreview,
+  RecordedApplicationIdentity,
   RetentionSettings,
   TimelineDay,
   PairingState,
@@ -144,6 +145,10 @@ export class ComputerHistoryService
     return this.backend.setRetention(input)
   }
 
+  public redactionApplications(): readonly RecordedApplicationIdentity[] {
+    return this.backend.redactionApplications()
+  }
+
   public redactionPreview(request: {
     readonly scopeKey: string
   }): RedactionPreview {
@@ -163,7 +168,6 @@ export class ComputerHistoryService
   public grantSemanticOptIn(request: {
     readonly scopeKey: string
     readonly providerKind: 'local' | 'remote'
-    readonly model?: string
   }): SemanticOptIn {
     return this.backend.grantSemanticOptIn(request)
   }

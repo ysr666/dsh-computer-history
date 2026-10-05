@@ -5,6 +5,7 @@ import type {
 } from './episode.js'
 import type {
   HistoryExport,
+  RecordedApplicationIdentity,
   RedactionPreview,
   RetentionSettings,
 } from './audit.js'
@@ -233,6 +234,9 @@ export interface ComputerHistoryServiceContract {
     readonly days?: number
   }): Promise<readonly TimelineDay[]>
 
+  /** Applications that still have metadata in the local observation store. */
+  redactionApplications(): readonly RecordedApplicationIdentity[]
+
   /** What the policy would not keep for a scope, using ingestion's own rules. */
   redactionPreview(request: {
     readonly scopeKey: string
@@ -249,7 +253,6 @@ export interface ComputerHistoryServiceContract {
   grantSemanticOptIn(request: {
     readonly scopeKey: string
     readonly providerKind: 'local' | 'remote'
-    readonly model?: string
   }): SemanticOptIn
 
   /** "Turn off and purge": revoke the permission and delete model summaries. */
