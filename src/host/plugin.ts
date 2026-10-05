@@ -10,6 +10,7 @@ import { registerAgentIntegration } from '../agent/index.js'
 import {
   presetBundles,
   readFirstRunPreset,
+  findStaleInstall,
   runningRelease,
   type CollectorToHost,
   type ComputerHistoryState,
@@ -487,10 +488,13 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
       }
     },
     () => {
-      // No drift guess here: pnpm hard-links installed files out of its content-addressed store, so the
-      // installed copy carries the store entry's timestamp and looks older than the artifact by construction.
-      // The owner's own install showed the banner crying wolf; the plugin states facts instead.
-      return runningRelease()
+      const release = runningRelease()
+      if (!release) return undefined
+      // The profile may have been rebuilt away from this copy. That is a fact, not a guess: it is decided by
+      // the digest pnpm recorded for the artifact against the artifact on disk, so a pnpm-linked install -
+      // where timestamps say nothing - cannot make it cry wolf.
+      const stale = findStaleInstall(release.loadedFrom, dshHomePath('profiles'))
+      return stale ? { ...release, stale } : release
     },
   )
 
