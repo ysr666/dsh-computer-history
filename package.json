@@ -24,6 +24,7 @@
     "verify:release": "node scripts/verify-release.mjs",
     "verify:release:blockers": "node scripts/release-blockers.mjs",
     "e2e:macos": "node scripts/e2e-macos.mjs",
+    "e2e:linux": "node scripts/e2e-linux.mjs",
     "verify:p1": "pnpm verify && pnpm build && pnpm benchmark:ingestion && pnpm native:build && pnpm native:test",
     "pack:plugin": "pnpm pack",
     "prepack": "pnpm build && pnpm native:build && pnpm build:extension && pnpm build:editor-extension",
