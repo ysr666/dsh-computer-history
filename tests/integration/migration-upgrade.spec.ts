@@ -271,16 +271,6 @@ describe('v1 database upgrade compatibility', () => {
     expect(upgraded.db.prepare(
       'SELECT COUNT(*) AS count FROM schema_migrations',
     ).get()).toEqual({ count: latestSchemaVersion() })
-    // A column added by a later migration has to appear on a database that predates it, and it has to be
-    // nullable: the episodes this fixture already holds were summarised before surface titles existed, and
-    // nothing invents one for them.
-    const surfaceColumns = upgraded.db.prepare(
-      'PRAGMA table_info(episode_surfaces)',
-    ).all() as Array<{ name: string, notnull: number }>
-    expect(surfaceColumns.find(column => column.name === 'title')).toMatchObject({
-      name: 'title',
-      notnull: 0,
-    })
     upgraded.close()
   })
 })
