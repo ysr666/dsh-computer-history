@@ -20,12 +20,15 @@ import { writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 
 const PORT = process.env.CDP_PORT ?? '19222'
+// Which Host the page under test belongs to. It was hardcoded to the desktop profile's port while the
+// debugging port above was already configurable, so the tool could only ever measure one Host.
+const TARGET_URL_MATCH = process.env.TARGET_URL_MATCH ?? '19387'
 const OUT = process.env.OUT_DIR ?? '/tmp/dch-ui'
 setTimeout(() => { console.log('HARD TIMEOUT'); process.exit(0) }, 90000)
 
 const targets = await (await fetch(`http://127.0.0.1:${PORT}/json/list`)).json()
-const page = targets.find(t => t.type === 'page' && t.url.includes('19387'))
-if (!page) { console.log('no Host page in the browser'); process.exit(1) }
+const page = targets.find(t => t.type === 'page' && t.url.includes(TARGET_URL_MATCH))
+if (!page) { console.log(`no Host page for ${TARGET_URL_MATCH} in the browser`); process.exit(1) }
 const ws = new WebSocket(page.webSocketDebuggerUrl)
 let id = 0
 const pending = new Map()
@@ -41,13 +44,23 @@ const evaluate = async (expression) => (await send('Runtime.evaluate', { returnB
 // 1. fresh build, fresh page: reload before measuring anything
 await send('Page.reload', { ignoreCache: true })
 await new Promise(r => setTimeout(r, 9000))
-await evaluate(`(() => { const b = [...document.querySelectorAll('button')].find(e => (e.textContent||'').trim() === '继续'); if (b) b.click() })()`)
+// The first-run gate is dismissed without the owner's input; its button is labelled per locale.
+await evaluate(`(() => {
+  const b = [...document.querySelectorAll('button')].find(e => /继续|稍后配置|Skip|Continue|Later/i.test((e.textContent||'').trim()))
+  if (b) b.click()
+})()`)
 await new Promise(r => setTimeout(r, 1200))
 
 // 2. open the panel and prove it opened
+// Found by slot and label, not by the English title: the panel is registered in the sidebar list and its
+// accessible name follows the locale, so looking for the text `Computer History` found nothing on a Chinese
+// GUI - the tool reported "not found" and captured the conversation view instead.
 const opened = await evaluate(`(() => {
-  const el = [...document.querySelectorAll('*')].filter(e => (e.textContent||'').trim() === 'Computer History')
+  const bySlot = document.querySelector('[data-slot="sidebar.panellist"] button, [data-slot="sidebar.panellist"] [role="button"], [data-slot="sidebar.panellist"] a')
+  const byLabel = [...document.querySelectorAll('button,[role="button"],a')].find(e => /Computer History|电脑使用记录/.test(e.getAttribute('aria-label') || e.getAttribute('title') || ''))
+  const byText = [...document.querySelectorAll('*')].filter(e => (e.textContent||'').trim() === 'Computer History')
     .map(e => e.closest('button,[role="button"],a,[data-slot]')).filter(Boolean)[0]
+  const el = bySlot || byLabel || byText
   if (!el) return 'not found'
   el.click(); return 'clicked'
 })()`)
