@@ -23,7 +23,37 @@ import { createHistoryControlStore } from './store.js'
 const PANEL_ID = 'computer-history' as MainPanelId
 
 function HistoryIcon(): React.ReactElement {
-  return React.createElement('span', { 'aria-hidden': true }, '◷')
+  return React.createElement(
+    'svg',
+    {
+      'aria-hidden': true,
+      viewBox: '0 0 24 24',
+      width: 20,
+      height: 20,
+      fill: 'none',
+    },
+    React.createElement('path', {
+      d: 'M5.2 18.4A8.3 8.3 0 1 1 18.3 6.4',
+      stroke: 'currentColor',
+      strokeWidth: 1.9,
+      strokeLinecap: 'round',
+    }),
+    React.createElement('circle', { cx: 18.25, cy: 6.35, r: 1.35, fill: 'currentColor' }),
+    React.createElement('circle', { cx: 20.15, cy: 12.05, r: 1.08, fill: 'currentColor' }),
+    React.createElement('circle', { cx: 18.35, cy: 17.65, r: 0.9, fill: 'currentColor' }),
+    React.createElement('path', {
+      d: 'M9.1 17.1A5.4 5.4 0 1 1 15.9 16',
+      stroke: 'currentColor',
+      strokeWidth: 1.7,
+      strokeLinecap: 'round',
+    }),
+    React.createElement('path', {
+      d: 'M12 11.8V8.8M12 11.8l2.6 1.8',
+      stroke: 'currentColor',
+      strokeWidth: 1.65,
+      strokeLinecap: 'round',
+    }),
+  )
 }
 
 export const inject = ['slots', 'locale']
