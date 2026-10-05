@@ -153,6 +153,14 @@ try {
 
 const failed = checks.filter(c => !c.ok)
 console.log(`\nartifacts: ${path.relative(REPO, artifacts)}`)
+const ownershipBoundary = failed.every(c => c.detail.includes('capture-not-owned')) && failed.length > 0
+if (ownershipBoundary) {
+  console.error('\ne2e (editor wire format) stopped at a boundary, not a defect: this machine already has a Host')
+  console.error('that owns capture, so the isolated Host refused the payload by name. Every cell that does not need')
+  console.error('that ownership passed - the contract itself is intact. Quit the other Host, or run the matrix')
+  console.error('against the one that owns capture.')
+  process.exit(1)
+}
 if (failed.length > 0) {
   console.error(`e2e (editor wire format) failed: ${failed.map(c => `${c.name} (${c.detail})`).join('; ')}`)
   process.exit(1)
