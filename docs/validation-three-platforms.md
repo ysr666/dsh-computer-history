@@ -606,6 +606,38 @@ active/focused in this harness (`GetState` returned the same value before and af
 "which window is in front" comes from X11 rather than from AT-SPI; on Wayland that route needs a portal and
 is unmeasured.
 
+### The panel on a Windows store (T5.3), 2026-10-05
+
+`docs/plan-three-platforms.md` asks for "the panel photographed against a store from each platform". The
+macOS photographs live in `.debug/panel-render-current/`, the Linux one in
+`.debug/linux-2026-10-05/panel-timeline-linux-rows.png`, and the Windows one is
+`.debug/linux-2026-10-05/panel-timeline-windows-rows.png`: five rows whose subject is the window title, taken
+with `scripts/panel-shot.mjs`.
+
+```text
+09:29  notes.txt - Notepad                / Notepad
+09:28  WindowsTerminal                    / WindowsTerminal   <- adapter suppresses titles: no title row
+09:27  measured.txt - Visual Studio Code  / Code
+09:24  47109 - 文件资源管理器               / explorer
+09:23  无标题 - Notepad                    / Notepad          <- the string the panel could not show before
+```
+
+**How faithful this is, stated plainly.** The rows are the ones that machine stored, captured from its own
+`/api/computer-history/recent` and recorded in this file; they were replayed into a Host through the documented
+collector protocol (a collector that reports `platform: win32` and those observations) because the machine's own
+database could not be fetched - **both Desktop Commander connectors fail their authentication** as of this run.
+So this is "the panel against that machine's rows", not "the panel against that machine's file". The Linux
+photograph is the other way round: that store is the one the VM's collector wrote.
+
+The run also settled two things about the tooling:
+
+* `scripts/panel-shot.mjs` could only open the panel on an English GUI at port 19387 - it looked for the text
+  `Computer History` while this GUI's accessible name is `电脑使用记录`, so it reported `opened: not found` and
+  captured the welcome screen. Fixed in `8a40e0f`, together with `TARGET_URL_MATCH`;
+* `/api/computer-history/recent` answered **500 Request failed** on a Host built from the shared working tree,
+  and answered correctly on a Host built from the committed HEAD (`60ecaba`). That points at the other session's
+  in-flight host code being bundled into the first build, not at HEAD - worth re-checking when that work lands.
+
 ### The Host row (2026-10-05), and the three defects it found
 
 A Host on the development machine drove the collector inside the VM - the Windows machine's own WSL cannot
