@@ -110,11 +110,14 @@ dsh: warning: 1 entry did not activate
 computer-history (dsh-computer-history): pending (waiting for services: connection, workspaceRegistry)
 ```
 
-The cause is the step `docs/release.md` describes in a comment: the CLI writes the dependency but **not** the
-profile's `bundles` list (`bundles` stays absent), and this plugin needs the two services the web application
-provides. Without that entry it never activates, so it cannot report anything itself - the silence is the whole
-symptom. Listing the package in the profile's `bundles` and restarting is what fixes it. This is recorded as a
-gap in the install path rather than a defect of the plugin: measured with the same command into an
+The cause is the entry `docs/release.md` describes in a comment, in a state the CLI does not repair by itself:
+the profile's `dsh.profile.bundles` list has to contain the plugin, and this plugin needs the two services the
+web application provides. Measured 2026-10-05: a fresh profile installed in one successful run **does** get the
+entry - `dsh.profile.bundles` came out as `["@deepseek-ai/dsh-base", "dsh-computer-history"]` - because the
+plugin manager reconciles *newly installed* bundles. What it does not do is reconcile a package that was
+**already** a dependency: an earlier attempt that failed after writing `dependencies` leaves it out on the retry
+(`beforeDeps.has(name)` skips it), and then this plugin stays pending with only that one warning line. Listing
+the package in `dsh.profile.bundles` and restarting is what fixes it. Measured with the same command into an
 already-working profile, where the plugin activates normally.
 
 ## Why an installed bundle can still show no interface

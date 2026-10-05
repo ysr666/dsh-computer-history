@@ -126,8 +126,10 @@ editor's extension directory.
 npm pack                                        # dsh-computer-history-<version>.tgz
 dsh plugin --profile <profile> add ./dsh-computer-history-<version>.tgz
 # then list the package in the profile's package.json "bundles" and start the Host
-#   skipping that step is silent: the log says `pending (waiting for services: connection,
-#   workspaceRegistry)` and the Host never listens (docs/development.md has the measurement)
+#   the CLI normally does this itself for a package it installs for the first time; it does not repair a
+#   package that was already in `dependencies` (an earlier failed attempt). Skipping it is silent: the log
+#   says `pending (waiting for services: connection, workspaceRegistry)` and the Host never listens
+#   (docs/development.md has the measurement)
 ```
 
 Verified on this machine, with the result that came back:
