@@ -411,10 +411,15 @@ describe('Computer History Host API', () => {
       }),
     })
     expect(opened.status).toBe(200)
-    await expect(opened.json()).resolves.toMatchObject({
-      status: 'opened',
-      kind: 'file',
-    })
+    const openedBody = await opened.json() as { status?: unknown, kind?: unknown, reason?: unknown }
+    if (process.platform === 'darwin') {
+      expect(openedBody).toMatchObject({ status: 'opened', kind: 'file' })
+    } else {
+      // The same darwin-only capability: off macOS the route answers `unsupported` rather than pretending to
+      // have opened anything. The rest of the test - a resource outside the stored episode is refused - is
+      // platform-independent and still exercised below.
+      expect(openedBody).toMatchObject({ status: 'unsupported', reason: 'platform-unverified' })
+    }
 
     const forged = await api.request('/resume/open', {
       method: 'POST',
