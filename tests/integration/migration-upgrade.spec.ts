@@ -274,3 +274,34 @@ describe('v1 database upgrade compatibility', () => {
     upgraded.close()
   })
 })
+
+describe('a store restored without its schema version', () => {
+  // `sqlite3 old.db .dump | sqlite3 new.db` writes every table and row and never `PRAGMA user_version`, so a
+  // restored store arrives at version 0 with all migrations applied. That used to fail with "table
+  // schema_migrations already exists" on data that was perfectly intact, and the message named nothing useful.
+  const restored = (tamper: boolean): string => {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'dsh-restored-'))
+    roots.push(root)
+    const handle = openHistoryDatabase({ dataDirectory: root })
+    if (tamper) {
+      handle.db.prepare('UPDATE schema_migrations SET checksum = ? WHERE version = 1').run('tampered')
+    }
+    handle.db.exec('PRAGMA user_version = 0')
+    handle.close()
+    return root
+  }
+
+  it('adopts the version its own migration records describe', () => {
+    const root = restored(false)
+    const handle = openHistoryDatabase({ dataDirectory: root })
+    const version = (handle.db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version
+    handle.close()
+    expect(version).toBe(latestSchemaVersion())
+  })
+
+  it('refuses by name when the records do not match this build', () => {
+    const root = restored(true)
+    expect(() => openHistoryDatabase({ dataDirectory: root }))
+      .toThrow(/restored without its schema version|do not match this build/)
+  })
+})

@@ -61,3 +61,28 @@ describe('editor observations (ADR 0009)', () => {
     expect(JSON.stringify(observation)).not.toContain('secret')
   })
 })
+
+describe('the adapter an editor observation is recorded with', () => {
+  // `source.adapter` is the "which adapter saw this" column and it reaches the export. It was hardcoded to
+  // 'vscode' for every editor payload, so a row from IntelliJ said VS Code - while the comment right above it
+  // promised "the real editor adapter". The bundle the editor claimed is already in the payload and the repo
+  // has a table that maps bundles to adapters, so the value is derived rather than assumed.
+  const editor = (bundleId: string) => ({
+    source: 'editor' as const,
+    app: { bundleId, name: 'an editor' },
+    workspaceRoot: '/tmp/ws',
+    surfaceKind: 'editor' as const,
+    editorSession: 'adapter-probe',
+    seq: 1,
+    observedAtMs: 1_760_000_000_000,
+  })
+
+  it('names the adapter the bundle maps to', () => {
+    expect(companionObservation(editor('com.jetbrains.intellij')).source.adapter).toBe('jetbrains')
+    expect(companionObservation(editor('com.microsoft.VSCode')).source.adapter).toBe('vscode')
+  })
+
+  it('says generic rather than naming an adapter it does not know', () => {
+    expect(companionObservation(editor('com.example.not-in-the-table')).source.adapter).toBe('generic')
+  })
+})
