@@ -81,7 +81,7 @@ try {
   }
 
   const jar = path.join(artifacts, 'cookies.txt')
-  spawnSync('curl', ['-s', '-c', jar, '-o', '/dev/null', `http://127.0.0.1:${web}/?token=${token}`])
+  spawnSync('curl', ['-s', '-c', jar, '-o', path.join(artifacts, 'bootstrap.html'), `http://127.0.0.1:${web}/?token=${token}`])
   const pairing = JSON.parse(spawnSync('curl', ['-s', '-b', jar, '-X', 'POST', `http://127.0.0.1:${web}/api/computer-history/pairing/rotate`], { encoding: 'utf8' }).stdout)
   // The matrix script wants a file whose one line is `cookie=<name>=<value>`.
   const cookieLine = readFileSync(jar, 'utf8').split('\n').filter(l => l.includes('dsh-auth'))

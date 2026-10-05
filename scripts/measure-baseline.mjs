@@ -76,7 +76,7 @@ try {
   if (token === undefined) throw new Error('the Host never started; see host.log')
   const api = `http://127.0.0.1:${web}/api/computer-history`
   const jar = path.join(artifacts, 'cookies.txt')
-  spawnSync('curl', ['-s', '-c', jar, '-o', '/dev/null', `http://127.0.0.1:${web}/?token=${token}`])
+  spawnSync('curl', ['-s', '-c', jar, '-o', path.join(artifacts, 'bootstrap.html'), `http://127.0.0.1:${web}/?token=${token}`])
   const get = (p) => { try { return JSON.parse(spawnSync('curl', ['-s', '-b', jar, `${api}${p}`], { encoding: 'utf8' }).stdout) } catch { return {} } }
 
   // ① setup actions a user performs, and what a stored row would additionally need.

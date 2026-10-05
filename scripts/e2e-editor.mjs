@@ -32,7 +32,10 @@ rmSync(home, { recursive: true, force: true })
 // installer shells out to the operator's `code`. That is what makes the pairing route safe to call from a test:
 // it can neither write into a real home nor touch a real editor.
 const env = { ...process.env, DSH_HOME: home }
-const hostEnv = { ...env, HOME: home }
+// HOME *and* USERPROFILE: os.homedir() follows HOME on POSIX and USERPROFILE on Windows, so setting only HOME
+// would leave the Windows run staging its pairing token into the operator's real home - measured 2026-10-06 with
+// `HOME=/tmp/fake-home node -e "require('node:os').homedir()"`.
+const hostEnv = { ...env, HOME: home, USERPROFILE: home }
 let host
 
 try {
@@ -68,7 +71,9 @@ try {
   if (sessionToken === undefined) throw new Error('the Host never started; see host.log')
   const api = `http://127.0.0.1:${web}/api/computer-history`
   const jar = path.join(artifacts, 'cookies.txt')
-  spawnSync('curl', ['-s', '-c', jar, '-o', '/dev/null', `http://127.0.0.1:${web}/?token=${sessionToken}`])
+  // Not /dev/null: that path does not exist on Windows. Write the landing page into the artifacts instead - the
+  // same single call, and the response is kept as evidence.
+  spawnSync('curl', ['-s', '-c', jar, '-o', path.join(artifacts, 'bootstrap.html'), `http://127.0.0.1:${web}/?token=${sessionToken}`])
 
   // GET reports what the Host could install; POST runs the installer and rotates the editor token into
   // $HOME/.dsh/computer-history. Both are safe here only because HOME points at the throwaway directory above.

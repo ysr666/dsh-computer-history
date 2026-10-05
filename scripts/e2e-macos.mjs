@@ -127,7 +127,8 @@ try {
   // silent-capture problem invisible.
   const jar = path.join(artifacts, 'cookies.txt')
   const api = `http://127.0.0.1:${webPort}/api/computer-history`
-  run('curl', ['-s', '-c', jar, '-o', '/dev/null', `http://127.0.0.1:${webPort}/?token=${token}`])
+  // -o into the artifacts, not /dev/null: that path does not exist on Windows, and this keeps the response.
+  run('curl', ['-s', '-c', jar, '-o', path.join(artifacts, 'bootstrap.html'), `http://127.0.0.1:${webPort}/?token=${token}`])
   const stateRaw = run('curl', ['-s', '-b', jar, `${api}/state`]).out
   writeFileSync(path.join(artifacts, 'state.json'), stateRaw)
   let state = {}
