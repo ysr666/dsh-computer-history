@@ -1,4 +1,5 @@
-import { existsSync, readFileSync, statSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { PHASE1_ADAPTERS } from './constants.js'
@@ -102,7 +103,10 @@ export interface RunningRelease {
   readonly version: string
   readonly loadedFrom: string
   readonly builtAtMs?: number
-  /** Set when the profile's dependency points at an artifact older than the installed code. */
+  /**
+   * Set when the profile's installed copy no longer matches the artifact it installed: the artifact was
+   * rebuilt and the profile still runs the previous extraction. Compared by content, never by time.
+   */
   readonly stale?: {
     readonly profile: string
     readonly artifact: string
@@ -132,18 +136,101 @@ export function runningRelease(
 }
 
 /**
- * Does the profile that installed this copy point at an artifact predating the installed code?
+ * Does the profile that installed this copy still match the artifact it installed?
  *
- * The failure this catches has already cost this phase twice: the plugin is changed and built, the
- * profile still runs the previous copy, and the result looks exactly like a broken feature. The plugin
- * can work it out without any help - it knows where it was loaded from, and it can find the profile
- * whose node_modules resolves to that directory - so the interface does not have to guess.
+ * The failure this catches has already cost this phase twice: the plugin is changed and built, the profile
+ * still runs the previous copy, and the result looks exactly like a broken feature. The plugin can work it out
+ * without any help - it knows where it was loaded from, it can find the profile whose node_modules resolves to
+ * that directory, and pnpm recorded what the artifact looked like when it installed it.
+ *
+ * That last part is the whole trick. An earlier version of this compared timestamps and was removed for crying
+ * wolf: pnpm hard-links installed files out of its content-addressed store, so the installed file carries the
+ * store entry's timestamp and looks older than the artifact by construction - every install looked stale. The
+ * digest pnpm wrote into the profile's lockfile cannot be fooled that way: hard links share content, not time.
+ * When the lockfile says nothing, this says nothing.
  */
+export function findStaleInstall(
+  loadedFrom: string,
+  profilesRoot: string,
+): RunningRelease['stale'] {
+  if (!existsSync(profilesRoot)) return undefined
+  let profiles: string[]
+  try {
+    profiles = readdirSync(profilesRoot)
+  } catch {
+    return undefined
+  }
 
-/*
- * There was a drift flag here, comparing the artifact's timestamp with the installed copy's. The owner's own
- * install showed what it does in practice: pnpm hard-links files out of its content-addressed store, so the
- * installed file carries the **store entry's** timestamp and looks older than the artifact by construction.
- * Every pnpm-linked install looked stale, and a banner that cries wolf is worse than no banner. What the plugin
- * states instead is fact: its version, where it was loaded from, and when its own entry was written.
+  for (const profile of profiles) {
+    const manifestPath = path.join(profilesRoot, profile, 'package.json')
+    if (!existsSync(manifestPath)) continue
+    let spec: unknown
+    try {
+      const manifest: unknown = JSON.parse(readFileSync(manifestPath, 'utf8'))
+      spec = (manifest as { dependencies?: Record<string, unknown> })
+        .dependencies?.['dsh-computer-history']
+    } catch {
+      continue
+    }
+    if (typeof spec !== 'string' || !spec.startsWith('file:')) continue
+
+    const installed = path.join(profilesRoot, profile, 'node_modules', 'dsh-computer-history')
+    let resolved: string
+    try {
+      resolved = realpathSync(installed)
+    } catch {
+      continue
+    }
+    if (path.resolve(resolved) !== path.resolve(loadedFrom)) continue
+
+    const artifact = path.resolve(path.dirname(manifestPath), spec.slice('file:'.length))
+    if (!existsSync(artifact)) continue
+
+    let recorded: string | undefined
+    try {
+      recorded = recordedIntegrity(
+        readFileSync(path.join(profilesRoot, profile, 'pnpm-lock.yaml'), 'utf8'),
+      )
+    } catch {
+      recorded = undefined
+    }
+    if (recorded === undefined) continue
+
+    let actual: string
+    try {
+      actual = `sha512-${createHash('sha512').update(readFileSync(artifact)).digest('base64')}`
+    } catch {
+      continue
+    }
+    if (actual === recorded) continue
+
+    return {
+      profile,
+      artifact,
+      artifactAtMs: Math.round(statSync(artifact).mtimeMs),
+      updateCommand: `dsh plugin --profile ${profile} add ${artifact}`,
+    }
+  }
+  return undefined
+}
+
+/**
+ * The integrity pnpm recorded for the plugin's own entry.
+ *
+ * A YAML parser would be a dependency, and this needs one value out of one entry, so it reads that entry the way
+ * pnpm writes it and answers `undefined` when the shape is not what it expects. Saying nothing is always safe
+ * here; guessing is what made the previous version useless.
  */
+function recordedIntegrity(lockfile: string): string | undefined {
+  const lines = lockfile.split('\n')
+  for (let index = 0; index < lines.length; index++) {
+    if (!/^ {2}dsh-computer-history@/.test(lines[index] ?? '')) continue
+    for (let cursor = index; cursor < lines.length && cursor < index + 24; cursor++) {
+      const line = lines[cursor] ?? ''
+      if (cursor > index && /^ {2}\S/.test(line)) break
+      const match = /integrity:\s*(sha512-[A-Za-z0-9+/=]+)/.exec(line)
+      if (match) return match[1]
+    }
+  }
+  return undefined
+}
