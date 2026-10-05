@@ -6,6 +6,12 @@ const forbidden = [
   'AXSelectedText',
   'AXNumberOfCharacters',
   'AXVisibleCharacterRange',
+  // The parameterized and range readers: `AXValue` above is only one spelling of "read the value". These are
+  // how a caller reads a string or an attributed string out of an element, so they are the same boundary.
+  'AXStringForRange',
+  'AXAttributedStringForRange',
+  'AXUIElementCopyParameterizedAttributeValue',
+  'AXSelectedTextRange',
   'ScreenCaptureKit',
   'CGWindowListCreateImage',
   'CGEventTapCreate',
@@ -22,6 +28,22 @@ const forbidden = [
   'DocumentRange',
   'GetClipboardData',
   'keybd_event',
+  // Windows key/screen injection beyond the legacy names above, and the modern capture API.
+  'SendInput(',
+  'Windows.Graphics.Capture',
+  'ITextRangeProvider',
+  'UIA_TextPatternId',
+  'GetText(',
+  // Linux AT-SPI: the Text interface is where content lives. The collector reads names/roles only, so every
+  // one of these is out of bounds exactly like the macOS AX value attributes are.
+  'atspi_text_get_text',
+  'get_text_at_offset',
+  'TextProxy',
+  // Browser: injecting a reader into the page is a content read by another route.
+  'executeScript',
+  // Editor clients: `document.` cannot be denied for them (they read `document.uri` for the path, which is
+  // metadata the contract allows), but a call that returns document text is a content read.
+  'getText(',
   'BitBlt',
   'PrintWindow',
 ]
@@ -36,6 +58,11 @@ const skipDirectories = new Set([
   '.build',
   '.swiftpm',
   '.git',
+  // Test directories name forbidden APIs on purpose (a test asserting "the payload must not call getText"
+  // is a guard of its own), so they are not scanned as if they were shipped code.
+  'tests',
+  'test',
+  '__tests__',
 ])
 
 // This file defines the denylist, so it necessarily contains the tokens it
@@ -51,7 +78,7 @@ async function walk(dir) {
       return skipDirectories.has(entry.name) ? [] : walk(full)
     }
     if (entry.name === SELF) return []
-    return /\.(swift|ts|tsx|js|mjs|rs)$/.test(entry.name) ? [full] : []
+    return /\.(swift|ts|tsx|js|mjs|cjs|rs|java|kt|kts)$/.test(entry.name) ? [full] : []
   }))
   return nested.flat()
 }
@@ -59,7 +86,9 @@ async function walk(dir) {
 // The verification helpers under scripts/ are scanned too: they touch the
 // Accessibility API directly, so they must respect the same boundary as the
 // collector they exercise.
-const roots = ['src', 'native', 'scripts', 'extension']
+// Every directory that holds code which could read content, including the companion clients: the editor
+// client talks to the same intake as the browser one, so it is inside this boundary too.
+const roots = ['src', 'native', 'scripts', 'extension', 'extension-editor', 'clients']
 const rootFiles = await Promise.all(roots.map(async (root) => {
   try {
     return await walk(root)
@@ -94,6 +123,7 @@ const contentApis = [
 const extensionFiles = [
   'extension/lib.js',
   'extension/service-worker.js',
+  'extension/background.js',
 ]
 const extensionSources = new Map(
   (
