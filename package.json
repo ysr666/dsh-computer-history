@@ -22,6 +22,7 @@
     "verify:privacy": "node scripts/verify-privacy-boundary.mjs",
     "verify": "pnpm check && pnpm verify:privacy && pnpm verify:adapters && pnpm verify:store-protection && pnpm verify:semantic-boundary && pnpm verify:architecture && pnpm verify:migrations && pnpm verify:native-timeouts && pnpm verify:collector-commands && pnpm verify:docs && pnpm verify:ci-boundaries && pnpm verify:collector-windows",
     "verify:release": "node scripts/verify-release.mjs",
+    "verify:release:blockers": "node scripts/release-blockers.mjs",
     "verify:p1": "pnpm verify && pnpm build && pnpm benchmark:ingestion && pnpm native:build && pnpm native:test",
     "pack:plugin": "pnpm pack",
     "prepack": "pnpm build && pnpm native:build && pnpm build:extension && pnpm build:editor-extension",

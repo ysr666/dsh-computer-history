@@ -189,6 +189,13 @@ where Gatekeeper's notarization rule applies. Then: a paid Apple Developer accou
 Application** certificate exported as a `.p12`, `--options runtime`, `xcrun notarytool submit --wait`, and (for
 a bundle, not a bare binary) `xcrun stapler staple`. None of that is needed for a DSH plugin today.
 
+### The scan that runs before it
+
+`pnpm verify:release:blockers` (its own step in the workflow) fails on two things only: a failed run on `main` in
+the last twenty, and an open **high or critical** dependabot alert. Open pull requests and issues, how many
+branches have a commit from the last month, and whether the alerts could be read at all are reported but not
+enforced - whether they block *this* release is a judgement, and a script that pretends otherwise gets ignored.
+
 ### Running it locally
 
 ```bash
