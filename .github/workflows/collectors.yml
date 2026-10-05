@@ -59,7 +59,7 @@ jobs:
     name: protocol layer on ubuntu-latest
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: The message layer, on Linux PR gate
         run: |
           cargo test --manifest-path native/collector-protocol/Cargo.toml
@@ -75,7 +75,7 @@ jobs:
       matrix:
         os: [macos-latest, windows-latest, ubuntu-latest]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: The message layer, on this platform
         run: |
           cargo test --manifest-path native/collector-protocol/Cargo.toml
@@ -89,7 +89,7 @@ jobs:
     name: conformance + Node 22 compatibility on macOS
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
