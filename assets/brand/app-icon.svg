@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">DSH Computer History app icon</title>
+  <desc id="desc">Timeline Orbit logo on a dark rounded-square app icon.</desc>
+  <defs>
+    <linearGradient id="bg" x1="54" y1="32" x2="452" y2="486" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#142546"/>
+      <stop offset=".55" stop-color="#0A1428"/>
+      <stop offset="1" stop-color="#070E1C"/>
+    </linearGradient>
+    <linearGradient id="g" x1="92" y1="396" x2="420" y2="112" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4B5CFF"/><stop offset=".48" stop-color="#2C8FFF"/><stop offset="1" stop-color="#48E0D2"/>
+    </linearGradient>
+  </defs>
+  <rect x="22" y="22" width="468" height="468" rx="112" fill="url(#bg)" stroke="#203A67" stroke-width="4"/>
+  <g transform="translate(26 26) scale(.8984375)">
+    <path d="M132 383A178 178 0 1 1 394 139" fill="none" stroke="url(#g)" stroke-width="34" stroke-linecap="round"/>
+    <circle cx="394" cy="139" r="27" fill="#7DE7E3" stroke="#0B1324" stroke-width="10"/>
+    <circle cx="427" cy="259" r="22" fill="#39AAFF" stroke="#0B1324" stroke-width="9"/>
+    <circle cx="389" cy="374" r="18" fill="#65D9D5" stroke="#0B1324" stroke-width="8"/>
+    <path d="M220 367A116 116 0 1 1 354 334" fill="none" stroke="url(#g)" stroke-width="24" stroke-linecap="round"/>
+    <circle cx="256" cy="256" r="13" fill="#F5F8FF"/>
+    <path d="M256 256V190M256 256L309 291" fill="none" stroke="#F5F8FF" stroke-width="18" stroke-linecap="round"/>
+  </g>
+</svg>

@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">DSH Computer History monochrome logo</title>
+  <desc id="desc">Monochrome timeline orbit and clock mark.</desc>
+  <g fill="none" stroke="#101827">
+    <path d="M132 383A178 178 0 1 1 394 139" stroke-width="34" stroke-linecap="round"/>
+    <path d="M220 367A116 116 0 1 1 354 334" stroke-width="24" stroke-linecap="round"/>
+    <path d="M256 256V190M256 256L309 291" stroke-width="18" stroke-linecap="round"/>
+  </g>
+  <g fill="#101827" stroke="#0B1324">
+    <circle cx="394" cy="139" r="27" stroke-width="10"/>
+    <circle cx="427" cy="259" r="22" stroke-width="9"/>
+    <circle cx="389" cy="374" r="18" stroke-width="8"/>
+  </g>
+  <circle cx="256" cy="256" r="13" fill="#101827"/>
+</svg>
