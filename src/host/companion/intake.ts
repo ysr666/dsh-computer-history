@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import type { CompanionKind } from '../../shared/index.js'
+import type { RefusalReason } from '../ingestion/normalize.js'
 import type { CompanionTokenStore } from './token-store.js'
 
 /** What the extension reports for one tab event (metadata only, ADR 0002). */
@@ -49,10 +50,20 @@ export type CompanionPayload =
   | BrowserCompanionPayload
   | EditorCompanionPayload
 
+export interface CompanionDelivery {
+  readonly stored: boolean
+  /** Set when the Host refused for a capture-level reason; those names are members of `RefusalReason`. */
+  readonly reason?: RefusalReason
+}
+
 export interface CompanionIntakeOptions {
   readonly tokens: CompanionTokenStore
-  /** Store the observation; returns whether anything was persisted. */
-  readonly deliver: (payload: CompanionPayload) => Promise<boolean> | boolean
+  /**
+   * Store the observation. The result says whether anything was persisted and, when the Host itself refused
+   * (capture paused, collector not running), why - a client that is only told "false" cannot tell those from
+   * a policy decision, and its own log stays silent too.
+   */
+  readonly deliver: (payload: CompanionPayload) => Promise<CompanionDelivery | boolean> | CompanionDelivery | boolean
   readonly port?: number
   readonly host?: string
   readonly maxBodyBytes?: number
@@ -261,8 +272,13 @@ export class CompanionIntake {
       return this.send(response, 403, { error: 'incognito tabs are never reported' })
     }
 
-    const stored = await this.options.deliver(payload)
-    return this.send(response, stored ? 201 : 202, { stored })
+    const delivery = await this.options.deliver(payload)
+    const stored = typeof delivery === 'boolean' ? delivery : delivery.stored
+    const reason = typeof delivery === 'boolean' ? undefined : delivery.reason
+    return this.send(response, stored ? 201 : 202, {
+      stored,
+      ...(reason === undefined ? {} : { reason }),
+    })
   }
 
   private readBody(request: IncomingMessage): Promise<string> {

@@ -37,6 +37,8 @@ async function harness(
   options: {
     rateLimitPerMinute?: number
     maxBodyBytes?: number
+    /** Make the Host refuse the payload for a capture-level reason and see what the client is told. */
+    refusal?: 'capture-paused' | 'collector-not-running' | 'capture-disabled' | 'capture-not-owned'
   } = {},
 ): Promise<Harness> {
   const tokens = tokenStore()
@@ -47,7 +49,7 @@ async function harness(
     tokens,
     deliver: (report) => {
       delivered.push(report)
-      return true
+      return options.refusal ? { stored: false, reason: options.refusal } : { stored: true }
     },
     port: 0,
     ...options,
@@ -121,6 +123,18 @@ function post(
 }
 
 describe('companion intake', () => {
+  it('says why nothing was stored when capture itself refused it', async () => {
+    // Five reasons a companion payload is not stored, and only some of them were named. `expired`,
+    // `future-timestamp` and `policy` reach the response and the Host's refusal counts; a paused capture and a
+    // collector that is not running answered `202 {"stored":false}` and nothing else, so a client - and its
+    // own log - could not tell "paused" from "the Host refused this app".
+    const { intake, port } = await harness({ refusal: 'capture-paused' })
+    const response = await post(port, JSON.stringify(payload()))
+    expect(response.status).toBe(202)
+    expect(response.json).toEqual({ stored: false, reason: 'capture-paused' })
+    await intake.stop()
+  })
+
   it('accepts a paired observation and reports it as stored', async () => {
     const { intake, port, delivered } = await harness()
     const response = await post(port, JSON.stringify(payload()))

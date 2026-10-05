@@ -103,8 +103,8 @@ only means something when the same setup can produce a row.
 ## Pause, disable, uninstall
 
 - **Pause** in the panel stops the companion too: the intake answers
-  `202 {stored:false}` and records nothing, exactly as the Accessibility
-  collector stops.
+  `202 {stored:false, reason:"capture-paused"}` and records nothing, exactly as the Accessibility
+  collector stops. The reason is named so the client's own log can say why.
 - **Disable** the extension in `chrome://extensions` to stop all browser
   reporting; the intake stays up for a future pairing.
 - **Uninstall**: remove the extension, then rotate the token in the panel — the

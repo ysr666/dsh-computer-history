@@ -210,6 +210,16 @@ export type RefusalReason =
    * used.
    */
   | 'future-timestamp'
+  /**
+   * The four refusals the companion path decides before ingestion ever sees the payload: capture switched off,
+   * another Host owning capture, the user pausing, and a collector that is not running. They reached the client
+   * as `202 {"stored":false}` and nothing else, so "paused" and "the Host refused this app" looked identical -
+   * to the client, to its log and to the refusal counts.
+   */
+  | 'capture-disabled'
+  | 'capture-not-owned'
+  | 'capture-paused'
+  | 'collector-not-running'
   /** Older than the retention window: arrived, but too late to be stored. */
   | 'expired'
   /** A refusal nothing attributed: visible rather than silent. */

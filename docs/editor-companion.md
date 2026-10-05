@@ -80,8 +80,10 @@ content-type: application/json
 }
 ```
 
-`201 {"stored":true}` means it was kept; `202 {"stored":false}` means the policy
-refused it (the request was valid, the answer is about the store). `400` carries a
+`201 {"stored":true}` means it was kept; `202 {"stored":false}` means the Host
+refused it (the request was valid, the answer is about the store). A refusal that capture itself decided
+- `capture-paused`, `collector-not-running`, `capture-disabled`, `capture-not-owned` - also carries
+`reason`, so a client can tell "you paused" from "the policy refused this app" instead of logging nothing. `400` carries a
 reason, `401` means the token is wrong, `403` means incognito (browser shape only).
 
 **What `app` means.** It is a **claim**: the Host records the observation with

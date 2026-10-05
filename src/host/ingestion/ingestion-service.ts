@@ -153,8 +153,16 @@ export class IngestionService {
     return this.refusals
   }
 
-  private refuse(reason: RefusalReason): false {
+  /**
+   * Count a refusal that was decided outside ingestion - a paused capture never reaches `refuse()`, and an
+   * unnamed answer cannot tell a user why nothing is being recorded.
+   */
+  public noteRefusal(reason: RefusalReason): void {
     this.refusals.set(reason, (this.refusals.get(reason) ?? 0) + 1)
+  }
+
+  private refuse(reason: RefusalReason): false {
+    this.noteRefusal(reason)
     return false
   }
 
