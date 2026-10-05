@@ -106,7 +106,11 @@ try {
       console.error('over CDP, was paired from its options page, and its reports reached this Host. Quit the other ')
       console.error('Host, or run scripts/verify/chrome-companion.mjs against the one that owns capture.')
     } else {
-      console.error(`\ne2e (Chromium) failed: see ${path.relative(REPO, path.join(artifacts, 'matrix.log'))}`)
+      // Show why, not just where: the matrix script's own sentence ("no Chrome at …", a failing cell) is the
+      // useful part, and a reader should not have to open a log to reach it.
+      const tail = `${matrix.stdout ?? ''}${matrix.stderr ?? ''}`.trim().split('\n').slice(-4).join('\n')
+      console.error(`\ne2e (Chromium) failed:\n${tail}`)
+      console.error(`\nfull log: ${path.relative(REPO, path.join(artifacts, 'matrix.log'))}`)
     }
     process.exitCode = 1
   } else {
@@ -119,7 +123,8 @@ try {
   if (host?.pid !== undefined) { try { process.kill(-host.pid, 'SIGTERM') } catch {} }
   await sleep(2500)
   // Browsers started by the matrix script: only those whose profile lives in the temp directory, checked by
-  // prefix on the executable too - a substring test can match the shell that runs it.
+  // prefix on the executable too - a substring test can match the shell that runs it. This sweep knows the
+  // macOS paths only; elsewhere the matrix script removes the profile it created itself.
   for (const line of spawnSync('ps', ['-eo', 'pid,command'], { encoding: 'utf8' }).stdout.split('\n')) {
     if (/^\s*\d+\s+\/Applications\/Google Chrome\.app\//.test(line) && /\/var\/folders\/|\/tmp\//.test(line)) {
       spawnSync('kill', ['-KILL', line.trim().split(/\s+/)[0]])

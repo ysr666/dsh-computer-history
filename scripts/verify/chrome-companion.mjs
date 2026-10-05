@@ -17,14 +17,21 @@
 //
 // Everything happens on loopback; the profile is removed afterwards.
 import { spawn } from 'node:child_process'
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import http from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
+// The same variable the repository's own panel script uses, with the same default: a hard-coded macOS path
+// makes this script unusable on the machine the objective names, and the rest of it is path-independent.
 const CHROME =
-  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+  process.env.PANEL_CHROME ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+// A missing browser has to be a sentence, not a stack trace twenty lines into a log.
+if (!existsSync(CHROME)) {
+  console.error(`no Chrome at ${CHROME}: install Google Chrome, or set PANEL_CHROME to its binary`)
+  process.exit(1)
+}
 
 function arg(name, fallback) {
   const index = process.argv.indexOf(`--${name}`)
@@ -215,7 +222,13 @@ function record(cell, expected, actual, detail) {
   )
 }
 
-const profile = mkdtempSync(path.join(os.tmpdir(), 'dsh-ch-chrome-'))
+// Every throwaway directory this script creates goes on one list, and the finally removes the list. The first
+// version removed only `profile` while a second profile was created further down for the extension-off cell:
+// measured 2026-10-06, nine `dsh-ch-chrome-off-*` directories had accumulated across runs. A list is what keeps
+// the next added profile from leaking the same way.
+const tempDirs = []
+const tempDir = (prefix) => { const dir = mkdtempSync(path.join(os.tmpdir(), prefix)); tempDirs.push(dir); return dir }
+const profile = tempDir('dsh-ch-chrome-')
 const debugPort = 9333
 let chrome
 
@@ -425,7 +438,7 @@ try {
   const debugPortOff = 9334
   chrome = launchChrome({
     withExtension: false,
-    profile: mkdtempSync(path.join(os.tmpdir(), 'dsh-ch-chrome-off-')),
+    profile: tempDir('dsh-ch-chrome-off-'),
     debugPort: debugPortOff,
   })
   await waitForDebugger(debugPortOff)
@@ -449,7 +462,7 @@ try {
   }
   await sleep(1500)
   site.close()
-  rmSync(profile, { recursive: true, force: true })
+  for (const dir of tempDirs) rmSync(dir, { recursive: true, force: true })
 }
 
 const failed = findings.filter(finding => !finding.pass)
