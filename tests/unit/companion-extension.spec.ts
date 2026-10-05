@@ -49,6 +49,7 @@ describe('companion extension logic', () => {
       1_000,
     )
     expect(payload).toEqual({
+      source: 'browser',
       origin: 'https://example.test',
       path: '/a',
       title: 'A',
@@ -58,6 +59,26 @@ describe('companion extension logic', () => {
       observedAtMs: 1_000,
     })
     expect(JSON.stringify(payload)).not.toContain('q=1')
+  })
+
+  it('labels the payload with the source the intake requires', () => {
+    // Found by a live run, not by these tests: the payload carried origin, path, title, incognito,
+    // browserSession, seq and observedAtMs, and no `source` - so every request the extension ever made was
+    // answered `400 source must be "browser" or "editor"`. The extension logs that at `console.debug`, which
+    // nobody reads, so the browser companion had never stored a row while looking like it was working.
+    //
+    // The assertion is the wire contract in docs/companion.md, not the current implementation: the exact field
+    // set, with the source the intake switches on.
+    const payload = buildPayload(
+      { url: 'https://example.test/docs', title: 'Docs', incognito: false },
+      'session',
+      1,
+    )
+    expect(payload).toBeDefined()
+    expect(Object.keys(payload!).toSorted()).toEqual([
+      'browserSession', 'incognito', 'observedAtMs', 'origin', 'path', 'seq', 'source', 'title',
+    ])
+    expect(payload!.source).toBe('browser')
   })
 
   it('omits an empty title rather than sending an empty string', () => {
@@ -78,6 +99,7 @@ describe('companion extension logic', () => {
       return new Response('{}', { status: 201 })
     }
     const payload: CompanionExtensionPayload = {
+      source: 'browser',
       origin: 'https://example.test',
       path: '/',
       incognito: false,

@@ -14,6 +14,8 @@ export interface CompanionConfig {
 }
 
 export interface CompanionExtensionPayload {
+  /** The intake switches on this field; a payload without it is answered 400 and never stored. */
+  readonly source: 'browser'
   readonly origin: string
   readonly path: string
   readonly title?: string

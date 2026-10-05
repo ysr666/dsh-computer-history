@@ -49,6 +49,10 @@ export function buildPayload(tab, session, seq, observedAtMs = Date.now()) {
     ? tab.title.slice(0, 1024)
     : undefined
   return {
+    // The intake switches on this field: without it every payload is answered
+    // `400 source must be "browser" or "editor"`, and the extension reports that only at console.debug. A live
+    // run on 2026-10-05 found the row missing for exactly this reason.
+    source: 'browser',
     origin,
     path,
     ...(title === undefined ? {} : { title }),
