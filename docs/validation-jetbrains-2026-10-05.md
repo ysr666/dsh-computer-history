@@ -67,3 +67,7 @@ grep 'computer-history companion' ~/Library/Logs/JetBrains/IdeaIC2025.2/idea.log
   plugin logged "no …/dsh-companion.json, sending nothing" - a silent client, four minutes after a silent
   collector had been debugged. `PathManager.getConfigPath()` is the answer, and the class it lives in was found
   by listing the platform's own jars rather than guessing the package.
+
+> **2026-10-05 之后的说明**：本次记录里的客户端 `extension-jetbrains/` 已按所有者决定删除；
+> 仓库现在只保留一份 JetBrains 客户端 `clients/jetbrains/`（Kotlin + Gradle，支持 2024.2 起、
+> 跟随 `FileEditorManagerListener` 报当前文件、字段更全）。这份记录按其日期保留，作为当时那次 live run 的证据。
