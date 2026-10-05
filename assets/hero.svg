@@ -43,28 +43,49 @@
   <text x="0" y="448" fill="#667990" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14">github.com/ysr666/dsh-computer-history</text>
 </g>
 
-<g transform="translate(815,74)">
-  <rect width="700" height="492" rx="30" fill="#0b1522" fill-opacity=".82" stroke="#26384f"/>
-  <rect x="20" y="20" width="660" height="452" rx="22" fill="url(#panel)" stroke="#ffffff" stroke-opacity=".035"/>
-  <g transform="translate(48,43)">
-    <circle cx="8" cy="8" r="5" fill="#48E0D2"/><text x="24" y="13" fill="#9fb0c8" font-family="Inter, PingFang SC, Microsoft YaHei, Arial, sans-serif" font-size="13" font-weight="700" letter-spacing="1.4">WORK EPISODES</text>
-    <rect x="453" y="-3" width="132" height="29" rx="14.5" fill="#0e2730" stroke="#2d6a60"/><path d="M468 11 l4 4 l8 -10" fill="none" stroke="#6ce2bf" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><text x="488" y="16" fill="#8edfc9" font-family="Inter, PingFang SC, Microsoft YaHei, Arial, sans-serif" font-size="11.5" font-weight="700">PRIVATE BY DESIGN</text>
+<g aria-label="Abstract timeline and work-episode layers">
+  <!-- spatial context arcs -->
+  <path d="M735 128 C930 50 1230 42 1515 170" fill="none" stroke="#244B8D" stroke-width="1.5" stroke-opacity=".42"/>
+  <path d="M718 208 C960 108 1288 120 1540 286" fill="none" stroke="#2C8FFF" stroke-width="1.4" stroke-opacity=".23"/>
+  <path d="M705 540 C965 628 1308 600 1530 458" fill="none" stroke="#48E0D2" stroke-width="1.4" stroke-opacity=".16"/>
 
-    <path d="M33 70 V312" stroke="#314760" stroke-width="2"/>
-    <circle cx="33" cy="90" r="8" fill="#2C8FFF" filter="url(#glow)"/>
-    <circle cx="33" cy="188" r="7" fill="#7e92b0"/>
-    <circle cx="33" cy="282" r="7" fill="#48E0D2"/>
-
-    <g transform="translate(63,61)"><rect width="503" height="72" rx="16" fill="#121f30" stroke="#2b4058"/><rect x="18" y="18" width="36" height="36" rx="10" fill="#172e52"/><path d="M29 28 h14 M29 35 h14 M29 42 h9" stroke="#7daeff" stroke-width="2" stroke-linecap="round"/><text x="72" y="30" fill="#edf3ff" font-family="Inter, PingFang SC, Microsoft YaHei, Arial, sans-serif" font-size="16" font-weight="700">Project18 · VS Code</text><text x="72" y="52" fill="#7f91a9" font-family="Inter, PingFang SC, Microsoft YaHei, Arial, sans-serif" font-size="12.5">42 min · just now</text><rect x="392" y="22" width="92" height="28" rx="14" fill="#183247"/><text x="438" y="40" text-anchor="middle" fill="#80d9c2" font-family="Inter, PingFang SC, Microsoft YaHei, Arial, sans-serif" font-size="11" font-weight="700">RESUME HERE</text></g>
-    <g transform="translate(63,159)"><rect width="503" height="72" rx="16" fill="#101c2b" stroke="#24384d"/><rect x="18" y="18" width="36" height="36" rx="10" fill="#1c2734"/><path d="M28 29 l8 7 l-8 7 M39 44 h8" fill="none" stroke="#a8b7c9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><text x="72" y="30" fill="#dce6f4" font-family="Inter, PingFang SC, Microsoft YaHei, Arial, sans-serif" font-size="15.5" font-weight="650">Terminal · dsh-computer-history</text><text x="72" y="52" fill="#72859c" font-family="Inter, PingFang SC, Microsoft YaHei, Arial, sans-serif" font-size="12.5">18 min · 1 hour ago</text></g>
-    <g transform="translate(63,253)"><rect width="503" height="72" rx="16" fill="#101c2b" stroke="#24384d"/><rect x="18" y="18" width="36" height="36" rx="10" fill="#19312b"/><path d="M27 31 h18 v13 h-18 z M27 31 l4 -5 h8 l4 5" fill="none" stroke="#72d8ba" stroke-width="1.8" stroke-linejoin="round"/><text x="72" y="30" fill="#dce6f4" font-family="Inter, PingFang SC, Microsoft YaHei, Arial, sans-serif" font-size="15.5" font-weight="650">Finder · docs/</text><text x="72" y="52" fill="#72859c" font-family="Inter, PingFang SC, Microsoft YaHei, Arial, sans-serif" font-size="12.5">7 min · 2 hours ago</text></g>
-
-    <g transform="translate(18,356)">
-      <rect width="548" height="54" rx="15" fill="#0c1825" stroke="#21364a"/>
-      <path d="M23 27 h18 M32 18 v18" stroke="#5b7895" stroke-width="1.7" stroke-linecap="round"/>
-      <text x="54" y="23" fill="#9fb1c8" font-family="Inter, PingFang SC, Microsoft YaHei, Arial, sans-serif" font-size="12" font-weight="700">LOCAL SQLITE  ·  INCLUDE-ONLY  ·  FAIL-CLOSED</text>
-      <text x="54" y="39" fill="#536980" font-family="Inter, PingFang SC, Microsoft YaHei, Arial, sans-serif" font-size="10.5">screenshots · keystrokes · page bodies · source bodies — never collected</text>
-    </g>
+  <!-- translucent work-episode layers: abstract, not product UI -->
+  <g fill="#112039" fill-opacity=".44" stroke="#2D6095" stroke-width="1.4">
+    <rect x="875" y="182" width="92" height="256" rx="26"/>
+    <rect x="972" y="135" width="112" height="330" rx="30" fill-opacity=".34"/>
+    <rect x="1088" y="210" width="82" height="218" rx="24" fill-opacity=".28"/>
+    <rect x="1172" y="118" width="132" height="372" rx="32" fill-opacity=".38"/>
+    <rect x="1310" y="164" width="144" height="276" rx="30" fill-opacity=".31"/>
   </g>
+  <g stroke="#6FA8D8" stroke-opacity=".09" stroke-width="1">
+    <path d="M902 227h38M902 245h28M999 194h58M999 214h44M1199 177h78M1199 198h54M1338 222h88M1338 242h64"/>
+  </g>
+
+  <!-- timeline axis and activity nodes -->
+  <path d="M1280 68 V548" stroke="#3D8CE8" stroke-width="2" stroke-opacity=".64"/>
+  <circle cx="1280" cy="104" r="9" fill="#4B5CFF"/>
+  <circle cx="1280" cy="160" r="19" fill="#356FFF"/>
+  <circle cx="1280" cy="248" r="28" fill="#39BDF2" filter="url(#glow)"/>
+  <circle cx="1280" cy="350" r="31" fill="#52D8B8" filter="url(#glow)"/>
+  <circle cx="1280" cy="438" r="11" fill="#53D4D0"/>
+  <circle cx="1280" cy="500" r="17" fill="#2D82DD"/>
+  <circle cx="1280" cy="544" r="9" fill="#1D4C91"/>
+
+  <!-- work-continuity trajectories -->
+  <defs>
+    <linearGradient id="continuityLine" x1="760" y1="250" x2="1480" y2="470" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#4B5CFF"/>
+      <stop offset="0.48" stop-color="#2C8FFF"/>
+      <stop offset="1" stop-color="#48E0D2"/>
+    </linearGradient>
+  </defs>
+  <path d="M752 292 C918 224 1060 224 1180 276 C1300 328 1405 360 1500 472" fill="none" stroke="url(#continuityLine)" stroke-width="4" stroke-linecap="round"/>
+  <path d="M752 398 C910 454 1075 470 1280 500 C1388 516 1445 508 1500 492" fill="none" stroke="#44B9E7" stroke-width="2" stroke-linecap="round" stroke-dasharray="2 13" stroke-opacity=".85"/>
+  <circle cx="768" cy="292" r="5" fill="#3F70EE"/>
+  <circle cx="814" cy="407" r="4" fill="#2C8FFF"/>
+  <circle cx="867" cy="423" r="5" fill="#326ED0"/>
+  <circle cx="918" cy="438" r="4" fill="#4B5CFF"/>
+  <circle cx="1398" cy="511" r="5" fill="#2C8FFF"/>
+  <circle cx="1442" cy="505" r="4" fill="#4B5CFF"/>
 </g>
 </svg>
