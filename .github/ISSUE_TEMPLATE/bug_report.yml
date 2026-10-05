@@ -1,0 +1,65 @@
+name: Bug report
+description: Report a reproducible problem without exposing private computer-history data
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. **Do not upload real history databases, credentials, pairing/session tokens, private paths, or unredacted capture logs.** Use GitHub Private Vulnerability Reporting for security-sensitive findings.
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - macOS
+        - Windows
+        - Linux
+        - Other / cross-platform
+    validations:
+      required: true
+  - type: input
+    id: dsh-version
+    attributes:
+      label: DeepSeek Harness version
+      placeholder: e.g. 0.2.0-rc.2
+  - type: input
+    id: plugin-version
+    attributes:
+      label: dsh-computer-history version or commit
+      placeholder: e.g. 0.1.0-dev.0 or commit SHA
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Describe the user-visible problem.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Redacted diagnostics
+      description: Paste only the minimum needed output. Replace private paths, URLs, project names, tokens and identifiers before posting.
+      render: shell
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check
+      options:
+        - label: I reviewed this report and removed credentials, tokens, private paths, private history content and other sensitive data.
+          required: true

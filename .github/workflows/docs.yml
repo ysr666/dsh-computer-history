@@ -6,6 +6,12 @@ on:
       - '**/*.md'
       - 'scripts/verify-docs.mjs'
       - '.github/workflows/docs.yml'
+  push:
+    branches: [main]
+    paths:
+      - '**/*.md'
+      - 'scripts/verify-docs.mjs'
+      - '.github/workflows/docs.yml'
   workflow_dispatch:
 
 permissions:

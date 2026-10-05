@@ -1,6 +1,16 @@
 name: Ingestion performance
 
 on:
+  pull_request:
+    paths:
+      - 'src/shared/**'
+      - 'src/host/ingestion/**'
+      - 'src/host/store/**'
+      - 'tests/benchmark/**'
+      - 'vitest.benchmark.config.ts'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/performance.yml'
   push:
     branches: [main]
     paths:

@@ -1,6 +1,20 @@
 name: macOS native + package
 
 on:
+  pull_request:
+    paths:
+      - 'native/**'
+      - 'bin/**'
+      - 'extension-editor/**'
+      - 'scripts/build-native.mjs'
+      - 'scripts/test-native.mjs'
+      - 'scripts/build-extension.mjs'
+      - 'presets/**'
+      - 'cordis.patch.yml'
+      - '.npmignore'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/macos-native.yml'
   push:
     branches: [main]
     paths:

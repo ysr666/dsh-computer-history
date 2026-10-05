@@ -1,17 +1,11 @@
 # Cross-platform collector contract.
 #
-# Pull requests run the Linux protocol gate only, and only when collector/host-facing files change.
-# A merge to main runs the protocol layer on Linux/macOS/Windows for those same relevant changes.
-# The expensive macOS conformance/full-verification suite runs only on manual dispatch and on the
-# twice-monthly safety sweep. That keeps the cross-platform contract without charging every UI/docs merge.
+# Relevant collector/host changes run the protocol layer on Linux, macOS and Windows before merge
+# and again on main. These are standard GitHub-hosted runners in a public repository, so keeping the
+# three-platform contract visible is more valuable than reducing the matrix to one OS.
 #
-# NOT verified here - observation through UI Automation or AT-SPI. Those need a desktop session with a
-# window to look at, not a runner, so the live rows stay marked unverified in
-# tests/conformance/fixtures/adapters.json and docs/validation-three-platforms.md until a machine with a
-# desktop produces them. A green run here is not evidence for those rows.
-#
-# A platform whose live row does not exist yet is listed here and in the fixture and the
-# validation file; scripts/verify-ci-boundaries.mjs fails when the three disagree.
+# This workflow does not by itself prove live UI Automation / AT-SPI desktop observation. Real-machine
+# evidence and remaining platform limitations live in docs/validation-three-platforms.md.
 # unverified-platforms: none
 name: collectors
 
@@ -41,7 +35,6 @@ on:
       - 'package.json'
       - 'pnpm-lock.yaml'
       - '.github/workflows/collectors.yml'
-  # Safety sweep: Node 22 full verification plus all three protocol runners twice a month.
   schedule:
     - cron: '23 5 1,15 * *'
   workflow_dispatch:
@@ -51,23 +44,10 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  protocol-pr:
-    if: github.event_name == 'pull_request'
-    name: protocol layer on ubuntu-latest
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: The message layer, on Linux PR gate
-        run: |
-          cargo test --manifest-path native/collector-protocol/Cargo.toml
-          cargo test --manifest-path native/windows/Cargo.toml
-          cargo test --manifest-path native/linux/Cargo.toml
-
-  protocol-full:
-    if: github.event_name != 'pull_request'
+  protocol:
     name: protocol layer on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
@@ -82,8 +62,8 @@ jobs:
           cargo test --manifest-path native/windows/Cargo.toml
           cargo test --manifest-path native/linux/Cargo.toml
 
-  # The core PR gate already runs the whole TypeScript verification suite on Node 24.
-  # Keep the expensive macOS duplicate as a periodic/manual compatibility sweep on Node 22.
+  # A periodic/manual second-OS Node compatibility sweep. Normal Node 22/24 compatibility is already
+  # covered by CI on Ubuntu; this catches host assumptions that only show up on macOS.
   suite:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     name: conformance + Node 22 compatibility on macOS
