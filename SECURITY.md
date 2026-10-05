@@ -36,4 +36,4 @@ The Phase 1 build produces and verifies a universal arm64/x86_64 helper with a s
 
 ## Reporting
 
-Do not include private history databases, capture logs, file paths containing secrets, or credentials in public bug reports. Security-sensitive findings should be reported privately to the repository maintainer until a public policy/contact is established.
+Do not include private history databases, capture logs, file paths containing secrets, or credentials in public bug reports. Security-sensitive findings should be reported with **GitHub Private Vulnerability Reporting** (open the repository Security tab and choose **Report a vulnerability**). Do not open a public issue for a vulnerability before disclosure is coordinated.

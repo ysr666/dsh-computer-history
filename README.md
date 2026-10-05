@@ -1,43 +1,108 @@
 # dsh-computer-history
 
-Privacy-first Work Continuity for DeepSeek Harness.
+[![CI](https://github.com/ysr666/dsh-computer-history/actions/workflows/ci.yml/badge.svg)](https://github.com/ysr666/dsh-computer-history/actions/workflows/ci.yml)
+[![Collectors](https://github.com/ysr666/dsh-computer-history/actions/workflows/collectors.yml/badge.svg)](https://github.com/ysr666/dsh-computer-history/actions/workflows/collectors.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-This project is building a new DSH context source: recent work performed outside the current DSH Session, represented as metadata-backed Work Episodes that an Agent can query or selectively resume.
+**Privacy-first computer history and work continuity for DeepSeek Harness.**
 
-## Status
+[简体中文](README.zh.md)
 
-Phase 1 DSH-integrated alpha is implemented. It includes the local SQLite evidence store, deterministic Work Episodes and resume resolver, an event-driven macOS Accessibility collector, DSH-managed helper lifecycle, authenticated Host API, History/Privacy Client panel, Agent-scoped history tools, and an experimental one-shot ResumeHint that is off by default.
+`dsh-computer-history` turns recent computer activity into local, metadata-backed **Work Episodes** that a DSH agent can inspect and selectively resume. The goal is not productivity surveillance: it is to help an agent answer “what was I working on, and where should I continue?” without recording the contents of your screen.
 
-## Design boundary
+> **Status:** early alpha. The core path is implemented and tested, but there is no stable release yet. Installation and compatibility details may still change.
 
-The Phase 1 collector is metadata-only. It is designed to identify applications, resources, workspaces, timing, and privacy state without capturing screenshots, keystrokes, terminal contents, source-file contents, page bodies, or Accessibility text values.
+<p align="center">
+  <img src="docs/assets/panel-firstrun-clean-store.png" alt="DSH Computer History first-run panel" width="820" />
+</p>
 
-## Technology
+## What it does
 
-- TypeScript / Node.js ESM for Host, Agent, Client, shared contracts, tests, and tools.
-- Swift for the macOS Accessibility collector.
-- SQLite via Node for local persistence.
-- pnpm for package management.
-- Vitest + fast-check for tests.
-- Oxlint for static linting.
-- tsdown for TypeScript packaging.
+- Stores recent activity locally in SQLite.
+- Groups observations into deterministic Work Episodes.
+- Exposes recent work to DSH through an authenticated Host API and agent-scoped tools.
+- Provides a History / Privacy panel for capture policy, retention, recent episodes and resume.
+- Supports browser and editor companion paths for applications where OS metadata is not enough.
+- Keeps collection policy explicit, include-only and fail-closed.
 
-See ARCHITECTURE.md, SECURITY.md, and docs/development.md before implementation work.
+## Privacy boundary
 
+The project is deliberately **metadata-only**.
 
-## Phase 1 defaults
+It may record application identity, resource/workspace metadata, timing, element role/identifier metadata and privacy state when policy allows it.
 
-Capture is off by default and app access is include-only. Browsers are fail-closed until a browser companion can enforce private/incognito boundaries. The packaged macOS collector is a universal arm64/x86_64 binary built by pnpm native:build. Run pnpm verify:p1 for the complete TypeScript/privacy/build/native gate.
+It is designed **not** to record:
 
-## How this is verified, and what cannot be verified on this machine
+- screenshots or screen recordings;
+- keystrokes, mouse coordinates or clipboard contents;
+- terminal output or shell history;
+- source-file bodies;
+- browser page bodies;
+- Accessibility text values or selected text.
 
-`pnpm verify` (typecheck, lint, 374 tests and every boundary script) and `pnpm verify:p1` (the macOS collector,
-built and signed, plus its native privacy and protocol tests) run from a clean checkout, and
-`scripts/verify-panel-render.mjs` drives seven rendered states of the panel against a running Host, writing a
-screenshot and the rendered text for each - run it with `PANEL_URL` pointing at a Host of your own.
+Capture starts off, application access is include-only, protected surfaces fail closed, and the Host re-checks metadata before storage. See [SECURITY.md](SECURITY.md) and [docs/threat-model.md](docs/threat-model.md) for the exact boundary and residual risks.
 
-Two things are deliberately **not** claimed. The three-platform CI workflow has every one of its commands run
-locally with exit codes recorded, but no runner has executed it, because this repository has no remote. And the
-panel has no page of its own: it is a client bundle mounted inside the DSH shell, so the only URL that renders it
-belongs to a token-protected Host - which is why `delivery_check` accepts this project's evidence manifest and
-still fails its `page-verify` smoke, and why that failure is stated rather than worked around.
+## Platform status
+
+| Platform | Collector path | Current status |
+| --- | --- | --- |
+| macOS | Accessibility | Primary path; native build, privacy tests and end-to-end flow validated |
+| Windows | UI Automation | Live collector + Host flow validated on Windows 11 |
+| Linux | AT-SPI | Collector/protocol path live-validated on Ubuntu; desktop/permission availability still matters |
+
+Cross-platform validation evidence and known limitations are recorded in [docs/validation-three-platforms.md](docs/validation-three-platforms.md).
+
+## Development quick start
+
+There is no stable packaged release yet, so the supported entry point today is a source checkout.
+
+```bash
+git clone https://github.com/ysr666/dsh-computer-history.git
+cd dsh-computer-history
+corepack enable
+pnpm install --frozen-lockfile
+pnpm build
+pnpm verify
+```
+
+Requirements:
+
+- Node.js `^22.19.0` or `>=24`
+- pnpm `11.7.0`
+- Rust for Windows/Linux collector work
+- Swift toolchain for native macOS work
+
+For DSH integration, throwaway-host testing and platform-specific validation, use [docs/development.md](docs/development.md).
+
+## Verification
+
+Useful gates include:
+
+```bash
+pnpm verify                 # typecheck, lint, tests and architecture/privacy boundaries
+pnpm verify:p1              # full macOS Phase 1 gate
+pnpm e2e:macos              # throwaway DSH Host flow on macOS
+pnpm e2e:linux              # Linux flow where the required desktop bus is available
+pnpm benchmark:ingestion    # ingestion benchmark
+```
+
+GitHub Actions also runs the core Node compatibility gate and the relevant cross-platform collector checks.
+
+## Documentation
+
+- [Architecture](ARCHITECTURE.md)
+- [Security & privacy](SECURITY.md)
+- [Development](docs/development.md)
+- [Collector protocol](docs/collector-protocol.md)
+- [Three-platform validation](docs/validation-three-platforms.md)
+- [Roadmap](docs/roadmap.md)
+
+## Contributing
+
+Issues and pull requests are welcome while the project is in alpha. Start with [CONTRIBUTING.md](CONTRIBUTING.md).
+
+Because this project handles sensitive local context, **do not attach real history databases, pairing/session tokens, credentials, private paths, or unredacted capture logs to public issues**. Use the security-reporting path in [SECURITY.md](SECURITY.md) for sensitive findings.
+
+## License
+
+[MIT](LICENSE)

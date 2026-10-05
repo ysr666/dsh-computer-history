@@ -35,17 +35,18 @@ whose state is genuinely hidden.
 | OS semantic tree | yes | yes - `macos-ax`, the whole foundation |
 | companion side channel | extensions for browsers/IDEs | yes - browser companion, editor companion, and now a **documented wire format** so any editor can be one |
 | pixels | yes, as the fallback | **no, by ADR 0002** - metadata only, no screenshots, no screen vision |
-| platforms | macOS + Windows | **macOS only** |
+| platforms | macOS + Windows | **macOS + Windows + Linux collectors, with uneven maturity** |
 
-So we are narrow in exactly two places, and neither is an accident:
+The platform gap described in the first version of this document has since narrowed:
+macOS remains the primary path, the Windows collector and Host flow have been validated
+on a real Windows 11 machine, and the Linux collector/protocol path has been exercised
+on a real Ubuntu machine. The exact evidence and the remaining desktop/permission limits
+are kept in `docs/validation-three-platforms.md` rather than restated here.
 
-- **one operating system.** The collector is per-platform work; the model above it
-  is not. Windows has UI Automation and Linux has AT-SPI, and both feed the same
-  observation shape.
-- **no pixels.** This is the boundary that distinguishes us: a screenshot pipeline
-  would buy app-agnostic coverage and cost us the property that we never store what
-  is on screen. It is a product decision, not a technical gap, and it is reversible
-  only with a new ADR and a much larger privacy argument.
+The deliberate narrowness that remains is **no pixels**. A screenshot pipeline would buy
+app-agnostic coverage and cost us the property that we never store what is on screen. It
+is a product decision, not a technical gap, and changing it would require a new ADR and a
+much larger privacy argument.
 
 ## The three ways to widen, cheapest first
 
