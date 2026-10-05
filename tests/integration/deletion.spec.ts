@@ -113,6 +113,11 @@ describe('provenance-aware deletion', () => {
     })
     expect(seeded.observations.count()).toBe(0)
     expect(seeded.episodes.get(seeded.episodeId)).toBeUndefined()
+    // A user deletion has to leave a trace of its own: the adversarial pass recorded "a delete succeeded and
+    // `deletion_log` stayed empty" as an open question, and this is the assertion that settles it. Everything
+    // else this case checks was already here; that is why the separate 63-line spec written for it was removed
+    // rather than shipped alongside.
+    expect(history.db.prepare('select scope from deletion_log').all()).toEqual([{ scope: 'episode' }])
     history.close()
   })
 
