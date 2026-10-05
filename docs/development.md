@@ -100,6 +100,17 @@ What is **not** the way, measured rather than assumed:
 - `~/.dsh/ext-bridge-token` is the browser bridge's token, not the web session cookie
   (`/state` answers `unauthorized` with it).
 
+## Running the whole macOS flow with one command
+
+`pnpm e2e:macos` builds the tarball, installs it into a throwaway `DSH_HOME`, boots the Host on its own ports,
+checks that it answers and that the companion either listens or names why not, writes its artifacts under
+`.debug/e2e-macos/`, and cleans up. It never touches `~/.dsh`. Set `DSH_CLI` if the `dsh` on `PATH` is not the
+CLI to use, and `DSH_E2E_KEEP=1` to keep the throwaway home for inspection.
+
+Measured 2026-10-05: nine checks, green, two runs in a row, with the collector reported as
+`state=degraded reason=collector-exited` - a collector spawned by a command-line Host has no Accessibility
+grant, which is the one part of the flow this command cannot cover, and it says so instead of pretending.
+
 ## When `dsh plugin add` succeeds and the Host still starts with nothing
 
 Measured 2026-10-05: a profile created by the CLI, with `dsh plugin --profile <p> add <tarball>` answered with
