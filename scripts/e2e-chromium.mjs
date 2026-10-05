@@ -23,6 +23,9 @@ const cli = process.env.DSH_CLI ?? 'dsh'
 const stamp = new Date().toISOString().replaceAll(/[:.]/g, '-')
 const artifacts = path.join(REPO, '.debug', 'e2e-chromium', `run-${stamp}`)
 mkdirSync(artifacts, { recursive: true })
+// The matrix prints one PASS/FAIL line per cell; collecting them is what makes a boundary run leave a
+// structured record instead of only a log. The other three commands write checks.json too.
+const evidence = []
 const log = (...a) => console.log(' ', ...a)
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 
@@ -92,7 +95,10 @@ try {
     '--extension', path.join(REPO, 'dist/extension'), '--port', String(companion)], { encoding: 'utf8' })
   writeFileSync(path.join(artifacts, 'matrix.log'), `${matrix.stdout ?? ''}${matrix.stderr ?? ''}`)
   const lines = `${matrix.stdout ?? ''}`.split('\n').filter(l => /^(PASS|FAIL|extension id|.the control cell)/.test(l))
-  for (const line of lines) log(line.slice(0, 150))
+  for (const line of lines) {
+    log(line.slice(0, 150))
+    evidence.push({ line: line.slice(0, 200), ok: line.startsWith('PASS') })
+  }
 
   // Ask the Host why anything was refused: that is where `capture-not-owned` shows up by name.
   const state = JSON.parse(spawnSync('curl', ['-s', '-b', jar, `http://127.0.0.1:${web}/api/computer-history/state`], { encoding: 'utf8' }).stdout || '{}')
@@ -120,6 +126,9 @@ try {
   console.error(`e2e (Chromium) failed: ${error instanceof Error ? error.message : String(error)}`)
   process.exitCode = 1
 } finally {
+  // Written on every exit path, including the boundary and the failure ones: a run that stops at a boundary is
+  // still a run whose evidence someone will want, and the other three commands write this file.
+  writeFileSync(path.join(artifacts, 'checks.json'), `${JSON.stringify(evidence, null, 2)}\n`)
   if (host?.pid !== undefined) { try { process.kill(-host.pid, 'SIGTERM') } catch {} }
   await sleep(2500)
   // Browsers started by the matrix script: only those whose profile lives in the temp directory, checked by
