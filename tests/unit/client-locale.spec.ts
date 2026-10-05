@@ -67,9 +67,13 @@ describe('host data rendered in the reader\'s language', () => {
 
   it('names a known Host reason in the interface language and keeps an unknown one', () => {
     expect(reasonText(zh_t, 'capture-owned-by-another-host'))
-      .toBe('这台机器上已有另一个 DSH 宿主在采集，这里不会重复记录。')
+      .toBe('这台机器上已有另一个 DSH 宿主在记录，这里仍可查看历史。关闭另一宿主后，点击“重试记录”即可接管。')
     expect(reasonText(en_t, 'capture-owned-by-another-host'))
-      .toBe('Another DSH Host is already recording on this machine.')
+      .toBe('Another DSH Host is already recording on this machine. History remains readable here; close the other Host, then retry recording to take over.')
+    expect(reasonText(zh_t, 'collector-exited'))
+      .toBe('本机记录进程意外停止了。可以点击“重试记录”重新连接。')
+    expect(reasonText(en_t, 'collector-exited'))
+      .toBe('The local recording process stopped unexpectedly. Retry recording.')
     expect(reasonText(en_t, 'something-new-from-a-later-host')).toBe('something-new-from-a-later-host')
   })
 

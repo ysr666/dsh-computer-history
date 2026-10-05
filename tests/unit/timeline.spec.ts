@@ -166,6 +166,46 @@ describe('timeline', () => {
     expect(activities.every(activity => activity.episodeCount === 1)).toBe(true)
   })
 
+  it('does not bridge across an intervening activity even when the surrounding work matches', () => {
+    const base = new Date('2026-10-03T12:00:00').getTime()
+    const activities = buildTimelineActivities([
+      workEpisode({
+        id: 'a', startedAtMs: base, endedAtMs: base + 60_000,
+        app: 'com.microsoft.VSCode', workspaceRoot: '/repo',
+      }),
+      workEpisode({
+        id: 'b', startedAtMs: base + 2 * 60_000, endedAtMs: base + 3 * 60_000,
+        app: 'com.apple.Terminal', workspaceRoot: '/repo',
+      }),
+      workEpisode({
+        id: 'c', startedAtMs: base + 4 * 60_000, endedAtMs: base + 5 * 60_000,
+        app: 'com.microsoft.VSCode', workspaceRoot: '/repo',
+      }),
+    ])
+
+    expect(activities).toHaveLength(3)
+    expect(activities.map(activity => activity.episodeIds.map(String))).toEqual([
+      ['c'], ['b'], ['a'],
+    ])
+  })
+
+  it('does not merge the same work identity across a local-day boundary', () => {
+    const beforeMidnight = new Date('2026-10-03T23:59:00').getTime()
+    const afterMidnight = new Date('2026-10-04T00:01:00').getTime()
+    const activities = buildTimelineActivities([
+      workEpisode({
+        id: 'a', startedAtMs: beforeMidnight, endedAtMs: beforeMidnight + 30_000,
+        app: 'com.microsoft.VSCode', workspaceRoot: '/repo',
+      }),
+      workEpisode({
+        id: 'b', startedAtMs: afterMidnight, endedAtMs: afterMidnight + 30_000,
+        app: 'com.microsoft.VSCode', workspaceRoot: '/repo',
+      }),
+    ])
+
+    expect(activities).toHaveLength(2)
+  })
+
   it('falls back to an exact resource identity when no workspace is known', () => {
     const base = new Date('2026-10-03T10:00:00').getTime()
     const activities = buildTimelineActivities([

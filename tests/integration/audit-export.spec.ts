@@ -46,8 +46,11 @@ function seed(db: ReturnType<typeof database>['db']): void {
   db.prepare(`INSERT INTO episode_summary_citations(episode_id, observation_id) VALUES ('ep1', 1)`).run()
   db.prepare(`INSERT INTO semantic_opt_ins(scope_key, provider_kind, model, created_at_ms)
     VALUES ('workspace:w1', 'local', 'llama3', ?)`).run(now)
-  // A credential that must never leave in an export.
-  db.prepare(`INSERT INTO companion_pairing(id, token_hash, created_at_ms) VALUES (1, 'deadbeef', ?)`).run(now)
+  // Companion credentials must never leave in an export. Keep both kinds here
+  // so the privacy assertion follows migration 0008 rather than the old singleton shape.
+  db.prepare(`INSERT INTO companion_pairing(kind, token_hash, created_at_ms)
+    VALUES ('browser', 'deadbeef-browser', ?), ('editor', 'deadbeef-editor', ?)`
+  ).run(now, now)
 }
 
 function counts(db: ReturnType<typeof database>['db']) {
@@ -115,7 +118,8 @@ describe('audit export and import', () => {
     const source = database('dsh-ch-export-cred-')
     seed(source.db)
     const serialised = JSON.stringify(exportHistory(source.db, 5_000))
-    expect(serialised).not.toContain('deadbeef')
+    expect(serialised).not.toContain('deadbeef-browser')
+    expect(serialised).not.toContain('deadbeef-editor')
     expect(serialised).not.toContain('companion_pairing')
     source.close()
   })

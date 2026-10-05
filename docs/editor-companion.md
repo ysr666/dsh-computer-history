@@ -27,24 +27,29 @@ mentions `getText`, `.text` or `.selection` at all.
 
 ## Install and pair
 
+The normal macOS flow is **Settings → VS Code companion → Install and connect**.
+The Host installs only the bundled VSIX with a fixed `code --install-extension`
+argv, creates an editor-specific pairing credential, and stages it for up to five
+minutes in a user-only `0600` bootstrap file. The extension consumes that file,
+moves the token into VS Code `SecretStorage`, stores the loopback port in extension
+state, and deletes the bootstrap file. An already-running extension watches for
+that handoff, so reconnecting does not require copying a token or a port.
+
+The Host database still persists **only the token digest**. Browser and editor
+credentials are separate: reconnecting VS Code cannot invalidate a browser
+companion, and a browser credential cannot authenticate an editor payload.
+
+The CLI install remains a development fallback only:
+
 ```bash
-pnpm build:editor-extension                      # → dsh-computer-history-editor.vsix
-env -u ELECTRON_RUN_AS_NODE code --install-extension ./dsh-computer-history-editor.vsix --force
+pnpm build:editor-extension
+code --install-extension ./dsh-computer-history-editor.vsix --force
 ```
 
-Then, in the Host panel, press **Create pairing token** and copy the value — it is
-shown once, because the Host keeps only a digest. Put it in your editor settings:
-
-```json
-{
-  "dshComputerHistory.port": 19388,
-  "dshComputerHistory.token": "<the token>"
-}
-```
-
-**Without a token nothing is sent**: the extension does not even build the
-request. Rotating the token in the panel invalidates the previous one, and the
-extension stops reporting until it is given the new one.
+A manually installed development VSIX will wait until the Host's **Connect
+automatically** action stages a credential. Legacy `dshComputerHistory.port` and
+`dshComputerHistory.token` settings are read once, migrated into SecretStorage,
+and are no longer exposed as normal extension settings.
 
 ## Allow or deny a workspace
 

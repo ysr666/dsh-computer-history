@@ -1,7 +1,7 @@
 import '@deepseek-ai/dsh-client-connection'
 import '@deepseek-ai/dsh-subprocess'
 import type { Context } from '@deepseek-ai/cordis'
-import { EpisodeId } from '../../shared/index.js'
+import { buildDiagnosticReport, EpisodeId, localDayKey } from '../../shared/index.js'
 import {
   parseDeleteRequest,
   parsePolicyUpdate,
@@ -12,10 +12,17 @@ import { SummaryProviderError } from '../semantic/provider.js'
 import { computerHistoryService } from '../service/index.js'
 import { browserCompanionSetup } from '../companion/setup.js'
 import {
+  bundledEditorCompanionVsix,
+  EditorCompanionInstaller,
+} from '../companion/editor-install.js'
+import { stageEditorCompanionBootstrap } from '../companion/editor-bootstrap.js'
+import {
   ResumeOpenLaunchError,
   ResumeOpenRequestError,
   ResumeResourceOpener,
 } from '../resume/opener.js'
+import { AccessibilitySettingsOpener } from '../system/accessibility-settings.js'
+import { SupportedApplicationInventoryReader } from '../system/application-inventory.js'
 
 export const HISTORY_API_PREFIX = '/api/computer-history'
 
@@ -23,6 +30,28 @@ function json(value: unknown, status = 200): Response {
   return Response.json(value, {
     status,
     headers: { 'cache-control': 'no-store' },
+  })
+}
+
+function jsonDownload(value: unknown, filename: string): Response {
+  return new Response(`${JSON.stringify(value, null, 2)}\n`, {
+    status: 200,
+    headers: {
+      'cache-control': 'no-store',
+      'content-type': 'application/json; charset=utf-8',
+      'content-disposition': `attachment; filename="${filename}"`,
+    },
+  })
+}
+
+function jsonDownloadHead(filename: string): Response {
+  return new Response(null, {
+    status: 200,
+    headers: {
+      'cache-control': 'no-store',
+      'content-type': 'application/json; charset=utf-8',
+      'content-disposition': `attachment; filename="${filename}"`,
+    },
   })
 }
 
@@ -95,6 +124,19 @@ export function registerHistoryApi(ctx: Context): void {
     subprocess: ctx.subprocess,
     cwd: process.cwd(),
   })
+  const accessibilitySettings = new AccessibilitySettingsOpener({
+    subprocess: ctx.subprocess,
+    cwd: process.cwd(),
+  })
+  const editorCompanion = new EditorCompanionInstaller({
+    subprocess: ctx.subprocess,
+    cwd: process.cwd(),
+    vsixPath: bundledEditorCompanionVsix(),
+  })
+  const applications = new SupportedApplicationInventoryReader({
+    subprocess: ctx.subprocess,
+    cwd: process.cwd(),
+  })
 
   ctx.effect(() => ctx.connection.fetch.register({
     path: HISTORY_API_PREFIX + '/state',
@@ -107,6 +149,22 @@ export function registerHistoryApi(ctx: Context): void {
         return Promise.resolve(textResponse('Request failed.', 500))
       }
     },
+  }))
+
+  ctx.effect(() => ctx.connection.fetch.register({
+    path: HISTORY_API_PREFIX + '/system/accessibility',
+    methods: ['GET', 'POST'],
+    requestBody: 'buffered',
+    fetch: async (request: Request) => request.method === 'GET'
+      ? json(await accessibilitySettings.capability())
+      : json(await accessibilitySettings.open()),
+  }))
+
+  ctx.effect(() => ctx.connection.fetch.register({
+    path: HISTORY_API_PREFIX + '/system/applications',
+    methods: ['GET'],
+    requestBody: 'buffered',
+    fetch: async () => json(await applications.read()),
   }))
 
   // One registration per path: the connection registry keys routes by exact
@@ -197,11 +255,29 @@ export function registerHistoryApi(ctx: Context): void {
 
   ctx.effect(() => ctx.connection.fetch.register({
     // "What do you know about me": one JSON document that this Host can read
-    // back. The pairing token digest is not part of it (see audit/export.ts).
+    // back. HEAD + GET mirror DSH Desktop's built-in Session export download
+    // lifecycle; pairing credentials remain excluded by audit/export.ts.
     path: HISTORY_API_PREFIX + '/export',
-    methods: ['GET'],
+    methods: ['GET', 'HEAD'],
     requestBody: 'buffered',
-    fetch: () => Promise.resolve(json(history.exportAll())),
+    fetch: (request: Request) => {
+      const filename = `computer-history-${localDayKey(Date.now())}.json`
+      return Promise.resolve(request.method === 'HEAD'
+        ? jsonDownloadHead(filename)
+        : jsonDownload(history.exportAll(), filename))
+    },
+  }))
+
+  ctx.effect(() => ctx.connection.fetch.register({
+    path: HISTORY_API_PREFIX + '/diagnostics',
+    methods: ['GET', 'HEAD'],
+    requestBody: 'buffered',
+    fetch: (request: Request) => {
+      const filename = `computer-history-diagnostics-${localDayKey(Date.now())}.json`
+      return Promise.resolve(request.method === 'HEAD'
+        ? jsonDownloadHead(filename)
+        : jsonDownload(buildDiagnosticReport(history.getState()), filename))
+    },
   }))
 
   ctx.effect(() => ctx.connection.fetch.register({
@@ -441,10 +517,65 @@ export function registerHistoryApi(ctx: Context): void {
   }))
 
   ctx.effect(() => ctx.connection.fetch.register({
+    path: HISTORY_API_PREFIX + '/thread',
+    methods: ['GET'],
+    requestBody: 'buffered',
+    fetch: async (request: Request) => {
+      try {
+        const url = new URL(request.url)
+        const threadKey = requiredQueryText(url, 'threadKey', 2_048)
+        const detail = await history.thread({ threadKey }, request.signal)
+        return detail ? json(detail) : textResponse('Not found.', 404)
+      } catch (error) {
+        return requestFailure(error)
+      }
+    },
+  }))
+
+  ctx.effect(() => ctx.connection.fetch.register({
     path: HISTORY_API_PREFIX + '/companion/setup',
     methods: ['GET'],
     requestBody: 'buffered',
     fetch: () => Promise.resolve(json(browserCompanionSetup())),
+  }))
+
+  ctx.effect(() => ctx.connection.fetch.register({
+    path: HISTORY_API_PREFIX + '/companion/editor',
+    methods: ['GET', 'POST'],
+    requestBody: 'buffered',
+    fetch: async (request: Request) => {
+      if (request.method === 'GET') {
+        return json(await editorCompanion.capability())
+      }
+
+      const install = await editorCompanion.install()
+      if (install.status !== 'installed' && install.status !== 'already-installed') {
+        return json(install)
+      }
+
+      try {
+        const current = history.pairing('editor')
+        if (!current.listening || current.port === undefined) {
+          return json({
+            ...install,
+            configured: false,
+            reason: 'pairing-unavailable',
+          })
+        }
+        const pairing = history.rotatePairing('editor')
+        stageEditorCompanionBootstrap({
+          port: current.port,
+          token: pairing.token,
+        })
+        return json({ ...install, configured: true })
+      } catch {
+        return json({
+          ...install,
+          configured: false,
+          reason: 'bootstrap-failed',
+        })
+      }
+    },
   }))
 
   ctx.effect(() => ctx.connection.fetch.register({
@@ -578,6 +709,7 @@ export function registerHistoryApi(ctx: Context): void {
   for (const [suffix, action] of [
     ['/pause', () => history.pause()],
     ['/resume', () => history.resume()],
+    ['/recover', () => history.recover()],
   ] as const) {
     ctx.effect(() => ctx.connection.fetch.register({
       path: HISTORY_API_PREFIX + suffix,

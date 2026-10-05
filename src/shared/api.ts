@@ -16,6 +16,7 @@ import type {
   SemanticSummaryState,
 } from './semantic.js'
 import type { PolicyRule, PolicySnapshot } from './policy.js'
+import type { SurfaceKind } from './observation.js'
 import type { ResumeRequest, ResumeResolution } from './resume.js'
 
 export interface RecentEpisodesRequest {
@@ -66,6 +67,8 @@ export interface PolicyUpdate {
   readonly rules: readonly PolicyRule[]
 }
 
+export type CompanionKind = 'browser' | 'editor'
+
 export interface PairingState {
   readonly paired: boolean
   readonly createdAtMs?: number
@@ -80,6 +83,52 @@ export interface BrowserCompanionSetup {
     readonly available: boolean
     readonly extensionPath?: string
   }
+}
+
+export interface SupportedApplication {
+  readonly bundleId: string
+  readonly name: string
+  readonly surfaceKind: SurfaceKind
+}
+
+export interface SupportedApplicationInventory {
+  readonly available: boolean
+  readonly applications: readonly SupportedApplication[]
+  readonly reason?: 'platform-unverified' | 'inventory-unavailable'
+}
+
+export interface AccessibilitySettingsCapability {
+  readonly available: boolean
+  readonly reason?: 'platform-unverified' | 'opener-unavailable'
+}
+
+export interface AccessibilitySettingsOpenResult {
+  readonly status: 'opened' | 'unsupported'
+  readonly reason?: 'platform-unverified' | 'opener-unavailable' | 'open-failed'
+}
+
+export type EditorCompanionInstallReason =
+  | 'platform-unverified'
+  | 'code-cli-unavailable'
+  | 'package-missing'
+  | 'install-failed'
+  | 'pairing-unavailable'
+  | 'bootstrap-failed'
+
+export interface EditorCompanionInstallCapability {
+  readonly available: boolean
+  readonly installed: boolean
+  readonly installedVersion?: string
+  readonly bundledVersion?: string
+  readonly updateAvailable?: boolean
+  readonly reason?: EditorCompanionInstallReason
+}
+
+export interface EditorCompanionInstallResult {
+  readonly status: 'installed' | 'already-installed' | 'failed' | 'unsupported'
+  /** A short-lived editor bootstrap credential was staged successfully. */
+  readonly configured?: boolean
+  readonly reason?: EditorCompanionInstallReason
 }
 
 export interface PairingRotation extends PairingState {
@@ -138,12 +187,14 @@ export interface ComputerHistoryState {
   readonly companion?: {
     readonly listening: boolean
     readonly port?: number
+    /** Browser pairing state retained under the original field name. */
     readonly paired: boolean
-    /**
-     * When a client last proved it holds the pairing token, if ever. A token can
-     * exist while nothing uses it, and "paired" alone cannot tell those apart.
-     */
+    readonly editorPaired?: boolean
+    /** Most recent authenticated companion contact, regardless of source. */
     readonly lastSeenAtMs?: number | undefined
+    /** Source-specific contact times keep Browser and Editor status truthful. */
+    readonly browserLastSeenAtMs?: number | undefined
+    readonly editorLastSeenAtMs?: number | undefined
     readonly reason?: string
   }
   readonly observationRetentionHours: number
@@ -156,11 +207,11 @@ export interface ComputerHistoryState {
 }
 
 export interface ComputerHistoryServiceContract {
-  /** Companion pairing state (ADR 0007). */
-  pairing(): PairingState
+  /** Companion pairing state (ADR 0007 / ADR 0009). */
+  pairing(kind?: CompanionKind): PairingState
 
-  /** Rotate the pairing token; the token is returned once. */
-  rotatePairing(): PairingRotation
+  /** Rotate one companion kind's token; the token is returned once. */
+  rotatePairing(kind?: CompanionKind): PairingRotation
 
   /** The audit export: everything this Host knows, as one document. */
   exportAll(): HistoryExport
@@ -242,6 +293,7 @@ export interface ComputerHistoryServiceContract {
 
   pause(): Promise<void>
   resume(): Promise<void>
+  recover(): Promise<void>
   getState(): ComputerHistoryState
   listPolicyRules(): readonly PolicyRule[]
   getPolicy(): PolicySnapshot

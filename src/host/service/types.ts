@@ -5,6 +5,7 @@ import type {
 export interface CaptureController {
   pause(): Promise<void>
   resume(): Promise<void>
+  recover(): Promise<void>
   getState(): Pick<
     ComputerHistoryState,
     | 'enabled'

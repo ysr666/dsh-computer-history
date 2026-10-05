@@ -9,8 +9,9 @@ import type {
   TimelineActivity,
   TimelineDay,
   WorkThread,
+  WorkThreadDetail,
 } from '../shared/index.js'
-import { localDayKey } from '../shared/audit-view.js'
+import { localDayKey, TIMELINE_ACTIVITY_MERGE_GAP_MS } from '../shared/audit-view.js'
 import { historyApi } from './api.js'
 import {
   episodeApp,
@@ -25,6 +26,7 @@ import {
   type HistoryTranslate,
 } from './locale.js'
 import type { HistoryControlStore } from './store.js'
+import { firstRunBundles, setupStage, type SetupStage } from './setup-state.js'
 
 interface PanelFactoryOptions {
   readonly getActiveLocale: () => string
@@ -195,6 +197,23 @@ function dayDuration(day: TimelineDay): number {
   )
 }
 
+export type SummaryDisplayStatus =
+  | 'loading'
+  | 'unavailable'
+  | 'deterministic'
+  | 'local'
+  | 'remote'
+
+export function summaryDisplayStatus(
+  semantic: SemanticSummaryState | null | undefined,
+): SummaryDisplayStatus {
+  if (semantic === undefined) return 'loading'
+  if (semantic === null) return 'unavailable'
+  if (semantic.scopes.some(scope => scope.providerKind === 'remote')) return 'remote'
+  if (semantic.scopes.some(scope => scope.providerKind === 'local')) return 'local'
+  return 'deterministic'
+}
+
 function dayLabel(t: HistoryTranslate, dayKey: string): string {
   const today = localDayKey(Date.now())
   if (dayKey === today) return t('today')
@@ -226,33 +245,53 @@ export function createHistoryPage({
     )
     const { state, policy } = controls
     const [hasAnyEpisode, setHasAnyEpisode] = React.useState<boolean | null>()
+    const [latestEpisode, setLatestEpisode] = React.useState<EpisodeSummary | null>()
+    const [accessibilitySettingsAvailable, setAccessibilitySettingsAvailable] = React.useState(false)
+    const [awaitingAccessibility, setAwaitingAccessibility] = React.useState(false)
     const [threads, setThreads] = React.useState<readonly WorkThread[] | null>()
+    const [threadDetail, setThreadDetail] = React.useState<WorkThreadDetail>()
+    const [threadDetailPendingKey, setThreadDetailPendingKey] = React.useState<string>()
+    const [threadDetailError, setThreadDetailError] = React.useState<string>()
     const [resumeQuery, setResumeQuery] = React.useState('')
     const [hint, setHint] = React.useState<ResumeResolution>()
     const [resumeOpenCapability, setResumeOpenCapability] = React.useState<ResumeOpenCapability>()
     const [resumeOpenPending, setResumeOpenPending] = React.useState(false)
     const [semantic, setSemantic] = React.useState<SemanticSummaryState | null>()
     const [timeline, setTimeline] = React.useState<readonly TimelineDay[] | null>()
+    const [timelineDays, setTimelineDays] = React.useState(7)
+    const [timelineHasMore, setTimelineHasMore] = React.useState(false)
+    const [timelineMorePending, setTimelineMorePending] = React.useState(false)
     const [selected, setSelected] = React.useState<EpisodeDetail>()
     const [selectedActivity, setSelectedActivity] = React.useState<TimelineActivity>()
     const [preview, setPreview] = React.useState<string>()
     const [contentError, setContentError] = React.useState<string>()
     const [actionError, setActionError] = React.useState<string>()
+    const [captureRecoveryPending, setCaptureRecoveryPending] = React.useState(false)
 
     const refreshContent = React.useCallback(async () => {
       const results = await Promise.allSettled([
         historyApi.getRecent(1),
         historyApi.getThreads(20),
         historyApi.getSemanticState(),
-        historyApi.getTimeline(7),
+        historyApi.getTimeline(8),
       ] as const)
       const [recentResult, threadResult, semanticResult, timelineResult] = results
       setHasAnyEpisode(recentResult.status === 'fulfilled'
         ? recentResult.value.length > 0
         : null)
+      setLatestEpisode(recentResult.status === 'fulfilled'
+        ? recentResult.value[0] ?? null
+        : null)
       setThreads(threadResult.status === 'fulfilled' ? threadResult.value : null)
       setSemantic(semanticResult.status === 'fulfilled' ? semanticResult.value : null)
-      setTimeline(timelineResult.status === 'fulfilled' ? timelineResult.value : null)
+      if (timelineResult.status === 'fulfilled') {
+        setTimelineDays(7)
+        setTimelineHasMore(timelineResult.value.length > 7)
+        setTimeline(timelineResult.value.slice(0, 7))
+      } else {
+        setTimelineHasMore(false)
+        setTimeline(null)
+      }
       const failures = results.filter(result => result.status === 'rejected')
       const failure = failures[0]
       setContentError(
@@ -273,11 +312,25 @@ export function createHistoryPage({
             reason: 'opener-unavailable',
           })
         })
+      void historyApi.getAccessibilitySettingsCapability()
+        .then(capability => { setAccessibilitySettingsAvailable(capability.available) })
+        .catch(() => { setAccessibilitySettingsAvailable(false) })
     }, [refreshContent, store])
+    React.useEffect(() => {
+      if (!awaitingAccessibility) return
+      const refreshOnReturn = (): void => {
+        setAwaitingAccessibility(false)
+        void store.reload().catch(() => {})
+      }
+      window.addEventListener('focus', refreshOnReturn, { once: true })
+      return () => { window.removeEventListener('focus', refreshOnReturn) }
+    }, [awaitingAccessibility, store])
     React.useEffect(() => {
       if (controls.historyRevision <= 0) return
       setSelected(undefined)
       setSelectedActivity(undefined)
+      setThreadDetail(undefined)
+      setThreadDetailError(undefined)
       setHint(undefined)
       setPreview(undefined)
       void refreshContent()
@@ -292,6 +345,41 @@ export function createHistoryPage({
       setContentError(undefined)
       void store.reload().catch(() => {})
       void refreshContent()
+    }
+
+    const recoverCapture = async (): Promise<void> => {
+      setCaptureRecoveryPending(true)
+      try {
+        await store.recover()
+      } finally {
+        setCaptureRecoveryPending(false)
+      }
+    }
+
+    const openAccessibilitySettings = async (): Promise<void> => {
+      setActionError(undefined)
+      const result = await historyApi.openAccessibilitySettings()
+      if (result.status !== 'opened') {
+        setActionError(t('accessibilitySettingsUnavailable'))
+        return
+      }
+      setAwaitingAccessibility(true)
+    }
+
+    const showEarlierHistory = async (): Promise<void> => {
+      const nextDays = timelineDays + 7
+      setTimelineMorePending(true)
+      setActionError(undefined)
+      try {
+        const next = await historyApi.getTimeline(nextDays + 1)
+        setTimelineDays(nextDays)
+        setTimelineHasMore(next.length > nextDays)
+        setTimeline(next.slice(0, nextDays))
+      } catch (cause) {
+        setActionError(failureText(t, cause))
+      } finally {
+        setTimelineMorePending(false)
+      }
     }
 
     const findWhereILeftOff = async (): Promise<void> => {
@@ -312,7 +400,11 @@ export function createHistoryPage({
             : { resourceCanonicalUri }),
         })
         if (result.status === 'unsupported') {
-          setActionError(t('resumeOpenUnavailable'))
+          setActionError(t(
+            result.reason === 'resource-missing'
+              ? 'resumeOpenMissing'
+              : 'resumeOpenUnavailable',
+          ))
         }
       } catch {
         setActionError(t('resumeOpenFailed'))
@@ -329,7 +421,7 @@ export function createHistoryPage({
 
     const previewScope = async (scopeKey: string): Promise<void> => {
       const payload = await historyApi.previewSemantic(scopeKey)
-      setPreview(`${scopeKey}\n${JSON.stringify(payload, null, 2)}`)
+      setPreview(JSON.stringify(payload, null, 2))
     }
 
     const openActivity = async (activity: TimelineActivity): Promise<void> => {
@@ -343,14 +435,40 @@ export function createHistoryPage({
       setSelected(detail)
     }
 
+    const openThread = async (thread: WorkThread): Promise<void> => {
+      if (threadDetail?.thread.threadKey === thread.threadKey) {
+        setThreadDetail(undefined)
+        setThreadDetailError(undefined)
+        return
+      }
+      setThreadDetailPendingKey(thread.threadKey)
+      setThreadDetailError(undefined)
+      try {
+        setThreadDetail(await historyApi.getThread(thread.threadKey))
+      } catch (cause) {
+        setThreadDetail(undefined)
+        setThreadDetailError(failureText(t, cause))
+      } finally {
+        setThreadDetailPendingKey(undefined)
+      }
+    }
+
     const startRecording = async (): Promise<void> => {
       const preset = state?.firstRunPreset
       if (!preset || !policy) return
       const existing = new Map<string, PolicySnapshot['rules'][number]>(
         policy.rules.filter(rule => !rule.builtIn).map(rule => [rule.pattern, rule]),
       )
+      let inventory
+      try {
+        inventory = await historyApi.getSupportedApplications()
+      } catch {
+        // Inventory narrows first-run consent. If it is unavailable, preserve
+        // the existing preset instead of guessing from bundle-id spelling.
+      }
+      const bundles = firstRunBundles(preset.bundles, inventory)
       const now = Date.now()
-      for (const bundle of preset.bundles) {
+      for (const bundle of bundles) {
         if (existing.has(bundle)) continue
         existing.set(bundle, {
           id: (`preset:${bundle}`) as never,
@@ -362,49 +480,102 @@ export function createHistoryPage({
         mode: 'include-only',
         rules: Array.from(existing.values()),
       })
+      if (state.capture === 'paused') await store.resume()
+      if (!state.accessibilityTrusted && accessibilitySettingsAvailable) {
+        await openAccessibilitySettings()
+      }
     }
 
     const staleRelease = state?.release?.stale
     const staleSection = staleRelease
       ? React.createElement(
           'section', { className: 'ch-alert' },
-          React.createElement('p', { role: 'status' },
-            t('staleRelease', { profile: staleRelease.profile })),
-          React.createElement('p', { className: 'ch-muted' }, t('staleRunCommand')),
-          React.createElement('pre', { className: 'ch-code' }, staleRelease.updateCommand),
+          React.createElement('p', { role: 'status' }, t('staleRelease')),
+          React.createElement(
+            'details', { className: 'ch-inspector' },
+            React.createElement('summary', null, t('staleAdvanced')),
+            React.createElement('p', { className: 'ch-muted' }, t('staleRunCommand')),
+            React.createElement('pre', { className: 'ch-code' }, staleRelease.updateCommand),
+          ),
         )
       : null
 
-    const isFirstRun =
+    const setup: SetupStage | undefined =
       controls.status === 'ready'
-      && hasAnyEpisode === false
-      && timeline?.length === 0
+      && state !== undefined
       && policy !== undefined
-      && policy.rules.every(rule => rule.builtIn)
+      && typeof hasAnyEpisode === 'boolean'
+        ? setupStage({
+            state,
+            policy,
+            hasAnyEpisode,
+            ...(latestEpisode?.endedAtMs === undefined
+              ? {}
+              : { newestEpisodeAtMs: latestEpisode.endedAtMs }),
+          })
+        : undefined
+    const isFirstRun = setup !== undefined
+      && setup !== 'complete'
+      && timeline?.length === 0
     const preset = state?.firstRunPreset
+    const setupCopy = setup === 'permission'
+      ? { title: t('setupPermissionTitle'), lead: t('setupPermissionBody') }
+      : setup === 'paused'
+        ? { title: t('setupPausedTitle'), lead: t('setupPausedBody') }
+        : setup === 'waiting'
+          ? { title: t('setupWaitingTitle'), lead: t('setupWaitingBody') }
+          : setup === 'stopped'
+            ? { title: t('setupBlockedTitle'), lead: t('setupStoppedBody') }
+            : setup === 'degraded'
+              ? { title: t('setupBlockedTitle'), lead: t('setupDegradedBody') }
+              : { title: t('startHere'), lead: t('firstRunIntro') }
+    const setupAction = setup === 'choose-apps'
+      ? React.createElement('button', {
+          type: 'button', className: 'ch-button', disabled: !preset,
+          onClick: () => { runAction(startRecording) },
+        }, t(!state?.accessibilityTrusted && accessibilitySettingsAvailable
+          ? 'startAndAuthorize'
+          : 'startRecording'))
+      : setup === 'permission' && accessibilitySettingsAvailable
+        ? React.createElement('button', {
+            type: 'button', className: 'ch-button', disabled: awaitingAccessibility,
+            onClick: () => { runAction(openAccessibilitySettings) },
+          }, awaitingAccessibility ? t('waitingForPermission') : t('openSystemSettings'))
+        : setup === 'paused'
+          ? React.createElement('button', {
+              type: 'button', className: 'ch-button',
+              onClick: () => { runAction(async () => { await store.resume() }) },
+            }, t('resumeRecording'))
+          : setup === 'stopped' || setup === 'degraded'
+            ? React.createElement('button', {
+                type: 'button', className: 'ch-button', disabled: captureRecoveryPending,
+                onClick: () => { runAction(recoverCapture) },
+              }, t(captureRecoveryPending ? 'recoveringRecording' : 'retryRecording'))
+            : null
     const firstRunSection = isFirstRun
       ? React.createElement(
           'section', { className: 'ch-first-run' },
           React.createElement('div', { className: 'ch-first-run-mark', 'aria-hidden': true }, '◷'),
-          React.createElement('h2', null, t('startHere')),
-          React.createElement('p', { className: 'ch-first-run-lead' }, t('firstRunIntro')),
+          React.createElement('h2', null, setupCopy.title),
+          React.createElement('p', { className: 'ch-first-run-lead' }, setupCopy.lead),
           React.createElement(
             'div', { className: 'ch-first-run-points' },
             React.createElement('span', null, `✓ ${t('metadataOnly')}`),
             React.createElement('span', null, `✓ ${t('firstRunPrivacy')}`),
             React.createElement('span', null, `✓ ${t('firstRunProtected')}`),
           ),
-          React.createElement(
-            'div', { className: 'ch-first-run-action' },
-            React.createElement('button', {
-              type: 'button', className: 'ch-button', disabled: !preset,
-              onClick: () => { runAction(startRecording) },
-            }, t('startRecording')),
-            preset
-              ? React.createElement('span', { className: 'ch-muted' },
-                  t('firstRunApps', { count: preset.bundles.length }))
+          setupAction
+            ? React.createElement(
+                'div', { className: 'ch-first-run-action' },
+                setupAction,
+                setup === 'choose-apps' && preset
+                  ? React.createElement('span', { className: 'ch-muted' },
+                      t('firstRunApps'))
+                  : null,
+              )
+            : state?.reason
+              ? React.createElement('p', { className: 'ch-muted' }, reasonText(t, state.reason))
               : null,
-          ),
         )
       : null
 
@@ -433,7 +604,7 @@ export function createHistoryPage({
         })()
       : []
 
-    const statusDotClass = isFirstRun
+    const statusDotClass = setup === 'choose-apps'
       ? 'ch-status-dot'
       : state?.capture === 'running'
         ? 'ch-status-dot ch-status-dot-success'
@@ -443,7 +614,7 @@ export function createHistoryPage({
             ? 'ch-status-dot ch-status-dot-error'
             : 'ch-status-dot'
 
-    const statusPrimary = isFirstRun
+    const statusPrimary = setup === 'choose-apps'
       ? t('captureNotStarted')
       : state
         ? captureLabel(t, state.capture)
@@ -451,18 +622,24 @@ export function createHistoryPage({
           ? t('stateUnavailable')
           : t('loadingHistory')
 
-    const statusSummary = isFirstRun
+    const statusSummary = setup === 'choose-apps'
       ? t('readyToStart')
-      : timeline === undefined
-        ? t('timelineLoading')
-        : timeline === null
-          ? t('timelineUnavailable')
-          : todayDay
-            ? t('todayUsage', {
-                duration: todayDurationText,
-                apps: todayApps,
-              })
-            : t('todayUsageNone')
+      : setup === 'permission'
+        ? t('setupPermissionSummary')
+        : setup === 'paused'
+          ? t('setupPausedSummary')
+          : setup === 'waiting'
+            ? t('setupWaitingSummary')
+            : timeline === undefined
+              ? t('timelineLoading')
+              : timeline === null
+                ? t('timelineUnavailable')
+                : todayDay
+                  ? t('todayUsage', {
+                      duration: todayDurationText,
+                      apps: todayApps,
+                    })
+                  : t('todayUsageNone')
 
     const timelineSection = section(
       t('timeline'),
@@ -535,6 +712,17 @@ export function createHistoryPage({
                   )
                 }),
               ),
+      timelineHasMore
+        ? React.createElement(
+            'div', { className: 'ch-timeline-more' },
+            React.createElement('button', {
+              type: 'button',
+              className: 'ch-text-action',
+              disabled: timelineMorePending,
+              onClick: () => { void showEarlierHistory() },
+            }, timelineMorePending ? t('loadingEarlierHistory') : t('showEarlierHistory')),
+          )
+        : null,
       selectedActivity && selected
         ? React.createElement(
             'div', { className: 'ch-detail' },
@@ -551,6 +739,16 @@ export function createHistoryPage({
             selectedActivity.episodeCount > 1
               ? React.createElement('p', { className: 'ch-detail-resource' },
                   t('mergedActivity', { count: selectedActivity.episodeCount }))
+              : null,
+            selectedActivity.episodeCount > 1
+              ? React.createElement(
+                  'details', { className: 'ch-inspector' },
+                  React.createElement('summary', null, t('activityGroupingTitle')),
+                  React.createElement('p', { className: 'ch-muted' },
+                    t('activityGroupingBody', {
+                      minutes: TIMELINE_ACTIVITY_MERGE_GAP_MS / 60_000,
+                    })),
+                )
               : null,
             React.createElement('p', { className: 'ch-detail-resource' },
               selectedActivity.resources.length > 0
@@ -580,7 +778,10 @@ export function createHistoryPage({
               : null,
             React.createElement(
               'details', { className: 'ch-inspector' },
-              React.createElement('summary', null, t('whyRecorded')),
+              React.createElement('summary', null,
+                selectedActivity.episodeCount > 1
+                  ? t('latestRawEpisodeWhyRecorded')
+                  : t('whyRecorded')),
               React.createElement('p', { className: 'ch-muted' },
                 t('episodeAuditMeta', {
                   citations: selected.summaryObservationIds.length,
@@ -598,8 +799,6 @@ export function createHistoryPage({
         ? t('resumeHit', {
             title: hint.episode.workspace?.title ?? hint.episode.id,
             resource: hint.resource?.displayLabel ?? hint.resource?.canonicalUri ?? t('lastActivity'),
-            citations: hint.citations.length,
-            confidence: hint.confidence.toFixed(2),
           })
         : hint.status === 'ambiguous'
           ? t('resumeAmbiguous', { reason: hint.reason })
@@ -685,6 +884,96 @@ export function createHistoryPage({
       ),
     )
 
+    const threadDetailView = threadDetail
+      ? (() => {
+          const activityCount = threadDetail.timeline.reduce(
+            (total, day) => total + day.activityCount,
+            0,
+          )
+          const durationMs = threadDetail.timeline.reduce(
+            (total, day) => total + dayDuration(day),
+            0,
+          )
+          const hasMergedActivity = threadDetail.timeline.some(day =>
+            day.activities.some(activity => activity.episodeCount > 1),
+          )
+          const durationText = formatDuration(t, durationMs)
+          const displayDuration = hasMergedActivity
+            ? t('approxDuration', { duration: durationText })
+            : durationText
+          const title = threadDetail.thread.workspaceTitle ?? t('unnamedWorkspace')
+          return React.createElement(
+            'div', { className: 'ch-project-history' },
+            React.createElement(
+              'div', { className: 'ch-project-history-head' },
+              React.createElement(
+                'div', null,
+                React.createElement('span', { className: 'ch-project-history-kicker' }, t('projectHistory')),
+                React.createElement('h3', null, title),
+                React.createElement('p', { className: 'ch-muted' },
+                  t('projectHistoryMeta', {
+                    activities: activityCount,
+                    days: threadDetail.timeline.length,
+                    duration: displayDuration,
+                  })),
+              ),
+              React.createElement('button', {
+                type: 'button',
+                className: 'ch-text-action',
+                'aria-label': t('closeProjectHistory'),
+                onClick: () => { setThreadDetail(undefined) },
+              }, '×'),
+            ),
+            React.createElement(
+              'div', { className: 'ch-project-days' },
+              ...threadDetail.timeline.map((day, dayIndex) => React.createElement(
+                'details', {
+                  key: day.dayKey,
+                  className: 'ch-project-day',
+                  open: dayIndex < 2 ? true : undefined,
+                },
+                React.createElement(
+                  'summary', { className: 'ch-project-day-head' },
+                  React.createElement('span', null,
+                    `${dayLabel(t, day.dayKey)} · ${formatDayDate(day.dayKey, activeLocale)}`),
+                  React.createElement('span', null,
+                    t('daySummary', {
+                      duration: day.activities.some(activity => activity.episodeCount > 1)
+                        ? t('approxDuration', { duration: formatDuration(t, dayDuration(day)) })
+                        : formatDuration(t, dayDuration(day)),
+                      count: day.activityCount,
+                    })),
+                ),
+                React.createElement(
+                  'ul', { className: 'ch-project-activity-list' },
+                  ...day.activities.map(activity => {
+                    const app = episodeApp(activity)
+                    return React.createElement(
+                      'li', { key: activity.activityKey },
+                      React.createElement('span', { className: 'ch-project-time' },
+                        `${formatClock(activity.startedAtMs, activeLocale)}–${formatClock(activity.endedAtMs, activeLocale)}`),
+                      React.createElement(
+                        'span', { className: 'ch-project-activity-copy' },
+                        React.createElement('span', { className: 'ch-project-activity-title' },
+                          episodeSubject(t, activity)),
+                        React.createElement('span', { className: 'ch-project-activity-meta' },
+                          episodeMeta(t, activity, app)),
+                      ),
+                      React.createElement('span', { className: 'ch-project-duration' },
+                        activityDurationText(t, activity)),
+                    )
+                  }),
+                ),
+              )),
+            ),
+          )
+        })()
+      : threadDetailPendingKey
+        ? React.createElement('p', { className: 'ch-muted', role: 'status' }, t('projectHistoryLoading'))
+        : threadDetailError
+          ? React.createElement('p', { className: 'ch-muted', role: 'alert' }, t('projectHistoryUnavailable'))
+          : null
+
     const threadSection = section(
       t('workThreads'),
       threads === undefined
@@ -707,35 +996,52 @@ export function createHistoryPage({
                     .slice(0, 2)
                     .map(resource => resource.displayLabel ?? resource.canonicalUri)
                     .join(', ')
+                  const isOpen = threadDetail?.thread.threadKey === thread.threadKey
                   return React.createElement(
                     'li', { key: thread.threadKey, className: 'ch-thread-item' },
                     React.createElement(
-                      'span', { className: 'ch-thread-leading' },
+                      'button', {
+                        type: 'button',
+                        className: isOpen
+                          ? 'ch-thread-action ch-thread-action-selected'
+                          : 'ch-thread-action',
+                        'aria-expanded': isOpen,
+                        disabled: threadDetailPendingKey === thread.threadKey,
+                        onClick: () => { void openThread(thread) },
+                      },
                       React.createElement(
-                        'span', { className: 'ch-thread-copy' },
-                        React.createElement('span', { className: 'ch-thread-title' }, title),
-                        resources
-                          ? React.createElement('span', { className: 'ch-thread-resources' }, resources)
-                          : null,
+                        'span', { className: 'ch-thread-leading' },
+                        React.createElement(
+                          'span', { className: 'ch-thread-copy' },
+                          React.createElement('span', { className: 'ch-thread-title' }, title),
+                          resources
+                            ? React.createElement('span', { className: 'ch-thread-resources' }, resources)
+                            : null,
+                        ),
                       ),
+                      React.createElement('span', { className: 'ch-thread-meta' },
+                        t('threadActivityMeta', {
+                          activities: thread.activityCount,
+                          duration: t('approxDuration', {
+                            duration: formatDuration(t, thread.approxActiveDurationMs),
+                          }),
+                        })),
+                      React.createElement('span', { className: 'ch-thread-chevron', 'aria-hidden': true }, '›'),
                     ),
-                    React.createElement('span', { className: 'ch-thread-meta' },
-                      t('threadMeta', {
-                        episodes: thread.episodeCount,
-                        duration: formatDuration(t, thread.endedAtMs - thread.startedAtMs),
-                      })),
                   )
                 }),
               ),
+      threadDetailView,
     )
 
-    const summaryStatus = semantic === undefined
-      ? t('summaryLoading')
-      : semantic === null
-        ? t('summaryUnavailable')
-        : semantic.scopes.some(scope => scope.providerKind === 'remote')
-          ? t('summaryRemoteShort')
-          : t('summaryLocalShort')
+    const summaryStatus = (() => {
+      const status = summaryDisplayStatus(semantic)
+      if (status === 'loading') return t('summaryLoading')
+      if (status === 'unavailable') return t('summaryUnavailable')
+      if (status === 'remote') return t('summaryRemoteShort')
+      if (status === 'local') return t('summaryLocalShort')
+      return t('summaryDeterministicShort')
+    })()
 
     const allContentUnavailable = hasAnyEpisode === null
       && timeline === null
@@ -755,6 +1061,38 @@ export function createHistoryPage({
       }, t('retry')),
     )
 
+    const accessibilityRecovery = !isFirstRun
+      && state !== undefined
+      && (state.capture === 'permission-required' || !state.accessibilityTrusted)
+      ? React.createElement(
+          'section', { className: 'ch-alert' },
+          React.createElement('p', null, t('accessibilityRecoveryBody')),
+          accessibilitySettingsAvailable
+            ? React.createElement('button', {
+                type: 'button', className: 'ch-button', disabled: awaitingAccessibility,
+                onClick: () => { runAction(openAccessibilitySettings) },
+              }, awaitingAccessibility ? t('waitingForPermission') : t('openSystemSettings'))
+            : React.createElement('p', { className: 'ch-muted' }, t('accessibilityManualPath')),
+        )
+      : null
+
+    const captureNeedsRecovery = !isFirstRun
+      && state?.enabled === true
+      && (state.capture === 'stopped' || state.capture === 'degraded')
+    const captureRecovery = captureNeedsRecovery
+      ? React.createElement(
+          'section', { className: 'ch-alert' },
+          React.createElement('p', null, t('captureRecoveryBody')),
+          state?.reason
+            ? React.createElement('p', { className: 'ch-muted' }, reasonText(t, state.reason))
+            : null,
+          React.createElement('button', {
+            type: 'button', className: 'ch-button', disabled: captureRecoveryPending,
+            onClick: () => { runAction(recoverCapture) },
+          }, t(captureRecoveryPending ? 'recoveringRecording' : 'retryRecording')),
+        )
+      : null
+
     const semanticSection = React.createElement(
       'details', { className: 'ch-summary-disclosure' },
       React.createElement(
@@ -768,26 +1106,54 @@ export function createHistoryPage({
         semantic && semantic.scopes.length
           ? React.createElement(
               'ul', { className: 'ch-summary-list' },
-              ...semantic.scopes.map(scope => React.createElement(
-                'li', { key: scope.scopeKey, className: 'ch-summary-item' },
-                React.createElement('div', { className: 'ch-summary-item-title' },
-                  `${scope.scopeKey} — ${scope.providerKind}${scope.model ? ` (${scope.model})` : ''}`),
-                React.createElement('div', { className: 'ch-controls' },
-                  React.createElement('button', {
-                    type: 'button', className: 'ch-button',
-                    onClick: () => { runAction(() => previewScope(scope.scopeKey)) },
-                  }, t('previewPayload')),
-                  React.createElement('button', {
-                    type: 'button', className: 'ch-button ch-button-danger',
-                    onClick: () => { runAction(() => revokeScope(scope.scopeKey)) },
-                  }, t('turnOffPurge')),
-                ),
-              )),
+              ...semantic.scopes.map(scope => {
+                const matchingThread = threads && threads !== null
+                  ? threads.find(thread => thread.threadKey === scope.scopeKey)
+                  : undefined
+                const appBundleId = scope.scopeKey.startsWith('app:')
+                  ? scope.scopeKey.slice('app:'.length)
+                  : undefined
+                const title = matchingThread?.workspaceTitle
+                  ?? (appBundleId ? friendlyAppName(appBundleId) : t('summaryScope'))
+                const provider = scope.providerKind === 'remote'
+                  ? t('summaryRemoteProvider')
+                  : t('summaryLocalProvider')
+                return React.createElement(
+                  'li', { key: scope.scopeKey, className: 'ch-summary-item' },
+                  React.createElement('div', { className: 'ch-summary-item-title' }, title),
+                  React.createElement('p', { className: 'ch-muted' }, provider),
+                  React.createElement('div', { className: 'ch-controls' },
+                    React.createElement('button', {
+                      type: 'button', className: 'ch-button',
+                      onClick: () => { runAction(() => previewScope(scope.scopeKey)) },
+                    }, t('previewPayload')),
+                    React.createElement('button', {
+                      type: 'button', className: 'ch-button ch-button-danger',
+                      onClick: () => { runAction(() => revokeScope(scope.scopeKey)) },
+                    }, t('turnOffPurge')),
+                  ),
+                  React.createElement(
+                    'details', { className: 'ch-inspector' },
+                    React.createElement('summary', null, t('technicalDetails')),
+                    React.createElement('p', { className: 'ch-muted' }, t('summaryTechnicalMeta', {
+                      scope: scope.scopeKey,
+                      provider: scope.providerKind,
+                      model: scope.model ? ` · ${scope.model}` : '',
+                    })),
+                  ),
+                )
+              }),
             )
           : semantic === undefined || semantic === null
             ? null
             : React.createElement('p', { className: 'ch-muted' }, t('noModelScope')),
-        preview ? React.createElement('pre', { className: 'ch-code' }, preview) : null,
+        preview
+          ? React.createElement(
+              'details', { className: 'ch-inspector', open: true },
+              React.createElement('summary', null, t('previewPayload')),
+              React.createElement('pre', { className: 'ch-code' }, preview),
+            )
+          : null,
       ),
     )
 
@@ -812,7 +1178,9 @@ export function createHistoryPage({
         ),
       ),
       staleSection,
-      state?.reason
+      accessibilityRecovery,
+      captureRecovery,
+      state?.reason && !captureNeedsRecovery
         ? React.createElement('div', { className: 'ch-alert' },
             React.createElement('p', null, reasonText(t, state.reason)))
         : null,

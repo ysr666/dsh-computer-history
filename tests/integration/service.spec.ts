@@ -126,6 +126,8 @@ class FakeCapture implements CaptureController {
     this.paused = false
   }
 
+  public async recover(): Promise<void> {}
+
   public getState() {
     return {
       enabled: true,
@@ -279,6 +281,7 @@ describe('Cordis computer history service', () => {
       },
       async pause() {},
       async resume() {},
+      async recover() {},
       getState() { return state },
       async threads() { return [] },
       async thread() { return undefined },

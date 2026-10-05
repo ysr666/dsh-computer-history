@@ -1,5 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   HISTORY_API_PREFIX,
   registerHistoryApi,
@@ -15,6 +15,7 @@ interface Calls {
   recent?: unknown
   search?: unknown
   episode?: unknown
+  thread?: unknown
   policy?: unknown
   deletion?: unknown
 }
@@ -51,8 +52,16 @@ function harness(overrides: Record<string, unknown> = {}) {
       calls.episode = id
       return undefined
     },
+    async threads() {
+      return []
+    },
+    async thread(input: unknown) {
+      calls.thread = input
+      return undefined
+    },
     async pause() {},
     async resume() {},
+    async recover() {},
     getPolicy: () => policy,
     async replacePolicy(update: unknown) {
       calls.policy = update
@@ -128,8 +137,10 @@ describe('Computer History Host API', () => {
     const { request, routes } = harness()
     expect([...routes.keys()].toSorted()).toEqual([
       '/api/computer-history/audit/preview',
+      '/api/computer-history/companion/editor',
       '/api/computer-history/companion/setup',
       '/api/computer-history/delete',
+      '/api/computer-history/diagnostics',
       '/api/computer-history/episode',
       '/api/computer-history/export',
       '/api/computer-history/import',
@@ -138,6 +149,7 @@ describe('Computer History Host API', () => {
       '/api/computer-history/pause',
       '/api/computer-history/policy',
       '/api/computer-history/recent',
+      '/api/computer-history/recover',
       '/api/computer-history/resume',
       '/api/computer-history/resume-hint',
       '/api/computer-history/resume/open',
@@ -148,6 +160,9 @@ describe('Computer History Host API', () => {
       '/api/computer-history/semantic/preview',
       '/api/computer-history/semantic/revoke',
       '/api/computer-history/state',
+      '/api/computer-history/system/accessibility',
+      '/api/computer-history/system/applications',
+      '/api/computer-history/thread',
       '/api/computer-history/threads',
       '/api/computer-history/timeline',
     ])
@@ -161,7 +176,84 @@ describe('Computer History Host API', () => {
     expect(setupResponse.headers.get('cache-control')).toBe('no-store')
     const setup = await setupResponse.json() as { chromium?: { available?: boolean } }
     expect(typeof setup.chromium?.available).toBe('boolean')
+
+    const accessibility = await request('/system/accessibility')
+    expect(accessibility.status).toBe(200)
+    const capability = await accessibility.json() as { available?: unknown }
+    expect(typeof capability.available).toBe('boolean')
+    const opened = await request('/system/accessibility', { method: 'POST' })
+    expect(opened.status).toBe(200)
+    const result = await opened.json() as { status?: unknown }
+    expect(['opened', 'unsupported']).toContain(result.status)
   })
+
+  it('serves Desktop-safe export and diagnostics downloads', async () => {
+    const { request } = harness({
+      exportAll: () => ({ schema: 'dsh-computer-history/v1', tables: {} }),
+      getState: () => ({
+        enabled: true,
+        capture: 'running',
+        accessibilityTrusted: true,
+        observationRetentionHours: 24,
+        episodeRetentionDays: 30,
+        autoResume: false,
+        release: {
+          version: '0.1.0-dev.0',
+          loadedFrom: '/Users/private/plugin',
+        },
+        companion: {
+          listening: true,
+          port: 19388,
+          paired: true,
+          editorPaired: true,
+        },
+      }),
+    })
+
+    const exportHead = await request('/export', { method: 'HEAD' })
+    expect(exportHead.status).toBe(200)
+    expect(exportHead.headers.get('content-disposition')).toContain('attachment;')
+    expect(exportHead.headers.get('content-type')).toContain('application/json')
+
+    const exportGet = await request('/export')
+    expect(exportGet.status).toBe(200)
+    expect(exportGet.headers.get('content-disposition')).toContain('computer-history-')
+    await expect(exportGet.json()).resolves.toMatchObject({
+      schema: 'dsh-computer-history/v1',
+    })
+
+    const diagnosticsHead = await request('/diagnostics', { method: 'HEAD' })
+    expect(diagnosticsHead.status).toBe(200)
+    expect(diagnosticsHead.headers.get('content-disposition'))
+      .toContain('computer-history-diagnostics-')
+
+    const diagnosticsGet = await request('/diagnostics')
+    const diagnosticsText = await diagnosticsGet.text()
+    expect(diagnosticsText).toContain('dsh-computer-history-diagnostics-v1')
+    expect(diagnosticsText).not.toContain('/Users/private/plugin')
+    expect(diagnosticsText).not.toContain('19388')
+    expect(diagnosticsText).not.toContain('token')
+  })
+  it('uses the Host local calendar date for download filenames', async () => {
+    const previousTz = process.env.TZ
+    process.env.TZ = 'Asia/Shanghai'
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-10-04T19:30:00.000Z'))
+    try {
+      const { request } = harness()
+      const exportHead = await request('/export', { method: 'HEAD' })
+      const diagnosticsHead = await request('/diagnostics', { method: 'HEAD' })
+      expect(exportHead.headers.get('content-disposition'))
+        .toContain('computer-history-2026-10-05.json')
+      expect(diagnosticsHead.headers.get('content-disposition'))
+        .toContain('computer-history-diagnostics-2026-10-05.json')
+    } finally {
+      vi.useRealTimers()
+      if (previousTz === undefined) delete process.env.TZ
+      else process.env.TZ = previousTz
+    }
+  })
+
   it('accepts bounded recent and search queries without silently coercing them', async () => {
     const { calls, request } = harness()
 
@@ -212,6 +304,43 @@ describe('Computer History Host API', () => {
     })
   })
 
+  it('returns one exact stored work thread and validates its key', async () => {
+    const detail = {
+      thread: {
+        threadKey: 'workspace:alpha',
+        episodeIds: ['episode:1'],
+        episodeCount: 1,
+        startedAtMs: 1,
+        endedAtMs: 2,
+        workspaceTitle: 'alpha',
+        resources: [],
+        summary: 'one episode',
+        summaryObservationIds: [],
+      },
+      timeline: [],
+    }
+    const { calls, request } = harness({
+      async thread(input: unknown) {
+        calls.thread = input
+        return detail
+      },
+    })
+
+    const response = await request('/thread?threadKey=workspace%3Aalpha')
+    expect(response.status).toBe(200)
+    expect(calls.thread).toEqual({ threadKey: 'workspace:alpha' })
+    await expect(response.json()).resolves.toEqual(detail)
+
+    expect((await request('/thread')).status).toBe(400)
+    expect((await request('/thread?threadKey=')).status).toBe(400)
+    expect((await request('/thread?threadKey=' + 'x'.repeat(2_049))).status).toBe(400)
+  })
+
+  it('returns 404 for an unknown work thread', async () => {
+    const { request } = harness()
+    expect((await request('/thread?threadKey=workspace%3Aunknown')).status).toBe(404)
+  })
+
   it('distinguishes missing and unknown episodes', async () => {
     const { request } = harness()
     const missing = await request('/episode')
@@ -225,7 +354,7 @@ describe('Computer History Host API', () => {
 
 
   it('opens only resources that belong to the named stored episode', async () => {
-    const storedUri = 'file:///tmp/project/report.md'
+    const storedUri = new URL('../../package.json', import.meta.url).href
     const episode = {
       id: 'episode:open',
       startedAtMs: 1,
@@ -298,6 +427,17 @@ describe('Computer History Host API', () => {
       },
     })
     expect((await conflict.request('/pause', {
+      method: 'POST',
+    })).status).toBe(409)
+
+    const recoverConflict = harness({
+      recover: async () => {
+        throw new Error(
+          'computer history capture is owned by another DSH Host',
+        )
+      },
+    })
+    expect((await recoverConflict.request('/recover', {
       method: 'POST',
     })).status).toBe(409)
 

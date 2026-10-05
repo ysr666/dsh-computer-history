@@ -619,6 +619,42 @@ describe('collector restart breaker', () => {
     expect(value.manager.snapshot().state?.state).toBe('degraded')
     await value.manager.stop()
   })
+
+  it('manually recovers after the breaker opens and resets the crash budget', async () => {
+    const value = restartFixture(2)
+
+    value.exits[0]!()
+    await new Promise(resolve => setTimeout(resolve, 10))
+    value.exits[1]!()
+    await new Promise(resolve => setTimeout(resolve, 10))
+
+    expect(value.unavailable()).toBe(1)
+    expect(value.manager.snapshot().state?.state).toBe('degraded')
+
+    let recovered = false
+    const recovering = value.manager.recover().then(() => { recovered = true })
+    expect(value.spawns()).toBe(3)
+    value.stdouts[2]!.write(hello())
+    value.stdouts[2]!.write(state('running'))
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(recovered).toBe(false)
+    value.stdouts[2]!.write(configured(1))
+    await recovering
+
+    expect(recovered).toBe(true)
+    expect(value.manager.snapshot().state?.state).toBe('running')
+    expect(value.unavailable()).toBe(1)
+
+    // Recovery resets the breaker: the next isolated crash is retried
+    // automatically instead of immediately releasing ownership again.
+    value.exits[2]!()
+    await new Promise(resolve => setTimeout(resolve, 10))
+    expect(value.spawns()).toBe(4)
+    expect(value.unavailable()).toBe(1)
+
+    await value.manager.stop()
+  })
 })
 
 describe('collector ownership handover', () => {

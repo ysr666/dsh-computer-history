@@ -9,7 +9,9 @@ import {
   AboutRow,
   ApplicationsRow,
   CompanionRow,
+  DataRow,
   DeleteHistoryRow,
+  EditorCompanionRow,
   RecordingRow,
   RetentionRow,
 } from './settings-rows.js'
@@ -52,7 +54,7 @@ export function createSettingsPage({
         React.createElement('span', {
           className: 'ch-visually-hidden', role: 'status',
         }, t('loadingSettings')),
-        ...Array.from({ length: 5 }, (_, index) => React.createElement(
+        ...Array.from({ length: 8 }, (_, index) => React.createElement(
           'li', { className: 'ch-settings-item', key: index, 'aria-hidden': true },
           React.createElement(
             'div', { className: 'ch-settings-line' },
@@ -92,6 +94,8 @@ export function createSettingsPage({
       React.createElement(ApplicationsRow, props),
       React.createElement(RetentionRow, props),
       React.createElement(CompanionRow, props),
+      React.createElement(EditorCompanionRow, props),
+      React.createElement(DataRow, props),
       React.createElement(DeleteHistoryRow, props),
       React.createElement(AboutRow, props),
     )

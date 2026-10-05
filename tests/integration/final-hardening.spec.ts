@@ -221,6 +221,7 @@ describe('final ingestion hardening', () => {
 class NoopCapture implements CaptureController {
   public pause(): Promise<void> { return Promise.resolve() }
   public resume(): Promise<void> { return Promise.resolve() }
+  public recover(): Promise<void> { return Promise.resolve() }
   public getState() {
     return {
       enabled: true,

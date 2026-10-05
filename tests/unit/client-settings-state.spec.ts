@@ -3,6 +3,8 @@ import type { ComputerHistoryState } from '../../src/shared/index.js'
 import {
   captureControlMode,
   companionUiStatus,
+  editorCompanionAwaitingFirstContact,
+  editorCompanionConnected,
   deleteHistoryRequest,
 } from '../../src/client/settings-rows.js'
 import { settingsViewMode } from '../../src/client/settings-view.js'
@@ -48,8 +50,33 @@ describe('client companion presentation', () => {
       listening: true,
       paired: true,
       port: 19388,
-      lastSeenAtMs: 100,
+      browserLastSeenAtMs: 100,
     })).toBe('connected')
+    expect(companionUiStatus({
+      listening: true,
+      paired: true,
+      port: 19388,
+      editorLastSeenAtMs: 100,
+    })).toBe('configured')
+  })
+})
+
+describe('client editor companion presentation', () => {
+
+  it('does not call an editor companion connected after the VS Code extension is removed', () => {
+    expect(editorCompanionConnected(undefined, 100)).toBe(false)
+    expect(editorCompanionConnected({ available: true, installed: false }, 100)).toBe(false)
+    expect(editorCompanionConnected({ available: true, installed: true }, undefined)).toBe(false)
+    expect(editorCompanionConnected({ available: true, installed: true }, 100)).toBe(true)
+  })
+
+  it('polls only while an installed paired editor is waiting for first contact', () => {
+    const installed = { available: true, installed: true } as const
+    expect(editorCompanionAwaitingFirstContact(undefined, true, undefined)).toBe(false)
+    expect(editorCompanionAwaitingFirstContact({ available: true, installed: false }, true, undefined)).toBe(false)
+    expect(editorCompanionAwaitingFirstContact(installed, false, undefined)).toBe(false)
+    expect(editorCompanionAwaitingFirstContact(installed, true, undefined)).toBe(true)
+    expect(editorCompanionAwaitingFirstContact(installed, true, 100)).toBe(false)
   })
 })
 

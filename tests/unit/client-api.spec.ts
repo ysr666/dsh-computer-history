@@ -10,6 +10,58 @@ afterEach(() => {
 })
 
 describe('client history API contract', () => {
+  it('takes an explicit safe download filename from the Host HEAD response', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, {
+      status: 200,
+      headers: {
+        'content-disposition': 'attachment; filename="computer-history-diagnostics-2026-10-05.json"',
+      },
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(historyApi.prepareDownloadRoute('/diagnostics')).resolves.toEqual({
+      href: 'api/computer-history/diagnostics',
+      filename: 'computer-history-diagnostics-2026-10-05.json',
+    })
+    expect(fetchMock).toHaveBeenCalledWith(
+      'api/computer-history/diagnostics',
+      expect.objectContaining({ method: 'HEAD', credentials: 'same-origin' }),
+    )
+  })
+
+  it('does not trust an unsafe download filename from a response header', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, {
+      status: 200,
+      headers: {
+        'content-disposition': 'attachment; filename="../private.json"',
+      },
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(historyApi.prepareDownloadRoute('/diagnostics')).resolves.toEqual({
+      href: 'api/computer-history/diagnostics',
+    })
+  })
+
+  it('uses the fixed capture recovery action', async () => {
+    const state = {
+      enabled: true,
+      capture: 'running',
+      accessibilityTrusted: true,
+      observationRetentionHours: 24,
+      episodeRetentionDays: 30,
+      autoResume: false,
+    }
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(state))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(historyApi.recover()).resolves.toEqual(state)
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe('api/computer-history/recover')
+    expect(init.method).toBe('POST')
+    expect(init.body).toBeUndefined()
+  })
+
   it('posts retention to the registered route', async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
       observationRetentionHours: 48,
@@ -50,6 +102,45 @@ describe('client history API contract', () => {
     })
   })
 
+  it('uses the fixed Accessibility Settings Host action', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ available: true }))
+      .mockResolvedValueOnce(jsonResponse({ status: 'opened' }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(historyApi.getAccessibilitySettingsCapability()).resolves.toEqual({
+      available: true,
+    })
+    await expect(historyApi.openAccessibilitySettings()).resolves.toEqual({
+      status: 'opened',
+    })
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      'api/computer-history/system/accessibility',
+    )
+    const [url, init] = fetchMock.mock.calls[1] as [string, RequestInit]
+    expect(url).toBe('api/computer-history/system/accessibility')
+    expect(init.method).toBe('POST')
+    expect(init.body).toBeUndefined()
+  })
+
+  it('reads the verified installed-application inventory through the typed API', async () => {
+    const inventory = {
+      available: true,
+      applications: [{
+        bundleId: 'com.microsoft.VSCode',
+        name: 'Visual Studio Code',
+        surfaceKind: 'editor',
+      }],
+    }
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(inventory))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(historyApi.getSupportedApplications()).resolves.toEqual(inventory)
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      'api/computer-history/system/applications',
+    )
+  })
+
   it('reads browser companion install information through the typed API', async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
       chromium: { available: true, extensionPath: '/tmp/extension' },
@@ -64,6 +155,51 @@ describe('client history API contract', () => {
     )
   })
 
+  it('exports and imports history through the typed data routes', async () => {
+    const exported = {
+      schema: 'dsh-computer-history-export-v1',
+      exportedAtMs: 1,
+      schemaVersion: 1,
+      tables: {},
+    }
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse(exported))
+      .mockResolvedValueOnce(jsonResponse({ imported: { episodes: 2 } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(historyApi.exportHistory()).resolves.toEqual(exported)
+    await expect(historyApi.importHistory(exported)).resolves.toEqual({
+      imported: { episodes: 2 },
+    })
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('api/computer-history/export')
+    const [url, init] = fetchMock.mock.calls[1] as [string, RequestInit]
+    expect(url).toBe('api/computer-history/import')
+    expect(init.method).toBe('POST')
+    expect(init.headers).toEqual({ 'content-type': 'application/json' })
+    expect(init.body).toBe(JSON.stringify(exported))
+  })
+
+  it('uses the fixed VS Code companion install action', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ available: true, installed: false }))
+      .mockResolvedValueOnce(jsonResponse({ status: 'installed' }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(historyApi.getEditorCompanionInstallCapability()).resolves.toEqual({
+      available: true,
+      installed: false,
+    })
+    await expect(historyApi.installEditorCompanion()).resolves.toEqual({
+      status: 'installed',
+    })
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('api/computer-history/companion/editor')
+    const [url, init] = fetchMock.mock.calls[1] as [string, RequestInit]
+    expect(url).toBe('api/computer-history/companion/editor')
+    expect(init.method).toBe('POST')
+    expect(init.body).toBeUndefined()
+  })
+
   it('rotates the companion token through /pairing/rotate', async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
       token: 'once', paired: false, listening: true, port: 4123,
@@ -73,6 +209,29 @@ describe('client history API contract', () => {
     await historyApi.rotatePairing()
     expect(fetchMock.mock.calls[0]?.[0]).toBe(
       'api/computer-history/pairing/rotate',
+    )
+  })
+
+  it('reads one work thread through the encoded project-history route', async () => {
+    const detail = {
+      thread: {
+        threadKey: 'workspace:alpha/beta',
+        episodeIds: [],
+        episodeCount: 0,
+        startedAtMs: 0,
+        endedAtMs: 0,
+        resources: [],
+        summary: '',
+        summaryObservationIds: [],
+      },
+      timeline: [],
+    }
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(detail))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(historyApi.getThread('workspace:alpha/beta')).resolves.toEqual(detail)
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      'api/computer-history/thread?threadKey=workspace%3Aalpha%2Fbeta',
     )
   })
 

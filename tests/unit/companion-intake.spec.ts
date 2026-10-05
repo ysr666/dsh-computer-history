@@ -40,7 +40,8 @@ async function harness(
   } = {},
 ): Promise<Harness> {
   const tokens = tokenStore()
-  const token = tokens.rotate(1_000)
+  const browserToken = tokens.rotate('browser', 1_000)
+  const editorToken = tokens.rotate('editor', 1_000)
   const delivered: CompanionPayload[] = []
   const intake = new CompanionIntake({
     tokens,
@@ -52,13 +53,17 @@ async function harness(
     ...options,
   })
   const port = await intake.start()
-  // Expose the token through a closure the helper owns, not through the class.
-  ;(harness as unknown as { token?: string }).token = token
+  // Expose test credentials through the helper, never through the intake class.
+  ;(harness as unknown as {
+    tokens?: { browser: string; editor: string }
+  }).tokens = { browser: browserToken, editor: editorToken }
   return { intake, port, delivered }
 }
 
-function currentToken(): string {
-  return (harness as unknown as { token?: string }).token ?? ''
+function currentToken(kind: 'browser' | 'editor' = 'browser'): string {
+  return (harness as unknown as {
+    tokens?: { browser: string; editor: string }
+  }).tokens?.[kind] ?? ''
 }
 
 function payload(
@@ -82,6 +87,13 @@ function post(
   body: string,
   headers: Record<string, string> = {},
 ): Promise<{ status: number; json: Record<string, unknown> }> {
+  let kind: 'browser' | 'editor' = 'browser'
+  try {
+    const parsed = JSON.parse(body) as { source?: unknown }
+    if (parsed.source === 'editor') kind = 'editor'
+  } catch {
+    // Malformed JSON is tested below; browser auth is sufficient to reach parsing.
+  }
   return new Promise((resolve, reject) => {
     const request = httpRequest({
       host: '127.0.0.1',
@@ -90,7 +102,7 @@ function post(
       path: '/companion/observation',
       headers: {
         'content-type': 'application/json',
-        'x-companion-token': currentToken(),
+        'x-companion-token': currentToken(kind),
         ...headers,
       },
     }, response => {
@@ -377,13 +389,30 @@ describe('a declared identity (ADR 0011)', () => {
 })
 
 describe('whether a client is actually connected (ADR 0007)', () => {
-  it('records the last request that proved it holds the token', async () => {
+  it('keeps browser and editor contact state separate', async () => {
     const { intake, port } = await harness()
-    // A token can exist while nothing uses it: "paired" and "never used" must be
-    // tellable apart, which is the whole point of this fact.
     expect(intake.lastSeen()).toBeUndefined()
+    expect(intake.lastSeen('browser')).toBeUndefined()
+    expect(intake.lastSeen('editor')).toBeUndefined()
+
     await post(port, JSON.stringify(editorPayload()))
+    expect(intake.lastSeen('editor')).toBeTypeOf('number')
+    expect(intake.lastSeen('browser')).toBeUndefined()
+
+    await post(port, JSON.stringify(payload()))
+    expect(intake.lastSeen('browser')).toBeTypeOf('number')
     expect(intake.lastSeen()).toBeTypeOf('number')
+    await intake.stop()
+  })
+
+  it('refuses a credential for the wrong companion kind', async () => {
+    const { intake, port, delivered } = await harness()
+    const response = await post(port, JSON.stringify(editorPayload()), {
+      'x-companion-token': currentToken('browser'),
+    })
+    expect(response.status).toBe(401)
+    expect(delivered).toHaveLength(0)
+    expect(intake.lastSeen('editor')).toBeUndefined()
     await intake.stop()
   })
 
@@ -428,7 +457,7 @@ const postReport = async (port: number, token: string, body: unknown) => {
 describe('a third editor, speaking the documented wire format', () => {
   it('accepts a JetBrains report that satisfies the shape', async () => {
     const { port, delivered } = await harness()
-    const result = await postReport(port, currentToken(), jetbrainsReport())
+    const result = await postReport(port, currentToken('editor'), jetbrainsReport())
     expect(result.status).toBe(201)
     expect(result.body.stored).toBe(true)
     // Delivery is the assertion here; how a workspace is carried and honoured is
@@ -442,7 +471,7 @@ describe('a third editor, speaking the documented wire format', () => {
     // error, not a silent success. This is also where the collector parser differs, which is recorded as an
     // open contract decision in docs/collector-protocol.md.
     const { port, delivered } = await harness()
-    const result = await postReport(port, currentToken(), jetbrainsReport({ selectionText: 'secret' }))
+    const result = await postReport(port, currentToken('editor'), jetbrainsReport({ selectionText: 'secret' }))
     expect(result.status).toBe(400)
     expect(delivered).toHaveLength(0)
   })

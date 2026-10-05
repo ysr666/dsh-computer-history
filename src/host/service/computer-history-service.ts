@@ -3,6 +3,7 @@ import {
   type Context,
 } from '@deepseek-ai/cordis'
 import type {
+  CompanionKind,
   ComputerHistoryServiceContract,
   ComputerHistoryState,
   DeleteHistoryRequest,
@@ -95,6 +96,10 @@ export class ComputerHistoryService
     return this.backend.resume()
   }
 
+  public recover(): Promise<void> {
+    return this.backend.recover()
+  }
+
   public getState(): ComputerHistoryState {
     return this.backend.getState()
   }
@@ -173,12 +178,12 @@ export class ComputerHistoryService
     return this.backend.revokeSemanticOptIn(request)
   }
 
-  public pairing(): PairingState {
-    return this.backend.pairing()
+  public pairing(kind: CompanionKind = 'browser'): PairingState {
+    return this.backend.pairing(kind)
   }
 
-  public rotatePairing(): PairingRotation {
-    return this.backend.rotatePairing()
+  public rotatePairing(kind: CompanionKind = 'browser'): PairingRotation {
+    return this.backend.rotatePairing(kind)
   }
 
   public listPolicyRules(): readonly PolicyRule[] {

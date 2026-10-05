@@ -18,21 +18,19 @@
 
 ## 安装与配对
 
+macOS 上的正常流程是：**设置 → VS Code 伴侣 → 安装并连接**。
+宿主只会用固定参数安装插件随附的 VSIX，然后创建**仅属于编辑器伴侣**的配对凭据，并把它放进一个最长有效五分钟、权限为 `0600` 的用户私有交接文件。扩展读取后，会把令牌转存到 VS Code `SecretStorage`，把回环端口保存在扩展状态中，并立刻删除交接文件。已经在运行的扩展会监听这次交接，所以重新连接也不需要复制 Token 或端口。
+
+宿主数据库长期保存的仍然**只有令牌摘要**。浏览器和编辑器的凭据彼此独立：重新连接 VS Code 不会踢掉浏览器伴侣，浏览器凭据也不能拿来认证编辑器载荷。
+
+命令行安装只保留为开发回退：
+
 ```bash
-pnpm build:editor-extension                      # → dsh-computer-history-editor.vsix
-env -u ELECTRON_RUN_AS_NODE code --install-extension ./dsh-computer-history-editor.vsix --force
+pnpm build:editor-extension
+code --install-extension ./dsh-computer-history-editor.vsix --force
 ```
 
-然后在宿主面板里按 **生成配对令牌** 并复制它 —— **它只显示一次**，因为宿主只保留摘要。把它填进编辑器设置：
-
-```json
-{
-  "dshComputerHistory.port": 19388,
-  "dshComputerHistory.token": "<the token>"
-}
-```
-
-**没有令牌就什么都不发送**：扩展**连请求都不会构造**。在面板里轮换令牌会作废旧的那个，扩展会一直不上报，直到拿到新的。
+如果手动装了开发版 VSIX，它会等待宿主里的**自动连接**动作来准备凭据。旧版的 `dshComputerHistory.port` 和 `dshComputerHistory.token` 如果已经存在，会被读取一次并迁移进 SecretStorage；它们不再作为正常设置项暴露给用户。
 
 ## 允许或拒绝一个工作区
 

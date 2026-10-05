@@ -1,4 +1,5 @@
 import type {
+  CompanionKind,
   PairingRotation,
   PairingState,
   WorkThread,
@@ -241,6 +242,10 @@ implements ComputerHistoryServiceContract {
     return this.capture.resume()
   }
 
+  public recover(): Promise<void> {
+    return this.capture.recover()
+  }
+
   public getState(): ComputerHistoryState {
     return {
       ...this.capture.getState(),
@@ -261,8 +266,8 @@ implements ComputerHistoryServiceContract {
     }
   }
 
-  public pairing(): PairingState {
-    const state = this.pairingTokens?.state() ?? { paired: false }
+  public pairing(kind: CompanionKind = 'browser'): PairingState {
+    const state = this.pairingTokens?.state(kind) ?? { paired: false }
     const companion = this.capture.getCompanionState?.()
     return {
       ...state,
@@ -271,16 +276,13 @@ implements ComputerHistoryServiceContract {
     }
   }
 
-  /**
-   * Rotate the companion token. The caller must show it once: only the digest
-   * is stored (ADR 0007), so it cannot be read back later.
-   */
-  public rotatePairing(): PairingRotation {
+  /** Rotate one companion kind without invalidating the other. */
+  public rotatePairing(kind: CompanionKind = 'browser'): PairingRotation {
     if (!this.pairingTokens) {
       throw new Error('companion pairing is unavailable')
     }
-    const token = this.pairingTokens.rotate(this.now())
-    return { ...this.pairing(), token }
+    const token = this.pairingTokens.rotate(kind, this.now())
+    return { ...this.pairing(kind), token }
   }
 
   /**

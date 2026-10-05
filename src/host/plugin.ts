@@ -66,9 +66,10 @@ export function resolveHistoryDataDirectory(
 
 class ManagedCapture implements CaptureController {
   public constructor(
-    private readonly manager: CollectorManager | undefined,
+    private readonly manager: () => CollectorManager | undefined,
     private readonly enabled: boolean,
     private readonly ownsCapture: () => boolean,
+    private readonly recoverCapture: () => Promise<void>,
     private readonly companion: () => NonNullable<
       ComputerHistoryState['companion']
     > = () => ({ listening: false, paired: false }),
@@ -78,7 +79,8 @@ class ManagedCapture implements CaptureController {
     if (!this.enabled) {
       throw new Error('computer history capture is disabled')
     }
-    if (!this.manager) {
+    const manager = this.manager()
+    if (!manager) {
       throw new Error(
         'computer history capture is owned by another DSH Host',
       )
@@ -88,7 +90,7 @@ class ManagedCapture implements CaptureController {
         'computer history capture is unavailable on this DSH Host',
       )
     }
-    return this.manager
+    return manager
   }
 
   public async pause(): Promise<void> {
@@ -98,6 +100,14 @@ class ManagedCapture implements CaptureController {
   public async resume(): Promise<void> {
     await this.requireOwnedManager().resume()
   }
+
+  public async recover(): Promise<void> {
+    if (!this.enabled) {
+      throw new Error('computer history capture is disabled')
+    }
+    await this.recoverCapture()
+  }
+
   /**
    * The companion listener's state, so the pairing route reports where the
    * intake actually listens instead of assuming it started.
@@ -117,7 +127,8 @@ class ManagedCapture implements CaptureController {
     | 'collector'
     | 'companion'
   > {
-    const snapshot = this.manager?.snapshot()
+    const manager = this.manager()
+    const snapshot = manager?.snapshot()
     return {
       enabled: this.enabled,
       capture: !this.enabled
@@ -128,7 +139,7 @@ class ManagedCapture implements CaptureController {
       ...(
         snapshot?.state?.reason
           ? { reason: snapshot.state.reason }
-          : this.enabled && !this.manager
+          : this.enabled && !manager
             ? { reason: 'capture-owned-by-another-host' }
             : {}
       ),
@@ -199,12 +210,16 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
     CaptureOwnershipLock | undefined
   let ownsCapture = false
   let manager: CollectorManager | undefined
-  let ownedCapture:
-    | {
-        readonly manager: CollectorManager
-        readonly lock: CaptureOwnershipLock
-      }
-    | undefined
+  let recovery: Promise<void> | undefined
+
+  const collectorExecutable =
+    config.collectorExecutable
+    ?? fileURLToPath(
+      new URL(
+        '../bin/dsh-computer-history-collector',
+        import.meta.url,
+      ),
+    )
 
   /** `true` once in-flight ingestion settles, `false` if it does not. */
   const ingestedIdle = async (): Promise<boolean> => {
@@ -222,76 +237,110 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
     }
   }
 
-  const releaseCaptureOwnership = async (): Promise<void> => {
-    if (!ownedCapture) return
-    try {
-      await ownedCapture.manager.stop('plugin-dispose')
-    } catch {
-      // A failed stop still releases ownership in its own body.
-    }
+  const releaseCurrentCaptureLock = async (): Promise<void> => {
     ownsCapture = false
+    const lock = captureLock
+    captureLock = undefined
+    if (!lock) return
     try {
-      await ownedCapture.lock.release()
+      await lock.release()
     } catch {
-      // Ownership release is idempotent; disposal continues.
+      // Ownership release is idempotent; disposal/recovery continues.
     }
   }
 
-  if (enabled) {
-    // Bounded probe rather than a zero-wait acquire: an outgoing owner
-    // hands the lock back asynchronously, and losing that race would
-    // wrongly downgrade this Host to a read-only client. A genuinely
-    // long-lived owner still wins and this Host stays read/delete only.
-    captureLock = await CaptureOwnershipLock.tryAcquire(
+  const ensureManager = (): CollectorManager => {
+    if (manager) return manager
+    manager = new CollectorManager(ctx, {
+      executable: collectorExecutable,
+      cwd: dataDirectory,
+      restartOnCrash: config.collectorRestart ?? true,
+      onMessage: async (message: CollectorToHost) => {
+        if (message.type === 'hello') {
+          await manager?.initialize(policies.get())
+        }
+        if (message.type === 'observation') {
+          await ingestion.ingest(message)
+        }
+      },
+      // This callback must release the *current* lock, not the lock from the
+      // first launch. A manual recovery can acquire a new lock on the same
+      // manager instance after the crash budget is exhausted.
+      onUnexpectedExit: releaseCurrentCaptureLock,
+    })
+    return manager
+  }
+
+  const acquireCaptureOwnership = async (): Promise<boolean> => {
+    if (ownsCapture && captureLock) return true
+    const lock = await CaptureOwnershipLock.tryAcquire(
       captureLockPath,
       config.captureLockProbeWaitMs
         ?? CAPTURE_LOCK_PROBE_WAIT_MS,
     )
-    ownsCapture = captureLock !== undefined
+    if (!lock) return false
+    captureLock = lock
+    ownsCapture = true
+    return true
+  }
 
-    if (captureLock) {
-      const collectorExecutable =
-        config.collectorExecutable
-        ?? fileURLToPath(
-          new URL(
-            '../bin/dsh-computer-history-collector',
-            import.meta.url,
-          ),
+  const releaseCaptureOwnership = async (): Promise<void> => {
+    try {
+      await manager?.stop('plugin-dispose')
+    } catch {
+      // A failed stop still releases ownership in its own body.
+    }
+    await releaseCurrentCaptureLock()
+  }
+
+  const recoverCapture = async (): Promise<void> => {
+    if (!enabled) {
+      throw new Error('computer history capture is disabled')
+    }
+    if (recovery) return recovery
+
+    recovery = (async () => {
+      if (!await acquireCaptureOwnership()) {
+        throw new Error(
+          'computer history capture is owned by another DSH Host',
         )
+      }
+
+      const activeManager = ensureManager()
+      const state = activeManager.snapshot().state?.state
+      if (
+        state === 'running'
+        || state === 'paused'
+        || state === 'permission-required'
+      ) {
+        return
+      }
 
       try {
-        const ownedLock = captureLock
-        manager = new CollectorManager(ctx, {
-          executable: collectorExecutable,
-          cwd: dataDirectory,
-          restartOnCrash: config.collectorRestart ?? true,
-          onMessage: async (
-            message: CollectorToHost,
-          ) => {
-            if (message.type === 'hello') {
-              await manager?.initialize(policies.get())
-            }
-            if (message.type === 'observation') {
-              await ingestion.ingest(message)
-            }
-          },
-          onUnexpectedExit: async () => {
-            ownsCapture = false
-            await ownedLock.release()
-          },
-        })
-        manager.start()
+        await activeManager.recover()
       } catch (error) {
-        ownsCapture = false
-        await captureLock.release()
-        captureLock = undefined
+        const message = error instanceof Error ? error.message : ''
+        // A concurrently-running helper still needs this Host's lock. Every
+        // other failed recovery path — including a shutdown still draining —
+        // must hand a newly-acquired lock back so the next retry or another
+        // Host cannot be wedged out.
+        if (message !== 'collector is already running') {
+          await releaseCurrentCaptureLock()
+        }
         throw error
       }
+    })().finally(() => {
+      recovery = undefined
+    })
+    return recovery
+  }
 
-      ownedCapture = {
-        manager,
-        lock: captureLock,
-      }
+  if (enabled && await acquireCaptureOwnership()) {
+    try {
+      ensureManager().start()
+    } catch (error) {
+      await releaseCurrentCaptureLock()
+      throw error
     }
   }
 
@@ -340,26 +389,25 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
       return ingestion.ingest(companionObservation(payload))
     },
   })
-  // Read the pairing state once, synchronously: the listener's callbacks run
-  // later, possibly after the store is closed during disposal, and a database
-  // read there would reject with "database is not open" while nobody is left
-  // to handle it.
-  const paired = companionTokens.state().paired
+  const browserPaired = companionTokens.state('browser').paired
+  const editorPaired = companionTokens.state('editor').paired
   let companionState: NonNullable<
     ComputerHistoryState['companion']
   > = {
     listening: false,
-    paired,
+    paired: browserPaired,
+    editorPaired,
     reason: 'companion intake not started',
   }
   void companionIntake.start()
     .then((port) => {
-      companionState = { listening: true, port, paired }
+      companionState = { listening: true, port, paired: browserPaired, editorPaired }
     })
     .catch((error: unknown) => {
       companionState = {
         listening: false,
-        paired,
+        paired: browserPaired,
+        editorPaired,
         reason: error instanceof Error
           ? error.message
           : 'companion intake failed',
@@ -374,15 +422,34 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
     policies,
     deletion,
     new ManagedCapture(
-      manager,
+      () => manager,
       enabled,
       () => ownsCapture,
-      () => ({
-        ...companionState,
-        // Read per call, from memory: the reason `paired` is snapshotted is that a
-        // listener callback can run after the store is closed.
-        lastSeenAtMs: companionIntake.lastSeen(),
-      }),
+      recoverCapture,
+      () => {
+        const browserPairing = companionTokens.state('browser')
+        const editorPairing = companionTokens.state('editor')
+        const browserSeen = companionIntake.lastSeen('browser')
+        const editorSeen = companionIntake.lastSeen('editor')
+        const validBrowserSeen = browserSeen !== undefined
+          && browserSeen >= (browserPairing.createdAtMs ?? 0)
+            ? browserSeen
+            : undefined
+        const validEditorSeen = editorSeen !== undefined
+          && editorSeen >= (editorPairing.createdAtMs ?? 0)
+            ? editorSeen
+            : undefined
+        const seen = [validBrowserSeen, validEditorSeen]
+          .filter((value): value is number => value !== undefined)
+        return {
+          ...companionState,
+          paired: browserPairing.paired,
+          editorPaired: editorPairing.paired,
+          ...(seen.length === 0 ? {} : { lastSeenAtMs: Math.max(...seen) }),
+          ...(validBrowserSeen === undefined ? {} : { browserLastSeenAtMs: validBrowserSeen }),
+          ...(validEditorSeen === undefined ? {} : { editorLastSeenAtMs: validEditorSeen }),
+        }
+      },
     ),
     {
       ...retentionSettings.get(),
@@ -414,7 +481,7 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
       const preset = readFirstRunPreset()
       if (!preset) return undefined
       return {
-        bundles: presetBundles(preset),
+        bundles: presetBundles(preset, process.platform),
         title: { ...preset.title },
         description: { ...preset.description },
       }

@@ -161,6 +161,95 @@ describe('plugin multi-Host capture composition', () => {
     await second.dispose()
   })
 
+  it('lets an already-running read-only Host recover after the owner exits', async () => {
+    const root = mkdtempSync(
+      path.join(os.tmpdir(), 'dsh-ch-plugin-recover-host-'),
+    )
+    roots.push(root)
+    const dataDirectory = path.join(root, 'history')
+    const spawned = { count: 0 }
+
+    const first = fakeHost(spawned)
+    await apply(first.ctx, {
+      enabled: true,
+      dataDirectory,
+      collectorExecutable: '/collector',
+      collectorRestart: false,
+      captureLockProbeWaitMs: 25,
+    })
+    expect(spawned.count).toBe(1)
+
+    const second = fakeHost(spawned)
+    await apply(second.ctx, {
+      enabled: true,
+      dataDirectory,
+      collectorExecutable: '/collector',
+      collectorRestart: false,
+      captureLockProbeWaitMs: 25,
+    })
+    expect(spawned.count).toBe(1)
+
+    const secondHistory = (
+      second.ctx as unknown as {
+        get(name: 'computerHistory'): {
+          recover(): Promise<void>
+          getState(): { capture: string; reason?: string }
+        }
+      }
+    ).get('computerHistory')
+
+    expect(secondHistory.getState()).toMatchObject({
+      capture: 'degraded',
+      reason: 'capture-owned-by-another-host',
+    })
+    await expect(secondHistory.recover()).rejects.toThrow(
+      /owned by another DSH Host/,
+    )
+    expect(spawned.count).toBe(1)
+
+    await first.dispose()
+
+    const recovering = secondHistory.recover()
+    await new Promise(resolve => setTimeout(resolve, 30))
+    expect(spawned.count).toBe(2)
+    second.stdouts[0]!.write(JSON.stringify({
+      v: 1,
+      type: 'hello',
+      collectorSession: 'recovered-session',
+      collectorVersion: '0.1.0',
+      platform: 'darwin',
+      arch: 'arm64',
+      capabilities: [],
+    }) + '\n')
+    await Promise.resolve()
+    await Promise.resolve()
+    second.stdouts[0]!.write(JSON.stringify({
+      v: 1,
+      type: 'state',
+      state: 'running',
+      accessibilityTrusted: true,
+    }) + '\n')
+    let recovered = false
+    void recovering.then(() => { recovered = true })
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(recovered).toBe(false)
+    second.stdouts[0]!.write(JSON.stringify({
+      v: 1,
+      type: 'configured',
+      revision: 1,
+    }) + '\n')
+    await recovering
+    expect(recovered).toBe(true)
+
+    expect(secondHistory.getState()).toMatchObject({
+      capture: 'running',
+    })
+    expect(secondHistory.getState().reason).toBeUndefined()
+
+    await second.dispose()
+  })
+
   it('releases fatal ownership and rejects stale owner controls', async () => {
     const root = mkdtempSync(
       path.join(os.tmpdir(), 'dsh-ch-plugin-fatal-'),

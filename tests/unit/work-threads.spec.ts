@@ -70,6 +70,8 @@ describe('work threads', () => {
     ])
     const first = threads[1]!
     expect(first.episodeIds).toEqual(['a', 'b'])
+    expect(first.activityCount).toBe(2)
+    expect(first.approxActiveDurationMs).toBe(20)
     expect(first.summaryObservationIds).toEqual([1, 2, 3])
     expect(first.summaryObservationIds).not.toContain(7)
     expect(first.resources.map(resource => resource.canonicalUri))

@@ -1,5 +1,6 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
+import type { CompanionKind } from '../../shared/index.js'
 
 const TOKEN_BYTES = 32
 
@@ -7,11 +8,6 @@ function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex')
 }
 
-/**
- * Constant-time comparison of two hex digests. Length is compared first
- * because `timingSafeEqual` throws on differing lengths, and a differing
- * length is not a secret once one side is a fixed-size digest.
- */
 function sameDigest(left: string, right: string): boolean {
   const a = Buffer.from(left, 'hex')
   const b = Buffer.from(right, 'hex')
@@ -24,45 +20,65 @@ export interface PairingState {
   readonly createdAtMs?: number
 }
 
+type Credential = {
+  readonly tokenHash: string
+  readonly createdAtMs: number
+}
+
 /**
- * The companion pairing token (ADR 0007): 256 bits of randomness, stored as a
- * SHA-256 digest, verifiable in constant time, rotatable by the user.
+ * Per-companion pairing credentials (ADR 0007 / ADR 0009).
+ *
+ * Browser and editor credentials are independent so rotating one cannot silently
+ * disconnect the other. Only SHA-256 digests persist in SQLite. The current
+ * digests are mirrored in memory so the loopback intake never needs to touch the
+ * database after plugin teardown has started.
  */
 export class CompanionTokenStore {
-  public constructor(private readonly db: DatabaseSync) {}
+  private readonly credentials = new Map<CompanionKind, Credential>()
 
-  /**
-   * Create a token, replacing any previous one. Returns the token itself, the
-   * only moment it exists outside the extension.
-   */
-  public rotate(nowMs: number): string {
+  public constructor(private readonly db: DatabaseSync) {
+    const rows = this.db.prepare(`
+      SELECT kind, token_hash, created_at_ms
+      FROM companion_pairing
+    `).all() as Array<{
+      kind: CompanionKind
+      token_hash: string
+      created_at_ms: number
+    }>
+    for (const row of rows) {
+      if (row.kind !== 'browser' && row.kind !== 'editor') continue
+      this.credentials.set(row.kind, {
+        tokenHash: row.token_hash,
+        createdAtMs: Number(row.created_at_ms),
+      })
+    }
+  }
+
+  /** Create a credential for one companion kind, replacing only that kind. */
+  public rotate(kind: CompanionKind, nowMs: number): string {
     const token = randomBytes(TOKEN_BYTES).toString('base64url')
+    const tokenHash = hashToken(token)
     this.db.prepare(`
-      INSERT INTO companion_pairing(id, token_hash, created_at_ms)
-      VALUES (1, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET
+      INSERT INTO companion_pairing(kind, token_hash, created_at_ms)
+      VALUES (?, ?, ?)
+      ON CONFLICT(kind) DO UPDATE SET
         token_hash = excluded.token_hash,
         created_at_ms = excluded.created_at_ms
-    `).run(hashToken(token), nowMs)
+    `).run(kind, tokenHash, nowMs)
+    this.credentials.set(kind, { tokenHash, createdAtMs: nowMs })
     return token
   }
 
-  public verify(candidate: string | undefined): boolean {
+  public verify(kind: CompanionKind, candidate: string | undefined): boolean {
     if (!candidate || candidate.length === 0) return false
-    const row = this.db.prepare(`
-      SELECT token_hash FROM companion_pairing WHERE id = 1
-    `).get() as { token_hash: string } | undefined
-    if (!row) return false
-    return sameDigest(hashToken(candidate), row.token_hash)
+    const credential = this.credentials.get(kind)
+    if (!credential) return false
+    return sameDigest(hashToken(candidate), credential.tokenHash)
   }
 
-  public state(): PairingState {
-    const row = this.db.prepare(`
-      SELECT token_hash, created_at_ms
-      FROM companion_pairing
-      WHERE id = 1
-    `).get() as { token_hash: string; created_at_ms: number } | undefined
-    if (!row) return { paired: false }
-    return { paired: true, createdAtMs: Number(row.created_at_ms) }
+  public state(kind: CompanionKind): PairingState {
+    const credential = this.credentials.get(kind)
+    if (!credential) return { paired: false }
+    return { paired: true, createdAtMs: credential.createdAtMs }
   }
 }

@@ -18,15 +18,19 @@ export interface HistoryControlSnapshot {
   readonly historyRevision: number
 }
 
+const STATE_POLL_INTERVAL_MS = 2_000
+
 type ControlApi = Pick<typeof historyApi,
   | 'getState'
   | 'getPolicy'
   | 'getRetention'
   | 'pause'
   | 'resume'
+  | 'recover'
   | 'replacePolicy'
   | 'setRetention'
   | 'deleteHistory'
+  | 'importHistory'
   | 'rotatePairing'
 >
 export interface HistoryControlStore {
@@ -34,14 +38,17 @@ export interface HistoryControlStore {
   subscribe(listener: () => void): () => void
   load(): Promise<void>
   reload(): Promise<void>
+  refreshState(): Promise<ComputerHistoryState>
   pause(): Promise<ComputerHistoryState>
   resume(): Promise<ComputerHistoryState>
+  recover(): Promise<ComputerHistoryState>
   replacePolicy(update: PolicyUpdate): Promise<PolicySnapshot>
   setRetention(input: {
     readonly observationRetentionHours: number
     readonly episodeRetentionDays: number
   }): Promise<RetentionSettings>
   deleteHistory(request: DeleteHistoryRequest): Promise<DeleteHistoryResult>
+  importHistory(document: unknown): Promise<{ readonly imported: Record<string, number> }>
   rotatePairing(): Promise<PairingRotation>
 }
 
@@ -54,6 +61,8 @@ export function createHistoryControlStore(
   }
   const listeners = new Set<() => void>()
   let loadPromise: Promise<void> | undefined
+  let stateRefreshPromise: Promise<ComputerHistoryState> | undefined
+  let statePollTimer: ReturnType<typeof setInterval> | undefined
 
   const publish = (next: HistoryControlSnapshot): void => {
     snapshot = next
@@ -95,22 +104,48 @@ export function createHistoryControlStore(
     publish({ ...snapshot, status: 'ready', state, error: undefined })
     return state
   }
+  const refreshState = (): Promise<ComputerHistoryState> => {
+    if (stateRefreshPromise) return stateRefreshPromise
+    stateRefreshPromise = api.getState()
+      .then(foldState)
+      .finally(() => { stateRefreshPromise = undefined })
+    return stateRefreshPromise
+  }
+  const stopStatePolling = (): void => {
+    if (statePollTimer === undefined) return
+    clearInterval(statePollTimer)
+    statePollTimer = undefined
+  }
+  const startStatePolling = (): void => {
+    if (statePollTimer !== undefined) return
+    statePollTimer = setInterval(() => {
+      void refreshState().catch(() => undefined)
+    }, STATE_POLL_INTERVAL_MS)
+  }
   return {
     getSnapshot: () => snapshot,
     subscribe(listener) {
       listeners.add(listener)
-      return () => { listeners.delete(listener) }
+      if (listeners.size === 1) startStatePolling()
+      return () => {
+        listeners.delete(listener)
+        if (listeners.size === 0) stopStatePolling()
+      }
     },
     async load() {
       if (snapshot.status === 'ready') return
       await readAll()
     },
     reload: readAll,
+    refreshState,
     async pause() {
       return foldState(await api.pause())
     },
     async resume() {
       return foldState(await api.resume())
+    },
+    async recover() {
+      return foldState(await api.recover())
     },
     async replacePolicy(update) {
       const policy = await api.replacePolicy(update)
@@ -143,10 +178,20 @@ export function createHistoryControlStore(
       })
       return result
     },
+    async importHistory(document) {
+      const result = await api.importHistory(document)
+      publish({
+        ...snapshot,
+        historyRevision: snapshot.historyRevision + 1,
+      })
+      return result
+    },
     async rotatePairing() {
       const rotation = await api.rotatePairing()
       const state = snapshot.state
       if (state) {
+        const editorPaired = state.companion?.editorPaired
+        const editorLastSeenAtMs = state.companion?.editorLastSeenAtMs
         publish({
           ...snapshot,
           state: {
@@ -155,6 +200,10 @@ export function createHistoryControlStore(
               listening: rotation.listening,
               paired: rotation.paired,
               ...(rotation.port === undefined ? {} : { port: rotation.port }),
+              ...(editorPaired === undefined ? {} : { editorPaired }),
+              ...(editorLastSeenAtMs === undefined
+                ? {}
+                : { editorLastSeenAtMs, lastSeenAtMs: editorLastSeenAtMs }),
             },
           },
         })

@@ -34,12 +34,27 @@ export function isFirstRunPreset(value: unknown): value is FirstRunPreset {
     && preset.allowSurfaceKinds.every(kind => typeof kind === 'string')
 }
 
+/** Whether an adapter identity belongs to one runtime platform. */
+function bundleMatchesPlatform(bundleId: string, platform: string): boolean {
+  if (bundleId === 'companion.browser') return true
+  if (platform === 'win32') return bundleId.endsWith('.exe')
+  if (platform === 'linux') return bundleId.endsWith('.desktop')
+  if (platform === 'darwin') {
+    return !bundleId.endsWith('.exe') && !bundleId.endsWith('.desktop')
+  }
+  return false
+}
+
 /** Every bundle id the preset would allow, in a stable order. */
-export function presetBundles(preset: FirstRunPreset): readonly string[] {
+export function presetBundles(
+  preset: FirstRunPreset,
+  platform?: string,
+): readonly string[] {
   const kinds = new Set(preset.allowSurfaceKinds)
   const bundles = PHASE1_ADAPTERS
     .filter(adapter => kinds.has(adapter.surfaceKind))
     .flatMap(adapter => adapter.bundleIds)
+    .filter(bundleId => platform === undefined || bundleMatchesPlatform(bundleId, platform))
   return Array.from(new Set(bundles)).toSorted()
 }
 

@@ -41,6 +41,18 @@ describe('the first-run preset', () => {
     }
   })
 
+  it('filters runtime presets to the current platform identity shape', async () => {
+    const raw: unknown = JSON.parse(
+      await readFile(new URL('../../presets/first-run.json', import.meta.url), 'utf8'),
+    )
+    if (!isFirstRunPreset(raw)) throw new Error('presets/first-run.json is not a preset')
+    const mac = presetBundles(raw, 'darwin')
+    expect(mac).toContain('com.microsoft.VSCode')
+    expect(mac).toContain('companion.browser')
+    expect(mac).not.toContain('Code.exe')
+    expect(mac).not.toContain('code.desktop')
+  })
+
   it('is stable: the same preset expands to the same list', async () => {
     expect(await shippedPreset()).toEqual(await shippedPreset())
   })

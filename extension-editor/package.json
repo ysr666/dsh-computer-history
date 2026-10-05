@@ -20,16 +20,6 @@
     "configuration": {
       "title": "DSH Computer History",
       "properties": {
-        "dshComputerHistory.port": {
-          "type": "number",
-          "default": 19388,
-          "description": "Loopback port the Host listens on for companion observations."
-        },
-        "dshComputerHistory.token": {
-          "type": "string",
-          "default": "",
-          "description": "Pairing token. Shown once in the Host panel; without it nothing is sent."
-        },
         "dshComputerHistory.traceFile": {
           "type": "string",
           "default": "",

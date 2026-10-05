@@ -1,4 +1,5 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
+import type { CompanionKind } from '../../shared/index.js'
 import type { CompanionTokenStore } from './token-store.js'
 
 /** What the extension reports for one tab event (metadata only, ADR 0002). */
@@ -92,11 +93,17 @@ const DEFAULT_RATE_LIMIT = 120
  * host-side as well as in the extension.
  */
 export class CompanionIntake {
-  /** When a request last proved it holds a valid token, if ever. */
-  private lastSeenAtMs: number | undefined
+  /** Last authenticated contact per companion kind; never persisted. */
+  private readonly lastSeenAtMs = new Map<CompanionKind, number>()
 
-  public lastSeen(): number | undefined {
-    return this.lastSeenAtMs
+  public lastSeen(kind?: CompanionKind): number | undefined {
+    if (kind) return this.lastSeenAtMs.get(kind)
+    const values = Array.from(this.lastSeenAtMs.values())
+    return values.length > 0 ? Math.max(...values) : undefined
+  }
+
+  private markSeen(kind: CompanionKind): void {
+    this.lastSeenAtMs.set(kind, this.now())
   }
 
   private server: Server | undefined
@@ -185,23 +192,22 @@ export class CompanionIntake {
 
     const token = request.headers['x-companion-token']
     const presented = Array.isArray(token) ? token[0] : token
-    if (!this.options.tokens.verify(presented)) {
-      return this.send(response, 401, { error: 'pairing token required' })
-    }
+    const browserAuthenticated = this.options.tokens.verify('browser', presented)
+    const editorAuthenticated = this.options.tokens.verify('editor', presented)
 
-    // A token existing is not the same as a client using it (ADR 0007, and the
-    // product need behind it): "paired" with nothing ever arriving looks exactly
-    // like a mistyped token, and telling those apart needs this one fact.
-    this.lastSeenAtMs = Date.now()
-
-    // Pairing check for the options page: proves the port and the token before
-    // the user trusts a pairing, and stores nothing.
+    // The legacy browser options page uses this endpoint as a pairing check.
+    // Keep it browser-specific: an editor credential must never authenticate a
+    // browser flow merely because both companions share the same loopback port.
     if (isHealth) {
+      if (!browserAuthenticated) {
+        return this.send(response, 401, { error: 'browser pairing token required' })
+      }
+      this.markSeen('browser')
       return this.send(response, 200, { ok: true, port: this.boundPort })
     }
 
-    if (!this.withinRate(presented ?? '')) {
-      return this.send(response, 429, { error: 'rate limit exceeded' })
+    if (!browserAuthenticated && !editorAuthenticated) {
+      return this.send(response, 401, { error: 'pairing token required' })
     }
 
     let body: string
@@ -230,6 +236,23 @@ export class CompanionIntake {
     if (typeof payload === 'string') {
       return this.send(response, 400, { error: payload })
     }
+
+    const sourceAuthenticated = payload.source === 'browser'
+      ? browserAuthenticated
+      : editorAuthenticated
+    if (!sourceAuthenticated) {
+      return this.send(response, 401, {
+        error: `${payload.source} pairing token required`,
+      })
+    }
+    if (!this.withinRate(presented ?? '')) {
+      return this.send(response, 429, { error: 'rate limit exceeded' })
+    }
+
+    // A valid source-specific credential proves that companion is actually
+    // present. Keep the timestamps separate so an editor connection cannot make
+    // the browser row look connected (and vice versa).
+    this.markSeen(payload.source)
 
     // Defence in depth: the extension refuses private windows itself, and the
     // Host refuses them again rather than trusting the extension. A browser

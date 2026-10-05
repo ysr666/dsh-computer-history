@@ -74,4 +74,5 @@ export type ResumeOpenResult =
         | 'opener-unavailable'
         | 'no-openable-resource'
         | 'unsupported-resource'
+        | 'resource-missing'
     }

@@ -73,6 +73,7 @@ describe('ResumeResourceOpener', () => {
       subprocess: runtime as never,
       cwd: '/tmp',
       platform: 'darwin',
+      exists: () => true,
     })
 
     await expect(opener.openEpisode(episode())).resolves.toEqual({
@@ -91,11 +92,45 @@ describe('ResumeResourceOpener', () => {
     ])
   })
 
+  it('falls back to the system default handler when the recorded app cannot open the resource', async () => {
+    const specs: unknown[] = []
+    const outcomes = [
+      { exitCode: 1, signal: null },
+      { exitCode: 0, signal: null },
+    ] as const
+    const runtime = {
+      resolveExecutable: vi.fn(async (command: string) => command),
+      spawn: vi.fn((spec: unknown) => {
+        specs.push(spec)
+        return { done: Promise.resolve(outcomes[specs.length - 1]!) }
+      }),
+    }
+    const opener = new ResumeResourceOpener({
+      subprocess: runtime as never,
+      cwd: '/tmp',
+      platform: 'darwin',
+      exists: () => true,
+    })
+
+    await expect(opener.openEpisode(episode())).resolves.toEqual({
+      status: 'opened',
+      kind: 'file',
+    })
+    expect(runtime.spawn).toHaveBeenCalledTimes(2)
+    expect((specs[0] as { argv: readonly string[] }).argv).toEqual([
+      '/usr/bin/open', '-b', 'com.microsoft.VSCode', '/tmp/report.md',
+    ])
+    expect((specs[1] as { argv: readonly string[] }).argv).toEqual([
+      '/usr/bin/open', '/tmp/report.md',
+    ])
+  })
+
   it('rejects a resource URI that was not stored on the episode', async () => {
     const opener = new ResumeResourceOpener({
       subprocess: subprocess() as never,
       cwd: '/tmp',
       platform: 'darwin',
+      exists: () => true,
     })
 
     await expect(opener.openEpisode(
@@ -104,12 +139,29 @@ describe('ResumeResourceOpener', () => {
     )).rejects.toBeInstanceOf(ResumeOpenRequestError)
   })
 
+  it('reports a stored local resource that no longer exists without launching anything', async () => {
+    const runtime = subprocess()
+    const opener = new ResumeResourceOpener({
+      subprocess: runtime as never,
+      cwd: '/tmp',
+      platform: 'darwin',
+      exists: () => false,
+    })
+
+    await expect(opener.openEpisode(episode())).resolves.toEqual({
+      status: 'unsupported',
+      reason: 'resource-missing',
+    })
+    expect(runtime.spawn).not.toHaveBeenCalled()
+  })
+
   it('uses the recorded workspace root only when the episode has no resource', async () => {
     const runtime = subprocess()
     const opener = new ResumeResourceOpener({
       subprocess: runtime as never,
       cwd: '/tmp',
       platform: 'darwin',
+      exists: () => true,
     })
     const withoutResources = episode({
       lastStrongResource: undefined,
@@ -129,6 +181,7 @@ describe('ResumeResourceOpener', () => {
       subprocess: subprocess() as never,
       cwd: '/tmp',
       platform: 'darwin',
+      exists: () => true,
     })
     const unsafe = episode({
       lastStrongResource: {
@@ -149,6 +202,7 @@ describe('ResumeResourceOpener', () => {
       subprocess: subprocess({ exitCode: 1, signal: null }) as never,
       cwd: '/tmp',
       platform: 'darwin',
+      exists: () => true,
     })
 
     await expect(opener.openEpisode(episode())).rejects.toBeInstanceOf(

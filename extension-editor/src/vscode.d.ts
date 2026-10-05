@@ -47,8 +47,20 @@ declare module 'vscode' {
     onDidChangeActiveTerminal(listener: () => void): Disposable
   }
 
+  export interface SecretStorage {
+    get(key: string): Promise<string | undefined>
+    store(key: string, value: string): Promise<void>
+  }
+
+  export interface Memento {
+    get<T>(key: string): T | undefined
+    update(key: string, value: unknown): Promise<void>
+  }
+
   export interface ExtensionContext {
     readonly subscriptions: Disposable[]
+    readonly secrets: SecretStorage
+    readonly globalState: Memento
   }
 
   export interface Env {
@@ -64,3 +76,8 @@ declare module 'vscode' {
 // The extension needs one function from node at runtime, and this declaration is
 // cheaper than adding a type dependency to a package that has none.
 declare function require(name: string): unknown
+
+declare const process: {
+  readonly platform: string
+  getuid?: () => number
+}

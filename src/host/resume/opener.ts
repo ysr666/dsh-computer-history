@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import type { SubprocessRuntime } from '@deepseek-ai/dsh-subprocess'
@@ -17,6 +18,7 @@ export interface ResumeResourceOpenerOptions {
   readonly subprocess: SubprocessFace
   readonly cwd: string
   readonly platform?: NodeJS.Platform
+  readonly exists?: (path: string) => boolean
 }
 
 function episodeResources(episode: EpisodeDetail): readonly ResourceIdentity[] {
@@ -92,12 +94,14 @@ export class ResumeResourceOpener {
   private readonly subprocess: SubprocessFace
   private readonly cwd: string
   private readonly platform: NodeJS.Platform
+  private readonly exists: (path: string) => boolean
   private openerPromise: Promise<string | undefined> | undefined
 
   public constructor(options: ResumeResourceOpenerOptions) {
     this.subprocess = options.subprocess
     this.cwd = options.cwd
     this.platform = options.platform ?? process.platform
+    this.exists = options.exists ?? existsSync
   }
 
   private resolveOpener(): Promise<string | undefined> {
@@ -139,32 +143,53 @@ export class ResumeResourceOpener {
     if (!target) {
       return { status: 'unsupported', reason: 'unsupported-resource' }
     }
+    if (resource.kind !== 'url' && !this.exists(target)) {
+      return { status: 'unsupported', reason: 'resource-missing' }
+    }
     const opener = await this.resolveOpener()
     if (!opener) {
       return { status: 'unsupported', reason: 'opener-unavailable' }
     }
+    const launch = async (argv: readonly string[]) => {
+      const handle = this.subprocess.spawn({
+        argv,
+        cwd: this.cwd,
+        stdio: {
+          stdin: 'ignore',
+          stdout: { maxBytes: 4_096 },
+          stderr: { maxBytes: 4_096 },
+        },
+        graceMs: 1_000,
+      })
+      return handle.done
+    }
+
     const appBundleId = preferredBundleId(episode)
-    const argv = appBundleId
-      ? [opener, '-b', appBundleId, target]
-      : [opener, target]
-    const handle = this.subprocess.spawn({
-      argv,
-      cwd: this.cwd,
-      stdio: {
-        stdin: 'ignore',
-        stdout: { maxBytes: 4_096 },
-        stderr: { maxBytes: 4_096 },
-      },
-      graceMs: 1_000,
-    })
-    const outcome = await handle.done
+    if (appBundleId) {
+      const preferred = await launch([opener, '-b', appBundleId, target])
+      if (preferred.exitCode === 0) {
+        return {
+          status: 'opened',
+          appBundleId,
+          kind: resource.kind,
+        }
+      }
+
+      // The stored app identity is a preference, not a reason to strand the
+      // user. The target has already passed the stored-evidence and scheme
+      // checks above, so retrying with LaunchServices' default handler does not
+      // broaden what the browser can ask the Host to open.
+      const fallback = await launch([opener, target])
+      if (fallback.exitCode === 0) {
+        return { status: 'opened', kind: resource.kind }
+      }
+      throw new ResumeOpenLaunchError('resource opener failed')
+    }
+
+    const outcome = await launch([opener, target])
     if (outcome.exitCode !== 0) {
       throw new ResumeOpenLaunchError('resource opener failed')
     }
-    return {
-      status: 'opened',
-      ...(appBundleId === undefined ? {} : { appBundleId }),
-      kind: resource.kind,
-    }
+    return { status: 'opened', kind: resource.kind }
   }
 }

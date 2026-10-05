@@ -136,8 +136,56 @@ export class CollectorManager {
 
     this.shutdownRequested = false
     this.unexpectedExitNotified = false
+    this.ownershipRelease = undefined
     this.crashTimes = []
     this.spawnCollector()
+  }
+
+  /**
+   * Retry a collector that has exhausted its automatic crash recovery.
+   *
+   * Ownership is deliberately not managed here: the plugin must hold the
+   * capture lock before calling this method. The manager keeps the user's
+   * desired pause/running state across recovery and only resolves once the
+   * replacement helper has acknowledged that state.
+   */
+  public async recover(): Promise<void> {
+    if (this.stopping) {
+      throw new Error('collector shutdown is still in progress')
+    }
+    if (this.handle) {
+      throw new Error('collector is already running')
+    }
+
+    this.clearRestartTimer()
+    this.shutdownRequested = false
+    this.unexpectedExitNotified = false
+    this.ownershipRelease = undefined
+    this.crashTimes = []
+    this.spawnCollector()
+
+    // A state acknowledgement alone is not enough to call recovery complete.
+    // The hello handler configures the current policy through `processing`; if
+    // recovery resolved on `running` first, the UI could report success while
+    // the first configure acknowledgement was still outstanding (and could
+    // still fail a moment later). Wait through that processing chain so a
+    // successful recovery means both capture state and initial policy are live.
+    await this.waitForState(this.desiredCaptureState)
+    await this.processing
+
+    const recoveredState = this.state?.state
+    const healthy = recoveredState === this.desiredCaptureState
+      || (
+        this.desiredCaptureState === 'running'
+        && recoveredState === 'permission-required'
+      )
+    if (!healthy) {
+      throw new Error(
+        `collector recovery did not become healthy${
+          this.state?.reason ? `: ${this.state.reason}` : ''
+        }`,
+      )
+    }
   }
 
   private spawnCollector(): void {
