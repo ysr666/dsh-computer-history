@@ -32,11 +32,16 @@ const companion = web + 1
 rmSync(home, { recursive: true, force: true })
 const env = { ...process.env, DSH_HOME: home }
 let host
-let actions = 0
+// Two counters, because conflating them is how a number starts lying. `userActions` counts what a person has to
+// do; `internalSteps` counts what this script does to isolate itself (packing, and repairing a layer list that
+// the platform only needs after a half-failed install - docs/development.md:126 measured that a clean install
+// needs no repair). The baseline's target is about the first counter.
+let userActions = 0
+let internalSteps = 0
 
 try {
   const add = spec => {
-    actions += 1
+    userActions += 1
     let r = spawnSync(cli, ['plugin', '--profile', 'baseline', 'add', spec], { env, encoding: 'utf8' })
     if (r.status !== 0) {
       const workspace = path.join(home, 'profiles', 'baseline', 'pnpm-workspace.yaml')
@@ -45,11 +50,12 @@ try {
     }
     return r.status === 0
   }
-  actions += 1 // pack
+  internalSteps += 1 // packing is a build/publish step, not something a user does
   spawnSync('pnpm', ['pack', '--pack-destination', home])
   const version = JSON.parse(readFileSync('package.json', 'utf8')).version
   const installed = add('@deepseek-ai/dsh-web-app@0.2.0-rc.2') && add(path.join(home, `dsh-computer-history-${version}.tgz`))
-  actions += 1 // the profile layer list, which the CLI leaves incomplete (measured: a dependency that is not a layer does not boot)
+  // The layer list only needs repairing after a half-failed install; a clean one gets it right (docs/development.md:126).
+  internalSteps += 1
   {
     const manifestPath = path.join(home, 'profiles', 'baseline', 'package.json')
     const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
@@ -58,8 +64,8 @@ try {
     writeFileSync(path.join(home, 'profiles', 'baseline', 'cordis.patch.yml'),
       `- id: computer-history\n  config:\n    enabled: true\n    dataDirectory: ${path.join(home, 'computer-history')}\n    companionPort: ${companion}\n    collectorRestart: false\n`)
   }
-  if (!installed) say('setup actions to a Host', 'install failed', `${actions} attempted`)
-  actions += 1 // boot
+  if (!installed) say('setup actions to a Host', 'install failed', `${userActions} attempted`)
+  userActions += 1 // starting the Host (the desktop application does this by itself)
   host = spawn(cli, ['--profile', 'baseline', '--port', String(web), '--no-open'], { env, cwd: os.tmpdir(), stdio: ['ignore', 'pipe', 'pipe'], detached: true })
   let out = ''
   host.stdout.on('data', c => { out += c }); host.stderr.on('data', c => { out += c })
@@ -75,8 +81,9 @@ try {
   // ① setup actions a user performs, and what a stored row would additionally need.
   const state = get('/state')
   const needsPermission = state.capture !== 'running'
-  say('① setup actions', String(actions + (needsPermission ? 1 : 0) + (state.companion?.paired ? 0 : 1)),
-    `(${actions} to a running Host + ${needsPermission ? '1 accessibility grant' : 'no grant needed'} + ${state.companion?.paired ? 'already paired' : '1 pairing'})`)
+  const total = userActions + (needsPermission ? 1 : 0) + (state.companion?.paired ? 0 : 1)
+  say('① user actions', String(total),
+    `(${userActions} install/boot + ${needsPermission ? '1 accessibility grant' : 'no grant'} + ${state.companion?.paired ? 'already paired' : '1 pairing'}; this script also took ${internalSteps} internal step(s) - packing and, only after a half-failed install, repairing the layer list - which are not user actions)`)
 
   // ② observations that appear with no action at all: read before doing anything else.
   const db = path.join(home, 'computer-history', 'history.sqlite')
