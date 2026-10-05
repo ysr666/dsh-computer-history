@@ -9,7 +9,7 @@
 // the browser again. What it does not do is pair it: the token lives in the extension's options page, which is
 // one dialog, and docs/companion.md documents it as such. This check covers everything up to that dialog.
 import { spawn, spawnSync } from 'node:child_process'
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 
 const REPO = path.resolve(import.meta.dirname, '..')
