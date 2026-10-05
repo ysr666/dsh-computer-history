@@ -107,7 +107,7 @@
     "presets",
     "cordis.patch.yml",
     "assets/brand/app-icon.svg",
-    "locale/*.json"
+    "locale"
   ],
   "peerDependencies": {
     "@deepseek-ai/cordis": "~4.0.4",
