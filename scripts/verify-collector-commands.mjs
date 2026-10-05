@@ -47,7 +47,35 @@ const PARSE_COMMAND = /pub fn parse_command/g
  * quoted inside prose is not a scan either - both would otherwise be reported as hand-written parsing.
  */
 function codeOnly(text) {
-  const shipped = text.split('\n#[cfg(test)]')[0]
+  let shipped = ''
+  let index = 0
+  for (;;) {
+    const marker = text.indexOf('#[cfg(test)]', index)
+    if (marker === -1) {
+      shipped += text.slice(index)
+      break
+    }
+    shipped += text.slice(index, marker)
+    // Cut the module itself by matching its braces, so code written after it stays in scope. Keeping only
+    // "everything before the first test module" made such code invisible, which an adversarial re-run
+    // proved by appending a hand-written parser behind a test module.
+    let cursor = text.indexOf('{', marker)
+    if (cursor === -1) break
+    let depth = 0
+    while (cursor < text.length) {
+      const character = text[cursor]
+      if (character === '{') depth += 1
+      else if (character === '}') {
+        depth -= 1
+        if (depth === 0) {
+          cursor += 1
+          break
+        }
+      }
+      cursor += 1
+    }
+    index = cursor
+  }
   return shipped
     .split('\n')
     .filter(line => !line.trimStart().startsWith('//'))
@@ -67,6 +95,16 @@ function sourceFiles(dir) {
 }
 
 const problems = []
+
+// The rule that matters is "a keyword literal outside the shared parser". A guard that cannot see code
+// written after a test module proves nothing about such code, so this asserts the shape it must catch.
+{
+  const sample = 'fn f() {}\n#[cfg(test)]\nmod tests {}\nfn g() -> bool { line.contains("configure") }'
+  if (!COMMAND_LITERAL.test(codeOnly(sample))) {
+    problems.push('the keyword rule no longer sees code written after a test module - this guard proves nothing')
+  }
+}
+
 const files = sourceFiles(NATIVE)
 if (files.length === 0) {
   problems.push(`${NATIVE}: no Rust sources found - this guard proves nothing`)

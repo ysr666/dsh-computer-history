@@ -65,21 +65,28 @@ const opened = await evaluate(`(() => {
   el.click(); return 'clicked'
 })()`)
 await new Promise(r => setTimeout(r, 3500))
+// The health line is the panel's own element (`ch-` is this plugin's prefix), not a `role="status"`
+// paragraph: looking for the role reported "no status line" on a panel that clearly has one, which is how
+// a check quietly stops checking.
 const health = await evaluate(`(() => {
-  const p = [...document.querySelectorAll('p')].find(e => (e.getAttribute('role')||'') === 'status')
-  return p ? (p.textContent||'').slice(0, 60) : '(no status line)'
+  const line = document.querySelector('main .ch-status-line')
+  return line ? (line.textContent||'').trim().slice(0, 80) : '(no status line)'
 })()`)
 
-// 3. geometry: a squeezed button is the tell that a row cannot wrap
+// 3. geometry: the tell is text that no longer fits its box. Height alone stopped meaning anything once
+// rows were allowed to wrap - a fixed "height > 46" reported 23 healthy timeline rows as squeezed, which is
+// the same "cries wolf" failure the staleness banner had.
 const buttons = JSON.parse(String(await evaluate(`(() => {
   const main = document.querySelector('main')
   if (!main) return '[]'
   return JSON.stringify([...main.querySelectorAll('button')].map(b => ({
-    label: (b.textContent||'').trim().slice(0, 12), w: Math.round(b.getBoundingClientRect().width),
+    label: ((b.textContent||'').trim().slice(0, 12)),
+    w: Math.round(b.getBoundingClientRect().width),
     h: Math.round(b.getBoundingClientRect().height),
+    over: b.scrollWidth > b.clientWidth + 1 || b.scrollHeight > b.clientHeight + 1,
   })))
 })()`)))
-const squeezed = buttons.filter(b => b.h > 46)
+const squeezed = buttons.filter(b => b.over)
 
 // 4. scroll every scrollable ancestor of the destructive warning, then measure it
 const warning = await evaluate(`(() => {
@@ -98,7 +105,7 @@ writeFileSync(`${OUT}/panel-verified.png`, bytes)
 
 console.log('opened:', opened)
 console.log('health line:', health)
-console.log('buttons:', buttons.length, '| squeezed (height > 46px):', squeezed.length, JSON.stringify(squeezed))
+console.log('buttons:', buttons.length, '| text clipped:', squeezed.length, JSON.stringify(squeezed))
 console.log('destructive warning:', warning)
 console.log('capture:', bytes.length, 'bytes, sha', createHash('sha256').update(bytes).digest('hex').slice(0, 12))
 process.exit(0)

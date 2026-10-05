@@ -35,7 +35,7 @@ export function phase1AdapterForBundle(
 }
 
 
-export const SECURE_PATH = /(?:^|\/)(?:\.env(?:\.|$)|\.ssh(?:\/|$))|\.(?:pem|key)$|(?:credentials|secrets)/i
+export const SECURE_PATH = /(?:^|\/)(?:\.env(?:\.|$)|\.ssh(?:\/|$)|\.netrc$|\.npmrc$|id_(?:rsa|ed25519|ecdsa|dsa)$|service-account\.json$)|\.(?:pem|key|p12|pfx|jks|keystore)$|(?:credentials|secrets)/i
 
 /**
  * Defence in depth for the Host's own store. The native helper already
