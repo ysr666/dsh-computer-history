@@ -1,0 +1,59 @@
+# Publishing a release: push a `v*` tag whose name is `v` + the version in package.json.
+#
+# No certificate and no secrets. This is a DSH plugin: the artifact is a tarball that `dsh plugin add` fetches
+# with Node, and Node sets no quarantine flag. Measured 2026-10-05 on an arm64 Mac with the collector this
+# repository ships:
+#
+#   * an unsigned arm64 binary is killed by the kernel ("Killed: 9") - so a signature is required;
+#   * an ad-hoc signature is enough, and that is what `scripts/build-native.mjs` has always produced;
+#   * a copy carrying a Safari quarantine flag still ran normally;
+#   * `spctl -a` reports our ad-hoc binary as "rejected" and it runs anyway - that gate is for app bundles,
+#     not for a CLI a plugin spawns.
+#
+# A Developer ID certificate only becomes necessary if this ever ships a `.app`/`.dmg`/`.pkg`, or asks a user to
+# launch the binary from Finder. See the "Publishing" section of docs/release.md.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.19.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm verify
+      - run: pnpm native:build
+      - run: pnpm pack --pack-destination /tmp
+
+      - name: Scan for release blockers
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: pnpm verify:release:blockers
+
+      - name: Verify the release
+        run: |
+          tarball=$(ls /tmp/dsh-computer-history-*.tgz | head -1)
+          echo "verifying $tarball"
+          DSH_RELEASE_TARBALL="$tarball" pnpm verify:release
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # The notes are the changelog section for this version, which the preflight has just proved exists.
+          version="${GITHUB_REF_NAME#v}"
+          awk -v v="$version" '$0 == "## " v {found=1; next} /^## / {found=0} found' CHANGELOG.md > /tmp/notes.md
+          test -s /tmp/notes.md || { echo "no changelog section for $version"; exit 1; }
+          gh release create "$GITHUB_REF_NAME" /tmp/dsh-computer-history-*.tgz \
+            --title "$GITHUB_REF_NAME" --notes-file /tmp/notes.md

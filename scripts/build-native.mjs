@@ -83,7 +83,8 @@ const signArgs = [
   '--sign', identity,
   '--identifier', identifier,
 ]
-if (identity === '-') {
+const adHoc = identity === '-'
+if (adHoc) {
   signArgs.push('--timestamp=none')
 } else {
   signArgs.push('--options', 'runtime', '--timestamp')
@@ -99,5 +100,7 @@ run(codesign, [
 ])
 
 console.log(
-  `built and signed universal macOS collector (${identifier})`,
+  adHoc
+    ? `built and signed the universal macOS collector ad-hoc (${identifier}) - fine for this machine, not for distribution`
+    : `built and signed the universal macOS collector with a Developer ID (${identifier})`,
 )

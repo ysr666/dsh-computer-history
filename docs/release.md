@@ -158,3 +158,52 @@ Three approaches recorded as measured failures, so nobody repeats them:
 **Still open, and stated as such:** the **client half** of an installed bundle does not appear in
 the interface on this Host yet, so the install is verified for the host plugin and *not* for the
 panel. Until that is fixed, this document says so rather than claiming a complete install.
+
+## Publishing
+
+Push a tag named `v` + the version in `package.json` (`.github/workflows/release.yml`). The workflow runs the
+same gate as `main`, builds the collector, packs, runs `pnpm verify:release`, and creates the GitHub release with
+the tarball attached and the changelog section as the notes. **It needs no certificate and no secrets.**
+
+### Why no certificate: a plugin install is not an app install
+
+Measured on an arm64 Mac with the collector this repository ships (2026-10-05):
+
+| what was measured | result |
+|---|---|
+| an **unsigned** arm64 binary | killed by the kernel (`Killed: 9`) - so a signature **is** required |
+| the **ad-hoc** signature this build produces | runs; it is what makes the binary executable at all |
+| a copy with a **Safari quarantine flag** | **ran normally** |
+| what `curl`/Node downloads carry | no quarantine attribute at all |
+| `spctl -a -vvv` on the ad-hoc binary | "rejected" - and it runs, because that gate is for app bundles |
+| how this ships | `dsh plugin add` fetches the tarball with Node and the plugin spawns the collector as a child |
+
+So the hard requirement is "signed at all", which `scripts/build-native.mjs` already satisfies, and `spctl` is
+not the check for this artifact. `pnpm verify:release` therefore requires a signature that verifies
+(`codesign --verify --strict`) and reports which kind it is, instead of demanding a Developer ID.
+
+### When a Developer ID certificate would become necessary
+
+Only if the product ships a `.app`, `.dmg` or `.pkg`, or tells a user to launch the binary from Finder - that is
+where Gatekeeper's notarization rule applies. Then: a paid Apple Developer account, a **Developer ID
+Application** certificate exported as a `.p12`, `--options runtime`, `xcrun notarytool submit --wait`, and (for
+a bundle, not a bare binary) `xcrun stapler staple`. None of that is needed for a DSH plugin today.
+
+### The scan that runs before it
+
+`pnpm verify:release:blockers` (its own step in the workflow) fails on two things only: a failed run on `main` in
+the last twenty, and an open **high or critical** dependabot alert. Open pull requests and issues, how many
+branches have a commit from the last month, and whether the alerts could be read at all are reported but not
+enforced - whether they block *this* release is a judgement, and a script that pretends otherwise gets ignored.
+
+### Running it locally
+
+```bash
+pnpm native:build                    # ad-hoc; the log says which signature it made
+pnpm pack --pack-destination /tmp
+DSH_RELEASE_TARBALL=/tmp/dsh-computer-history-<version>.tgz pnpm verify:release
+```
+
+Measured 2026-10-05 with the version still at `0.1.0-dev.0`: `pnpm verify:release` exits 1 and names what is
+actually missing - the `-dev` version and the absent changelog section - while the signature check passes.
+The release workflow itself has not run yet: it needs a tag, which is the owner's call.
