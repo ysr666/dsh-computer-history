@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#07101F"/><stop offset=".52" stop-color="#0A1427"/><stop offset="1" stop-color="#07101B"/></linearGradient>
+    <linearGradient id="g" x1="0" y1="1" x2="1" y2="0"><stop stop-color="#4B5CFF"/><stop offset=".5" stop-color="#2C8FFF"/><stop offset="1" stop-color="#48E0D2"/></linearGradient>
+    <radialGradient id="halo"><stop stop-color="#2D8FFF" stop-opacity=".15"/><stop offset="1" stop-color="#2D8FFF" stop-opacity="0"/></radialGradient>
+  </defs>
+  <rect width="1280" height="640" rx="28" fill="url(#bg)"/><circle cx="640" cy="300" r="330" fill="url(#halo)"/>
+  <g opacity=".24" fill="none"><ellipse cx="640" cy="300" rx="508" ry="248" stroke="#38577F"/><ellipse cx="640" cy="300" rx="430" ry="205" stroke="#2C8FFF"/><ellipse cx="640" cy="300" rx="350" ry="164" stroke="#48E0D2" stroke-opacity=".38"/></g>
+  <g transform="translate(532 62)">
+    <path d="M34 196A111 111 0 1 1 198 43" fill="none" stroke="url(#g)" stroke-width="22" stroke-linecap="round"/>
+    <circle cx="198" cy="43" r="17" fill="#75E4DF" stroke="#091426" stroke-width="7"/><circle cx="218" cy="118" r="14" fill="#3FAEFF" stroke="#091426" stroke-width="6"/><circle cx="195" cy="190" r="11" fill="#65D9D5" stroke="#091426" stroke-width="5"/>
+    <path d="M90 185A72 72 0 1 1 174 165" fill="none" stroke="url(#g)" stroke-width="15" stroke-linecap="round"/>
+    <circle cx="112" cy="118" r="8" fill="#F5F8FF"/><path d="M112 118V78M112 118L145 140" stroke="#F5F8FF" stroke-width="10" stroke-linecap="round" fill="none"/>
+  </g>
+  <g text-anchor="middle" font-family="Inter,Arial,sans-serif">
+    <text x="640" y="360" fill="#F5F8FF" font-size="70" font-weight="820" letter-spacing="-2.5">DSH Computer History</text>
+    <text x="640" y="417" fill="#C7D4E7" font-size="29" font-weight="650">Remember the work. <tspan fill="#66DCDD">Not the screen.</tspan></text>
+    <text x="640" y="458" fill="#8196B3" font-size="18">Local-first · Metadata-only · Work continuity</text>
+  </g>
+  <g transform="translate(425 508)" font-family="Inter,Arial,sans-serif" font-size="12" font-weight="700" letter-spacing="1">
+    <rect width="132" height="38" rx="19" fill="#0D192B" stroke="#29476D"/><circle cx="18" cy="19" r="4" fill="#4B5CFF"/><text x="32" y="24" fill="#B6C7DB">LOCAL-FIRST</text>
+    <g transform="translate(144)"><rect width="166" height="38" rx="19" fill="#0D192B" stroke="#29476D"/><circle cx="18" cy="19" r="4" fill="#2C8FFF"/><text x="32" y="24" fill="#B6C7DB">METADATA-ONLY</text></g>
+    <g transform="translate(322)"><rect width="172" height="38" rx="19" fill="#0D192B" stroke="#29476D"/><circle cx="18" cy="19" r="4" fill="#48E0D2"/><text x="32" y="24" fill="#B6C7DB">WORK CONTINUITY</text></g>
+  </g>
+</svg>

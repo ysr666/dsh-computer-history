@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#07101F"/><stop offset=".6" stop-color="#0A1426"/><stop offset="1" stop-color="#07101C"/></linearGradient>
+    <linearGradient id="g" x1="0" y1="1" x2="1" y2="0"><stop stop-color="#4B5CFF"/><stop offset=".5" stop-color="#2C8FFF"/><stop offset="1" stop-color="#48E0D2"/></linearGradient>
+    <radialGradient id="glow" cx="78%" cy="48%" r="46%"><stop stop-color="#2C8FFF" stop-opacity=".13"/><stop offset="1" stop-color="#2C8FFF" stop-opacity="0"/></radialGradient>
+    <pattern id="dots" width="32" height="32" patternUnits="userSpaceOnUse"><circle cx="1.5" cy="1.5" r="1" fill="#7890B1" opacity=".09"/></pattern>
+  </defs>
+  <rect width="1280" height="640" rx="28" fill="url(#bg)"/><rect width="1280" height="640" rx="28" fill="url(#dots)"/><rect width="1280" height="640" rx="28" fill="url(#glow)"/>
+  <g transform="translate(82 76)">
+    <rect width="268" height="36" rx="18" fill="#0D1A2E" stroke="#274368"/>
+    <circle cx="20" cy="18" r="4" fill="#48E0D2"/><text x="35" y="23" fill="#9FB4D0" font-family="Inter,Arial,sans-serif" font-size="14" font-weight="700" letter-spacing="1.7">DEEPSEEK HARNESS</text>
+    <g transform="translate(0 68)">
+      <path d="M36 156A91 91 0 1 1 170 31" fill="none" stroke="url(#g)" stroke-width="18" stroke-linecap="round"/>
+      <circle cx="170" cy="31" r="14" fill="#75E4DF" stroke="#091426" stroke-width="6"/><circle cx="187" cy="92" r="11" fill="#3FAEFF" stroke="#091426" stroke-width="5"/><circle cx="168" cy="150" r="9" fill="#65D9D5" stroke="#091426" stroke-width="4"/>
+      <path d="M81 148A60 60 0 1 1 150 131" fill="none" stroke="url(#g)" stroke-width="13" stroke-linecap="round"/>
+      <circle cx="100" cy="92" r="7" fill="#F5F8FF"/><path d="M100 92V58M100 92L127 110" stroke="#F5F8FF" stroke-width="9" stroke-linecap="round" fill="none"/>
+    </g>
+    <text x="235" y="158" fill="#F6F9FF" font-family="Inter,Arial,sans-serif" font-size="62" font-weight="800" letter-spacing="-2">DSH</text>
+    <text x="235" y="218" fill="#DCE6F5" font-family="Inter,Arial,sans-serif" font-size="43" font-weight="560" letter-spacing="-1">Computer History</text>
+    <text x="0" y="330" fill="#F1F5FC" font-family="Inter,Arial,sans-serif" font-size="37" font-weight="720" letter-spacing="-.7">Remember the work. <tspan fill="#62D9DB">Not the screen.</tspan></text>
+    <text x="0" y="375" fill="#8EA3BF" font-family="Inter,Arial,sans-serif" font-size="19">Local-first, metadata-only work continuity for DeepSeek Harness.</text>
+    <g transform="translate(0 418)" font-family="Inter,Arial,sans-serif" font-size="13" font-weight="700" letter-spacing="1">
+      <rect width="148" height="40" rx="20" fill="#0D192B" stroke="#2A456A"/><circle cx="20" cy="20" r="4" fill="#4B5CFF"/><text x="34" y="25" fill="#B4C5DA">LOCAL-FIRST</text>
+      <g transform="translate(160)"><rect width="180" height="40" rx="20" fill="#0D192B" stroke="#2A456A"/><circle cx="20" cy="20" r="4" fill="#2C8FFF"/><text x="34" y="25" fill="#B4C5DA">METADATA-ONLY</text></g>
+      <g transform="translate(352)"><rect width="186" height="40" rx="20" fill="#0D192B" stroke="#2A456A"/><circle cx="20" cy="20" r="4" fill="#48E0D2"/><text x="34" y="25" fill="#B4C5DA">WORK CONTINUITY</text></g>
+    </g>
+  </g>
+  <g opacity=".92">
+    <path d="M790 72 C1035 40 1166 162 1175 314 C1183 467 1048 566 812 580" fill="none" stroke="#34527A" stroke-opacity=".55" stroke-width="1.5"/>
+    <path d="M842 94 C1058 73 1133 180 1138 316 C1143 447 1042 532 838 556" fill="none" stroke="#2C8FFF" stroke-opacity=".22" stroke-width="1.2"/>
+    <line x1="997" y1="112" x2="997" y2="532" stroke="#31557C" stroke-width="2"/>
+    <circle cx="997" cy="168" r="11" fill="#4B5CFF"/><circle cx="997" cy="276" r="18" fill="#2C8FFF"/><circle cx="997" cy="397" r="24" fill="#48E0D2"/><circle cx="997" cy="489" r="10" fill="#67D9D5"/>
+    <g fill="#0D1B30" stroke="#294567">
+      <rect x="860" y="140" width="105" height="56" rx="14"/><rect x="1030" y="244" width="126" height="64" rx="14"/><rect x="828" y="368" width="138" height="62" rx="14"/><rect x="1033" y="463" width="105" height="54" rx="14"/>
+    </g>
+    <g fill="#7590B1" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="12"><text x="878" y="173">episode</text><text x="1050" y="281">timeline</text><text x="848" y="405">resume</text><text x="1050" y="495">context</text></g>
+  </g>
+</svg>
