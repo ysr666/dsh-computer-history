@@ -1616,11 +1616,11 @@ than implying one.
 | Acceptance | Command | Status |
 |---|---|---|
 | Three collectors pass one conformance suite | `pnpm test` (`tests/conformance/**`) | green: 374 tests, 0 warnings |
-| The suite runs on three platforms | `.github/workflows/collectors.yml` | **unverified**: no runner has executed it (no git remote) |
+| The suite runs on three platforms | `.github/workflows/collectors.yml` | green: it runs on every push and its three protocol jobs pass (measured 2026-10-05, `gh run list`) |
 | Every job command actually works | each command run locally with its exit code | green: recorded in this file, Windows crate's `0 passed` on macOS explained |
-| A live record per platform, with the producing command | macOS: `pnpm verify:p1` + the collector's own run; Windows/Linux: none | macOS green; **Windows and Linux unverified** |
-| Identical refusal reasons across platforms | `tests/conformance/**` + the fixture's `$unverified` lists | green for the message layer; live refusals **unverified** |
-| A panel screenshot per platform store | macOS: the self-hosted Host; others: none | macOS green (three states reviewed by eye); others **unverified** |
+| A live record per platform, with the producing command | macOS: `pnpm verify:p1` + the collector's own run; Windows: the P5 run below; Linux: the P6 run below | green for all three - Windows at the "panel on a Windows store" section, Linux at "The run on a real Linux" (both in this file) |
+| Identical refusal reasons across platforms | `tests/conformance/**` + the fixture's `$unverified` lists | green for the message layer; live refusals verified on the macOS Host (`expired`, `future-timestamp`, `policy`), per-collector parity not measured |
+| A panel screenshot per platform store | macOS: the self-hosted Host; Windows: the P5 section below | macOS green (three states reviewed by eye); Windows recorded in the P5 section; Linux has rows but no panel capture yet |
 | Loading, empty, unavailable and error stay distinct | `node scripts/verify-panel-render.mjs` | green: 52/52, and all four states read as images - loading says 正在加载… per section, failure says 暂时不可用 with a retry, empty is absent from both |
 | Copy goes through the locale dictionary | `pnpm test` (`client-locale`, `client-diagnostic-copy`) | green |
 | No diagnostic reaches the reader | `tests/unit/client-diagnostic-copy.spec.ts` | green (guard added after the regression shipped twice) |

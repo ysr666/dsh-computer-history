@@ -73,8 +73,17 @@ jobs:
       - run: pnpm install --frozen-lockfile
         working-directory: extension-editor
       - run: pnpm pack --pack-destination /tmp
-      - run: tar -tzf /tmp/dsh-computer-history-*.tgz | grep -q 'package/bin/dsh-computer-history-collector'
-      - run: tar -tzf /tmp/dsh-computer-history-*.tgz | grep -q 'package/lib/client.js'
-      # `files` promises this one too, and until now nothing checked it - which is how a tarball can ship
-      # without the editor extension and still pass this job.
-      - run: tar -tzf /tmp/dsh-computer-history-*.tgz | grep -q 'package/dsh-computer-history-editor.vsix'
+      # Every entry `files` promises must be in the tarball. Three of them were checked by hand until now and
+      # the other eleven were not, which is how a package can quietly ship without `presets/` or
+      # `cordis.patch.yml` - the same failure the editor-extension line was added for.
+      - run: |
+          tarball=$(ls /tmp/dsh-computer-history-*.tgz)
+          missing=0
+          while IFS= read -r entry; do
+            if ! tar -tzf "$tarball" | grep -qE "^package/${entry}(/|$)"; then
+              echo "files promises ${entry} and the tarball does not contain it"
+              missing=1
+            fi
+          done < <(node -p "require('./package.json').files.join('\n')")
+          exit "$missing"
+
