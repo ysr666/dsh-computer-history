@@ -65,6 +65,14 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm native:build
       - run: pnpm native:test
+      # `prepack` also packages the editor extension, which is a project of its own with its own lockfile
+      # (`extension-editor/`) and a dependency the root install never provides: without this step
+      # `node node_modules/@vscode/vsce/vsce` fails with MODULE_NOT_FOUND and the pack job dies there.
+      - run: pnpm install --frozen-lockfile
+        working-directory: extension-editor
       - run: pnpm pack --pack-destination /tmp
       - run: tar -tzf /tmp/dsh-computer-history-*.tgz | grep -q 'package/bin/dsh-computer-history-collector'
       - run: tar -tzf /tmp/dsh-computer-history-*.tgz | grep -q 'package/lib/client.js'
+      # `files` promises this one too, and until now nothing checked it - which is how a tarball can ship
+      # without the editor extension and still pass this job.
+      - run: tar -tzf /tmp/dsh-computer-history-*.tgz | grep -q 'package/dsh-computer-history-editor.vsix'
