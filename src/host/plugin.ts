@@ -384,10 +384,20 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
       // Pause means nothing new is recorded — for the companion exactly as for
       // the Accessibility collector.
       const snapshot = manager?.snapshot().state
-      if (!enabled || !ownsCapture || snapshot?.state !== 'running') {
-        return false
+      if (!enabled) {
+        ingestion.noteRefusal('capture-disabled')
+        return { stored: false, reason: 'capture-disabled' as const }
       }
-      return ingestion.ingest(companionObservation(payload))
+      if (!ownsCapture) {
+        ingestion.noteRefusal('capture-not-owned')
+        return { stored: false, reason: 'capture-not-owned' as const }
+      }
+      if (snapshot?.state !== 'running') {
+        const reason = snapshot?.state === 'paused' ? 'capture-paused' as const : 'collector-not-running' as const
+        ingestion.noteRefusal(reason)
+        return { stored: false, reason }
+      }
+      return { stored: await ingestion.ingest(companionObservation(payload)) }
     },
   })
   const browserPaired = companionTokens.state('browser').paired
