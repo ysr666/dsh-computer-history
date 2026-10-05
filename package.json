@@ -27,6 +27,7 @@
     "e2e:linux": "node scripts/e2e-linux.mjs",
     "e2e:gecko": "node scripts/e2e-gecko.mjs",
     "e2e:chromium": "node scripts/e2e-chromium.mjs",
+    "e2e:editor": "node scripts/e2e-editor.mjs",
     "verify:p1": "pnpm verify && pnpm build && pnpm benchmark:ingestion && pnpm native:build && pnpm native:test",
     "pack:plugin": "pnpm pack",
     "prepack": "pnpm build && pnpm native:build && pnpm build:extension && pnpm build:editor-extension",
