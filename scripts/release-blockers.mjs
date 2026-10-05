@@ -28,16 +28,33 @@ const json = (args) => {
 const problems = []
 const notes = []
 
-// 1. main must be green. A release is cut from a commit whose own gate passed.
-const runs = json(['run', 'list', '--branch', 'main', '--limit', '20', '--json', 'conclusion,headSha,name'])
-if (runs.unavailable !== undefined) {
+// 1. The commit we are about to release must be green. Historical failures on other commits — especially
+// Dependabot's dynamic update checks — do not say anything about the release candidate and must not poison the
+// gate forever. Read the current main head, then inspect only push-triggered workflows attached to that SHA.
+const mainBranch = json(['api', 'repos/{owner}/{repo}/branches/main'])
+const mainSha = mainBranch?.commit?.sha
+const runs = json(['run', 'list', '--branch', 'main', '--limit', '100', '--json', 'conclusion,event,headSha,name,status,workflowName'])
+if (mainBranch.unavailable !== undefined) {
+  problems.push(`could not read the main branch head: ${mainBranch.unavailable}`)
+} else if (typeof mainSha !== 'string' || mainSha.length === 0) {
+  problems.push('could not determine the current main commit')
+} else if (runs.unavailable !== undefined) {
   problems.push(`could not read the runs on main: ${runs.unavailable}`)
 } else {
-  const failed = runs.filter(run => run.conclusion === 'failure')
-  if (failed.length > 0) {
-    problems.push(`${failed.length} of the last ${runs.length} runs on main failed (${failed.map(run => `${run.name}@${run.headSha.slice(0, 7)}`).join(', ')})`)
+  const current = runs.filter(run => run.headSha === mainSha && run.event === 'push')
+  const ci = current.find(run => run.workflowName === 'CI' || run.name === 'CI')
+  const incomplete = current.filter(run => !['success', 'skipped'].includes(run.conclusion ?? ''))
+
+  if (current.length === 0) {
+    problems.push(`current main ${mainSha.slice(0, 7)} has no push workflow result yet`)
+  } else if (ci === undefined) {
+    problems.push(`current main ${mainSha.slice(0, 7)} has no CI run`)
+  } else if (ci.conclusion !== 'success') {
+    problems.push(`current main ${mainSha.slice(0, 7)} CI is ${ci.status ?? ci.conclusion ?? 'not complete'}`)
+  } else if (incomplete.length > 0) {
+    problems.push(`current main ${mainSha.slice(0, 7)} is not fully green (${incomplete.map(run => `${run.workflowName ?? run.name}:${run.status ?? run.conclusion ?? 'pending'}`).join(', ')})`)
   } else {
-    notes.push(`main is green: ${runs.length} recent runs, no failure`)
+    notes.push(`current main ${mainSha.slice(0, 7)} is green: ${current.length} push workflow(s) succeeded or skipped`)
   }
 }
 
