@@ -1,16 +1,17 @@
 # Publishing a release: push a `v*` tag whose name is `v` + the version in package.json.
 #
-# Everything this needs from the owner is a secret, because it is a certificate and an Apple account:
+# No certificate and no secrets. This is a DSH plugin: the artifact is a tarball that `dsh plugin add` fetches
+# with Node, and Node sets no quarantine flag. Measured 2026-10-05 on an arm64 Mac with the collector this
+# repository ships:
 #
-#   MACOS_CERT_P12             a "Developer ID Application" certificate exported as a .p12 (base64 or raw)
-#   MACOS_CERT_PASSWORD        the password that .p12 was exported with
-#   MACOS_CODESIGN_IDENTITY    the identity to sign with, e.g. "Developer ID Application: Name (TEAMID)"
-#   MACOS_NOTARY_APPLE_ID      the Apple ID that owns the developer account
-#   MACOS_NOTARY_TEAM_ID       the team id
-#   MACOS_NOTARY_PASSWORD      an app-specific password for that Apple ID (or an API key, see docs/release.md)
+#   * an unsigned arm64 binary is killed by the kernel ("Killed: 9") - so a signature is required;
+#   * an ad-hoc signature is enough, and that is what `scripts/build-native.mjs` has always produced;
+#   * a copy carrying a Safari quarantine flag still ran normally;
+#   * `spctl -a` reports our ad-hoc binary as "rejected" and it runs anyway - that gate is for app bundles,
+#     not for a CLI a plugin spawns.
 #
-# The job refuses to publish an ad-hoc signed or unnotarized collector: `pnpm native:build` runs with
-# DSH_COMPUTER_HISTORY_REQUIRE_DISTRIBUTION=1 and `pnpm verify:release` checks the signature and Gatekeeper.
+# A Developer ID certificate only becomes necessary if this ever ships a `.app`/`.dmg`/`.pkg`, or asks a user to
+# launch the binary from Finder. See the "Publishing" section of docs/release.md.
 name: Release
 
 on:
@@ -32,56 +33,13 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm verify
-
-      - name: Import the signing certificate
-        env:
-          CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
-          CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
-        run: |
-          if [ -z "$CERT_P12" ]; then
-            echo "MACOS_CERT_P12 is not set: a release has to be signed with a Developer ID, not ad-hoc"
-            exit 1
-          fi
-          keychain=release.keychain-db
-          security create-keychain -p "" "$keychain"
-          security set-keychain-settings -lut 1800 "$keychain"
-          security unlock-keychain -p "" "$keychain"
-          printf '%s' "$CERT_P12" | base64 --decode > /tmp/cert.p12 2>/dev/null || printf '%s' "$CERT_P12" > /tmp/cert.p12
-          security import /tmp/cert.p12 -k "$keychain" -P "$CERT_PASSWORD" -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple: -k "" "$keychain"
-          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
-          rm -f /tmp/cert.p12
-
-      - name: Store the notary credentials
-        env:
-          NOTARY_APPLE_ID: ${{ secrets.MACOS_NOTARY_APPLE_ID }}
-          NOTARY_TEAM_ID: ${{ secrets.MACOS_NOTARY_TEAM_ID }}
-          NOTARY_PASSWORD: ${{ secrets.MACOS_NOTARY_PASSWORD }}
-        run: |
-          if [ -z "$NOTARY_APPLE_ID" ] || [ -z "$NOTARY_TEAM_ID" ] || [ -z "$NOTARY_PASSWORD" ]; then
-            echo "the notary secrets are not set: see the header of this workflow"
-            exit 1
-          fi
-          xcrun notarytool store-credentials dsh-notary \
-            --apple-id "$NOTARY_APPLE_ID" --team-id "$NOTARY_TEAM_ID" --password "$NOTARY_PASSWORD"
-
-      - name: Build and notarize the collector
-        env:
-          DSH_COMPUTER_HISTORY_CODESIGN_IDENTITY: ${{ secrets.MACOS_CODESIGN_IDENTITY }}
-          DSH_COMPUTER_HISTORY_NOTARY_PROFILE: dsh-notary
-          DSH_COMPUTER_HISTORY_REQUIRE_DISTRIBUTION: '1'
-        run: pnpm native:build
-
-      - name: Pack
-        run: pnpm pack --pack-destination /tmp
+      - run: pnpm native:build
+      - run: pnpm pack --pack-destination /tmp
 
       - name: Verify the release
-        env:
-          DSH_RELEASE_TARBALL: /tmp/dsh-computer-history-${{ github.ref_name }}.tgz
         run: |
-          # `github.ref_name` is `vX.Y.Z`; the tarball is named after the version.
-          ls /tmp/*.tgz
           tarball=$(ls /tmp/dsh-computer-history-*.tgz | head -1)
+          echo "verifying $tarball"
           DSH_RELEASE_TARBALL="$tarball" pnpm verify:release
 
       - name: Create the release

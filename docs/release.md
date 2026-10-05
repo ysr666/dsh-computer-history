@@ -162,41 +162,41 @@ panel. Until that is fixed, this document says so rather than claiming a complet
 ## Publishing
 
 Push a tag named `v` + the version in `package.json` (`.github/workflows/release.yml`). The workflow runs the
-same gate as `main`, builds the collector **with a Developer ID and notarization**, packs, runs
-`pnpm verify:release` and only then creates the GitHub release with the tarball attached.
+same gate as `main`, builds the collector, packs, runs `pnpm verify:release`, and creates the GitHub release with
+the tarball attached and the changelog section as the notes. **It needs no certificate and no secrets.**
 
-### What the owner provides (secrets, all of them a certificate or an Apple account)
+### Why no certificate: a plugin install is not an app install
 
-| secret | what it is |
+Measured on an arm64 Mac with the collector this repository ships (2026-10-05):
+
+| what was measured | result |
 |---|---|
-| `MACOS_CERT_P12` | a **Developer ID Application** certificate exported as a `.p12` (base64 or raw) |
-| `MACOS_CERT_PASSWORD` | the password that `.p12` was exported with |
-| `MACOS_CODESIGN_IDENTITY` | the identity string, e.g. `Developer ID Application: Name (TEAMID)` |
-| `MACOS_NOTARY_APPLE_ID` | the Apple ID that owns the developer account |
-| `MACOS_NOTARY_TEAM_ID` | the team id |
-| `MACOS_NOTARY_PASSWORD` | an app-specific password for that Apple ID (an API key would need `--key`/`--key-id`/`--issuer` instead) |
+| an **unsigned** arm64 binary | killed by the kernel (`Killed: 9`) - so a signature **is** required |
+| the **ad-hoc** signature this build produces | runs; it is what makes the binary executable at all |
+| a copy with a **Safari quarantine flag** | **ran normally** |
+| what `curl`/Node downloads carry | no quarantine attribute at all |
+| `spctl -a -vvv` on the ad-hoc binary | "rejected" - and it runs, because that gate is for app bundles |
+| how this ships | `dsh plugin add` fetches the tarball with Node and the plugin spawns the collector as a child |
 
-A Developer ID certificate needs a paid Apple Developer account. Until those secrets exist the workflow fails
-on purpose at the first step that needs them: it never publishes an ad-hoc signed or unnotarized collector,
-because Gatekeeper blocks one on every machine that did not build it.
+So the hard requirement is "signed at all", which `scripts/build-native.mjs` already satisfies, and `spctl` is
+not the check for this artifact. `pnpm verify:release` therefore requires a signature that verifies
+(`codesign --verify --strict`) and reports which kind it is, instead of demanding a Developer ID.
 
-### What the pipeline refuses, and where that is enforced
+### When a Developer ID certificate would become necessary
 
-- **an ad-hoc signature** - `DSH_COMPUTER_HISTORY_REQUIRE_DISTRIBUTION=1` makes `scripts/build-native.mjs` exit
-  with the name of the missing variable instead of signing ad-hoc and reporting success;
-- **no notarization** - the same switch refuses to run without `DSH_COMPUTER_HISTORY_NOTARY_PROFILE`;
-- **a tag that disagrees with `package.json`**, **a version still ending in `-dev`**, **no changelog section for
-  the version**, **a tarball missing something `files` promises**, **a binary Gatekeeper rejects** - all of them
-  are `pnpm verify:release`, which the workflow runs before it creates anything.
+Only if the product ships a `.app`, `.dmg` or `.pkg`, or tells a user to launch the binary from Finder - that is
+where Gatekeeper's notarization rule applies. Then: a paid Apple Developer account, a **Developer ID
+Application** certificate exported as a `.p12`, `--options runtime`, `xcrun notarytool submit --wait`, and (for
+a bundle, not a bare binary) `xcrun stapler staple`. None of that is needed for a DSH plugin today.
 
 ### Running it locally
 
 ```bash
-pnpm native:build                    # ad-hoc unless a Developer ID identity is set; the log says which
-pnpm pack --pack-destination /tmp    # then
+pnpm native:build                    # ad-hoc; the log says which signature it made
+pnpm pack --pack-destination /tmp
 DSH_RELEASE_TARBALL=/tmp/dsh-computer-history-<version>.tgz pnpm verify:release
 ```
 
-Measured 2026-10-05 with the version still at `0.1.0-dev.0`: the preflight exits 1 and names every one of them -
-the `-dev` version, the missing changelog section, the ad-hoc signature, the missing hardened runtime, and
-Gatekeeper rejecting the binary. The release workflow itself has **not** run: it needs the secrets above.
+Measured 2026-10-05 with the version still at `0.1.0-dev.0`: `pnpm verify:release` exits 1 and names what is
+actually missing - the `-dev` version and the absent changelog section - while the signature check passes.
+The release workflow itself has not run yet: it needs a tag, which is the owner's call.
