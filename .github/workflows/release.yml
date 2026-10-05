@@ -35,6 +35,8 @@ jobs:
       - run: pnpm build
       - run: pnpm verify
       - run: pnpm native:build
+      - run: pnpm install --frozen-lockfile
+        working-directory: extension-editor
       - run: pnpm pack --pack-destination /tmp
 
       - name: Scan for release blockers
