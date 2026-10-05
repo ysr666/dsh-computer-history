@@ -129,7 +129,13 @@ try {
   // Written on every exit path, including the boundary and the failure ones: a run that stops at a boundary is
   // still a run whose evidence someone will want, and the other three commands write this file.
   writeFileSync(path.join(artifacts, 'checks.json'), `${JSON.stringify(evidence, null, 2)}\n`)
-  if (host?.pid !== undefined) { try { process.kill(-host.pid, 'SIGTERM') } catch {} }
+  if (host?.pid !== undefined) {
+    // Kill the group when there is one and the process when there is not, then check: the earlier version only
+    // tried the group and swallowed every error, so a Host that was not a group leader survived the run
+    // silently - measured 2026-10-06, two `--profile chromium` Hosts left behind by two failure-path runs.
+    try { process.kill(-host.pid, 'SIGTERM') } catch { /* not a group leader */ }
+    try { process.kill(host.pid, 'SIGTERM') } catch { /* already gone */ }
+  }
   await sleep(2500)
   // Browsers started by the matrix script: only those whose profile lives in the temp directory, checked by
   // prefix on the executable too - a substring test can match the shell that runs it. This sweep knows the
@@ -139,6 +145,10 @@ try {
       spawnSync('kill', ['-KILL', line.trim().split(/\s+/)[0]])
     }
   }
-  writeFileSync(path.join(artifacts, 'done.json'), `${JSON.stringify({ exit: process.exitCode ?? 0 }, null, 2)}\n`)
+  await sleep(1500)
+  // A cleanup that reports success while leaving a process behind is a claim, not a cleanup: say it out loud.
+  const survived = host?.pid !== undefined && spawnSync('ps', ['-p', String(host.pid)], { encoding: 'utf8' }).status === 0
+  writeFileSync(path.join(artifacts, 'done.json'), `${JSON.stringify({ exit: process.exitCode ?? 0, hostSurvived: survived }, null, 2)}\n`)
+  if (survived) console.error(`warning: the Host (pid ${host.pid}) outlived the run; done.json records hostSurvived: true`)
   rmSync(home, { recursive: true, force: true })
 }
