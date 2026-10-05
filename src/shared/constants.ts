@@ -48,10 +48,11 @@ export const PHASE1_ADAPTERS: readonly Phase1AdapterDefinition[] = [
       // not an expectation. (The editor element itself is not exposed to UI Automation unless VS Code's
       // screen-reader mode is on; the file name comes from the window title.)
       'Code.exe',
-      // linux: the .desktop ids tests/conformance/fixtures/adapters.json declares. They are the
-      // Linux collector's expected mapping, not a measurement - the row in
-      // docs/validation-three-platforms.md stays unverified until a Linux machine produces it - but
-      // the Host has to know them or the first Linux observation would be refused as not-an-adapter.
+      // linux: measured 2026-10-05 on Ubuntu 24.04 (arm64). The deb VS Code 1.140.0 installs is
+      // `com.microsoft.VSCode.desktop`; `code.desktop` is the id other packages use and is kept for them.
+      // Both were declared before that run, and the declared one turned out not to be the one this packaging
+      // ships - an application resolving to an unknown id is refused as not-an-adapter, silently.
+      'com.microsoft.VSCode.desktop',
       'code.desktop',
       'code-insiders.desktop',
     ],

@@ -21,7 +21,7 @@ Phase 1 的每个适配器一行，并附上产生这一行的**真机测量**�
 
 同一批适配器的 Windows id：`finder` = `explorer.exe`、`terminal` = `WindowsTerminal.exe`、`vscode` = `Code.exe`，三者都**已实测**于 Windows 11 26200——前两者在 2026-10-04（`cargo run --release --example foreground_identity` 加真实 collector 运行），`vscode` 在 2026-10-05（那台机器装上 VS Code 1.140.0 之后；落库的观测里 `bundleId: "Code.exe"`、`surfaceKind: "editor"`、`adapter: "vscode"`）。实测更正了先前写下的预期值（`Microsoft.WindowsTerminal`、`Microsoft.VisualStudioCode`）：那台机器上实测的两个打包应用（记事本、Windows Terminal）**根本没有上报窗口级 AppUserModelID**，所以 Windows 交给 collector 的是可执行文件名——开始菜单里的 `Microsoft.WindowsTerminal_8wekyb3d8bbwe!App` 并不是窗口属性。这是该次测量的覆盖范围：两个打包应用加一个经典应用，而不是一条关于所有 Windows 应用的规律。
 
-同一批适配器的 Linux id 也已在 fixture 中声明——`vscode` = `code.desktop`、`code-insiders.desktop`；`terminal` = `org.gnome.Terminal.desktop`；`finder` = `org.gnome.Nautilus.desktop`——它们进入 Host 表的理由与 win32 id 相同：没有它们，第一条 Linux 观测就会被当成 `not-an-adapter` 拒掉。**它们一个都没有被实测过**，因为还没有 Linux 机器跑过这个 collector；该状态记录在 `docs/validation-three-platforms.md`。
+同一批适配器的 Linux id：`vscode` = **`com.microsoft.VSCode.desktop`**（**2026-10-05 实测**：Ubuntu 24.04 arm64 上 VS Code 1.140.0 的 deb 装的是这个文件，**不是** `code.desktop`——而本仓三个地方都声明了后者，于是在那台机器上 VS Code 会解析成一个没有适配器认识的 id、被 `not-an-adapter` 静默拒掉）；`code.desktop` 与 `code-insiders.desktop` 作为其他打包方式使用的 id 保留声明。`terminal` = `org.gnome.Terminal.desktop`（已实测）、`finder` = `org.gnome.Nautilus.desktop`（已实测）。它们进入 Host 表的理由与 win32 id 相同：没有它们，第一条 Linux 观测就会被当成 `not-an-adapter` 拒掉。实测与边界的台账见 `docs/validation-three-platforms.md`。
 
 ## 各行明细
 
@@ -138,6 +138,21 @@ Cursor 3.x 备注：默认的 **"Cursor Agents"** 窗口报告**空的** `kAXDoc
 ```
 
 没有 `document` 也没有 `url`：普通 Finder 窗口（下载窗口、桌面窗口）的 `kAXDocument` 是 nil，所以那些观测不带资源。Phase 1 验证期间宿主存下**七条** Finder 观测，**七条的 `resource_id` 都是空的** —— 这就是路线图把 Finder 当作**窗口表面**而不是文档表面的原因。
+
+### Linux 上的 `vscode` 与 `finder`——2026-10-05 实测
+
+Ubuntu 24.04 arm64：VS Code 1.140.0（Microsoft 的 arm64 deb）与 GNOME 文件（nautilus，发行版安装），由宿主驱动并落库：
+
+| 适配器 | 窗口身份 | 落库的 surface |
+| --- | --- | --- |
+| `vscode` | `WM_CLASS "com.microsoft.vscode" / "com.microsoft.VSCode"`，标题 `● measured.txt - Visual Studio Code`，exe `/usr/share/code/code` | `com.microsoft.VSCode.desktop / editor`，标题已记录 |
+| `finder` | `WM_CLASS "org.gnome.Nautilus"`，标题 `Home`，exe `/usr/bin/nautilus` | `org.gnome.Nautilus.desktop / window`，标题已记录 |
+| `terminal` | `WM_CLASS "gnome-terminal-server" / "Gnome-terminal"`，标题是 shell 的工作目录 | `org.gnome.Terminal.desktop / terminal`，**标题为 `null`** |
+
+两条值得留下的发现：
+
+* **该 deb 装的是 `com.microsoft.VSCode.desktop`，不是 `code.desktop`**——本仓三处都声明了后者，于是在那台机器上 VS Code 会解析成一个没有适配器认识的 id、被宿主当成 `not-an-adapter` 静默拒掉。`code.desktop` 与 `code-insiders.desktop` 作为其他打包方式使用的 id 保留；本次实测覆盖的是这里安装的那个 deb，而不是所有打包；
+* nautilus **没有** `StartupWMClass`，因此走的是第二条路线（可执行文件规则 `Exec=nautilus`）。
 
 ### `notepad` — Windows 11 记事本
 

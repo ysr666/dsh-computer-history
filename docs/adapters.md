@@ -34,7 +34,12 @@ collector - the Start menu's `Microsoft.WindowsTerminal_8wekyb3d8bbwe!App` is no
 That is the scope of the measurement: two packaged applications and one classic one, not a rule about
 every Windows application.
 
-Linux ids for the same adapters are declared in the fixture as well - `vscode` = `code.desktop`,
+Linux ids for the same adapters: `vscode` = **`com.microsoft.VSCode.desktop`**, **measured 2026-10-05** on
+Ubuntu 24.04 arm64 - the deb VS Code 1.140.0 installs that file and **not** `code.desktop`, which three files
+in this repository had declared, so on that machine VS Code resolved to an id no adapter knew and would have
+been refused as `not-an-adapter` without saying anything. `code.desktop` and `code-insiders.desktop` stay
+declared for the packages that use them; the measurement covers the deb this repository installed, not every
+packaging. The rest are declared in the fixture as well -
 `code-insiders.desktop`; `terminal` = `org.gnome.Terminal.desktop`; `finder` =
 `org.gnome.Nautilus.desktop` - and they are in the Host table for the same reason the win32 ids are:
 without them the first Linux observation would be refused as `not-an-adapter`. **None of them has been
@@ -232,6 +237,27 @@ download window, a desktop window), so those observations carry no resource.
 The Host stored seven Finder observations during the Phase 1 validation and all
 seven had an empty `resource_id`, which is why the roadmap treats Finder as a
 window surface rather than a document surface.
+
+### `vscode` and `finder` on Linux — measured 2026-10-05
+
+Ubuntu 24.04 arm64, VS Code 1.140.0 from Microsoft's arm64 deb, GNOME Files (nautilus) from the distribution,
+driven through a Host that stored the rows:
+
+| adapter | window identity | stored surface |
+| --- | --- | --- |
+| `vscode` | `WM_CLASS "com.microsoft.vscode" / "com.microsoft.VSCode"`, title `● measured.txt - Visual Studio Code`, exe `/usr/share/code/code` | `com.microsoft.VSCode.desktop / editor`, title recorded |
+| `finder` | `WM_CLASS "org.gnome.Nautilus"`, title `Home`, exe `/usr/bin/nautilus` | `org.gnome.Nautilus.desktop / window`, title recorded |
+| `terminal` | `WM_CLASS "gnome-terminal-server" / "Gnome-terminal"`, title is the shell's working directory | `org.gnome.Terminal.desktop / terminal`, **title `null`** |
+
+Two findings worth keeping:
+
+* **the deb installs `com.microsoft.VSCode.desktop`, not `code.desktop`.** Three files in this repository had
+  declared the latter, so on that machine VS Code resolved to an id no adapter knew and the Host would have
+  refused it as `not-an-adapter` without saying anything. `code.desktop` and `code-insiders.desktop` stay
+  listed for the packagings that use them; this measurement covers the deb installed here, not every
+  packaging;
+* nautilus publishes **no** `StartupWMClass`, so it resolves through the executable rule (`Exec=nautilus`),
+  which is the second of the two routes the resolver has.
 
 ### `notepad` — Windows 11 Notepad
 

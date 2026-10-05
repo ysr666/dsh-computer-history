@@ -58,6 +58,15 @@ export interface EpisodeResourceSummary extends ResourceIdentity {
 export interface EpisodeSurfaceSummary {
   readonly bundleId: string
   readonly surfaceKind: SurfaceKind
+  /**
+   * The window title this surface carried, when the adapter records one.
+   *
+   * It is the only thing that tells two Notepad windows, or two Explorer folders, apart on a platform with no
+   * resource to anchor to - the observation already stores it, and an episode that dropped it left the panel
+   * showing `Notepad.exe · editor` for every window of the day. Adapters that suppress their titles
+   * (terminals carry a working directory, so `suppressesWindowTitle` is true) never contribute one.
+   */
+  readonly title?: string
   readonly firstSeenAtMs: number
   readonly lastSeenAtMs: number
   readonly observationCount: number

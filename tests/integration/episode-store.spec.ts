@@ -163,6 +163,9 @@ describe('episode store', () => {
       surfaces: [{
         bundleId: 'com.microsoft.VSCode',
         surfaceKind: 'editor',
+        // The surface carries the newest title it saw: the second observation was `other.ts`. An adapter that
+        // suppresses its titles contributes none, which is asserted in tests/unit/episode-surface-title.spec.ts.
+        title: 'other.ts',
         firstSeenAtMs: first.observedAtMs,
         lastSeenAtMs: second.observedAtMs,
         observationCount: 2,
@@ -219,6 +222,57 @@ describe('episode store', () => {
       'file:///repo/src/other.ts',
     ])
 
+    history.close()
+  })
+
+  it('carries the surface title through an append, and keeps the last one', () => {
+    const history = openTempDatabase()
+    const resources = new ResourceStore(history.db)
+    const observations = new ObservationStore(history.db)
+    const episodes = new EpisodeStore(history.db)
+
+    const first = observation(1, 'file:///repo/src/provider.ts')
+    const second = observation(2, 'file:///repo/src/other.ts')
+    const resourceId = resources.upsert(first.resource!, first.observedAtMs)
+    const secondResourceId = resources.upsert(second.resource!, second.observedAtMs)
+    const firstId = observations.insert(first, resourceId)
+    const secondId = observations.insert(second, secondResourceId)
+
+    const id = EpisodeId('episode-title-append')
+    const base = {
+      id,
+      startedAtMs: first.observedAtMs,
+      startReason: 'first-observation' as const,
+      endReason: 'timeout' as const,
+      workspace: { id: 'workspace-1' },
+      lastStrongResourceId: secondResourceId,
+      summaryKind: 'deterministic' as const,
+      summary: 'Worked in repo.',
+      confidence: 1,
+      state: 'closed' as const,
+      createdAtMs: 20_000,
+      expiresAtMs: 100_000,
+    }
+    episodes.replace({
+      ...base,
+      endedAtMs: first.observedAtMs,
+      updatedAtMs: 20_000,
+      observationIds: [firstId],
+    })
+    expect(episodes.get(id)?.surfaces.at(0)?.title).toBe('provider.ts')
+
+    // The append path is a separate statement from the rebuild path, so the title has to travel through it
+    // on its own - this is the assertion that fails if only one of the two was taught about titles.
+    episodes.replace({
+      ...base,
+      endedAtMs: second.observedAtMs,
+      updatedAtMs: 30_000,
+      observationIds: [firstId, secondId],
+    }, {
+      provenance: 'append',
+      appendObservationIds: [secondId],
+    })
+    expect(episodes.get(id)?.surfaces.at(0)?.title).toBe('other.ts')
     history.close()
   })
 

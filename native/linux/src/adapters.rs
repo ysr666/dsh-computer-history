@@ -12,22 +12,29 @@ pub use dsh_collector_protocol::adapters::{Adapter, FocusPolicy};
 pub const ADAPTERS: &[Adapter] = &[
     Adapter {
         id: "vscode",
-        // Declared, not yet measured: no Linux machine in this repository has run VS Code. The id is what
-        // the Debian and Ubuntu packages install.
-        ids: &["code.desktop"],
+        // Measured 2026-10-05: the arm64 deb (1.140.0) installs `com.microsoft.VSCode.desktop` and **not**
+        // `code.desktop` - which three files in this repository had declared, so on that machine VS Code would
+        // have resolved to an id no adapter knew and been silently unobservable. `code.desktop` stays listed
+        // because other packages and distros use it, and the measurement covers the deb this repository
+        // installed, not every packaging of VS Code.
+        ids: &["com.microsoft.VSCode.desktop", "code.desktop"],
         suppresses_window_title: false,
         focus_policy: FocusPolicy::Require,
     },
     Adapter {
         id: "terminal",
-        // Terminal windows carry the working directory and the running command, so their titles are never
-        // recorded - the same decision the other two platforms make.
+        // Measured 2026-10-05 (Ubuntu 24.04 arm64): gnome-terminal's window reports WM_CLASS
+        // "gnome-terminal-server"/"Gnome-terminal" and a title that is the shell's working directory, which
+        // is why the title is suppressed - the stored row came back with `title: null`.
         ids: &["org.gnome.Terminal.desktop", "org.kde.konsole.desktop"],
         suppresses_window_title: true,
         focus_policy: FocusPolicy::Require,
     },
     Adapter {
         id: "finder",
+        // Measured 2026-10-05: nautilus reports WM_CLASS "org.gnome.Nautilus" and `Exec=nautilus --new-window`
+        // in its `.desktop` file, so the executable rule resolves it; the stored surface was
+        // `org.gnome.Nautilus.desktop / window` with the title `Home`.
         ids: &["org.gnome.Nautilus.desktop", "org.kde.dolphin.desktop"],
         suppresses_window_title: false,
         focus_policy: FocusPolicy::Require,

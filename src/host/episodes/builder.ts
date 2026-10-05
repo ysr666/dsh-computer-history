@@ -35,6 +35,8 @@ interface MutableSurface {
   readonly bundleId: string
   readonly surfaceKind:
     EpisodeSurfaceSummary['surfaceKind']
+  /** The last title seen for this surface; the observation only carries one for adapters that record titles. */
+  title?: string
   firstSeenAtMs: number
   lastSeenAtMs: number
   observationCount: number
@@ -202,15 +204,20 @@ function addObservation(
   }
 
   const key = surfaceKey(observation)
+  const title = observation.surface.title
   const existingSurface = episode.surfaces.get(key)
   if (existingSurface) {
     existingSurface.lastSeenAtMs =
       observation.observedAtMs
     existingSurface.observationCount += 1
+    if (title) {
+      existingSurface.title = title
+    }
   } else {
     episode.surfaces.set(key, {
       bundleId: observation.app.bundleId,
       surfaceKind: observation.surface.kind,
+      ...(title ? { title } : {}),
       firstSeenAtMs: observation.observedAtMs,
       lastSeenAtMs: observation.observedAtMs,
       observationCount: 1,

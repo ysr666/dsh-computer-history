@@ -12,6 +12,7 @@
           "Code.exe"
         ],
         "linux": [
+          "com.microsoft.VSCode.desktop",
           "code.desktop",
           "code-insiders.desktop"
         ]

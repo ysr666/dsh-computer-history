@@ -479,12 +479,13 @@ export class EpisodeStore {
         episode_id,
         bundle_id,
         surface_kind,
+        title,
         first_seen_at_ms,
         last_seen_at_ms,
         observation_count
       )
       SELECT ?, o.bundle_id, o.surface_kind,
-        o.observed_at_ms, o.observed_at_ms, 1
+        o.window_title, o.observed_at_ms, o.observed_at_ms, 1
       FROM observations o
       WHERE o.id = ?
       ON CONFLICT(
@@ -493,6 +494,9 @@ export class EpisodeStore {
         surface_kind
       )
       DO UPDATE SET
+        -- The newest title wins, and a title-less observation (a suppressed one) leaves the last one in place
+        -- rather than erasing what the surface was called a moment ago.
+        title = COALESCE(excluded.title, episode_surfaces.title),
         first_seen_at_ms = MIN(
           episode_surfaces.first_seen_at_ms,
           excluded.first_seen_at_ms
@@ -545,6 +549,7 @@ export class EpisodeStore {
         episode_id,
         bundle_id,
         surface_kind,
+        title,
         first_seen_at_ms,
         last_seen_at_ms,
         observation_count
@@ -553,6 +558,9 @@ export class EpisodeStore {
         eo.episode_id,
         o.bundle_id,
         o.surface_kind,
+        -- SQLite's documented bare-column rule: with a single MAX() aggregate, the bare columns come from the
+        -- row that produced it, so this is the title of the newest observation that had one.
+        o.window_title,
         MIN(o.observed_at_ms),
         MAX(o.observed_at_ms),
         COUNT(*)
@@ -560,6 +568,7 @@ export class EpisodeStore {
       JOIN observations o ON o.id = eo.observation_id
       WHERE eo.episode_id = ?
       GROUP BY eo.episode_id, o.bundle_id, o.surface_kind
+      ORDER BY MAX(o.observed_at_ms)
     `).run(id)
   }
 
@@ -794,19 +803,24 @@ export class EpisodeStore {
       SELECT
         bundle_id,
         surface_kind,
+        title,
         first_seen_at_ms,
         last_seen_at_ms,
         observation_count
       FROM episode_surfaces
       WHERE episode_id = ?
       ORDER BY first_seen_at_ms, bundle_id, surface_kind
-    `).all(id).map((row) => ({
-      bundleId: stringValue(row, 'bundle_id'),
-      surfaceKind: surfaceKind(stringValue(row, 'surface_kind')),
-      firstSeenAtMs: numberValue(row, 'first_seen_at_ms'),
-      lastSeenAtMs: numberValue(row, 'last_seen_at_ms'),
-      observationCount: numberValue(row, 'observation_count'),
-    }))
+    `).all(id).map((row) => {
+      const title = nullableString(row, 'title')
+      return {
+        bundleId: stringValue(row, 'bundle_id'),
+        surfaceKind: surfaceKind(stringValue(row, 'surface_kind')),
+        ...(title ? { title } : {}),
+        firstSeenAtMs: numberValue(row, 'first_seen_at_ms'),
+        lastSeenAtMs: numberValue(row, 'last_seen_at_ms'),
+        observationCount: numberValue(row, 'observation_count'),
+      }
+    })
   }
 
   private resourceIdForEpisodeResource(
