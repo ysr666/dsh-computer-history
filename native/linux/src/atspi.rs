@@ -295,7 +295,7 @@ fn desktop_names(desktop: &str, executable: &str) -> bool {
 }
 
 /// The AT-SPI bus address: the environment variable a session exports, then the registry's own answer.
-fn at_spi_bus_address() -> Option<String> {
+pub(crate) fn at_spi_bus_address() -> Option<String> {
     if let Ok(address) = std::env::var("AT_SPI_BUS_ADDRESS") {
         if !address.is_empty() {
             return Some(address);

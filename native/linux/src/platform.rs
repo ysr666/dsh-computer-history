@@ -51,7 +51,24 @@ pub fn accessibility_state() -> AccessibilityState {
         Err(_) => {}
     }
 
-    match toolkit_accessibility() {
+    state_without_canonical_source(crate::atspi::at_spi_bus_address(), toolkit_accessibility())
+}
+
+/// What to report when the canonical AT-SPI source did not answer.
+///
+/// The toolkit setting answers "would a GTK application export its tree", which is not the same question as
+/// "can this process reach AT-SPI". With no session bus there is nothing to talk to, and reporting `running`
+/// there is exactly the ambiguity this module exists to remove: a collector that cannot see anything looks
+/// like a machine nobody used. Measured 2026-10-05 in a headless VM - `org.a11y.Status` does not answer
+/// without a desktop session, while the dconf key still reads `true`.
+fn state_without_canonical_source(
+    bus: Option<String>,
+    toolkit: Result<bool, Failure>,
+) -> AccessibilityState {
+    if bus.is_none() {
+        return AccessibilityState::Unknown(NO_SESSION_BUS);
+    }
+    match toolkit {
         Ok(true) => AccessibilityState::Enabled,
         Ok(false) => AccessibilityState::Disabled(TURN_IT_ON),
         Err(Failure::NoGdbus) => AccessibilityState::Unavailable(NO_GDBUS),
@@ -68,6 +85,9 @@ const NO_GDBUS: &str = "gdbus is not installed (it ships with GLib), and it is h
 
 const NO_SOURCE: &str = "neither org.a11y.Status nor the toolkit-accessibility setting answered, so \
                          whether AT-SPI may be used is unknown";
+const NO_SESSION_BUS: &str = "no accessibility bus: neither AT_SPI_BUS_ADDRESS nor org.a11y.Bus answered, \
+                              so there is nothing to observe through. Run this collector inside a desktop \
+                              session (a session bus with at-spi2-core), not from a daemon or a bare shell";
 
 /// Why a single subprocess did not produce a value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -226,6 +246,25 @@ mod tests {
         assert_eq!(parse_boolean("(<true>,)"), Some(true));
         assert_eq!(parse_boolean("(<false>,)"), Some(false));
         assert_eq!(parse_boolean("(error)"), None);
+    }
+
+    #[test]
+    fn no_session_bus_is_named_instead_of_reported_as_running() {
+        // The dconf key can read `true` while there is no bus to talk to. That combination used to report
+        // `running` with `accessibilityTrusted: true`, and then produced nothing at all - the silent shape
+        // this module exists to eliminate.
+        let state = state_without_canonical_source(None, Ok(true));
+        assert_eq!(state.state_name(), "permission-required");
+        assert_eq!(state.reason(), Some(NO_SESSION_BUS));
+        // With a bus, the fallback still does its useful work.
+        assert_eq!(
+            state_without_canonical_source(Some("unix:path=/run/user/1/bus".into()), Ok(true)).state_name(),
+            "running",
+        );
+        assert!(matches!(
+            state_without_canonical_source(Some("unix:path=/run/user/1/bus".into()), Ok(false)),
+            AccessibilityState::Disabled(_),
+        ));
     }
 
     #[test]
