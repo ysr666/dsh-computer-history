@@ -391,7 +391,16 @@ describe('Computer History Host API', () => {
 
     const capability = await api.request('/resume/open')
     expect(capability.status).toBe(200)
-    await expect(capability.json()).resolves.toMatchObject({ available: true })
+    // Opening a stored resource is a darwin-only capability by product decision: elsewhere the answer is
+    // `platform-unverified` rather than a guess (`src/host/resume/opener.ts`). Asserting `available: true`
+    // unconditionally passed only on the author's machine and failed every ubuntu runner, because the opener
+    // resolves `/usr/bin/open`. The platform's own contract is deterministic on every runner.
+    const capabilityBody = await capability.json() as { available?: unknown, reason?: unknown }
+    if (process.platform === 'darwin') {
+      expect(capabilityBody).toMatchObject({ available: true })
+    } else {
+      expect(capabilityBody).toMatchObject({ available: false, reason: 'platform-unverified' })
+    }
 
     const opened = await api.request('/resume/open', {
       method: 'POST',
