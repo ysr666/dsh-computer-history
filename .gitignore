@@ -56,3 +56,12 @@ tmp-pack/
 *.tgz
 extension-editor/out/
 *.vsix
+
+# Gradle and IntelliJ Platform build output: every file under these directories is generated on the
+# machine that ran the build (caches, locks, local platform descriptors), so a clone must not carry them.
+# They are listed here rather than in a per-project file because the next Gradle project in this repo
+# would otherwise repeat the same mistake.
+.gradle/
+.intellijPlatform/
+.kotlin/
+build/
