@@ -8,6 +8,7 @@
 // for another editor is the contract: an editor-shaped payload is stored, the browser token cannot speak for an
 // editor, and document text is not merely unwelcome but inexpressible - the payload shape has no field for it.
 import { spawn, spawnSync } from 'node:child_process'
+import { DatabaseSync } from 'node:sqlite'
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -131,7 +132,15 @@ try {
         ? 'HTTP 202 capture-not-owned: the payload arrived and was refused by name, because another Host on this machine owns capture'
         : `HTTP ${control.status} ${JSON.stringify(control.body).slice(0, 90)}`)
     const db = path.join(home, 'computer-history', 'history.sqlite')
-    const row = spawnSync('sqlite3', [db, 'select workspace_root, surface_kind, bundle_id from observations limit 1;'], { encoding: 'utf8' }).stdout.trim()
+    // node:sqlite rather than the `sqlite3` CLI: the CLI does not exist on Windows, and the objective names that
+    // machine. The repository already reads stores this way (scripts/verify/chrome-companion.mjs).
+    let row = ''
+    try {
+      const store = new DatabaseSync(db, { readOnly: true })
+      const found = store.prepare('select workspace_root, surface_kind, bundle_id from observations limit 1').get()
+      store.close()
+      if (found) row = Object.values(found).join('|')
+    } catch { row = '' }
     if (refusedForOwnership) {
       console.log('  – not run: the store cell needs this Host to own capture; another Host on this machine holds it')
     } else {

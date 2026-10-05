@@ -140,9 +140,16 @@ try {
   // Browsers started by the matrix script: only those whose profile lives in the temp directory, checked by
   // prefix on the executable too - a substring test can match the shell that runs it. This sweep knows the
   // macOS paths only; elsewhere the matrix script removes the profile it created itself.
-  for (const line of spawnSync('ps', ['-eo', 'pid,command'], { encoding: 'utf8' }).stdout.split('\n')) {
-    if (/^\s*\d+\s+\/Applications\/Google Chrome\.app\//.test(line) && /\/var\/folders\/|\/tmp\//.test(line)) {
-      spawnSync('kill', ['-KILL', line.trim().split(/\s+/)[0]])
+  // `ps` and `kill` do not exist on Windows. Where they do, this sweep still does its job; where they do not,
+  // say so instead of implying the sweep ran (the matrix script removes the profile it created itself).
+  const listing = spawnSync('ps', ['-eo', 'pid,command'], { encoding: 'utf8' })
+  if (listing.error) {
+    console.log(`  (browser sweep skipped: no ps on this platform - ${listing.error.code ?? 'unavailable'})`)
+  } else {
+    for (const line of (listing.stdout ?? '').split('\n')) {
+      if (/^\s*\d+\s+\/Applications\/Google Chrome\.app\//.test(line) && /\/var\/folders\/|\/tmp\//.test(line)) {
+        try { process.kill(Number(line.trim().split(/\s+/)[0]), 'SIGKILL') } catch { /* already gone */ }
+      }
     }
   }
   await sleep(1500)

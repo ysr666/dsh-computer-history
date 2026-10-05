@@ -12,6 +12,7 @@
 // spawned by a command-line Host does not have one. The script prints the collector's own state and reason
 // instead of asserting anything about it, so a reader can see exactly which part of the flow this run covered.
 import { spawn, spawnSync } from 'node:child_process'
+import { DatabaseSync } from 'node:sqlite'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -142,8 +143,18 @@ try {
   record('collector (reported, not asserted)', true, `state=${state.capture} reason=${state.reason ?? '(none)'}`)
 
   const db = path.join(home, 'computer-history', 'history.sqlite')
-  const counts = run('sqlite3', [db, 'select (select count(*) from episodes), (select count(*) from observations);'])
-  record('store opens', counts.status === 0, counts.status === 0 ? `episodes/observations = ${counts.out.trim()}` : counts.out.trim().slice(-120))
+  // node:sqlite rather than the `sqlite3` CLI (absent on Windows, and this command is meant to be runnable on
+  // the platforms the collector supports). The repository already reads stores this way elsewhere.
+  let counts
+  try {
+    const store = new DatabaseSync(db, { readOnly: true })
+    const row = store.prepare('select (select count(*) from episodes) as e, (select count(*) from observations) as o').get()
+    store.close()
+    counts = { status: 0, out: `${row.e}|${row.o}` }
+  } catch (error) {
+    counts = { status: 1, out: error instanceof Error ? error.message : String(error) }
+  }
+  record('store opens', counts.status === 0, counts.status === 0 ? `episodes/observations = ${counts.out.trim().split('|').join('|')}` : counts.out.slice(-120))
 } catch (error) {
   record('run', false, error instanceof Error ? error.message : String(error))
 } finally {
