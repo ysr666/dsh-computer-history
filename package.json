@@ -10,7 +10,7 @@
   },
   "packageManager": "pnpm@11.7.0",
   "scripts": {
-    "build": "node -e \"require('node:fs').rmSync('lib',{recursive:true,force:true})\" && tsdown && node -e \"const fs=require('node:fs');fs.renameSync('lib/.client-dts/client.d.ts','lib/client.d.ts');fs.rmSync('lib/.client-dts',{recursive:true,force:true})\"",
+    "build": "node -e \"require('node:fs').rmSync('lib',{recursive:true,force:true})\" && tsdown && node -e \"const fs=require('node:fs');fs.renameSync('lib/.client-dts/client.d.ts','lib/client.d.ts');fs.rmSync('lib/.client-dts',{recursive:true,force:true})\" && node scripts/write-build-info.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "oxlint .",
     "test": "vitest run",

@@ -123,9 +123,14 @@ export function runningRelease(
     const manifest: unknown = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'))
     const version = (manifest as { version?: unknown }).version
     if (typeof version !== 'string') return undefined
+    // The build time comes from the stamp the build writes, not from a file's mtime. An installed package can
+    // carry an mtime from pnpm's content-addressed store - measured 2026-10-06, that made a run report a build
+    // 18 minutes older than the code it was running. No stamp means no answer, which is better than a wrong one.
     let builtAtMs: number | undefined
     try {
-      builtAtMs = Math.round(statSync(path.join(root, 'lib', 'index.js')).mtimeMs)
+      const info: unknown = JSON.parse(readFileSync(path.join(root, 'lib', 'build-info.json'), 'utf8'))
+      const stamp = (info as { builtAtMs?: unknown }).builtAtMs
+      builtAtMs = typeof stamp === 'number' && Number.isFinite(stamp) ? Math.round(stamp) : undefined
     } catch {
       builtAtMs = undefined
     }
