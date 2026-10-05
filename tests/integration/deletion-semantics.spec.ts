@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, rmSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { openHistoryDatabase } from '../../src/host/store/database.js'
@@ -66,5 +66,7 @@ describe('deletion semantics, measured', () => {
     expect(reseeded.observations).toBe(0)
     expect(db.prepare('select scope from deletion_log').all()).toEqual([{ scope: 'episode' }])
     handle.close()
+    // Every other spec here removes what it created, and this one runs on every `pnpm verify`.
+    rmSync(dir, { recursive: true, force: true })
   })
 })
