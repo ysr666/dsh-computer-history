@@ -2,6 +2,7 @@ import {
   COMPANION_BUNDLE_ID,
   type NativeObservation,
 } from '../../shared/index.js'
+import { phase1AdapterForBundle } from '../ingestion/normalize.js'
 import type { CompanionPayload } from './intake.js'
 
 /**
