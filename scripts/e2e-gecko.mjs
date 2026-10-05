@@ -9,7 +9,8 @@
 // the browser again. What it does not do is pair it: the token lives in the extension's options page, which is
 // one dialog, and docs/companion.md documents it as such. This check covers everything up to that dialog.
 import { spawn, spawnSync } from 'node:child_process'
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 
 const REPO = path.resolve(import.meta.dirname, '..')
@@ -34,11 +35,17 @@ const built = spawnSync('pnpm', ['build:extension:firefox'], { encoding: 'utf8' 
 record('package', built.status === 0, built.status === 0 ? 'dist/extension-firefox' : (built.stderr ?? '').trim().slice(-140))
 if (built.status !== 0) process.exit(1)
 
-const before = spawnSync('ps', ['-eo', 'pid,command'], { encoding: 'utf8' }).stdout
-  .split('\n').filter(line => line.includes('Firefox.app')).map(line => line.trim().split(/\s+/)[0])
+// Everything this run starts carries the profile directory it was given, so the browser can be identified
+// precisely. Diffing "Firefox processes before vs after" was the first version of this and it can kill a
+// browser another agent started in the same workspace - the independent verifier flagged exactly that.
+const profileDir = mkdtempSync(path.join(os.tmpdir(), 'dsh-gecko-profile-'))
 const log = path.join(artifacts, 'web-ext.log')
-const runner = spawn('npx', ['--yes', 'web-ext', 'run', '-s', 'dist/extension-firefox', `--firefox=${firefox}`, '--arg=-headless', '--no-reload'], {
+const runner = spawn('npx', ['--yes', 'web-ext', 'run', '-s', 'dist/extension-firefox', `--firefox=${firefox}`,
+  `--firefox-profile=${profileDir}`, '--arg=-headless', '--no-reload'], {
   stdio: ['ignore', 'pipe', 'pipe'],
+  // Its own process group, so the whole tree goes down together: killing by name or by a before/after diff
+  // leaves the browser's helper processes behind - measured, 8 of them survived the first version of this.
+  detached: true,
 })
 let output = ''
 runner.stdout.on('data', chunk => { output += String(chunk) })
@@ -55,16 +62,24 @@ record(
   installed ? 'web-ext reports it installed as a temporary add-on' : output.trim().split('\n').slice(-2).join(' / ').slice(0, 160) || 'no output from web-ext',
 )
 
-runner.kill('SIGTERM')
-await new Promise(resolve => setTimeout(resolve, 3_000))
-// Only the processes this run started, each checked before it is killed: the command line has to be Firefox's.
-const after = spawnSync('ps', ['-eo', 'pid,command'], { encoding: 'utf8' }).stdout
-  .split('\n').filter(line => line.includes('Firefox.app')).map(line => line.trim().split(/\s+/)[0])
-for (const pid of after.filter(pid => !before.includes(pid))) {
-  const command = spawnSync('ps', ['-p', pid, '-o', 'command='], { encoding: 'utf8' }).stdout
-  if (command.includes('Firefox.app')) spawnSync('kill', [pid])
-}
-record('cleaned up', true, 'stopped the browser this run started')
+// Firefox re-parents itself out of the group web-ext was started in, so a group kill misses it: measured, the
+// "cleaned up" line printed while eleven of its processes were still alive. Kill by this run's own profile
+// directory instead, then check rather than assume - the check fails if anything is left.
+const browsersOnThisProfile = () => spawnSync('ps', ['-eo', 'pid,command'], { encoding: 'utf8' }).stdout.split('\n')
+  .filter(line => /^\s*\d+\s+\/Applications\/Firefox\.app\//.test(line) && line.includes(profileDir))
+  .map(line => line.trim().split(/\s+/)[0])
+const sweep = () => { for (const pid of browsersOnThisProfile()) spawnSync('kill', ['-KILL', pid]) }
+try { process.kill(-runner.pid, 'SIGTERM') } catch { /* already gone */ }
+await new Promise(resolve => setTimeout(resolve, 2_000))
+sweep()
+await new Promise(resolve => setTimeout(resolve, 2_000))
+sweep()
+await new Promise(resolve => setTimeout(resolve, 1_000))
+const survived = browsersOnThisProfile().length
+rmSync(profileDir, { recursive: true, force: true })
+record('cleaned up', survived === 0, survived === 0
+  ? `stopped the browser running ${path.basename(profileDir)} (its own profile), nothing left`
+  : `${survived} of this run's browser processes survived`)
 
 writeFileSync(path.join(artifacts, 'checks.json'), `${JSON.stringify(checks, null, 2)}\n`)
 const failed = checks.filter(check => !check.ok)

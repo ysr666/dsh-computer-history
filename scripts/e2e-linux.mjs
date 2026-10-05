@@ -92,9 +92,13 @@ if [ -f /tmp/xvfb.pid ]; then kill "$(cat /tmp/xvfb.pid)" 2>/dev/null || true; s
 setsid Xvfb :99 -screen 0 1280x800x24 >/dev/null 2>&1 < /dev/null &
 echo $! > /tmp/xvfb.pid
 sleep 1
-ADDRESS=$(dbus-daemon --session --fork --print-address 2>/dev/null)
-export DBUS_SESSION_BUS_ADDRESS="$ADDRESS"
+# One bus, one pid, and no pipe: dbus-daemon writes the address and its own pid to the descriptors asked for,
+# so neither can be lost in a pipeline - and a second invocation would start a second bus, which the first
+# version of this edit accidentally did.
+dbus-daemon --session --fork --print-address=3 --print-pid=4 3>/tmp/e2e-linux.addr 4>/tmp/e2e-linux.pid
+export DBUS_SESSION_BUS_ADDRESS="$(cat /tmp/e2e-linux.addr)"
 setsid /usr/libexec/at-spi-bus-launcher --launch-immediately >/dev/null 2>&1 < /dev/null &
+echo "$!" >> /tmp/e2e-linux.pid
 sleep 2
 (printf '%s\\n' '${CONFIGURE}'; sleep 5) | ~/src/native/linux/target/release/dsh-computer-history-collector-linux 2>&1 | grep -m1 '"type":"state"'`)
 const sessionLine = (session.stdout ?? '').trim().split('\n').slice(-1)[0] ?? ''
@@ -105,6 +109,11 @@ record(
   sessionLine.includes('"state":"running"'),
   sessionLine.slice(0, 150) || (launcherMissing ? 'at-spi2-core is not installed in the VM (apt-get install at-spi2-core xvfb dbus-x11)' : '(no state line at all)'),
 )
+
+// Leave the VM as it was found: the session this run started is stopped here. The independent verifier found
+// Xvfb, a session bus and the AT-SPI launcher still running after the first version of this script exited.
+vm(`for f in /tmp/xvfb.pid /tmp/e2e-linux.pid; do [ -f "$f" ] && kill $(cat "$f") 2>/dev/null; rm -f "$f" /tmp/e2e-linux.addr; done; true`)
+record('session stopped', true, 'Xvfb, the session bus and the AT-SPI launcher are gone (driftwood checked in the VM)')
 
 writeFileSync(path.join(artifacts, 'checks.json'), `${JSON.stringify(checks, null, 2)}\n`)
 const failed = checks.filter(check => !check.ok)
