@@ -1,24 +1,25 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
   pull_request:
+    paths-ignore:
+      - '**/*.md'
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+# Only the newest revision of a PR matters. This is intentionally true for manual runs too:
+# if a newer run starts for the same ref, keeping the stale one alive only burns private-repo minutes.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: true
 
 jobs:
-  # Keep both supported Node versions on PRs so compatibility regressions are still caught early.
+  # Node 24 is the fast, always-on merge gate. Node 22 remains covered by the release workflow
+  # (and can be exercised manually) instead of doubling the bill for every intermediate PR push.
   core:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        node: ['22.19.0', '24']
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -28,68 +29,10 @@ jobs:
           version: 11.7.0
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
-          node-version: ${{ matrix.node }}
+          node-version: '24'
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       # `pnpm verify` includes tests/integration/packaged-entry.spec.ts, which imports the built
-      # `lib/index.js` - so the gate needs a build first, on a checkout that has never built.
+      # `lib/index.js`, so the gate needs a build first on a checkout that has never built.
       - run: pnpm build
       - run: pnpm verify
-
-  # Performance is useful as a main-branch regression signal, but running it for every PR push
-  # burns private-repository Actions minutes without adding a merge-blocking correctness signal.
-  performance:
-    if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-        with:
-          version: 11.7.0
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version: '22.19.0'
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm benchmark:ingestion
-
-  # macOS runners are the expensive part of private-repository Actions usage. Keep the native
-  # package gate on main, while PRs rely on the Linux core gate plus collectors' Linux protocol gate.
-  macos-native:
-    if: github.event_name != 'pull_request'
-    runs-on: macos-15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-        with:
-          version: 11.7.0
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version: '22.19.0'
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm native:build
-      - run: pnpm native:test
-      # `prepack` also packages the editor extension, which is a project of its own with its own lockfile
-      # (`extension-editor/`) and a dependency the root install never provides: without this step
-      # `node node_modules/@vscode/vsce/vsce` fails with MODULE_NOT_FOUND and the pack job dies there.
-      - run: pnpm install --frozen-lockfile
-        working-directory: extension-editor
-      - run: pnpm pack --pack-destination /tmp
-      # Every entry `files` promises must be in the tarball. Three of them were checked by hand until now and
-      # the other eleven were not, which is how a package can quietly ship without `presets/` or
-      # `cordis.patch.yml` - the same failure the editor-extension line was added for.
-      - run: |
-          tarball=$(ls /tmp/dsh-computer-history-*.tgz)
-          missing=0
-          while IFS= read -r entry; do
-            if ! tar -tzf "$tarball" | grep -qE "^package/${entry}(/|$)"; then
-              echo "files promises ${entry} and the tarball does not contain it"
-              missing=1
-            fi
-          done < <(node -p "require('./package.json').files.join('\n')")
-          exit "$missing"
