@@ -686,7 +686,6 @@ export class CollectorManager {
     policy: PolicySnapshot,
   ): Promise<void> {
     const priorState = this.state?.state
-
     // A user-requested pause always wins, and only a positively-running
     // helper can be quiesced by the pause/configure/resume dance. Any
     // other state (paused, permission-required, degraded, or not yet
@@ -695,17 +694,32 @@ export class CollectorManager {
     // transitions, so the Host would either wedge capture or time out
     // waiting for a resume that can never be acknowledged while
     // Accessibility is untrusted.
-    if (
-      priorState !== 'running'
-      || this.desiredCaptureState === 'paused'
-    ) {
-      await this.configureAndWait(policy)
-      return
-    }
+    //
+    // Both branches live under one try: this method runs during the Host's own start-up, and a collector that is
+    // gone cannot be told anything. The control helpers below deliberately throw, because a caller that asked for
+    // one operation has to hear that it failed - but letting that error escape here made the plugin fail to load
+    // and took the whole Host down with it (measured 2026-10-05: `dsh: fatal load failure: Error: collector is
+    // not writable`, reproduced with the collector's process already exited). The design's answer for a collector
+    // that cannot be reached is a named degraded state with the Host up, so that is what happens here.
+    try {
+      if (
+        priorState !== 'running'
+        || this.desiredCaptureState === 'paused'
+      ) {
+        await this.configureAndWait(policy)
+        return
+      }
 
-    await this.pauseNow()
-    await this.configureAndWait(policy)
-    await this.resumeNow()
+      await this.pauseNow()
+      await this.configureAndWait(policy)
+      await this.resumeNow()
+    } catch (error) {
+      this.rejectStateWaiters(
+        error instanceof Error ? error : new Error(String(error)),
+      )
+      this.markDegraded('apply-policy-send-failed')
+      void this.stop('protocol-error').catch(() => {})
+    }
   }
 
   public pause(): Promise<void> {

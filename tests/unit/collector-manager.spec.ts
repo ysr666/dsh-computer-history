@@ -47,4 +47,47 @@ describe('collector manager lifecycle', () => {
     expect(terminated).toBe(true)
     expect(waits).toBe(2)
   })
+
+  it('stays up when a dead collector cannot be told the new policy', async () => {
+    // Measured 2026-10-05 on a CLI-managed profile: the collector exited, `applyPolicyNow` then reached for it,
+    // the guard in `send` threw `collector is not writable`, and that error escaped the plugin's start-up as
+    // `dsh: fatal load failure` - the whole Host refused to start because one collector was gone. The design
+    // says a collector that cannot be reached is a named degraded state with the Host still up.
+    const stdin = new PassThrough()
+    const stdout = new PassThrough()
+    let exit: () => void = () => {}
+    const done = new Promise<{ exitCode: number | null, signal: NodeJS.Signals | null }>(resolve => {
+      exit = () => resolve({ exitCode: 0, signal: null })
+    })
+    const handle: SubprocessHandle = {
+      stdin,
+      stdout,
+      stderr: undefined,
+      control: undefined,
+      collected: {},
+      done,
+      terminate() {},
+      async waitForExit() { return true },
+    }
+    const ctx = { subprocess: { spawn: () => handle } }
+    const manager = new CollectorManager(ctx as never, {
+      executable: '/collector',
+      cwd: '/tmp',
+      graceMs: 10,
+      onMessage: () => {},
+    })
+    manager.start()
+    stdout.write(`${JSON.stringify({
+      v: 1, type: 'hello', collectorSession: 'dead-one', collectorVersion: '0.1.0',
+      platform: 'darwin', arch: 'arm64', capabilities: ['app-focus'],
+    })}\n`)
+    await new Promise(resolve => setTimeout(resolve, 20))
+    // The collector exits: this is the state production was in.
+    exit()
+    await new Promise(resolve => setTimeout(resolve, 30))
+    const policy = { revision: 1, mode: 'include-only' as const, updatedAtMs: 1, rules: [] }
+    await expect(manager.applyPolicy(policy)).resolves.toBeUndefined()
+    expect(manager.snapshot().state?.state).toBe('degraded')
+    await manager.stop('plugin-dispose')
+  })
 })
