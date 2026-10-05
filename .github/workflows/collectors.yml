@@ -49,5 +49,8 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # `pnpm verify` includes tests/integration/packaged-entry.spec.ts, which imports the built
+      # `lib/index.js` - so the gate needs a build first, on a checkout that has never built.
+      - run: pnpm build
       - name: The gate, which includes tests/conformance
         run: pnpm verify

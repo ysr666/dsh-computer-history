@@ -391,7 +391,16 @@ describe('Computer History Host API', () => {
 
     const capability = await api.request('/resume/open')
     expect(capability.status).toBe(200)
-    await expect(capability.json()).resolves.toMatchObject({ available: true })
+    // Opening a stored resource is a darwin-only capability by product decision: elsewhere the answer is
+    // `platform-unverified` rather than a guess (`src/host/resume/opener.ts`). Asserting `available: true`
+    // unconditionally passed only on the author's machine and failed every ubuntu runner, because the opener
+    // resolves `/usr/bin/open`. The platform's own contract is deterministic on every runner.
+    const capabilityBody = await capability.json() as { available?: unknown, reason?: unknown }
+    if (process.platform === 'darwin') {
+      expect(capabilityBody).toMatchObject({ available: true })
+    } else {
+      expect(capabilityBody).toMatchObject({ available: false, reason: 'platform-unverified' })
+    }
 
     const opened = await api.request('/resume/open', {
       method: 'POST',
@@ -402,10 +411,15 @@ describe('Computer History Host API', () => {
       }),
     })
     expect(opened.status).toBe(200)
-    await expect(opened.json()).resolves.toMatchObject({
-      status: 'opened',
-      kind: 'file',
-    })
+    const openedBody = await opened.json() as { status?: unknown, kind?: unknown, reason?: unknown }
+    if (process.platform === 'darwin') {
+      expect(openedBody).toMatchObject({ status: 'opened', kind: 'file' })
+    } else {
+      // The same darwin-only capability: off macOS the route answers `unsupported` rather than pretending to
+      // have opened anything. The rest of the test - a resource outside the stored episode is refused - is
+      // platform-independent and still exercised below.
+      expect(openedBody).toMatchObject({ status: 'unsupported', reason: 'platform-unverified' })
+    }
 
     const forged = await api.request('/resume/open', {
       method: 'POST',

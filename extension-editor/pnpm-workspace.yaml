@@ -1,2 +1,5 @@
 allowBuilds:
-  '@vscode/vsce-sign': set this to true or false
+  # Answered, because pnpm exits 1 while this is left as the placeholder it writes - which is what failed the
+  # pack job's install. The script installs vsce's signing helper and packaging here is unsigned
+  # (`vsce package --skip-license`), so skipping it is the honest answer; flip it to true if signing is wanted.
+  '@vscode/vsce-sign': false

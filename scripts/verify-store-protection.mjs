@@ -101,8 +101,13 @@ if (normalized.startsWith('/Volumes/')) {
   )
 }
 
-// 3. FileVault
-if (macos) {
+// 3. FileVault - only where there is a store to protect. A machine that has never created a store has nothing
+// at rest, which is why the permission checks above are skipped in the same case; asserting FileVault there
+// failed every macOS CI runner, whose disk is not encrypted. Where the store exists, the guarantee still has to
+// hold, so the gate stays.
+const needsFileVault = (platform, storeExists) => platform === 'darwin' && storeExists
+
+if (needsFileVault(process.platform, existsSync(storePath))) {
   const status = spawnSync('/usr/bin/fdesetup', ['status'], {
     encoding: 'utf8',
   })
@@ -113,6 +118,8 @@ if (macos) {
       + 'encryption for at-rest confidentiality',
     )
   }
+} else if (macos) {
+  console.log(`store not created yet: ${storePath} (FileVault check skipped)`)
 } else {
   console.log(
     `${process.platform}: FileVault check unavailable; at-rest protection `
@@ -131,6 +138,18 @@ if (macos) {
   }
   if (isSynced('/Users/someone/.dsh/computer-history')) {
     problems.push('the sync-folder check flags a path that is not synced')
+  }
+
+  // The FileVault gate has one job: apply where a store exists, on macOS only. It must not go quiet in either
+  // direction, which is what letting a macOS runner pass without a store would look like.
+  if (needsFileVault('darwin', true) !== true) {
+    problems.push('the FileVault gate no longer applies where a store exists')
+  }
+  if (needsFileVault('darwin', false) !== false) {
+    problems.push('the FileVault gate applies where no store has been created')
+  }
+  if (needsFileVault('linux', true) !== false) {
+    problems.push('the FileVault gate applies off macOS')
   }
 
   if (!posixModes) {
