@@ -100,6 +100,23 @@ What is **not** the way, measured rather than assumed:
 - `~/.dsh/ext-bridge-token` is the browser bridge's token, not the web session cookie
   (`/state` answers `unauthorized` with it).
 
+## When `dsh plugin add` succeeds and the Host still starts with nothing
+
+Measured 2026-10-05: a profile created by the CLI, with `dsh plugin --profile <p> add <tarball>` answered with
+exit 0, starts **without a web listener and with one warning line and nothing else**:
+
+```
+dsh: warning: 1 entry did not activate
+computer-history (dsh-computer-history): pending (waiting for services: connection, workspaceRegistry)
+```
+
+The cause is the step `docs/release.md` describes in a comment: the CLI writes the dependency but **not** the
+profile's `bundles` list (`bundles` stays absent), and this plugin needs the two services the web application
+provides. Without that entry it never activates, so it cannot report anything itself - the silence is the whole
+symptom. Listing the package in the profile's `bundles` and restarting is what fixes it. This is recorded as a
+gap in the install path rather than a defect of the plugin: measured with the same command into an
+already-working profile, where the plugin activates normally.
+
 ## Why an installed bundle can still show no interface
 
 Measured while installing this plugin into a profile as a bundle (`dsh plugin --profile ... add`):
