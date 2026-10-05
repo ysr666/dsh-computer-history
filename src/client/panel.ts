@@ -13,6 +13,12 @@ import type {
 import { localDayKey } from '../shared/audit-view.js'
 import { historyApi } from './api.js'
 import {
+  episodeApp,
+  episodeSubject,
+  friendlyAppName,
+  isHomeDirectoryResource,
+} from './episode-subject.js'
+import {
   captureLabel,
   failureText,
   reasonText,
@@ -78,29 +84,6 @@ function threadSkeleton(label: string): React.ReactElement {
   )
 }
 
-function friendlyAppName(bundleId: string): string {
-  const known: Record<string, string> = {
-    'com.apple.Notes': 'Notes',
-    'com.apple.Preview': 'Preview',
-    'com.apple.Terminal': 'Terminal',
-    'com.apple.finder': 'Finder',
-    'com.apple.dt.Xcode': 'Xcode',
-    'com.apple.Safari': 'Safari',
-    'com.google.Chrome': 'Google Chrome',
-    'com.microsoft.VSCode': 'VS Code',
-    'com.microsoft.edgemac': 'Microsoft Edge',
-    'com.openai.chat': 'ChatGPT',
-  }
-  if (known[bundleId]) return known[bundleId]
-  const tail = bundleId.split('.').findLast(part => part.length > 0)
-  return tail && tail.length <= 28 ? tail.replaceAll('-', ' ') : bundleId
-}
-
-function episodeApp(episode: Pick<EpisodeSummary, 'surfaces'> | Pick<TimelineActivity, 'surfaces'>): string {
-  const first = episode.surfaces[0]?.bundleId
-  return first ? friendlyAppName(first) : '—'
-}
-
 function appMark(label: string): string {
   const known: Record<string, string> = {
     Terminal: '>_',
@@ -128,11 +111,6 @@ function appBadge(app: string): React.ReactElement {
   )
 }
 
-function isHomeDirectoryResource(resource: { readonly kind: string; readonly canonicalUri: string } | undefined): boolean {
-  return resource?.kind === 'directory'
-    && /^file:\/\/\/Users\/[^/]+\/?$/.test(resource.canonicalUri)
-}
-
 function resourceLabel(
   t: HistoryTranslate,
   resource: { readonly kind: string; readonly canonicalUri: string; readonly displayLabel?: string },
@@ -140,26 +118,6 @@ function resourceLabel(
 ): string {
   if (app === 'Terminal' && isHomeDirectoryResource(resource)) return t('homeDirectory')
   return resource.displayLabel ?? resource.canonicalUri
-}
-
-function episodeSubject(t: HistoryTranslate, episode: EpisodeSummary | TimelineActivity): string {
-  const workspaceTitle = episode.workspace?.title?.trim()
-  if (episodeApp(episode) === 'Terminal') {
-    const rootParts = episode.workspace?.root?.split('/').filter(Boolean) ?? []
-    const isHomeWorkspace = rootParts.length === 2
-      && rootParts[0] === 'Users'
-      && rootParts[1] === workspaceTitle
-    const resource = episode.lastStrongResource ?? episode.resources[0]
-    if (!workspaceTitle || isHomeWorkspace) {
-      return isHomeDirectoryResource(resource)
-        ? t('terminalSession')
-        : resource?.displayLabel ?? t('terminalSession')
-    }
-  }
-  return workspaceTitle
-    ?? episode.lastStrongResource?.displayLabel
-    ?? episode.resources[0]?.displayLabel
-    ?? episodeApp(episode)
 }
 
 function episodeMeta(
