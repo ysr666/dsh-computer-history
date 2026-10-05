@@ -46,7 +46,13 @@ export function companionObservation(
         title: payload.workspaceRoot.split('/').findLast(segment => segment !== '')
           ?? payload.workspaceRoot,
       },
-      source: { provider: 'companion', adapter: 'vscode' },
+      // Derived from the bundle the editor claimed, through the same table the collector path uses, so a row
+      // from IntelliJ says `jetbrains` instead of `vscode`. `generic` is the type's own word for "an
+      // adapter this build does not know" - and ingestion refuses such a bundle by name before storing it.
+      source: {
+        provider: 'companion',
+        adapter: phase1AdapterForBundle(payload.app.bundleId) ?? 'generic',
+      },
     }
   }
 

@@ -75,11 +75,54 @@ function verifyApplied(
   }
 }
 
+/**
+ * The migrations a database says it has applied, or `undefined` when there is no `schema_migrations` table yet -
+ * a brand new store.
+ */
+function recordedMigrations(
+  db: DatabaseSync,
+): Array<{ version: number, checksum: string }> | undefined {
+  try {
+    return db.prepare(`
+      SELECT version, checksum
+      FROM schema_migrations
+      ORDER BY version
+    `).all() as Array<{ version: number, checksum: string }>
+  } catch {
+    return undefined
+  }
+}
+
 export function migrate(
   db: DatabaseSync,
   nowMs = Date.now(),
 ): void {
-  const initial = schemaVersion(db)
+  let initial = schemaVersion(db)
+  if (initial === 0) {
+    // A store can hold every table and still report version 0: `sqlite3 old.db .dump | sqlite3 new.db` writes
+    // the schema and the rows and never `PRAGMA user_version`. Replaying migration 0001 into such a store fails
+    // with "table schema_migrations already exists" on data that is perfectly intact, and the message says
+    // nothing about the real cause. The recorded migrations know which version the store actually is, so adopt
+    // it when the records match this build, and refuse by name when they do not.
+    const recorded = recordedMigrations(db)
+    if (recorded !== undefined && recorded.length > 0) {
+      const expected = MIGRATIONS.slice(0, recorded.length)
+      const matches = expected.length === recorded.length
+        && expected.every((migration, index) =>
+          recorded[index]?.version === migration.version
+          && recorded[index]?.checksum === migration.checksum)
+      if (!matches) {
+        throw new Error(
+          'this store records migrations that do not match this build: it was restored without its schema '
+          + 'version, or written by a different version. Back it up and start a new store rather than '
+          + 'migrating it blind.',
+        )
+      }
+      const adopted = recorded[recorded.length - 1]?.version ?? 0
+      db.exec(`PRAGMA user_version = ${adopted}`)
+      initial = adopted
+    }
+  }
   const latest =
     MIGRATIONS.at(-1)?.version ?? 0
 
