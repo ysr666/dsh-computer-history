@@ -13,6 +13,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Keep both supported Node versions on PRs so compatibility regressions are still caught early.
   core:
     runs-on: ubuntu-latest
     strategy:
@@ -35,7 +36,10 @@ jobs:
       - run: pnpm build
       - run: pnpm verify
 
+  # Performance is useful as a main-branch regression signal, but running it for every PR push
+  # burns private-repository Actions minutes without adding a merge-blocking correctness signal.
   performance:
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -51,7 +55,10 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm benchmark:ingestion
 
+  # macOS runners are the expensive part of private-repository Actions usage. Keep the native
+  # package gate on main, while PRs rely on the Linux core gate plus collectors' Linux protocol gate.
   macos-native:
+    if: github.event_name != 'pull_request'
     runs-on: macos-15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -86,4 +93,3 @@ jobs:
             fi
           done < <(node -p "require('./package.json').files.join('\n')")
           exit "$missing"
-
