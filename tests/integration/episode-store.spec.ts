@@ -72,6 +72,36 @@ function observation(seq: number, uri: string): ActivityObservation {
 }
 
 describe('episode store', () => {
+  it('reads app-switch as a valid persisted boundary reason', () => {
+    const history = openTempDatabase()
+    const episodes = new EpisodeStore(history.db)
+
+    history.db.prepare(`
+      INSERT INTO episodes(
+        id, started_at_ms, ended_at_ms, start_reason, end_reason,
+        summary_kind, summary_text, confidence, state, created_at_ms, updated_at_ms
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      'episode-app-switch',
+      10_000,
+      11_000,
+      'first-observation',
+      'app-switch',
+      'deterministic',
+      'Switched applications.',
+      1,
+      'closed',
+      11_000,
+      11_000,
+    )
+
+    expect(episodes.listRecent({ limit: 1 })[0]?.boundary).toEqual({
+      startReason: 'first-observation',
+      endReason: 'app-switch',
+    })
+    history.close()
+  })
+
   it('persists provenance, resources, surfaces, and last strong resource', () => {
     const history = openTempDatabase()
     const resources = new ResourceStore(history.db)

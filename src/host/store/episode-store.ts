@@ -126,6 +126,7 @@ function boundaryReason(value: string): EpisodeBoundaryReason {
   const allowed: readonly EpisodeBoundaryReason[] = [
     'first-observation',
     'workspace-switch',
+    'app-switch',
     'idle',
     'sleep',
     'pause',
