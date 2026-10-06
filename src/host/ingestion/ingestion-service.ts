@@ -166,13 +166,18 @@ export class IngestionService {
     return false
   }
 
-  public async ingest(
+  public ingest(
     message: NativeObservation,
   ): Promise<boolean> {
-    const before = this.refusedSinceStart()
-    const droppedBefore = this.silentDrops
-    const running = this.ingestNow(message)
-    void running.then((stored) => {
+    // Collector delivery is ordered, but the browser/editor companion is an HTTP server and can call ingest()
+    // concurrently with itself and with the collector. DatabaseSync is one connection: allowing two ingestNow()
+    // calls to cross their asynchronous workspace-resolution boundary can make both try BEGIN IMMEDIATE on the
+    // same connection. Keep one tail for all producers. The tail also makes whenIdle() mean "every ingest queued
+    // before this read has settled", rather than "the most recently started ingest happened to settle".
+    const running = this.inFlight.then(async () => {
+      const before = this.refusedSinceStart()
+      const droppedBefore = this.silentDrops
+      const stored = await this.ingestNow(message)
       // Refusals that named their reason are already counted; the rest are visible
       // as unattributed rather than missing from the total - except the ones the Host dropped on
       // purpose, which are not refusals at all.
@@ -183,15 +188,12 @@ export class IngestionService {
       ) {
         this.refusals.set('unknown', (this.refusals.get('unknown') ?? 0) + 1)
       }
+      return stored
     })
-    const idle: Promise<void> = running
-      .then(() => undefined, () => undefined)
-    this.inFlight = idle
-    void idle.then(() => {
-      if (this.inFlight === idle) {
-        this.inFlight = Promise.resolve()
-      }
-    })
+    this.inFlight = running.then(
+      () => undefined,
+      () => undefined,
+    )
     return running
   }
 
