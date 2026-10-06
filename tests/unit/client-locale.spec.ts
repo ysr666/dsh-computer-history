@@ -4,6 +4,7 @@ import {
   en,
   episodeLineText,
   failureText,
+  reasonNeedsAllowedApps,
   reasonText,
   threadSubjectText,
   zh,
@@ -74,6 +75,12 @@ describe('host data rendered in the reader\'s language', () => {
       .toBe('本机记录进程意外停止了。可以点击“重试记录”重新连接。')
     expect(reasonText(en_t, 'collector-exited'))
       .toBe('The local recording process stopped unexpectedly. Retry recording.')
+    expect(reasonText(zh_t, 'no-apps-allowed'))
+      .toBe('还没有允许任何应用，所以电脑使用记录现在不会记录任何内容。可以在这里允许推荐应用，或到设置中选择参与记录的应用。')
+    expect(reasonText(en_t, 'no-apps-allowed'))
+      .toBe('No applications are allowed yet, so Computer History cannot record anything. Allow the recommended apps here, or choose participating apps in Settings.')
+    expect(reasonNeedsAllowedApps(' no-apps-allowed ')).toBe(true)
+    expect(reasonNeedsAllowedApps('collector-exited')).toBe(false)
     expect(reasonText(en_t, 'something-new-from-a-later-host')).toBe('something-new-from-a-later-host')
   })
 
