@@ -16,6 +16,17 @@ import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+const allowBuildsOff = (workspace) => {
+  try {
+    if (!existsSync(workspace)) return false
+    const text = readFileSync(workspace, 'utf8')
+    const fixed = text.replace(/^(\s+[^\s:]+:\s*)set this to true or false\s*$/gm, '$1false')
+    if (fixed === text) return false
+    writeFileSync(workspace, fixed)
+    return true
+  } catch { return false }
+}
+
 
 const REPO = path.resolve(import.meta.dirname, '..')
 process.chdir(REPO)
@@ -41,7 +52,7 @@ try {
     let r = spawnSync(cli, ['plugin', '--profile', 'chromium', 'add', spec], { env, encoding: 'utf8' })
     if (r.status !== 0) {
       const workspace = path.join(home, 'profiles', 'chromium', 'pnpm-workspace.yaml')
-      if (existsSync(workspace)) writeFileSync(workspace, readFileSync(workspace, 'utf8').replaceAll(': set this to true or false', ': false'))
+      if (existsSync(workspace)) allowBuildsOff(workspace)
       r = spawnSync(cli, ['plugin', '--profile', 'chromium', 'add', spec], { env, encoding: 'utf8' })
     }
     return r
