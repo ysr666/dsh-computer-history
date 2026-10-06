@@ -15,7 +15,6 @@ import {
   ObservationStore,
   openHistoryDatabase,
   PolicyStore,
-  ResourceStore,
 } from '../../src/host/store/index.js'
 
 const roots: string[] = []
