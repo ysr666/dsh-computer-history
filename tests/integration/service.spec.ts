@@ -349,6 +349,58 @@ describe('local computer history backend', () => {
     second.close()
   })
 
+  it('finds semantic scope history even after more than 50 unrelated Episodes', () => {
+    const history = openTempDatabase()
+    seedEpisode(history)
+    const episodes = new EpisodeStore(history.db)
+    for (let index = 0; index < 60; index += 1) {
+      episodes.replace({
+        id: EpisodeId(`decoy-${index}`),
+        startedAtMs: 10_000 + index,
+        endedAtMs: 10_000 + index,
+        startReason: 'first-observation',
+        endReason: 'timeout',
+        workspace: {
+          id: `decoy-workspace-${index}`,
+          root: `/decoy/${index}`,
+          title: `decoy-${index}`,
+        },
+        summaryKind: 'deterministic',
+        summary: `Decoy ${index}`,
+        confidence: 1,
+        state: 'closed',
+        createdAtMs: 10_000 + index,
+        updatedAtMs: 10_000 + index,
+        observationIds: [],
+      })
+    }
+
+    const policies = new PolicyStore(history.db)
+    policies.ensureInitial(1)
+    const backend = new LocalComputerHistoryBackend(
+      episodes,
+      policies,
+      new DeletionService(history.db),
+      new FakeCapture(),
+      {
+        observationRetentionHours: 24,
+        episodeRetentionDays: 30,
+        autoResume: false,
+      },
+      undefined,
+      new SemanticOptInStore(history.db),
+      history.db,
+    )
+
+    expect(backend.semanticPreview({
+      scopeKey: 'workspace:alpha',
+    })).toBeDefined()
+    expect(backend.semanticPreview({
+      scopeKey: 'app:com.microsoft.VSCode',
+    })).toBeDefined()
+    history.close()
+  })
+
   it('keeps /state retention in step with a successful retention change', () => {
     const history = openTempDatabase()
     const policies = new PolicyStore(history.db)

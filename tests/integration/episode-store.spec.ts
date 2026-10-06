@@ -621,6 +621,31 @@ describe('episode store', () => {
     history.close()
   })
 
+  it('treats SQL LIKE wildcard characters as literal search text', () => {
+    const history = openTempDatabase()
+    const episodes = new EpisodeStore(history.db)
+    const insert = history.db.prepare(`
+      INSERT INTO episodes(
+        id, started_at_ms, ended_at_ms, start_reason, end_reason,
+        summary_kind, summary_text, confidence, state, created_at_ms, updated_at_ms
+      ) VALUES (?, ?, ?, 'first-observation', 'timeout',
+        'deterministic', ?, 1, 'closed', ?, ?)
+    `)
+    insert.run('literal-search', 1, 1, 'Build reached 100%_done\\path', 1, 1)
+    insert.run('ordinary-search', 2, 2, 'Build reached 100Xdone path', 2, 2)
+
+    expect(episodes.search({ query: '%', limit: 10 }).map(item => item.id))
+      .toEqual([EpisodeId('literal-search')])
+    expect(episodes.search({ query: '_', limit: 10 }).map(item => item.id))
+      .toEqual([EpisodeId('literal-search')])
+    expect(episodes.search({ query: '100%_done', limit: 10 }).map(item => item.id))
+      .toEqual([EpisodeId('literal-search')])
+    expect(episodes.search({ query: '\\path', limit: 10 }).map(item => item.id))
+      .toEqual([EpisodeId('literal-search')])
+
+    history.close()
+  })
+
   it('cascades episode provenance rows when the episode is deleted', () => {
     const history = openTempDatabase()
     const episodes = new EpisodeStore(history.db)

@@ -186,6 +186,33 @@ describe('audit export and import', () => {
     target.close()
   })
 
+  it('refuses a partial observation row when its session/seq already exists locally', () => {
+    const source = database('dsh-ch-export-partial-src-')
+    seed(source.db)
+    const document = exportHistory(source.db, 5_000)
+    source.close()
+
+    const target = database('dsh-ch-export-partial-dst-')
+    importHistory(target.db, document)
+
+    const partial = structuredClone(document) as {
+      tables: Record<string, Array<Record<string, unknown>>>
+    }
+    delete partial.tables.observations?.[0]?.bundle_id
+
+    expect(() => importHistory(target.db, partial))
+      .toThrow(/observations\.bundle_id is required/)
+    expect(counts(target.db)).toEqual({
+      resources: 1,
+      observations: 1,
+      episodes: 1,
+      citations: 1,
+      rules: 0,
+      optIns: 0,
+    })
+    target.close()
+  })
+
   it('is idempotent for the same document', () => {
     const source = database('dsh-ch-export-same-')
     seed(source.db)
