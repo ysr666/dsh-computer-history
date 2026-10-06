@@ -73,7 +73,7 @@ export function buildPayload(tab, session, seq, observedAtMs = Date.now()) {
  * @param {typeof fetch} fetchImpl
  * @param {CompanionConfig} config
  * @param {object} payload
- * @returns {Promise<number>} the intake's HTTP status
+ * @returns {Promise<{status: number, stored?: boolean, reason?: string}>}
  */
 export async function sendObservation(
   fetchImpl,
@@ -91,7 +91,17 @@ export async function sendObservation(
       body: JSON.stringify(payload),
     },
   )
-  return response.status
+  let body
+  try {
+    body = await response.json()
+  } catch {
+    body = undefined
+  }
+  return {
+    status: response.status,
+    ...(typeof body?.stored === 'boolean' ? { stored: body.stored } : {}),
+    ...(typeof body?.reason === 'string' ? { reason: body.reason } : {}),
+  }
 }
 
 /**

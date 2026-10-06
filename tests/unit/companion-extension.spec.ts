@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 // Plain ESM: the extension is loaded by Chrome, not bundled by the plugin.
 import {
@@ -107,16 +108,51 @@ describe('companion extension logic', () => {
       seq: 1,
       observedAtMs: 1,
     }
-    const status = await sendObservation(
+    const result = await sendObservation(
       fakeFetch as unknown as typeof fetch,
       { port: 19388, token: 'tok' },
       payload,
     )
-    expect(status).toBe(201)
+    expect(result).toEqual({ status: 201 })
     expect(calls[0]!.url).toBe('http://127.0.0.1:19388/companion/observation')
     const headers = calls[0]!.init.headers as Record<string, string>
     expect(headers['x-companion-token']).toBe('tok')
     expect(calls[0]!.init.body).toContain('https://example.test')
+  })
+
+  it('returns a 202 refusal reason instead of treating every 2xx response as stored', async () => {
+    const payload: CompanionExtensionPayload = {
+      source: 'browser',
+      origin: 'https://example.test',
+      path: '/',
+      incognito: false,
+      browserSession: 's',
+      seq: 1,
+      observedAtMs: 1,
+    }
+    const result = await sendObservation(
+      (async () => Response.json(
+        { stored: false, reason: 'capture-paused' },
+        { status: 202 },
+      )) as unknown as typeof fetch,
+      { port: 19388, token: 'tok' },
+      payload,
+    )
+    expect(result).toEqual({
+      status: 202,
+      stored: false,
+      reason: 'capture-paused',
+    })
+  })
+
+  it('gives every background lifetime a fresh session when its in-memory sequence resets', () => {
+    const source = readFileSync(
+      new URL('../../extension/background.js', import.meta.url),
+      'utf8',
+    )
+    expect(source).toContain('const session = `browser-${crypto.randomUUID()}`')
+    expect(source).not.toContain("'companionSession'")
+    expect(source).not.toContain('stored.companionSession')
   })
 
   it('checks pairing against the health route', async () => {

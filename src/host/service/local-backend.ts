@@ -452,8 +452,15 @@ implements ComputerHistoryServiceContract {
 
   public importAll(
     document: unknown,
-  ): { readonly imported: Record<string, number> } {
-    return importHistory(this.requireDb(), document)
+  ): Promise<{ readonly imported: Record<string, number> }> {
+    return this.withOperation(async () => {
+      const result = importHistory(this.requireDb(), document)
+      // importHistory writes through this same SQLite connection, so PRAGMA data_version cannot be relied on to
+      // make ingestion notice the change later. Reseed explicitly before reporting success: the next live
+      // observation must see every imported sequence and the correct chronological tail immediately.
+      await this.config.onHistoryChanged?.()
+      return result
+    })
   }
 
   private requireDb(): DatabaseSync {

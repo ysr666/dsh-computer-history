@@ -15,11 +15,22 @@ POST /api/computer-history/import      → reads one back
 The document is a **projection of the tables that already exist** — resources,
 policy state and rules, semantic opt-ins, observations, episodes, their
 observations, resources, surfaces and summary citations — not a second schema.
-An export therefore cannot disagree with the store it came from, and the import
-reads it through a whitelist taken from the live database (`PRAGMA table_info`):
-an unknown schema, an unknown table, an unknown column or a non-primitive value
-is refused with a reason instead of half-importing. Importing the same document
-twice is idempotent.
+An export therefore cannot disagree with the store it came from.
+
+**Import is intentionally narrower than export.** It merges historical evidence
+(resources, observations, episodes and their provenance) but does **not** apply
+the source device's policy rows or semantic opt-ins. A backup file must not
+silently enable capture or remote model sending on a different device.
+
+Database-local numeric ids are remapped during merge. Resources are matched by
+`(kind, canonical_uri)`, observations by `(collector_session, collector_seq)`,
+and new episodes attach to the remapped ids. Existing episode ids win rather
+than being replaced, so importing another non-empty store cannot fire SQLite
+`REPLACE` cascades through unrelated local provenance. The import validator is
+still whitelist-based (`PRAGMA table_info`): unknown tables, unknown columns,
+non-primitive values and conflicting observation identities are refused before
+a partial merge can be committed. Importing the same document twice is
+idempotent.
 
 Two tables are deliberately absent, and `src/host/audit/export.ts` says why next
 to them:

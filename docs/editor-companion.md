@@ -14,7 +14,7 @@ policy dimension. No new trusted concept.
 
 | sent | source in the editor |
 |---|---|
-| `workspaceRoot` | `workspace.workspaceFolders[0].uri.fsPath` |
+| `workspaceRoot` | the workspace that owns the active document (`workspace.getWorkspaceFolder(...)`); the sole/fallback folder only when no editor is active |
 | `filePath` | `window.activeTextEditor.document.uri.fsPath` |
 | `languageId` | `document.languageId` |
 | `surfaceKind` | active view: editor, diff, terminal |
@@ -81,7 +81,7 @@ content-type: application/json
 ```
 
 `201 {"stored":true}` means it was kept; `202 {"stored":false}` means the Host
-refused it (the request was valid, the answer is about the store). A refusal that capture itself decided
+refused it (the request was valid, the answer is about the store). The shipped VS Code companion reads that 202 body and records the refusal reason in its Computer History output/trace rather than treating every 2xx response as a successful store. A refusal that capture itself decided
 - `capture-paused`, `collector-not-running`, `capture-disabled`, `capture-not-owned` - also carries
 `reason`, so a client can tell "you paused" from "the policy refused this app" instead of logging nothing. `400` carries a
 reason, `401` means the token is wrong, `403` means incognito (browser shape only).

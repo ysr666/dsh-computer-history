@@ -123,7 +123,7 @@ export class ComputerHistoryService
 
   public importAll(
     document: unknown,
-  ): { readonly imported: Record<string, number> } {
+  ): Promise<{ readonly imported: Record<string, number> }> {
     return this.backend.importAll(document)
   }
 
