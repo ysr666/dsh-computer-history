@@ -151,11 +151,20 @@ describe('remote summary provider (ADR 0010)', () => {
     expect(plaintext.calls).toEqual([])
 
     const failing = recordingFetch({ summary: 'text', citations: [1 as ObservationId] }, false)
-    await expect(provider({ store, fetchImpl: failing.impl }).summarise({
+    const sent: RemoteSendRecord[] = []
+    await expect(provider({ store, fetchImpl: failing.impl, sent }).summarise({
       scope, payload, citations: [1 as ObservationId],
     })).rejects.toThrow(/answered 500/)
-    // No retry: one attempt, and one attempt only.
+    // No retry: one request, and one request only. A 500 is still proof that
+    // the payload reached an HTTP peer, so the privacy audit must not erase it
+    // merely because the remote side rejected the request.
     expect(failing.calls).toHaveLength(1)
+    expect(sent).toHaveLength(1)
+    expect(sent[0]).toMatchObject({
+      endpointHost: 'models.example.test',
+      model: 'test-model',
+      sentAtMs: 5_000,
+    })
   })
 
   it('does not send for a scope that opted into local only', async () => {
