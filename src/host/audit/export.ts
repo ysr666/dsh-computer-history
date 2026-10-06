@@ -97,6 +97,18 @@ function validateDocument(
       `unsupported schema: ${String(candidate.schema)}`,
     )
   }
+  const documentVersion = candidate.schemaVersion
+  const currentVersion = schemaVersion(db)
+  if (
+    typeof documentVersion !== 'number'
+    || !Number.isSafeInteger(documentVersion)
+    || documentVersion < 1
+    || documentVersion > currentVersion
+  ) {
+    throw new HistoryImportError(
+      `unsupported schema version: ${String(documentVersion)}`,
+    )
+  }
   if (typeof candidate.tables !== 'object' || candidate.tables === null) {
     throw new HistoryImportError('the document has no tables')
   }
