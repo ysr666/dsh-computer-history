@@ -21,9 +21,23 @@ describe('summary presentation state', () => {
       scopes: [{
         scopeKey: 'workspace:w1', providerKind: 'local', createdAtMs: 1,
       }],
+    })).toBe('provider-unavailable')
+    expect(summaryDisplayStatus({
+      ...deterministic,
+      providers: {
+        local: { available: true, model: 'local-model' },
+        remote: { available: false, reason: 'not-wired' },
+      },
+      scopes: [{
+        scopeKey: 'workspace:w1', providerKind: 'local', createdAtMs: 1,
+      }],
     })).toBe('local')
     expect(summaryDisplayStatus({
       ...deterministic,
+      providers: {
+        local: { available: true, model: 'local-model' },
+        remote: { available: true, model: 'remote-model' },
+      },
       scopes: [
         { scopeKey: 'workspace:w1', providerKind: 'local', createdAtMs: 1 },
         { scopeKey: 'app:com.microsoft.VSCode', providerKind: 'remote', createdAtMs: 2 },
