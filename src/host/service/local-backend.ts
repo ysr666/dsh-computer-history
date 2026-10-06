@@ -248,6 +248,7 @@ implements ComputerHistoryServiceContract {
   }
 
   public getState(): ComputerHistoryState {
+    const maintenance = this.maintenance?.()
     return {
       ...this.capture.getState(),
       // Why things were refused, when the host can tell us: a bare count is a
@@ -259,7 +260,7 @@ implements ComputerHistoryServiceContract {
         ? { firstRunPreset: this.firstRunPreset() }
         : {}),
       ...(this.release ? { release: this.release() } : {}),
-      ...(this.maintenance ? { maintenance: this.maintenance() } : {}),
+      ...(maintenance === undefined ? {} : { maintenance }),
       observationRetentionHours:
         this.config.observationRetentionHours,
       episodeRetentionDays:
