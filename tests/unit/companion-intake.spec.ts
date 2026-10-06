@@ -286,6 +286,25 @@ describe('companion intake', () => {
     await intake.stop()
   })
 
+  it('refuses URL credentials and non-canonical path metadata before delivery', async () => {
+    const { intake, port, delivered } = await harness()
+    const cases = [
+      payload({ origin: 'https://alice:s3cr3t@example.test' }),
+      payload({ path: '/docs?token=s3cr3t' }),
+      payload({ path: '/docs#private' }),
+      payload({ path: '/one/../two' }),
+      payload({ origin: 'https://EXAMPLE.test' }),
+    ]
+
+    for (const candidate of cases) {
+      const response = await post(port, JSON.stringify(candidate))
+      expect(response.status, JSON.stringify(candidate)).toBe(400)
+      expect(String(response.json.error)).toContain('canonical')
+    }
+    expect(delivered).toHaveLength(0)
+    await intake.stop()
+  })
+
   it('rejects an unexpected Host header (DNS rebinding)', async () => {
     const { intake, port, delivered } = await harness()
     const response = await post(port, JSON.stringify(payload()), { host: 'evil.test' })

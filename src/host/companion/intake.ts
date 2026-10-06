@@ -96,6 +96,37 @@ const DEFAULT_PORT = 19388
 const DEFAULT_MAX_BODY = 8 * 1024
 const DEFAULT_RATE_LIMIT = 120
 
+function isCanonicalBrowserLocation(origin: string, pathname: string): boolean {
+  try {
+    const base = new URL(origin)
+    if (
+      (base.protocol !== 'http:' && base.protocol !== 'https:')
+      || base.username.length > 0
+      || base.password.length > 0
+      || base.origin !== origin
+      || base.pathname !== '/'
+      || base.search.length > 0
+      || base.hash.length > 0
+    ) return false
+
+    // The extension sends URL.origin + URL.pathname, not an arbitrary URL
+    // string split into two fields. Reconstruct it and require that the URL
+    // parser gives us the exact same pathname with no query/fragment/userinfo.
+    // This rejects raw credentials, control characters, dot-segment aliases and
+    // accidental "?token"/"#fragment" data before it can become a resource.
+    if (!pathname.startsWith('/')) return false
+    const full = new URL(origin + pathname)
+    return full.origin === origin
+      && full.username.length === 0
+      && full.password.length === 0
+      && full.pathname === pathname
+      && full.search.length === 0
+      && full.hash.length === 0
+  } catch {
+    return false
+  }
+}
+
 type AbsolutePathStyle = 'posix' | 'win32'
 
 function absolutePathStyle(value: string): AbsolutePathStyle | undefined {
@@ -427,12 +458,13 @@ export class CompanionIntake {
     }
 
     const origin = record.origin
-    if (typeof origin !== 'string' || !/^https?:\/\/[^/?#]+$/.test(origin)) {
-      return 'origin must be an http(s) origin without a path'
-    }
     const path = record.path
-    if (typeof path !== 'string' || !path.startsWith('/')) {
-      return 'path must start with /'
+    if (
+      typeof origin !== 'string'
+      || typeof path !== 'string'
+      || !isCanonicalBrowserLocation(origin, path)
+    ) {
+      return 'origin/path must be canonical http(s) URL metadata without credentials, query or fragment'
     }
     const browserSession = record.browserSession
     if (typeof browserSession !== 'string' || browserSession.length === 0) {

@@ -37,9 +37,12 @@ authenticated intake that the plugin itself controls.
    the AX path uses), with a companion-specific default-deny list for
    credential-bearing origins is *not* needed because the token and the policy
    already gate it — instead the panel gains per-origin allow/deny shortcuts.
-5. **URL normalisation.** The companion strips the query string and the
-   fragment before sending, so tokens and search terms in URLs never reach the
-   store. `displayLabel` is the tab title.
+5. **URL normalisation.** The companion sends the browser's canonical
+   `URL.origin + URL.pathname`; query strings, fragments and URL credentials
+   are not part of that shape. The Host validates that shape independently
+   before delivery and refuses userinfo or non-canonical origin/path metadata,
+   so a buggy or modified paired companion cannot smuggle credentials, queries
+   or fragments into a stored URL. `displayLabel` is the tab title.
 6. **AX-derived URLs stay dropped.** Only an observation whose
    `source.provider` is `companion` may carry `resource.kind === 'url'`; the
    rule in `normalizeObservation` becomes provenance-aware rather than
