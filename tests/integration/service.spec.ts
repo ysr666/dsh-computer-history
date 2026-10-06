@@ -27,6 +27,7 @@ import {
   ResourceStore,
 } from '../../src/host/store/index.js'
 import { SemanticOptInStore } from '../../src/host/semantic/opt-in.js'
+import { CompanionTokenStore } from '../../src/host/companion/token-store.js'
 import { RemoteSendStore } from '../../src/host/semantic/send-store.js'
 
 const roots: string[] = []
@@ -435,6 +436,81 @@ describe('local computer history backend', () => {
       'SELECT id FROM episodes WHERE id = ?',
     ).get('remote-ep')).toEqual({ id: 'remote-ep' })
     expect(sends.listForScope('workspace:w1')).toHaveLength(1)
+    history.close()
+  })
+
+  it('refuses a delayed editor pairing publication once backend drain has begun', async () => {
+    const history = openTempDatabase()
+    const policies = new PolicyStore(history.db)
+    policies.ensureInitial(1)
+    const tokens = new CompanionTokenStore(history.db)
+    const previous = tokens.rotate('editor', 1_000)
+
+    const backend = new LocalComputerHistoryBackend(
+      new EpisodeStore(history.db),
+      policies,
+      new DeletionService(history.db),
+      new FakeCapture(),
+      {
+        observationRetentionHours: 24,
+        episodeRetentionDays: 30,
+        autoResume: false,
+        now: () => 2_000,
+      },
+      tokens,
+      undefined,
+      history.db,
+    )
+
+    await backend.drain()
+
+    let published = false
+    expect(() => backend.publishPairingRotation('editor', () => {
+      published = true
+    })).toThrow(/disposing/)
+    expect(published).toBe(false)
+
+    // A delayed installer finishing after drain must not invalidate the
+    // credential that was working before teardown began.
+    expect(tokens.verify('editor', previous)).toBe(true)
+    expect(tokens.state('editor')).toEqual({
+      paired: true,
+      createdAtMs: 1_000,
+    })
+    history.close()
+  })
+
+  it('rolls pairing publication back if the handoff publisher fails', () => {
+    const history = openTempDatabase()
+    const policies = new PolicyStore(history.db)
+    policies.ensureInitial(1)
+    const tokens = new CompanionTokenStore(history.db)
+    const previous = tokens.rotate('editor', 1_000)
+
+    const backend = new LocalComputerHistoryBackend(
+      new EpisodeStore(history.db),
+      policies,
+      new DeletionService(history.db),
+      new FakeCapture(),
+      {
+        observationRetentionHours: 24,
+        episodeRetentionDays: 30,
+        autoResume: false,
+        now: () => 2_000,
+      },
+      tokens,
+      undefined,
+      history.db,
+    )
+
+    expect(() => backend.publishPairingRotation('editor', () => {
+      throw new Error('forced bootstrap publication failure')
+    })).toThrow(/forced bootstrap publication failure/)
+    expect(tokens.verify('editor', previous)).toBe(true)
+    expect(tokens.state('editor')).toEqual({
+      paired: true,
+      createdAtMs: 1_000,
+    })
     history.close()
   })
 
