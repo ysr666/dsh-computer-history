@@ -204,6 +204,7 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
     () => policies.get(),
     undefined,
     () => retentionSettings.observationRetentionMs(),
+    () => retentionSettings.episodeRetentionMs(),
   )
 
   let retentionMaintenanceFailureAtMs: number | undefined
