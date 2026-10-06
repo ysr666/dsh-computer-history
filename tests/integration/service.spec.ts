@@ -514,6 +514,74 @@ describe('local computer history backend', () => {
     history.close()
   })
 
+  it('does not let an in-flight remote request recreate state after its scope is revoked', async () => {
+    const history = openTempDatabase()
+    const episodeId = seedEpisode(history)
+    const episodes = new EpisodeStore(history.db)
+    const policies = new PolicyStore(history.db)
+    policies.ensureInitial(1)
+    const optIns = new SemanticOptInStore(history.db)
+    const backend = new LocalComputerHistoryBackend(
+      episodes,
+      policies,
+      new DeletionService(history.db),
+      new FakeCapture(),
+      {
+        observationRetentionHours: 24,
+        episodeRetentionDays: 30,
+        autoResume: false,
+        now: () => 5_000,
+      },
+      undefined,
+      optIns,
+      history.db,
+    )
+    backend.grantSemanticOptIn({
+      scopeKey: 'workspace:alpha',
+      providerKind: 'remote',
+      model: 'm',
+    })
+    const citation = episodes.get(episodeId)?.summaryObservationIds[0]
+    expect(citation).toBeDefined()
+
+    let releaseResponse!: () => void
+    let requestStarted!: () => void
+    const started = new Promise<void>(resolve => {
+      requestStarted = resolve
+    })
+    const response = new Promise<Response>(resolve => {
+      releaseResponse = () => resolve(Response.json({
+        summary: 'Too late.',
+        citations: [Number(citation)],
+      }))
+    })
+
+    const remote = backend.summariseRemotely({
+      scopeKey: 'workspace:alpha',
+      endpoint: 'https://models.example.test/v1',
+      model: 'm',
+      fetchImpl: async () => {
+        requestStarted()
+        return response
+      },
+    })
+    await started
+
+    expect(backend.revokeSemanticOptIn({
+      scopeKey: 'workspace:alpha',
+    })).toMatchObject({
+      revoked: true,
+      forgotten: 0,
+    })
+    expect(optIns.get({ kind: 'workspace', id: 'alpha' })).toBeUndefined()
+
+    releaseResponse()
+    await expect(remote).rejects.toThrow(/no recorded opt-in/)
+    expect(new RemoteSendStore(history.db).listForScope('workspace:alpha'))
+      .toHaveLength(0)
+    history.close()
+  })
+
   it('keeps a remote summary operation alive through drain until its send audit is durable', async () => {
     const history = openTempDatabase()
     const episodeId = seedEpisode(history)
