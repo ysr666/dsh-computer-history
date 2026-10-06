@@ -35,6 +35,12 @@ v1 observation field set; a partial row cannot reuse an existing identity while
 omitting fields that would reveal a conflict. Importing the same document twice
 is idempotent.
 
+The audit export also includes `remote_summary_sends`: the content-free ledger
+of which remote endpoint/model received a request, when it happened and the
+digest of the exact bytes. That table is **export-only**. Importing a backup does
+not replay those rows, because an imported document must not manufacture claims
+about what this device itself sent off-machine.
+
 Two tables are deliberately absent, and `src/host/audit/export.ts` says why next
 to them:
 

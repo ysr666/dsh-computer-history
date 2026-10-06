@@ -21,6 +21,7 @@ export const EXPORTED_TABLES = [
   'policy_state',
   'policy_rules',
   'semantic_opt_ins',
+  'remote_summary_sends',
   'observations',
   'episodes',
   'episode_observations',
