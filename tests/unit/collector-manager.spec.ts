@@ -91,3 +91,56 @@ describe('collector manager lifecycle', () => {
     await manager.stop('plugin-dispose')
   })
 })
+
+/**
+ * A collector that starts and then says nothing, which is what the Windows machine showed: the process is spawned
+ * (sampled at +17.35s) and no hello ever reaches the Host. Sampling once is not enough to judge it - every timeout
+ * writes a named state and every spawn used to clear it, so a snapshot taken at the wrong moment reads as silence.
+ */
+function silentHandle(waitForExit: () => Promise<boolean>): SubprocessHandle {
+  return {
+    stdin: new PassThrough(),
+    stdout: new PassThrough(),
+    stderr: undefined,
+    control: undefined,
+    collected: {},
+    done: new Promise(() => {}),
+    terminate() {},
+    waitForExit,
+  }
+}
+
+function managerFor(handle: SubprocessHandle, helloTimeoutMs: number, restartDelaysMs?: readonly number[]) {
+  const ctx = { subprocess: { spawn: () => handle } } as unknown as Context
+  return new CollectorManager(ctx, {
+    executable: '/collector-that-never-speaks',
+    cwd: '/tmp',
+    helloTimeoutMs,
+    ...(restartDelaysMs ? { restartDelaysMs } : {}),
+    onMessage: () => {},
+    onUnexpectedExit: () => {},
+  })
+}
+
+describe('a collector that never says hello', () => {
+  it('ends in a named degraded state rather than in silence', async () => {
+    const manager = managerFor(silentHandle(async () => true), 120)
+    manager.start()
+    await new Promise(resolve => setTimeout(resolve, 400))
+    const snapshot = manager.snapshot()
+    expect(snapshot.state?.state).toBe('degraded')
+    expect(snapshot.state?.reason).toBe('hello-timeout')
+    await manager.stop('plugin-dispose')
+  })
+
+  it('keeps a named reason across restarts instead of going silent again', async () => {
+    const manager = managerFor(silentHandle(async () => true), 80, [40])
+    manager.start()
+    await new Promise(resolve => setTimeout(resolve, 600))
+    const snapshot = manager.snapshot()
+    expect(snapshot.state?.state).toBe('degraded')
+    expect(snapshot.state?.reason).toBeDefined()
+    await manager.stop('plugin-dispose')
+  })
+
+})

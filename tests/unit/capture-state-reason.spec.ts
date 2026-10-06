@@ -42,7 +42,13 @@ describe('capture state honesty', () => {
     expect(capture.getState().reason).toBe('hello-timeout')
   })
 
-  it('stays unnamed while a Host that owns capture is still handshaking', () => {
+  /**
+   * Measured 2026-10-06 on the Windows machine: a spawned collector that never handshakes leaves the manager
+   * without a state, and `getState()` then fell back to `'degraded'` with **no reason at all**. The manager is
+   * right not to claim a state it has not seen; the Host that owns capture and has not heard from the collector
+   * yet is a fact, and it has a name.
+   */
+  it('names the wait while a Host that owns capture has not heard from the collector yet', () => {
     const capture = new ManagedCapture(
       () => managerWithoutState(),
       true,
@@ -50,6 +56,6 @@ describe('capture state honesty', () => {
       async () => {},
       companion,
     )
-    expect(capture.getState().reason).toBeUndefined()
+    expect(capture.getState().reason).toBe('collector-starting')
   })
 })
