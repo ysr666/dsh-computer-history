@@ -3,7 +3,11 @@ import type {
   ComputerHistoryState,
   PolicySnapshot,
 } from '../../src/shared/index.js'
-import { firstRunBundles, setupStage } from '../../src/client/setup-state.js'
+import {
+  firstRunBundles,
+  setupStage,
+  shouldOfferAllowedAppsRecovery,
+} from '../../src/client/setup-state.js'
 
 const state: ComputerHistoryState = {
   enabled: true,
@@ -93,5 +97,28 @@ describe('first-run setup state', () => {
       policy: policy(true),
       hasAnyEpisode: true,
     })).toBe('complete')
+  })
+
+  it('offers the empty-allow-list recovery only after first-run setup', () => {
+    expect(shouldOfferAllowedAppsRecovery({
+      isFirstRun: true,
+      reason: 'no-apps-allowed',
+      hasPreset: true,
+    })).toBe(false)
+    expect(shouldOfferAllowedAppsRecovery({
+      isFirstRun: false,
+      reason: 'no-apps-allowed',
+      hasPreset: true,
+    })).toBe(true)
+    expect(shouldOfferAllowedAppsRecovery({
+      isFirstRun: false,
+      reason: 'collector-exited',
+      hasPreset: true,
+    })).toBe(false)
+    expect(shouldOfferAllowedAppsRecovery({
+      isFirstRun: false,
+      reason: 'no-apps-allowed',
+      hasPreset: false,
+    })).toBe(false)
   })
 })

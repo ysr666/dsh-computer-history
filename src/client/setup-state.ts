@@ -46,6 +46,23 @@ export interface SetupStateInput {
   readonly nowMs?: number
 }
 
+export interface AllowedAppsRecoveryInput {
+  readonly isFirstRun: boolean
+  readonly reason: string | undefined
+  readonly hasPreset: boolean
+}
+
+/**
+ * The empty-allow-list action belongs to an already-used installation. A pristine
+ * first run already has the normal setup CTA, so rendering another recovery
+ * button there would duplicate the same consent action.
+ */
+export function shouldOfferAllowedAppsRecovery(input: AllowedAppsRecoveryInput): boolean {
+  return !input.isFirstRun
+    && input.reason?.trim() === 'no-apps-allowed'
+    && input.hasPreset
+}
+
 function allowedAppCount(policy: PolicySnapshot): number {
   return policy.rules.filter(rule =>
     rule.dimension === 'app' && rule.action === 'allow',

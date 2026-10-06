@@ -26,7 +26,12 @@ import {
   type HistoryTranslate,
 } from './locale.js'
 import type { HistoryControlStore } from './store.js'
-import { firstRunBundles, setupStage, type SetupStage } from './setup-state.js'
+import {
+  firstRunBundles,
+  setupStage,
+  shouldOfferAllowedAppsRecovery,
+  type SetupStage,
+} from './setup-state.js'
 
 interface PanelFactoryOptions {
   readonly getActiveLocale: () => string
@@ -267,6 +272,7 @@ export function createHistoryPage({
     const [contentError, setContentError] = React.useState<string>()
     const [actionError, setActionError] = React.useState<string>()
     const [captureRecoveryPending, setCaptureRecoveryPending] = React.useState(false)
+    const [startRecordingPending, setStartRecordingPending] = React.useState(false)
 
     const refreshContent = React.useCallback(async () => {
       const results = await Promise.allSettled([
@@ -456,33 +462,38 @@ export function createHistoryPage({
     const startRecording = async (): Promise<void> => {
       const preset = state?.firstRunPreset
       if (!preset || !policy) return
-      const existing = new Map<string, PolicySnapshot['rules'][number]>(
-        policy.rules.filter(rule => !rule.builtIn).map(rule => [rule.pattern, rule]),
-      )
-      let inventory
+      setStartRecordingPending(true)
       try {
-        inventory = await historyApi.getSupportedApplications()
-      } catch {
-        // Inventory narrows first-run consent. If it is unavailable, preserve
-        // the existing preset instead of guessing from bundle-id spelling.
-      }
-      const bundles = firstRunBundles(preset.bundles, inventory)
-      const now = Date.now()
-      for (const bundle of bundles) {
-        if (existing.has(bundle)) continue
-        existing.set(bundle, {
-          id: (`preset:${bundle}`) as never,
-          dimension: 'app', action: 'allow', matcher: 'exact', pattern: bundle,
-          builtIn: false, createdAtMs: now, updatedAtMs: now,
+        const existing = new Map<string, PolicySnapshot['rules'][number]>(
+          policy.rules.filter(rule => !rule.builtIn).map(rule => [rule.pattern, rule]),
+        )
+        let inventory
+        try {
+          inventory = await historyApi.getSupportedApplications()
+        } catch {
+          // Inventory narrows first-run consent. If it is unavailable, preserve
+          // the existing preset instead of guessing from bundle-id spelling.
+        }
+        const bundles = firstRunBundles(preset.bundles, inventory)
+        const now = Date.now()
+        for (const bundle of bundles) {
+          if (existing.has(bundle)) continue
+          existing.set(bundle, {
+            id: (`preset:${bundle}`) as never,
+            dimension: 'app', action: 'allow', matcher: 'exact', pattern: bundle,
+            builtIn: false, createdAtMs: now, updatedAtMs: now,
+          })
+        }
+        await store.replacePolicy({
+          mode: 'include-only',
+          rules: Array.from(existing.values()),
         })
-      }
-      await store.replacePolicy({
-        mode: 'include-only',
-        rules: Array.from(existing.values()),
-      })
-      if (state.capture === 'paused') await store.resume()
-      if (!state.accessibilityTrusted && accessibilitySettingsAvailable) {
-        await openAccessibilitySettings()
+        if (state.capture === 'paused') await store.resume()
+        if (!state.accessibilityTrusted && accessibilitySettingsAvailable) {
+          await openAccessibilitySettings()
+        }
+      } finally {
+        setStartRecordingPending(false)
       }
     }
 
@@ -531,7 +542,7 @@ export function createHistoryPage({
               : { title: t('startHere'), lead: t('firstRunIntro') }
     const setupAction = setup === 'choose-apps'
       ? React.createElement('button', {
-          type: 'button', className: 'ch-button', disabled: !preset,
+          type: 'button', className: 'ch-button', disabled: !preset || startRecordingPending,
           onClick: () => { runAction(startRecording) },
         }, t(!state?.accessibilityTrusted && accessibilitySettingsAvailable
           ? 'startAndAuthorize'
@@ -574,22 +585,7 @@ export function createHistoryPage({
                   : null,
               )
             : state?.reason
-              ? React.createElement(
-                  React.Fragment, null,
-                  React.createElement('p', { className: 'ch-muted' }, reasonText(t, state.reason)),
-                  // Naming it is only half of it. This reason exists because the first-run consent never wrote an
-                  // allow rule, so the notice offers that same consent again - the action the consent itself runs
-                  // (`startRecording`), through the same `runAction` wrapper, with no second way to write a policy.
-                  // Measured 2026-10-06: the state said `running` while nothing was recorded, and the only thing
-                  // the panel could do about it was print a line of grey text.
-                  state.reason === 'no-apps-allowed' && preset
-                    ? React.createElement('button', {
-                        type: 'button',
-                        className: 'ch-button',
-                        onClick: () => { runAction(startRecording) },
-                      }, t('allowPresetApps'))
-                    : null,
-                )
+              ? React.createElement('p', { className: 'ch-muted' }, reasonText(t, state.reason))
               : null,
         )
       : null
@@ -1091,6 +1087,11 @@ export function createHistoryPage({
         )
       : null
 
+    const offerAllowedAppsRecovery = shouldOfferAllowedAppsRecovery({
+      isFirstRun,
+      reason: state?.reason,
+      hasPreset: preset !== undefined,
+    })
     const captureNeedsRecovery = !isFirstRun
       && state?.enabled === true
       && (state.capture === 'stopped' || state.capture === 'degraded')
@@ -1195,9 +1196,19 @@ export function createHistoryPage({
       staleSection,
       accessibilityRecovery,
       captureRecovery,
-      state?.reason && !captureNeedsRecovery
-        ? React.createElement('div', { className: 'ch-alert' },
-            React.createElement('p', null, reasonText(t, state.reason)))
+      state?.reason && !captureNeedsRecovery && !(isFirstRun && state.reason === 'no-apps-allowed')
+        ? React.createElement(
+            'div', { className: 'ch-alert' },
+            React.createElement('p', null, reasonText(t, state.reason)),
+            offerAllowedAppsRecovery
+              ? React.createElement('button', {
+                  type: 'button',
+                  className: 'ch-button',
+                  disabled: startRecordingPending,
+                  onClick: () => { runAction(startRecording) },
+                }, t(startRecordingPending ? 'allowingPresetApps' : 'allowPresetApps'))
+              : null,
+          )
         : null,
       !allContentUnavailable && ((controls.status === 'error' && controls.error) || contentError)
         ? React.createElement(
