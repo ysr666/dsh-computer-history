@@ -48,6 +48,10 @@ function fakeControlApi() {
       listening: true,
       port: 4123,
     }),
+    installEditorCompanion: vi.fn().mockResolvedValue({
+      status: 'already-installed',
+      configured: true,
+    }),
   }
 }
 
@@ -167,6 +171,48 @@ describe('client control store', () => {
       episodeRetentionDays: 14,
     })
     expect(store.getSnapshot().retention).toEqual(changed)
+  })
+
+  it('does not let a pre-install state poll undo editor pairing after configuration succeeds', async () => {
+    const backend = fakeControlApi()
+    const initial: ComputerHistoryState = {
+      ...readyState,
+      companion: {
+        listening: true,
+        paired: false,
+        editorPaired: false,
+      },
+    }
+    backend.getState.mockResolvedValueOnce(initial)
+    const store = createHistoryControlStore(backend)
+    await store.load()
+
+    let resolveOldState!: (value: ComputerHistoryState) => void
+    const oldState = new Promise<ComputerHistoryState>(resolve => {
+      resolveOldState = resolve
+    })
+    backend.getState.mockReturnValueOnce(oldState)
+    const refreshing = store.refreshState()
+
+    await expect(store.installEditorCompanion()).resolves.toMatchObject({
+      configured: true,
+    })
+
+    const paired: ComputerHistoryState = {
+      ...readyState,
+      companion: {
+        listening: true,
+        paired: false,
+        editorPaired: true,
+      },
+    }
+    backend.getState.mockResolvedValueOnce(paired)
+    await store.reload()
+
+    resolveOldState(initial)
+    await refreshing
+
+    expect(store.getSnapshot().state?.companion?.editorPaired).toBe(true)
   })
 
   it('does not let a reload started before a policy write restore the old policy', async () => {
