@@ -598,7 +598,16 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
 
   try {
     await ctx.plugin(ComputerHistoryService, { backend })
-    registerHistoryApi(ctx, { companionTokens })
+    registerHistoryApi(ctx, {
+      configureEditorCompanion: (port) => {
+        backend.publishPairingRotation('editor', (rotation) => {
+          stageEditorCompanionBootstrap({
+            port,
+            token: rotation.token,
+          })
+        })
+      },
+    })
   } catch (error) {
     // Roll back the capture ownership acquired above: this apply() is
     // failing, so no teardown will run for a lock this call still holds.
