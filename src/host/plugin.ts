@@ -146,7 +146,12 @@ export class ManagedCapture implements CaptureController {
           // `capture: degraded` with no reason at all, while the Host knew it did not own capture.
           : this.enabled && !this.ownsCapture()
             ? { reason: 'capture-owned-by-another-host' }
-            : {}
+            // Owning capture without a state yet means the collector has been started and has not answered.
+            // The manager is right not to claim a state it has not seen, but the Host reporting `degraded` with
+            // nothing else is the silence this product keeps being measured on; the wait itself is a fact.
+            : this.enabled && snapshot?.state === undefined
+              ? { reason: 'collector-starting' }
+              : {}
       ),
       ...(snapshot?.hello
         ? {
