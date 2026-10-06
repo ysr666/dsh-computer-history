@@ -68,6 +68,20 @@ pub struct Collector<S: ObservationSource> {
     last_availability: Option<Availability>,
 }
 
+/// The diagnostic code for "this platform's accessibility path is not answering".
+///
+/// The reason string beside it is already platform-true; a code that names UI Automation on a machine running
+/// AT-SPI is a small lie that costs a reader time - measured 2026-10-06, when a Linux run printed
+/// `no X display ...` under the code `uia-unavailable`. Windows keeps its original code, which is the one the
+/// wire baseline prints and the one that has been in the field longest.
+fn unavailable_code(platform: &str) -> &'static str {
+    match platform {
+        "darwin" => "ax-unavailable",
+        "linux" => "at-spi-unavailable",
+        _ => "uia-unavailable",
+    }
+}
+
 impl<S: ObservationSource> Collector<S> {
     pub fn new(
         session: String,
@@ -361,7 +375,7 @@ impl<S: ObservationSource> Collector<S> {
             Availability::Available => lines.push(availability_state(&availability)),
             Availability::Unavailable(reason) => {
                 lines.push(availability_state(&availability));
-                lines.push(protocol::diagnostic("warn", "uia-unavailable", reason));
+                lines.push(protocol::diagnostic("warn", unavailable_code(self.source.platform()), reason));
             }
         }
         availability
@@ -628,6 +642,39 @@ mod tests {
             .iter()
             .filter(|line| line.contains("\"type\":\"observation\""))
             .collect()
+    }
+
+    #[test]
+    fn the_unavailable_code_names_the_path_the_platform_really_uses() {
+        // The reason beside the code is platform-true; the code used to say `uia-unavailable` everywhere,
+        // including a Linux run whose reason was a missing X display.
+        assert_eq!(unavailable_code("win32"), "uia-unavailable");
+        assert_eq!(unavailable_code("darwin"), "ax-unavailable");
+        assert_eq!(unavailable_code("linux"), "at-spi-unavailable");
+        assert_eq!(unavailable_code("something-new"), "uia-unavailable");
+
+        // And the emission uses it, which is the part a reader actually sees.
+        struct LinuxWithoutDisplay;
+        impl ObservationSource for LinuxWithoutDisplay {
+            fn platform(&self) -> &'static str { "linux" }
+            fn provider(&self) -> &'static str { "at-spi" }
+            fn availability(&mut self) -> Availability {
+                Availability::Unavailable("no X display: nothing to observe".to_string())
+            }
+            fn foreground(&mut self) -> Option<ForegroundIdentity> { None }
+            fn describe(&mut self, _identity: &ForegroundIdentity) -> Option<PlatformObservation> { None }
+            fn idle_seconds(&mut self) -> Option<u64> { None }
+        }
+        let mut collector = Collector::new("probe".to_string(), LinuxWithoutDisplay, &[]);
+        let lines = collector.tick();
+        assert!(
+            lines.iter().any(|line| line.contains(r#""code":"at-spi-unavailable""#)),
+            "{lines:?}",
+        );
+        assert!(
+            !lines.iter().any(|line| line.contains("uia-unavailable")),
+            "{lines:?}",
+        );
     }
 
     #[test]
