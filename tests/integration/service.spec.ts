@@ -252,6 +252,55 @@ describe('local computer history backend', () => {
 
     history.close()
   })
+  it('does not report import complete until the ingestion refresh has settled', async () => {
+    const history = openTempDatabase()
+    const episodes = new EpisodeStore(history.db)
+    const policies = new PolicyStore(history.db)
+    policies.ensureInitial(100)
+    let refreshStarted = false
+    let releaseRefresh!: () => void
+    const refresh = new Promise<void>(resolve => {
+      releaseRefresh = resolve
+    })
+
+    const backend = new LocalComputerHistoryBackend(
+      episodes,
+      policies,
+      new DeletionService(history.db),
+      new FakeCapture(),
+      {
+        observationRetentionHours: 24,
+        episodeRetentionDays: 30,
+        autoResume: false,
+        onHistoryChanged: async () => {
+          refreshStarted = true
+          await refresh
+        },
+      },
+      undefined,
+      undefined,
+      history.db,
+    )
+
+    let settled = false
+    const importing = backend.importAll({
+      schema: 'dsh-computer-history/v1',
+      exportedAtMs: 1,
+      schemaVersion: 8,
+      tables: {},
+    }).then(result => {
+      settled = true
+      return result
+    })
+
+    await Promise.resolve()
+    expect(refreshStarted).toBe(true)
+    expect(settled).toBe(false)
+    releaseRefresh()
+    await expect(importing).resolves.toEqual({ imported: {} })
+    expect(settled).toBe(true)
+    history.close()
+  })
 })
 
 describe('Cordis computer history service', () => {
@@ -304,7 +353,7 @@ describe('Cordis computer history service', () => {
       exportAll() {
         return { schema: 'dsh-computer-history/v1', exportedAtMs: 1, schemaVersion: 1, tables: {} }
       },
-      importAll() { return { imported: {} } },
+      async importAll() { return { imported: {} } },
       semanticState() {
         return { active: 'deterministic', localProviderConfigured: false, scopes: [] }
       },
