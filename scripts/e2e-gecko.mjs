@@ -32,7 +32,7 @@ if (spawnSync(firefox, ['--version'], { encoding: 'utf8' }).status !== 0) {
   process.exit(1)
 }
 
-const built = spawnSync('pnpm', ['build:extension:firefox'], { encoding: 'utf8' })
+const built = runCmd('pnpm', ['build:extension:firefox'], { encoding: 'utf8' })
 record('package', built.status === 0, built.status === 0 ? 'dist/extension-firefox' : (built.stderr ?? '').trim().slice(-140))
 if (built.status !== 0) process.exit(1)
 
