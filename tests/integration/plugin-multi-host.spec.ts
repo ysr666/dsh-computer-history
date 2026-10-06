@@ -245,7 +245,11 @@ describe('plugin multi-Host capture composition', () => {
     expect(secondHistory.getState()).toMatchObject({
       capture: 'running',
     })
-    expect(secondHistory.getState().reason).toBeUndefined()
+    // This Host owns capture and its collector is running, but its data directory is fresh, so its policy is the
+    // initial include-only one - which allows nothing. Asking for no reason here asserted the defect: a Host that
+    // reports `running` while it can record nothing has to say so. Measured 2026-10-06 on the owner's machine and
+    // reproduced in an isolated Host (`capture=running`, `refusedByReason={}`, `store 0|0`).
+    expect(secondHistory.getState().reason).toBe('no-apps-allowed')
 
     await second.dispose()
   })
