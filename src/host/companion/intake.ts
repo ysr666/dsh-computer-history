@@ -232,7 +232,7 @@ export class CompanionIntake {
       // No new delivery can enter once acceptingDeliveries is false, so this
       // snapshot is the complete set that can still touch ingestion/SQLite.
       if (this.activeDeliveries.size > 0) {
-        await Promise.allSettled([...this.activeDeliveries])
+        await Promise.allSettled(this.activeDeliveries)
       }
     })()
 
