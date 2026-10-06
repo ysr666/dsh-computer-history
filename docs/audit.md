@@ -29,8 +29,11 @@ than being replaced, so importing another non-empty store cannot fire SQLite
 `REPLACE` cascades through unrelated local provenance. The import validator is
 still whitelist-based (`PRAGMA table_info`): unknown tables, unknown columns,
 non-primitive values and conflicting observation identities are refused before
-a partial merge can be committed. Importing the same document twice is
-idempotent.
+a partial merge can be committed. Because `(collector_session, collector_seq)`
+is an observation identity, a v1 observation row must also carry the complete
+v1 observation field set; a partial row cannot reuse an existing identity while
+omitting fields that would reveal a conflict. Importing the same document twice
+is idempotent.
 
 Two tables are deliberately absent, and `src/host/audit/export.ts` says why next
 to them:
