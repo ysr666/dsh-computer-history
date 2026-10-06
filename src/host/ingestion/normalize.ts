@@ -89,6 +89,39 @@ export function isProtectedTitle(
   return isProtectedText(title, policy)
 }
 
+/**
+ * ADR 0009 treats a companion-vouched workspace root as a resource for
+ * allow/deny/protect purposes even when the editor has no active file.
+ *
+ * Test the exact path the companion vouched for, a slash-normalised form (so
+ * the built-in secure-path screen behaves the same on Windows), and the
+ * canonical file URI the rest of resource policy already uses.
+ */
+export function isProtectedWorkspace(
+  workspace: WorkspaceRef,
+  policy: PolicySnapshot,
+): boolean {
+  const root = workspace.source === 'companion' ? workspace.root : undefined
+  if (!root) return false
+
+  const candidates = new Set<string>([
+    root,
+    root.replaceAll('\\', '/'),
+  ])
+  try {
+    if (path.isAbsolute(root)) {
+      candidates.add(pathToFileURL(root).href)
+    }
+  } catch {
+    // An unreadable vouched root is not evidence of safety.
+    return true
+  }
+
+  return Array.from(candidates).some(candidate =>
+    isProtectedText(candidate, policy),
+  )
+}
+
 function isProtectedMetadata(
   message: NativeObservation,
   policy: PolicySnapshot,
@@ -290,6 +323,10 @@ export function normalizeObservation(
   // Accessibility path still cannot tell a private window from a normal one, so
   // a browser seen through AX keeps contributing nothing.
   const provider = message.source.provider ?? 'macos-ax'
+  if (
+    provider === 'companion'
+    && isProtectedWorkspace(workspace, policy)
+  ) return refuse('protected-metadata')
   if (
     resource?.kind === 'url'
     && provider !== 'companion'
