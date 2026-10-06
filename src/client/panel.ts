@@ -22,6 +22,7 @@ import {
 import {
   captureLabel,
   failureText,
+  reasonNeedsAllowedApps,
   reasonText,
   type HistoryTranslate,
 } from './locale.js'
@@ -267,6 +268,7 @@ export function createHistoryPage({
     const [contentError, setContentError] = React.useState<string>()
     const [actionError, setActionError] = React.useState<string>()
     const [captureRecoveryPending, setCaptureRecoveryPending] = React.useState(false)
+    const [allowRecommendedPending, setAllowRecommendedPending] = React.useState(false)
 
     const refreshContent = React.useCallback(async () => {
       const results = await Promise.allSettled([
@@ -456,33 +458,38 @@ export function createHistoryPage({
     const startRecording = async (): Promise<void> => {
       const preset = state?.firstRunPreset
       if (!preset || !policy) return
-      const existing = new Map<string, PolicySnapshot['rules'][number]>(
-        policy.rules.filter(rule => !rule.builtIn).map(rule => [rule.pattern, rule]),
-      )
-      let inventory
+      setAllowRecommendedPending(true)
       try {
-        inventory = await historyApi.getSupportedApplications()
-      } catch {
-        // Inventory narrows first-run consent. If it is unavailable, preserve
-        // the existing preset instead of guessing from bundle-id spelling.
-      }
-      const bundles = firstRunBundles(preset.bundles, inventory)
-      const now = Date.now()
-      for (const bundle of bundles) {
-        if (existing.has(bundle)) continue
-        existing.set(bundle, {
-          id: (`preset:${bundle}`) as never,
-          dimension: 'app', action: 'allow', matcher: 'exact', pattern: bundle,
-          builtIn: false, createdAtMs: now, updatedAtMs: now,
+        const existing = new Map<string, PolicySnapshot['rules'][number]>(
+          policy.rules.filter(rule => !rule.builtIn).map(rule => [rule.pattern, rule]),
+        )
+        let inventory
+        try {
+          inventory = await historyApi.getSupportedApplications()
+        } catch {
+          // Inventory narrows first-run consent. If it is unavailable, preserve
+          // the existing preset instead of guessing from bundle-id spelling.
+        }
+        const bundles = firstRunBundles(preset.bundles, inventory)
+        const now = Date.now()
+        for (const bundle of bundles) {
+          if (existing.has(bundle)) continue
+          existing.set(bundle, {
+            id: (`preset:${bundle}`) as never,
+            dimension: 'app', action: 'allow', matcher: 'exact', pattern: bundle,
+            builtIn: false, createdAtMs: now, updatedAtMs: now,
+          })
+        }
+        await store.replacePolicy({
+          mode: 'include-only',
+          rules: Array.from(existing.values()),
         })
-      }
-      await store.replacePolicy({
-        mode: 'include-only',
-        rules: Array.from(existing.values()),
-      })
-      if (state.capture === 'paused') await store.resume()
-      if (!state.accessibilityTrusted && accessibilitySettingsAvailable) {
-        await openAccessibilitySettings()
+        if (state.capture === 'paused') await store.resume()
+        if (!state.accessibilityTrusted && accessibilitySettingsAvailable) {
+          await openAccessibilitySettings()
+        }
+      } finally {
+        setAllowRecommendedPending(false)
       }
     }
 
@@ -531,7 +538,7 @@ export function createHistoryPage({
               : { title: t('startHere'), lead: t('firstRunIntro') }
     const setupAction = setup === 'choose-apps'
       ? React.createElement('button', {
-          type: 'button', className: 'ch-button', disabled: !preset,
+          type: 'button', className: 'ch-button', disabled: !preset || allowRecommendedPending,
           onClick: () => { runAction(startRecording) },
         }, t(!state?.accessibilityTrusted && accessibilitySettingsAvailable
           ? 'startAndAuthorize'
@@ -1076,6 +1083,7 @@ export function createHistoryPage({
         )
       : null
 
+    const noAppsAllowed = reasonNeedsAllowedApps(state?.reason)
     const captureNeedsRecovery = !isFirstRun
       && state?.enabled === true
       && (state.capture === 'stopped' || state.capture === 'degraded')
@@ -1090,6 +1098,23 @@ export function createHistoryPage({
             type: 'button', className: 'ch-button', disabled: captureRecoveryPending,
             onClick: () => { runAction(recoverCapture) },
           }, t(captureRecoveryPending ? 'recoveringRecording' : 'retryRecording')),
+        )
+      : null
+
+    const noAppsRecovery = !isFirstRun && noAppsAllowed
+      ? React.createElement(
+          'section', { className: 'ch-alert' },
+          React.createElement('p', null, reasonText(t, state!.reason!)),
+          React.createElement(
+            'div', { className: 'ch-controls' },
+            React.createElement('button', {
+              type: 'button',
+              className: 'ch-button',
+              disabled: !preset || allowRecommendedPending,
+              onClick: () => { runAction(startRecording) },
+            }, t(allowRecommendedPending ? 'allowingRecommendedApps' : 'allowRecommendedApps')),
+          ),
+          React.createElement('p', { className: 'ch-muted' }, t('chooseAppsInSettings')),
         )
       : null
 
@@ -1180,7 +1205,8 @@ export function createHistoryPage({
       staleSection,
       accessibilityRecovery,
       captureRecovery,
-      state?.reason && !captureNeedsRecovery
+      noAppsRecovery,
+      state?.reason && !captureNeedsRecovery && !noAppsAllowed
         ? React.createElement('div', { className: 'ch-alert' },
             React.createElement('p', null, reasonText(t, state.reason)))
         : null,
