@@ -4,7 +4,11 @@ This document states what has been **measured**. Where a step has not been
 verified, it says so rather than describing the intention.
 
 > [!IMPORTANT]
-> **First public pre-release target: `v0.1.0-alpha.1` — not published yet.**
+> **First public pre-release target: `v0.1.0-alpha.1` — not published yet, and packaged for macOS only.**
+>
+> Windows and Linux collectors have source/live evidence, but the current release workflow does not build or
+> merge their native binaries into the plugin tarball. A three-platform packaged release therefore remains a
+> separate distribution task; alpha.1 must not claim it.
 >
 > The packaged Host path has been measured successfully, the public repository and brand
 > surface are in place, and the release workflow is ready to build a tagged artifact.
@@ -22,6 +26,8 @@ verified, it says so rather than describing the intention.
 | Host plugin install from a packed tarball | ✅ |
 | macOS native/package build gate | ✅ |
 | Shared collector protocol checks on macOS / Windows / Linux | ✅ |
+| macOS collector included in the packaged artifact | ✅ |
+| Windows/Linux collectors included in the packaged artifact | ➖ not in alpha.1; separate distribution task |
 | Installed bundle's **client panel** appears and works | ⬜ blocker |
 | `pnpm verify:release:blockers` at release cut | ⬜ run at release cut |
 | Non-`-dev` package version + matching changelog section | ⬜ set only when cutting the release |
