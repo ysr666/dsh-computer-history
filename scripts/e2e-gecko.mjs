@@ -19,7 +19,7 @@ import path from 'node:path'
 const quoteForCmd = a => (/[\s"]/.test(String(a)) ? `"${a}"` : String(a))
 
 const runCmd = (command, args, options) => process.platform === 'win32'
-  ? spawnSync(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', [command, ...args].map(quoteForCmd).join(' ')], options)
+  ? spawnSync(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', [command, ...args].map(quoteForCmd).join(' ')], { ...options, windowsVerbatimArguments: true })
   : spawnSync(command, args, options)
 
 const REPO = path.resolve(import.meta.dirname, '..')
@@ -57,6 +57,10 @@ const webExtArgs = ['--yes', 'web-ext', 'run', '-s', 'dist/extension-firefox', `
 const runner = spawn(...(process.platform === 'win32'
   ? [process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', ['npx', ...webExtArgs].map(quoteForCmd).join(' ')]]
   : ['npx', webExtArgs]), {
+  // cmd.exe receives the line verbatim so the quotes survive; without this Node escapes them as \" and cmd splits
+  // a path with a space in two - measured on the Windows machine as web-ext answering
+  // "/ This command does not take any arguments".
+  windowsVerbatimArguments: process.platform === 'win32',
   stdio: ['ignore', 'pipe', 'pipe'],
   // Its own process group, so the whole tree goes down together: killing by name or by a before/after diff
   // leaves the browser's helper processes behind - measured, 8 of them survived the first version of this.

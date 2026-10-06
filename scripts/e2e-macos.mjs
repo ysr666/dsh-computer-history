@@ -65,7 +65,7 @@ const record = (name, ok, detail) => {
 const quoteForCmd = a => (/[\s"]/.test(String(a)) ? `"${a}"` : String(a))
 
 const spawnCmd = (command, args, options) => process.platform === 'win32'
-  ? spawn(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', [command, ...args].map(quoteForCmd).join(' ')], options)
+  ? spawn(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', [command, ...args].map(quoteForCmd).join(' ')], { ...options, windowsVerbatimArguments: true })
   : spawn(command, args, options)
 
 // `dsh` and `pnpm` are .cmd shims on Windows and Node refuses to spawn those without a shell; measured
@@ -74,7 +74,7 @@ const spawnCmd = (command, args, options) => process.platform === 'win32'
 const run = (command, args, options = {}) => {
   const shim = process.platform === 'win32' && ['dsh', 'pnpm', 'npx'].includes(command)
   const result = shim
-    ? spawnSync(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', [command, ...args].map(quoteForCmd).join(' ')], { encoding: 'utf8', ...options })
+    ? spawnSync(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', [command, ...args].map(quoteForCmd).join(' ')], { encoding: 'utf8', ...options, windowsVerbatimArguments: true })
     : spawnSync(command, args, { encoding: 'utf8', ...options })
   return { status: result.status ?? 1, out: `${result.stdout ?? ''}${result.stderr ?? ''}` }
 }
