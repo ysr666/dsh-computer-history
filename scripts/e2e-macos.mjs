@@ -201,7 +201,39 @@ ${collectorLine}    collectorRestart: false
     companion.listening === true ? `listening on ${companion.port}` : `not listening, reason=${companion.reason ?? '(none!)'}`,
   )
   // Reported, not asserted: see the header. A command-line Host has no Accessibility grant to hand its helper.
-  record('collector (reported, not asserted)', true, `state=${state.capture} reason=${state.reason ?? '(none)'}`)
+  //
+  // Read a state the Host has settled on, not the one it has one second after boot. Measured on Windows
+  // 2026-10-06: the first read answered `capture: degraded, reason: collector-starting` and two seconds later the
+  // same Host answered `running` with its collector field present - the handshake simply had not finished. Three
+  // rounds of investigation read a boot and called it an anomaly; a check that samples once reports the boot.
+  let settled = state
+  for (let i = 0; i < 12; i += 1) {
+    const waiting = settled.reason === 'collector-starting' || settled.collector === undefined
+    if (!waiting) break
+    await new Promise(resolve => setTimeout(resolve, 1000))
+    try { settled = JSON.parse(run('curl', ['-s', '-b', jar, `${api}/state`]).out) } catch { /* keep the last read */ }
+  }
+  record(
+    'collector (reported, not asserted)',
+    true,
+    `state=${settled.capture} reason=${settled.reason ?? '(none)'} collector=${settled.collector ? 'yes' : 'no'}`,
+  )
+
+  // One read a second or two after boot is earlier than several named states can exist: the manager's hello timer
+  // is five seconds, so "no reason at all" is exactly what that window looks like. Measured on Windows 2026-10-06 -
+  // every single read answered `collector-starting` while a probe had already proven both the transport and the
+  // collector healthy, which sent three rounds chasing a state nobody had waited for. So watch it instead.
+  const watched = []
+  for (let i = 0; i < 8; i += 1) {
+    const raw = run('curl', ['-s', '-b', jar, `${api}/state`]).out
+    let seen = {}
+    try { seen = JSON.parse(raw) } catch { /* recorded as unknown below */ }
+    const line = `${seen.capture ?? '?'}/reason=${seen.reason ?? '(none)'}/collector=${seen.collector ? 'yes' : 'no'}`
+    if (watched.at(-1)?.line !== line) watched.push({ atMs: i * 2000, line })
+    await new Promise(resolve => setTimeout(resolve, 2000))
+  }
+  writeFileSync(path.join(artifacts, 'state-timeline.json'), `${JSON.stringify(watched, null, 2)}\n`)
+  record('collector over time (reported, not asserted)', true, watched.map(w => `${w.atMs}ms ${w.line}`).join('  ->  '))
 
   const db = path.join(home, 'computer-history', 'history.sqlite')
   // node:sqlite rather than the `sqlite3` CLI (absent on Windows, and this command is meant to be runnable on
