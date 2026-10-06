@@ -189,6 +189,39 @@ ${collectorLine}    collectorRestart: false
   const api = `http://127.0.0.1:${webPort}/api/computer-history`
   // -o into the artifacts, not /dev/null: that path does not exist on Windows, and this keeps the response.
   run('curl', ['-s', '-c', jar, '-o', path.join(artifacts, 'bootstrap.html'), `http://127.0.0.1:${webPort}/?token=${token}`])
+  // Optional: write the product preset as an allow rule, which is exactly what the panel's own button does
+  // (`firstRunBundles` -> `replacePolicy`). Without it an isolated Host allows nothing, so a run that generates
+  // real activity still records nothing - measured on Windows 2026-10-06: the collector was running, the desktop
+  // had thirteen real windows, and the store stayed at zero. That is correct behaviour and useless as a capture
+  // test, which is why this is opt-in rather than always on.
+  if (process.env.DSH_E2E_ALLOW_PRESET === '1') {
+    let firstRead = {}
+    try { firstRead = JSON.parse(run('curl', ['-s', '-b', jar, `${api}/state`]).out) } catch { /* recorded below */ }
+    const bundles = firstRead.firstRunPreset?.bundles ?? []
+    const nowMs = Date.now()
+    const rules = bundles.map(bundle => ({
+      id: `preset:${bundle}`,
+      dimension: 'app',
+      action: 'allow',
+      matcher: 'exact',
+      pattern: bundle,
+      builtIn: false,
+      createdAtMs: nowMs,
+      updatedAtMs: nowMs,
+    }))
+    const written = run('curl', [
+      '-s', '-b', jar, '-X', 'POST', '-H', 'content-type: application/json',
+      '-d', JSON.stringify({ mode: 'include-only', rules }), `${api}/policy`,
+    ]).out
+    let echoed = {}
+    try { echoed = JSON.parse(written) } catch { /* recorded below */ }
+    record(
+      'allow preset (opt-in)',
+      rules.length > 0 && Array.isArray(echoed.rules) && echoed.rules.length >= rules.length,
+      `${rules.length} preset bundles -> policy revision ${echoed.revision ?? '?'} with ${echoed.rules?.length ?? 0} rules`,
+    )
+  }
+
   const stateRaw = run('curl', ['-s', '-b', jar, `${api}/state`]).out
   writeFileSync(path.join(artifacts, 'state.json'), stateRaw)
   let state = {}
@@ -233,6 +266,24 @@ ${collectorLine}    collectorRestart: false
     await new Promise(resolve => setTimeout(resolve, 2000))
   }
   writeFileSync(path.join(artifacts, 'state-timeline.json'), `${JSON.stringify(watched, null, 2)}\n`)
+
+  // Read the store again once the state has settled: with the preset allowed and real activity on the machine,
+  // this is the line that says whether capture works end to end. Reported rather than asserted, because whether
+  // anything happened on the desktop during the run is the caller's business, not this command's.
+  if (process.env.DSH_E2E_ALLOW_PRESET === '1') {
+    let after = { e: '?', o: '?' }
+    try {
+      // Recompute the path instead of borrowing the binding declared further down: this block runs before it.
+      const store = new DatabaseSync(path.join(home, 'computer-history', 'history.sqlite'), { readOnly: true })
+      after = store.prepare('select (select count(*) from episodes) as e, (select count(*) from observations) as o').get()
+      store.close()
+    } catch { /* recorded as unknown */ }
+    record(
+      'store after the settle window (reported, not asserted)',
+      true,
+      `episodes/observations = ${after.e}|${after.o}`,
+    )
+  }
   record('collector over time (reported, not asserted)', true, watched.map(w => `${w.atMs}ms ${w.line}`).join('  ->  '))
 
   const db = path.join(home, 'computer-history', 'history.sqlite')
