@@ -157,6 +157,12 @@ export class RemoteSummaryProvider implements SummaryProvider {
     }
     this.assertCitations(parsed.citations, request.citations)
 
+    // response.json() is another asynchronous boundary. Revocation can happen
+    // after the HTTP response (and its audit row) exists but while the body is
+    // still being read. In that case revoke() removes the audit row; do not let
+    // the now-stale body become a summary afterwards.
+    assertRemoteOptIn(this.options.optIns, request.scope)
+
     return summary
   }
 
