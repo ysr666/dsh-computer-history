@@ -60,6 +60,16 @@ describe('editor companion payload (ADR 0009)', () => {
   })
 })
 
+describe('editor runtime routing', () => {
+  it('uses the active document workspace and treats HTTP rejection as a failed send', () => {
+    const source = readFileSync(path.join(SOURCE_DIR, 'extension.ts'), 'utf8')
+    expect(source).toContain('getWorkspaceFolder(editor.document.uri)')
+    expect(source).toContain('if (!response.ok)')
+    expect(source).toContain('send rejected: HTTP')
+    expect(source).toContain("split(/[\\\\/]/)")
+  })
+})
+
 describe('the extension never reads what ADR 0002 forbids', () => {
   // Calibrated both ways: the pattern must match a forbidden call (red) and the
   // real sources must not contain one (green).
