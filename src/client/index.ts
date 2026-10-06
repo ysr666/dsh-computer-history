@@ -28,14 +28,18 @@ function HistoryIcon({ size }: SidebarPanelIconOwnerProps): React.ReactElement {
   // The platform tells the icon what size it wants - `SidebarPanelIconOwnerProps = { size, active }` - so this
   // takes it instead of guessing. Guessing is what produced the two wrong versions: the row asked for its own
   // square edge and this hardcoded 20, then 18, and each time it read too large or too small against the shipped
-  // icons beside it. The viewBox stays cropped to the drawing (its ink spans 16.0 x 13.6 inside a 24 box, so a
-  // 24-frame leaves it small); the frame keeps a margin because a stroke is painted outside the path it belongs
-  // to - `4.4 3 17.6 17.6` clipped the left of that stroke.
+  // icons beside it.
+  //
+  // The frame is cropped to the drawing and centred on its *ink*, not on the artwork's coordinates: with strokes
+  // included the ink spans x 4.25..21.30 and y 4.00..19.00, so its centre is (12.78, 11.50) while `2 1 22 22`
+  // centred on (13, 12) - which left the glyph about 0.2px high and left of the row's centre, and it already reads
+  // left-heavy because the ring and hands carry more mass than the three dots. The frame keeps a margin because a
+  // stroke is painted outside the path it belongs to: `4.4 3 17.6 17.6` clipped the left of that stroke.
   return React.createElement(
     'svg',
     {
       'aria-hidden': true,
-      viewBox: '2 1 22 22',
+      viewBox: '1.78 0.5 22 22',
       width: size,
       height: size,
       fill: 'none',
