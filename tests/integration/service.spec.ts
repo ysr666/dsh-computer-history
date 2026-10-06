@@ -26,6 +26,8 @@ import {
   PolicyStore,
   ResourceStore,
 } from '../../src/host/store/index.js'
+import { SemanticOptInStore } from '../../src/host/semantic/opt-in.js'
+import { RemoteSendStore } from '../../src/host/semantic/send-store.js'
 
 const roots: string[] = []
 
@@ -252,6 +254,96 @@ describe('local computer history backend', () => {
 
     history.close()
   })
+  it('keeps /state retention in step with a successful retention change', () => {
+    const history = openTempDatabase()
+    const policies = new PolicyStore(history.db)
+    policies.ensureInitial(1)
+    const backend = new LocalComputerHistoryBackend(
+      new EpisodeStore(history.db),
+      policies,
+      new DeletionService(history.db),
+      new FakeCapture(),
+      {
+        observationRetentionHours: 24,
+        episodeRetentionDays: 30,
+        autoResume: false,
+        now: () => 9_000,
+      },
+      undefined,
+      undefined,
+      history.db,
+    )
+
+    expect(backend.setRetention({
+      observationRetentionHours: 6,
+      episodeRetentionDays: 14,
+    })).toMatchObject({
+      observationRetentionHours: 6,
+      episodeRetentionDays: 14,
+    })
+    expect(backend.getState()).toMatchObject({
+      observationRetentionHours: 6,
+      episodeRetentionDays: 14,
+    })
+    history.close()
+  })
+
+  it('rolls semantic revocation back as one action when forgetting send audit fails', () => {
+    const history = openTempDatabase()
+    const policies = new PolicyStore(history.db)
+    policies.ensureInitial(1)
+    const optIns = new SemanticOptInStore(history.db)
+    optIns.grant({ kind: 'workspace', id: 'w1' }, 'remote', 'm', 1)
+    history.db.prepare(`
+      INSERT INTO episodes(
+        id, started_at_ms, ended_at_ms, start_reason, end_reason,
+        primary_workspace_id, summary_kind, summary_text, confidence, state,
+        created_at_ms, updated_at_ms
+      ) VALUES ('remote-ep', 1, 2, 'first-observation', 'timeout',
+        'w1', 'remote', 'derived', 0.5, 'closed', 1, 1)
+    `).run()
+    const sends = new RemoteSendStore(history.db)
+    sends.record({
+      episodeId: 'remote-ep',
+      scopeKey: 'workspace:w1',
+      endpointHost: 'models.example.test',
+      model: 'm',
+      payloadDigest: 'a'.repeat(64),
+      sentAtMs: 2,
+    })
+    history.db.exec(`
+      CREATE TRIGGER fail_send_forget
+      BEFORE DELETE ON remote_summary_sends
+      BEGIN
+        SELECT RAISE(ABORT, 'forced send-forget failure');
+      END;
+    `)
+
+    const backend = new LocalComputerHistoryBackend(
+      new EpisodeStore(history.db),
+      policies,
+      new DeletionService(history.db),
+      new FakeCapture(),
+      {
+        observationRetentionHours: 24,
+        episodeRetentionDays: 30,
+        autoResume: false,
+      },
+      undefined,
+      optIns,
+      history.db,
+    )
+
+    expect(() => backend.revokeSemanticOptIn({ scopeKey: 'workspace:w1' }))
+      .toThrow(/forced send-forget failure/)
+    expect(optIns.get({ kind: 'workspace', id: 'w1' })).toBeDefined()
+    expect(history.db.prepare(
+      'SELECT id FROM episodes WHERE id = ?',
+    ).get('remote-ep')).toEqual({ id: 'remote-ep' })
+    expect(sends.listForScope('workspace:w1')).toHaveLength(1)
+    history.close()
+  })
+
   it('does not report import complete until the ingestion refresh has settled', async () => {
     const history = openTempDatabase()
     const episodes = new EpisodeStore(history.db)

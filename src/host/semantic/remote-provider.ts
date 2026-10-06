@@ -29,7 +29,11 @@ export interface RemoteSummaryProviderOptions {
   readonly fetchImpl?: typeof fetch
   readonly timeoutMs?: number
   readonly now?: () => number
-  /** Called after a successful send, for provenance storage. */
+  /**
+   * Called once a Response exists, before response/status/body validation.
+   * At that point the request definitely reached an HTTP peer, so a rejected
+   * response must still remain visible in the "what left this machine" audit.
+   */
   readonly onSent?: (record: RemoteSendRecord) => void
 }
 
@@ -117,6 +121,16 @@ export class RemoteSummaryProvider implements SummaryProvider {
       clearTimeout(timer)
     }
 
+    // A response is proof that the request left this Host. Record that
+    // before judging whether the remote side returned a usable summary: a 500,
+    // malformed JSON, an empty summary or bad citations do not unsend bytes.
+    this.options.onSent?.({
+      endpointHost: url.host,
+      model: this.options.model,
+      sentAtMs,
+      payloadDigest: digest,
+    })
+
     if (!response.ok) {
       throw new SummaryProviderError(
         `remote summary endpoint answered ${response.status}`,
@@ -136,12 +150,6 @@ export class RemoteSummaryProvider implements SummaryProvider {
     }
     this.assertCitations(parsed.citations, request.citations)
 
-    this.options.onSent?.({
-      endpointHost: url.host,
-      model: this.options.model,
-      sentAtMs,
-      payloadDigest: digest,
-    })
     return summary
   }
 
