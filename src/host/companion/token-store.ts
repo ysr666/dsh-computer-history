@@ -97,30 +97,47 @@ export class CompanionTokenStore {
   }
 
   /**
-   * Restore a checkpoint in SQLite first and mirror it in memory only after the
-   * durable write succeeds.
+   * Restore a checkpoint only if the durable credential is still the token
+   * produced by the rotation being compensated. Another Host may legitimately
+   * rotate the same companion while filesystem publication is in progress;
+   * an unconditional rollback would erase that newer successful write.
+   *
+   * Returns false when a later writer won. In that case the local cache is
+   * refreshed from SQLite and the newer credential is preserved.
    */
   public restore(
     kind: CompanionKind,
     checkpoint: CompanionPairingCheckpoint,
-  ): void {
+    expectedCurrentToken: string,
+  ): boolean {
+    const expectedHash = hashToken(expectedCurrentToken)
     const credential = checkpoint.credential
-    if (credential) {
-      this.db.prepare(`
-        INSERT INTO companion_pairing(kind, token_hash, created_at_ms)
-        VALUES (?, ?, ?)
-        ON CONFLICT(kind) DO UPDATE SET
-          token_hash = excluded.token_hash,
-          created_at_ms = excluded.created_at_ms
-      `).run(kind, credential.tokenHash, credential.createdAtMs)
-      this.credentials.set(kind, { ...credential })
-      return
+    const result = credential
+      ? this.db.prepare(`
+          UPDATE companion_pairing
+          SET token_hash = ?, created_at_ms = ?
+          WHERE kind = ? AND token_hash = ?
+        `).run(
+          credential.tokenHash,
+          credential.createdAtMs,
+          kind,
+          expectedHash,
+        )
+      : this.db.prepare(
+          'DELETE FROM companion_pairing WHERE kind = ? AND token_hash = ?',
+        ).run(kind, expectedHash)
+
+    if (Number(result.changes) === 1) {
+      if (credential) this.credentials.set(kind, { ...credential })
+      else this.credentials.delete(kind)
+      return true
     }
 
-    this.db.prepare(
-      'DELETE FROM companion_pairing WHERE kind = ?',
-    ).run(kind)
-    this.credentials.delete(kind)
+    // A different writer replaced our token after rotate(). Reflect that
+    // durable winner locally instead of restoring a stale checkpoint.
+    this.reloadCredentials()
+    this.observedDataVersion = this.dataVersion()
+    return false
   }
 
   /** Create a credential for one companion kind, replacing only that kind. */
