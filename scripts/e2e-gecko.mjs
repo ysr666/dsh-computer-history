@@ -44,6 +44,10 @@ const log = path.join(artifacts, 'web-ext.log')
 // cmd.exe does not parse the escaping Node applies to a quoted argument: measured 2026-10-06 on the Windows
 // machine, '"pnpm" "--version"' arrives as '\"pnpm\"' and is not recognised, while the unquoted command line
 // exits 0. So the line is assembled unquoted and only arguments that contain whitespace are quoted.
+const runCmd = (command, args, options) => process.platform === 'win32'
+  ? spawnSync(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', [command, ...args].map(quoteForCmd).join(' ')], options)
+  : spawnSync(command, args, options)
+
 const quoteForCmd = a => (/[\s"]/.test(String(a)) ? `"${a}"` : String(a))
 
 const webExtArgs = ['--yes', 'web-ext', 'run', '-s', 'dist/extension-firefox', `--firefox=${firefox}`,
