@@ -43,3 +43,5 @@ export function checkPairing(
   fetchImpl: typeof fetch,
   config: CompanionConfig,
 ): Promise<boolean>
+
+export function pairingFromHash(hash: string): { token?: string; port?: number }
