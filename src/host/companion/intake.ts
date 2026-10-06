@@ -351,6 +351,18 @@ export class CompanionIntake {
   private withinRate(token: string): boolean {
     const nowMs = this.now()
     const windowStart = nowMs - 60_000
+
+    // Pairing rotation changes the cleartext token. A token that was once used
+    // used to remain as a Map key forever after rotation, even after every hit
+    // in its one-minute window expired. Prune expired buckets opportunistically;
+    // if there are no future requests there is no future growth either.
+    for (const [key, stamps] of this.hits) {
+      if (key === token) continue
+      const live = stamps.filter(stamp => stamp > windowStart)
+      if (live.length === 0) this.hits.delete(key)
+      else if (live.length !== stamps.length) this.hits.set(key, live)
+    }
+
     const recent = (this.hits.get(token) ?? []).filter(
       stamp => stamp > windowStart,
     )

@@ -63,6 +63,30 @@ describe('companion pairing tokens', () => {
     expect(tokens.state('editor').createdAtMs).toBe(2_000)
   })
 
+  it('refreshes cached credentials when another Host rotates the shared token', () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'dsh-ch-pairing-multi-host-'))
+    roots.push(root)
+    const dataDirectory = path.join(root, 'history')
+    const first = openHistoryDatabase({ dataDirectory, nowMs: 1 })
+    const second = openHistoryDatabase({ dataDirectory, nowMs: 1 })
+    const hostA = new CompanionTokenStore(first.db)
+    const hostB = new CompanionTokenStore(second.db)
+
+    const firstToken = hostA.rotate('browser', 1_000)
+    expect(hostB.verify('browser', firstToken)).toBe(true)
+
+    const replacement = hostB.rotate('browser', 2_000)
+    expect(hostA.verify('browser', firstToken)).toBe(false)
+    expect(hostA.verify('browser', replacement)).toBe(true)
+    expect(hostA.state('browser')).toEqual({
+      paired: true,
+      createdAtMs: 2_000,
+    })
+
+    first.close()
+    second.close()
+  })
+
   it('survives a reopen of the store', () => {
     const root = mkdtempSync(path.join(os.tmpdir(), 'dsh-ch-pairing-reopen-'))
     roots.push(root)

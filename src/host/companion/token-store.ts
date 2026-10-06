@@ -37,13 +37,28 @@ export interface CompanionPairingCheckpoint {
  *
  * Browser and editor credentials are independent so rotating one cannot silently
  * disconnect the other. Only SHA-256 digests persist in SQLite. The current
- * digests are mirrored in memory so the loopback intake never needs to touch the
- * database after plugin teardown has started.
+ * digests are mirrored in memory for cheap verification. Because the database is
+ * shared by multiple DSH Hosts, the cache watches SQLite `data_version` and reloads
+ * when another connection changes pairing. Companion intake is stopped before
+ * SQLite closes, so this refresh cannot outlive the database lifecycle.
  */
 export class CompanionTokenStore {
   private readonly credentials = new Map<CompanionKind, Credential>()
+  private observedDataVersion = 0
 
   public constructor(private readonly db: DatabaseSync) {
+    this.reloadCredentials()
+    this.observedDataVersion = this.dataVersion()
+  }
+
+  private dataVersion(): number {
+    const row = this.db.prepare('PRAGMA data_version').get() as {
+      data_version?: number | bigint
+    }
+    return Number(row.data_version ?? 0)
+  }
+
+  private reloadCredentials(): void {
     const rows = this.db.prepare(`
       SELECT kind, token_hash, created_at_ms
       FROM companion_pairing
@@ -52,6 +67,7 @@ export class CompanionTokenStore {
       token_hash: string
       created_at_ms: number
     }>
+    this.credentials.clear()
     for (const row of rows) {
       if (row.kind !== 'browser' && row.kind !== 'editor') continue
       this.credentials.set(row.kind, {
@@ -61,11 +77,19 @@ export class CompanionTokenStore {
     }
   }
 
+  private refreshExternalChanges(): void {
+    const version = this.dataVersion()
+    if (version === this.observedDataVersion) return
+    this.reloadCredentials()
+    this.observedDataVersion = version
+  }
+
   /**
    * Snapshot one credential so a larger cross-resource operation can compensate
    * if publishing the cleartext handoff fails after rotation.
    */
   public checkpoint(kind: CompanionKind): CompanionPairingCheckpoint {
+    this.refreshExternalChanges()
     const credential = this.credentials.get(kind)
     return credential
       ? { credential: { ...credential } }
@@ -116,12 +140,14 @@ export class CompanionTokenStore {
 
   public verify(kind: CompanionKind, candidate: string | undefined): boolean {
     if (!candidate || candidate.length === 0) return false
+    this.refreshExternalChanges()
     const credential = this.credentials.get(kind)
     if (!credential) return false
     return sameDigest(hashToken(candidate), credential.tokenHash)
   }
 
   public state(kind: CompanionKind): PairingState {
+    this.refreshExternalChanges()
     const credential = this.credentials.get(kind)
     if (!credential) return { paired: false }
     return { paired: true, createdAtMs: credential.createdAtMs }

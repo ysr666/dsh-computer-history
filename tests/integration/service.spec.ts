@@ -285,7 +285,67 @@ describe('local computer history backend', () => {
     expect(() => backend.semanticPreview({
       scopeKey: 'workspace:',
     })).toThrow(/unrecognised scope key/)
+    expect(() => backend.redactionPreview({
+      scopeKey: 'not-a-scope:com.microsoft.VSCode',
+    })).toThrow(/unrecognised scope key/)
     history.close()
+  })
+
+  it('refreshes /state when another Host changes shared retention', () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'dsh-ch-service-multi-retention-'))
+    roots.push(root)
+    const dataDirectory = path.join(root, 'history')
+    const first = openHistoryDatabase({ dataDirectory, nowMs: 1 })
+    const second = openHistoryDatabase({ dataDirectory, nowMs: 1 })
+    const firstPolicies = new PolicyStore(first.db)
+    firstPolicies.ensureInitial(1)
+    const secondPolicies = new PolicyStore(second.db)
+
+    const hostA = new LocalComputerHistoryBackend(
+      new EpisodeStore(first.db),
+      firstPolicies,
+      new DeletionService(first.db),
+      new FakeCapture(),
+      {
+        observationRetentionHours: 24,
+        episodeRetentionDays: 30,
+        autoResume: false,
+      },
+      undefined,
+      undefined,
+      first.db,
+    )
+    const hostB = new LocalComputerHistoryBackend(
+      new EpisodeStore(second.db),
+      secondPolicies,
+      new DeletionService(second.db),
+      new FakeCapture(),
+      {
+        observationRetentionHours: 24,
+        episodeRetentionDays: 30,
+        autoResume: false,
+        now: () => 4_000,
+      },
+      undefined,
+      undefined,
+      second.db,
+    )
+
+    expect(hostA.getState()).toMatchObject({
+      observationRetentionHours: 24,
+      episodeRetentionDays: 30,
+    })
+    hostB.setRetention({
+      observationRetentionHours: 6,
+      episodeRetentionDays: 14,
+    })
+    expect(hostA.getState()).toMatchObject({
+      observationRetentionHours: 6,
+      episodeRetentionDays: 14,
+    })
+
+    first.close()
+    second.close()
   })
 
   it('keeps /state retention in step with a successful retention change', () => {
@@ -375,6 +435,81 @@ describe('local computer history backend', () => {
       'SELECT id FROM episodes WHERE id = ?',
     ).get('remote-ep')).toEqual({ id: 'remote-ep' })
     expect(sends.listForScope('workspace:w1')).toHaveLength(1)
+    history.close()
+  })
+
+  it('keeps a remote summary operation alive through drain until its send audit is durable', async () => {
+    const history = openTempDatabase()
+    const episodeId = seedEpisode(history)
+    const episodes = new EpisodeStore(history.db)
+    const policies = new PolicyStore(history.db)
+    policies.ensureInitial(1)
+    const optIns = new SemanticOptInStore(history.db)
+    const backend = new LocalComputerHistoryBackend(
+      episodes,
+      policies,
+      new DeletionService(history.db),
+      new FakeCapture(),
+      {
+        observationRetentionHours: 24,
+        episodeRetentionDays: 30,
+        autoResume: false,
+        now: () => 5_000,
+      },
+      undefined,
+      optIns,
+      history.db,
+    )
+    backend.grantSemanticOptIn({
+      scopeKey: 'workspace:alpha',
+      providerKind: 'remote',
+      model: 'm',
+    })
+    const citation = episodes.get(episodeId)?.summaryObservationIds[0]
+    expect(citation).toBeDefined()
+
+    let releaseResponse!: () => void
+    let requestStarted!: () => void
+    const started = new Promise<void>(resolve => {
+      requestStarted = resolve
+    })
+    const response = new Promise<Response>(resolve => {
+      releaseResponse = () => resolve(Response.json({
+        summary: 'Remote summary.',
+        citations: [Number(citation)],
+      }))
+    })
+    const remote = backend.summariseRemotely({
+      scopeKey: 'workspace:alpha',
+      endpoint: 'https://models.example.test/v1',
+      model: 'm',
+      fetchImpl: async () => {
+        requestStarted()
+        return response
+      },
+    })
+    await started
+
+    let drained = false
+    const draining = backend.drain().then(() => {
+      drained = true
+    })
+    await Promise.resolve()
+    expect(drained).toBe(false)
+
+    releaseResponse()
+    await expect(remote).resolves.toMatchObject({
+      summary: 'Remote summary.',
+    })
+    await draining
+    expect(drained).toBe(true)
+    expect(new RemoteSendStore(history.db).listForScope('workspace:alpha'))
+      .toHaveLength(1)
+
+    expect(() => backend.setRetention({
+      observationRetentionHours: 6,
+      episodeRetentionDays: 14,
+    })).toThrow(/disposing/)
     history.close()
   })
 

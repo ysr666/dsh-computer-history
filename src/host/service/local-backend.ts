@@ -137,6 +137,17 @@ implements ComputerHistoryServiceContract {
     }
   }
 
+  private withSynchronousOperation<T>(
+    operation: () => T,
+  ): T {
+    const release = this.acquireOperation()
+    try {
+      return operation()
+    } finally {
+      release()
+    }
+  }
+
   public drain(): Promise<void> {
     this.acceptingOperations = false
     if (this.activeOperations === 0) return Promise.resolve()
@@ -254,44 +265,56 @@ implements ComputerHistoryServiceContract {
   }
 
   public getState(): ComputerHistoryState {
-    const maintenance = this.maintenance?.()
-    return {
-      ...this.capture.getState(),
-      // Why things were refused, when the host can tell us: a bare count is a
-      // number, and this is the sentence a new installation needs.
-      ...(this.refusalCounts
-        ? { refusedByReason: Object.fromEntries(this.refusalCounts()) }
-        : {}),
-      ...(this.firstRunPreset
-        ? { firstRunPreset: this.firstRunPreset() }
-        : {}),
-      ...(this.release ? { release: this.release() } : {}),
-      ...(maintenance === undefined ? {} : { maintenance }),
-      observationRetentionHours:
-        this.currentRetention.observationRetentionHours,
-      episodeRetentionDays:
-        this.currentRetention.episodeRetentionDays,
-      autoResume: this.config.autoResume,
-    }
+    return this.withSynchronousOperation(() => {
+      // Retention is shared SQLite state, not Host-local state. Another Host may
+      // change it while this process keeps running; refresh it before composing
+      // /state so the UI cannot disagree with the TTL ingestion is actually using.
+      if (this.db) {
+        this.currentRetention = new RetentionSettingsStore(this.db).get()
+      }
+      const maintenance = this.maintenance?.()
+      return {
+        ...this.capture.getState(),
+        // Why things were refused, when the host can tell us: a bare count is a
+        // number, and this is the sentence a new installation needs.
+        ...(this.refusalCounts
+          ? { refusedByReason: Object.fromEntries(this.refusalCounts()) }
+          : {}),
+        ...(this.firstRunPreset
+          ? { firstRunPreset: this.firstRunPreset() }
+          : {}),
+        ...(this.release ? { release: this.release() } : {}),
+        ...(maintenance === undefined ? {} : { maintenance }),
+        observationRetentionHours:
+          this.currentRetention.observationRetentionHours,
+        episodeRetentionDays:
+          this.currentRetention.episodeRetentionDays,
+        autoResume: this.config.autoResume,
+      }
+    })
   }
 
   public pairing(kind: CompanionKind = 'browser'): PairingState {
-    const state = this.pairingTokens?.state(kind) ?? { paired: false }
-    const companion = this.capture.getCompanionState?.()
-    return {
-      ...state,
-      listening: companion?.listening ?? false,
-      ...(companion?.port === undefined ? {} : { port: companion.port }),
-    }
+    return this.withSynchronousOperation(() => {
+      const state = this.pairingTokens?.state(kind) ?? { paired: false }
+      const companion = this.capture.getCompanionState?.()
+      return {
+        ...state,
+        listening: companion?.listening ?? false,
+        ...(companion?.port === undefined ? {} : { port: companion.port }),
+      }
+    })
   }
 
   /** Rotate one companion kind without invalidating the other. */
   public rotatePairing(kind: CompanionKind = 'browser'): PairingRotation {
-    if (!this.pairingTokens) {
-      throw new Error('companion pairing is unavailable')
-    }
-    const token = this.pairingTokens.rotate(kind, this.now())
-    return { ...this.pairing(kind), token }
+    return this.withSynchronousOperation(() => {
+      if (!this.pairingTokens) {
+        throw new Error('companion pairing is unavailable')
+      }
+      const token = this.pairingTokens.rotate(kind, this.now())
+      return { ...this.pairing(kind), token }
+    })
   }
 
   /**
@@ -300,15 +323,21 @@ implements ComputerHistoryServiceContract {
    * model only when a scope is switched on.
    */
   public semanticState(): SemanticSummaryState {
-    return {
+    return this.withSynchronousOperation(() => ({
       active: 'deterministic',
       localProviderConfigured: false,
       scopes: this.semanticOptIns?.list() ?? [],
-    }
+    }))
   }
 
   /** The exact payload a provider would see for this scope (ADR 0004 §4). */
   public semanticPreview(
+    request: { readonly scopeKey: string },
+  ): MinimisedSummaryPayload | undefined {
+    return this.withSynchronousOperation(() => this.semanticPreviewNow(request))
+  }
+
+  private semanticPreviewNow(
     request: { readonly scopeKey: string },
   ): MinimisedSummaryPayload | undefined {
     const scope = parseScopeKey(request.scopeKey)
@@ -339,17 +368,19 @@ implements ComputerHistoryServiceContract {
     readonly scopeKey: string
     readonly model: string
   }): { readonly payload: MinimisedSummaryPayload, readonly body: string } | undefined {
-    const payload = this.semanticPreview({ scopeKey: request.scopeKey })
-    if (!payload) return undefined
-    const citations = this.citationsForScope(request.scopeKey)
-    return {
-      payload,
-      body: buildRemoteRequestBody({
-        model: request.model,
+    return this.withSynchronousOperation(() => {
+      const payload = this.semanticPreviewNow({ scopeKey: request.scopeKey })
+      if (!payload) return undefined
+      const citations = this.citationsForScope(request.scopeKey)
+      return {
         payload,
-        observationIds: citations,
-      }),
-    }
+        body: buildRemoteRequestBody({
+          model: request.model,
+          payload,
+          observationIds: citations,
+        }),
+      }
+    })
   }
 
   /**
@@ -357,38 +388,40 @@ implements ComputerHistoryServiceContract {
    * provider refuses without a recorded opt-in, so a scope the user has not
    * enabled cannot reach this far.
    */
-  public async summariseRemotely(request: {
+  public summariseRemotely(request: {
     readonly scopeKey: string
     readonly endpoint: string
     readonly model: string
     readonly fetchImpl?: typeof fetch
   }): Promise<{ readonly summary: string, readonly sendId: number }> {
-    const payload = this.semanticPreview({ scopeKey: request.scopeKey })
-    if (!payload) throw new SummaryProviderError('no episode for that scope')
-    const citations = this.citationsForScope(request.scopeKey)
-    const scope = parseScopeKey(request.scopeKey)
-    if (!this.semanticOptIns) {
-      throw new SummaryProviderError('semantic summaries are unavailable')
-    }
-    const sends = new RemoteSendStore(this.requireDb())
-    const episodeId = this.episodeIdForScope(request.scopeKey)
-    const provider = new RemoteSummaryProvider({
-      endpoint: request.endpoint,
-      model: request.model,
-      optIns: this.semanticOptIns,
-      ...(request.fetchImpl ? { fetchImpl: request.fetchImpl } : {}),
-      now: () => this.now(),
-      onSent: (record) => {
-        lastSendId = sends.record({
-          ...record,
-          scopeKey: request.scopeKey,
-          ...(episodeId === undefined ? {} : { episodeId }),
-        })
-      },
+    return this.withOperation(async () => {
+      const payload = this.semanticPreviewNow({ scopeKey: request.scopeKey })
+      if (!payload) throw new SummaryProviderError('no episode for that scope')
+      const citations = this.citationsForScope(request.scopeKey)
+      const scope = parseScopeKey(request.scopeKey)
+      if (!this.semanticOptIns) {
+        throw new SummaryProviderError('semantic summaries are unavailable')
+      }
+      const sends = new RemoteSendStore(this.requireDb())
+      const episodeId = this.episodeIdForScope(request.scopeKey)
+      let lastSendId = 0
+      const provider = new RemoteSummaryProvider({
+        endpoint: request.endpoint,
+        model: request.model,
+        optIns: this.semanticOptIns,
+        ...(request.fetchImpl ? { fetchImpl: request.fetchImpl } : {}),
+        now: () => this.now(),
+        onSent: (record) => {
+          lastSendId = sends.record({
+            ...record,
+            scopeKey: request.scopeKey,
+            ...(episodeId === undefined ? {} : { episodeId }),
+          })
+        },
+      })
+      const summary = await provider.summarise({ scope, payload, citations })
+      return { summary, sendId: lastSendId }
     })
-    let lastSendId = 0
-    const summary = await provider.summarise({ scope, payload, citations })
-    return { summary, sendId: lastSendId }
   }
 
   /** The episode a scope points at, and the citations behind its summary. */
@@ -413,15 +446,17 @@ implements ComputerHistoryServiceContract {
     readonly providerKind: 'local' | 'remote'
     readonly model?: string
   }): SemanticOptIn {
-    if (!this.semanticOptIns) {
-      throw new Error('semantic summaries are unavailable')
-    }
-    return this.semanticOptIns.grant(
-      parseScopeKey(request.scopeKey),
-      request.providerKind,
-      request.model,
-      this.now(),
-    )
+    return this.withSynchronousOperation(() => {
+      if (!this.semanticOptIns) {
+        throw new Error('semantic summaries are unavailable')
+      }
+      return this.semanticOptIns.grant(
+        parseScopeKey(request.scopeKey),
+        request.providerKind,
+        request.model,
+        this.now(),
+      )
+    })
   }
 
   /**
@@ -437,36 +472,40 @@ implements ComputerHistoryServiceContract {
     /** Local send records forgotten by this revocation (ADR 0010). */
     readonly forgotten: number
   } {
-    if (!this.semanticOptIns) {
-      throw new Error('semantic summaries are unavailable')
-    }
-    const db = this.requireDb()
-    if (db.isTransaction) {
-      throw new Error('semantic revocation must own the outer transaction')
-    }
-    const scope = parseScopeKey(request.scopeKey)
-    db.exec('BEGIN IMMEDIATE')
-    try {
-      const revoked = this.semanticOptIns.revoke(scope)
-      const purged = this.semanticOptIns.purge(scope)
-      // Revoking is an instruction to forget, so the local record of what left
-      // goes too (ADR 0010). These three writes are one user action: a failure
-      // after the permission row is removed must roll the whole action back
-      // rather than leave model output or send audit rows behind.
-      const forgotten = new RemoteSendStore(db)
-        .deleteForScope(request.scopeKey)
-      db.exec('COMMIT')
-      return { revoked, purged, forgotten }
-    } catch (error) {
-      if (db.isTransaction) db.exec('ROLLBACK')
-      throw error
-    }
+    return this.withSynchronousOperation(() => {
+      if (!this.semanticOptIns) {
+        throw new Error('semantic summaries are unavailable')
+      }
+      const db = this.requireDb()
+      if (db.isTransaction) {
+        throw new Error('semantic revocation must own the outer transaction')
+      }
+      const scope = parseScopeKey(request.scopeKey)
+      db.exec('BEGIN IMMEDIATE')
+      try {
+        const revoked = this.semanticOptIns.revoke(scope)
+        const purged = this.semanticOptIns.purge(scope)
+        // Revoking is an instruction to forget, so the local record of what left
+        // goes too (ADR 0010). These three writes are one user action: a failure
+        // after the permission row is removed must roll the whole action back
+        // rather than leave model output or send audit rows behind.
+        const forgotten = new RemoteSendStore(db)
+          .deleteForScope(request.scopeKey)
+        db.exec('COMMIT')
+        return { revoked, purged, forgotten }
+      } catch (error) {
+        if (db.isTransaction) db.exec('ROLLBACK')
+        throw error
+      }
+    })
   }
 
 
   /** The whole store as one document, for the audit export. */
   public exportAll(): HistoryExport {
-    return exportHistory(this.requireDb(), this.now())
+    return this.withSynchronousOperation(
+      () => exportHistory(this.requireDb(), this.now()),
+    )
   }
 
   public importAll(
@@ -504,44 +543,49 @@ implements ComputerHistoryServiceContract {
   public redactionPreview(request: {
     readonly scopeKey: string
   }): RedactionPreview {
-    const [kind, ...rest] = request.scopeKey.split(':')
-    const id = rest.join(':')
-    const observations = new ObservationStore(this.requireDb()).listAll()
-    const scoped = kind === 'app'
-      ? observations.filter(item => item.app.bundleId === id)
-      : observations.filter(item => item.workspace.id === id)
-    return buildRedactionPreview({
-      scopeKey: request.scopeKey,
-      policy: this.policies.get(),
-      observations: scoped,
+    return this.withSynchronousOperation(() => {
+      const scope = parseScopeKey(request.scopeKey)
+      const observations = new ObservationStore(this.requireDb()).listAll()
+      const scoped = scope.kind === 'app'
+        ? observations.filter(item => item.app.bundleId === scope.bundleId)
+        : observations.filter(item => item.workspace.id === scope.id)
+      return buildRedactionPreview({
+        scopeKey: request.scopeKey,
+        policy: this.policies.get(),
+        observations: scoped,
+      })
     })
   }
 
   public retention(): RetentionSettings {
-    const retention = new RetentionSettingsStore(this.requireDb()).get()
-    this.currentRetention = retention
-    return retention
+    return this.withSynchronousOperation(() => {
+      const retention = new RetentionSettingsStore(this.requireDb()).get()
+      this.currentRetention = retention
+      return retention
+    })
   }
 
   public setRetention(input: {
     readonly observationRetentionHours: number
     readonly episodeRetentionDays: number
   }): RetentionSettings {
-    const retention = new RetentionSettingsStore(this.requireDb())
-      .set(input, this.now())
-    // /state is polled independently from /retention. Keep the runtime snapshot
-    // in step immediately so a successful save is not overwritten two seconds
-    // later by the startup values.
-    this.currentRetention = retention
-    return retention
+    return this.withSynchronousOperation(() => {
+      const retention = new RetentionSettingsStore(this.requireDb())
+        .set(input, this.now())
+      // /state is polled independently from /retention. Keep the runtime snapshot
+      // in step immediately so a successful save is not overwritten two seconds
+      // later by the startup values.
+      this.currentRetention = retention
+      return retention
+    })
   }
 
   public listPolicyRules(): readonly PolicyRule[] {
-    return this.policies.get().rules
+    return this.withSynchronousOperation(() => this.policies.get().rules)
   }
 
   public getPolicy(): PolicySnapshot {
-    return this.policies.get()
+    return this.withSynchronousOperation(() => this.policies.get())
   }
 
   public async replacePolicy(
