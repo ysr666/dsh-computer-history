@@ -50,6 +50,19 @@ try {
   store.close()
 } catch { observations = undefined }
 
+// The collector is the thing that actually stores observations on this platform, so its state belongs in the
+// verdict: measured 2026-10-06 on the owner's machine, it had been running for two hours with an empty store and a
+// zero-byte WAL, which is what an untrusted collector looks like. Saying that here saves the next reader from
+// having to find out that a running process and an empty table are both true at once.
+const collector = (() => {
+  const listing = spawnSync('ps', ['-eo', 'pid,etime,command'], { encoding: 'utf8' })
+  if (listing.error) return { state: 'not verifiable here (no ps on this platform)' }
+  const line = (listing.stdout ?? '').split('\n').find(l => l.includes('computer-history-collector') && !l.includes('grep'))
+  if (!line) return { state: 'not running' }
+  const trimmed = line.trim().split(/\s+/)
+  return { state: 'running', pid: trimmed[0], uptime: trimmed[1], path: line.slice(line.indexOf('/')) }
+})()
+
 const step1 = pluginInstalled ? 'done' : 'not done'
 // Three states, never a silent "done": an application that is not running has no running process to judge, and a
 // profile with no manifest cannot have loaded anything. The first version defaulted both to 'done', which the edge
@@ -70,6 +83,7 @@ const rows = [
   ['1. the plugin is installed as a layer', step1],
   ['2. the running application loaded it', step2],
   ['3. the store has its first observation', step3],
+  ['4. the collector that stores them', collector.state === 'running' ? `running (pid ${collector.pid}, up ${collector.uptime})` : collector.state],
 ]
 
 console.log('desktop-application path (the owner\'s baseline ①):')
@@ -78,9 +92,21 @@ console.log(`\n  application started: ${appStartedMs ? new Date(appStartedMs).to
 console.log(`  manifest written:    ${manifestMs ? new Date(manifestMs).toISOString() : 'missing'}`)
 console.log(`  patch written:       ${patchMs ? new Date(patchMs).toISOString() : 'missing'}`)
 
-if (step1 === 'done' && step2 === 'done' && step3 === 'done') {
-  console.log('\nverdict: the three steps have happened. The count is 3 actions unless the owner reports extra ones -')
-  console.log('         this command reads evidence, it does not count what a person did.')
+// Step three is the decisive one and it settles step two: a stored observation could only be there if the running
+// application had loaded the plugin, whatever the timestamps say. Measured 2026-10-06 - the first observation
+// arrived while this line still read "not judgeable", purely because the patch had been written after startup.
+if (step3 === 'done' || (step1 === 'done' && step2 === 'done')) {
+  console.log('\nverdict: the three steps have happened - the plugin is a layer, the application loaded it, and the')
+  console.log('         store holds an observation. The count is 3 actions unless the owner reports extra ones; this')
+  console.log('         command reads evidence, it does not count what a person did.')
+  if (step2 !== 'done') console.log('         (step 2 is inferred from step 3: the timestamps alone could not settle it.)')
 } else {
   console.log('\nverdict: not judgeable yet - the first step that is not done above is where it stands.')
+  if (collector.state === 'running' && step3 !== 'done') {
+    // On macOS the collector runs fine without the Accessibility permission and simply observes nothing, which is
+    // the state this line was written from. Name the switch rather than leaving "it runs but does nothing" hanging.
+    console.log(`\nthe collector is up (pid ${collector.pid}) and the store is still empty - on macOS that is what an`)
+    console.log('untrusted collector looks like: System Settings -> Privacy & Security -> Accessibility, and enable')
+    console.log(`  ${collector.path ?? 'the collector binary'}`)
+  }
 }
