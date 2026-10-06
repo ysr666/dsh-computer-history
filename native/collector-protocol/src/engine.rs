@@ -126,6 +126,20 @@ impl<S: ObservationSource> Collector<S> {
         self.last_fingerprint = None;
 
         let mut lines = vec![protocol::configured(revision)];
+        // An allow list with nothing in it cannot record anything: every window is refused by the gate in
+        // `reconcile`, and that gate is deliberately silent because it runs on every tick - a user who allowed two
+        // of forty applications would get noise. The empty case is different in kind: it is not a preference, it is
+        // a capture that cannot work, and it used to look exactly like a machine nobody used. Measured 2026-10-06:
+        // a Host whose policy parsed to an empty list made the Linux collector report `running`, record nothing and
+        // say nothing at all. Emitted here rather than in `reconcile` because `allowed` only changes here, so this
+        // is said once per policy instead of once per heartbeat.
+        if self.allowed.is_empty() {
+            lines.push(protocol::diagnostic(
+                "warn",
+                "no-allowed-applications",
+                "the policy allows no application, so nothing can be recorded: allow at least one application",
+            ));
+        }
         lines.extend(self.reconcile());
         lines
     }
@@ -614,6 +628,33 @@ mod tests {
             .iter()
             .filter(|line| line.contains("\"type\":\"observation\""))
             .collect()
+    }
+
+    #[test]
+    fn an_empty_allow_list_is_named_once_instead_of_recording_nothing_quietly() {
+        // Measured 2026-10-06: with a policy that parsed to an empty allow list the collector reported `running`,
+        // produced no observation, and produced no diagnostic either - indistinguishable from a machine nobody
+        // used. It is said once per configure, not once per heartbeat.
+        let mut collector = Collector::new("probe".to_string(), FakeSource::new(Vec::new()), &[]);
+        let first = collector.configure(1, Policy::default());
+        assert!(
+            first.iter().any(|line| line.contains("no-allowed-applications")),
+            "{first:?}",
+        );
+        let ticks = collector.tick();
+        assert!(
+            !ticks.iter().any(|line| line.contains("no-allowed-applications")),
+            "the diagnostic must not repeat on every heartbeat: {ticks:?}",
+        );
+        let allowed = Policy {
+            allowed_bundle_ids: vec!["org.gnome.Terminal.desktop".to_string()],
+            ..Policy::default()
+        };
+        let second = collector.configure(2, allowed);
+        assert!(
+            !second.iter().any(|line| line.contains("no-allowed-applications")),
+            "{second:?}",
+        );
     }
 
     #[test]
