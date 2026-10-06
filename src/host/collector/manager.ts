@@ -205,16 +205,27 @@ export class CollectorManager {
     this.lastObservationSeq = undefined
     this.lastObservationFingerprint = undefined
 
-    const handle = this.ctx.subprocess.spawn({
-      argv: [this.options.executable],
-      cwd: this.options.cwd,
-      stdio: {
-        stdin: 'pipe',
-        stdout: 'pipe',
-        stderr: { maxBytes: 32 * 1024 },
-      },
-      graceMs: this.options.graceMs ?? DEFAULT_SHUTDOWN_GRACE_MS,
-    })
+    let handle: SubprocessHandle
+    try {
+      handle = this.ctx.subprocess.spawn({
+        argv: [this.options.executable],
+        cwd: this.options.cwd,
+        stdio: {
+          stdin: 'pipe',
+          stdout: 'pipe',
+          stderr: { maxBytes: 32 * 1024 },
+        },
+        graceMs: this.options.graceMs ?? DEFAULT_SHUTDOWN_GRACE_MS,
+      })
+    } catch (error) {
+      // A spawn that throws used to escape through `start()` with nothing recorded anywhere the state could be
+      // read from, so an interface could only report that it was still starting. Measured on Windows 2026-10-06:
+      // `/state` answered `capture: degraded, reason: collector-starting` for a Host whose collector never
+      // appeared - and the reason stayed absent whether the child was missing, unlaunchable, or fine. The spawn
+      // error still propagates (the caller decides what to do); what changes is that the state now names it.
+      this.markDegraded('collector-spawn-failed')
+      throw error
+    }
 
     if (!handle.stdin || !handle.stdout) {
       // Name it before throwing: the throw reaches the caller, but the state is what an interface reads, and

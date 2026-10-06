@@ -218,3 +218,23 @@ describe('a collector that says nothing, and what the manager saw', () => {
     await manager.stop('plugin-dispose')
   })
 })
+
+describe('a spawn that never produced a child', () => {
+  it('names the failure instead of leaving the state looking like it is still starting', () => {
+    const ctx = {
+      subprocess: {
+        spawn: () => { throw Object.assign(new Error('spawn ENOENT'), { code: 'ENOENT' }) },
+      },
+    } as unknown as Context
+    const manager = new CollectorManager(ctx, {
+      executable: '/missing-collector',
+      cwd: '/tmp',
+      onMessage: () => {},
+      onUnexpectedExit: () => {},
+    })
+    expect(() => manager.start()).toThrow(/ENOENT/)
+    // The state is what an interface reads; before this it said nothing at all while `start()` had already failed.
+    expect(manager.snapshot().state?.state).toBe('degraded')
+    expect(manager.snapshot().state?.reason).toBe('collector-spawn-failed')
+  })
+})
