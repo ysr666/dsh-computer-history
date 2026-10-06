@@ -105,30 +105,47 @@ export class CompanionTokenStore {
   }
 
   /**
-   * Restore a checkpoint in SQLite first and mirror it in memory only after the
-   * durable write succeeds.
+   * Restore a checkpoint only if the credential being compensated is still the
+   * current durable value. A second Host may rotate the same kind while a
+   * cross-resource operation is staging its cleartext handoff; unconditional
+   * rollback would then erase that newer user action.
    */
-  public restore(
+  public restoreIfCurrent(
     kind: CompanionKind,
     checkpoint: CompanionPairingCheckpoint,
-  ): void {
+    currentToken: string,
+  ): boolean {
+    const currentHash = hashToken(currentToken)
     const credential = checkpoint.credential
-    if (credential) {
-      this.db.prepare(`
-        INSERT INTO companion_pairing(kind, token_hash, created_at_ms)
-        VALUES (?, ?, ?)
-        ON CONFLICT(kind) DO UPDATE SET
-          token_hash = excluded.token_hash,
-          created_at_ms = excluded.created_at_ms
-      `).run(kind, credential.tokenHash, credential.createdAtMs)
-      this.credentials.set(kind, { ...credential })
-      return
+    const result = credential
+      ? this.db.prepare(`
+          UPDATE companion_pairing
+          SET token_hash = ?, created_at_ms = ?
+          WHERE kind = ? AND token_hash = ?
+        `).run(
+          credential.tokenHash,
+          credential.createdAtMs,
+          kind,
+          currentHash,
+        )
+      : this.db.prepare(`
+          DELETE FROM companion_pairing
+          WHERE kind = ? AND token_hash = ?
+        `).run(kind, currentHash)
+
+    if (Number(result.changes) > 0) {
+      if (credential) {
+        this.credentials.set(kind, { ...credential })
+      } else {
+        this.credentials.delete(kind)
+      }
+      return true
     }
 
-    this.db.prepare(
-      'DELETE FROM companion_pairing WHERE kind = ?',
-    ).run(kind)
-    this.credentials.delete(kind)
+    // Another Host won the race. Refresh our mirror and leave its newer
+    // credential intact instead of compensating across someone else's write.
+    this.reloadCredentials()
+    return false
   }
 
   /** Create a credential for one companion kind, replacing only that kind. */
