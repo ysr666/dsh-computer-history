@@ -295,13 +295,15 @@ implements ComputerHistoryServiceContract {
   }
 
   public pairing(kind: CompanionKind = 'browser'): PairingState {
-    const state = this.pairingTokens?.state(kind) ?? { paired: false }
-    const companion = this.capture.getCompanionState?.()
-    return {
-      ...state,
-      listening: companion?.listening ?? false,
-      ...(companion?.port === undefined ? {} : { port: companion.port }),
-    }
+    return this.withSynchronousOperation(() => {
+      const state = this.pairingTokens?.state(kind) ?? { paired: false }
+      const companion = this.capture.getCompanionState?.()
+      return {
+        ...state,
+        listening: companion?.listening ?? false,
+        ...(companion?.port === undefined ? {} : { port: companion.port }),
+      }
+    })
   }
 
   /** Rotate one companion kind without invalidating the other. */
