@@ -2063,10 +2063,10 @@ to `~\dsh-ch-tmp`, `cargo test` and `cargo build --release` ran there (the P5 se
 and hashes), and four live collector runs produced observations for Explorer, Windows Terminal and a
 policy-protected Notepad.
 
-What is still missing there is the Host row: the plugin has not been built, installed and driven on that
-machine, so nothing has been stored yet. The remaining sequence is to build the plugin, point its
-`collectorExecutable` at the built binary, drive the two recordable applications, read the rows back with the
-command recorded, and then remove the temporary tree, the temporary profiles and the windows the run opened.
+**Superseded later on 2026-10-05.** The Host row described as missing here was subsequently produced on
+that Windows machine: the P5 Host run above records four closed episodes from Explorer, Windows Terminal and
+Notepad, plus a counted `protected-app` refusal. Keep this paragraph only as the chronology of what was still
+missing at this earlier checkpoint; it is no longer an open acceptance item.
 
 One note kept for whoever reads the logs next: that Windows is a Chinese installation and PowerShell's errors come
 back in GBK, so command output there has to be forced to UTF-8 or the diagnostics are unreadable.
