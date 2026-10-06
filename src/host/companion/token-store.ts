@@ -42,22 +42,52 @@ export interface CompanionPairingCheckpoint {
  */
 export class CompanionTokenStore {
   private readonly credentials = new Map<CompanionKind, Credential>()
+  private dataVersion = -1
 
   public constructor(private readonly db: DatabaseSync) {
-    const rows = this.db.prepare(`
-      SELECT kind, token_hash, created_at_ms
-      FROM companion_pairing
-    `).all() as Array<{
-      kind: CompanionKind
-      token_hash: string
-      created_at_ms: number
-    }>
-    for (const row of rows) {
-      if (row.kind !== 'browser' && row.kind !== 'editor') continue
-      this.credentials.set(row.kind, {
-        tokenHash: row.token_hash,
-        createdAtMs: Number(row.created_at_ms),
-      })
+    this.reloadCredentials()
+  }
+
+  private readDataVersion(): number {
+    const row = this.db.prepare('PRAGMA data_version').get() as {
+      data_version: number
+    }
+    return Number(row.data_version)
+  }
+
+  private reloadCredentials(): void {
+    // A second Host may rotate a credential between the row read and the
+    // data_version read. Repeat until both observations describe one stable
+    // committed snapshot instead of caching a mixture.
+    while (true) {
+      const before = this.readDataVersion()
+      const rows = this.db.prepare(`
+        SELECT kind, token_hash, created_at_ms
+        FROM companion_pairing
+      `).all() as Array<{
+        kind: CompanionKind
+        token_hash: string
+        created_at_ms: number
+      }>
+      const after = this.readDataVersion()
+      if (before !== after) continue
+
+      this.credentials.clear()
+      for (const row of rows) {
+        if (row.kind !== 'browser' && row.kind !== 'editor') continue
+        this.credentials.set(row.kind, {
+          tokenHash: row.token_hash,
+          createdAtMs: Number(row.created_at_ms),
+        })
+      }
+      this.dataVersion = after
+      return
+    }
+  }
+
+  private refreshIfChanged(): void {
+    if (this.readDataVersion() !== this.dataVersion) {
+      this.reloadCredentials()
     }
   }
 
@@ -66,6 +96,7 @@ export class CompanionTokenStore {
    * if publishing the cleartext handoff fails after rotation.
    */
   public checkpoint(kind: CompanionKind): CompanionPairingCheckpoint {
+    this.refreshIfChanged()
     const credential = this.credentials.get(kind)
     return credential
       ? { credential: { ...credential } }
@@ -116,12 +147,14 @@ export class CompanionTokenStore {
 
   public verify(kind: CompanionKind, candidate: string | undefined): boolean {
     if (!candidate || candidate.length === 0) return false
+    this.refreshIfChanged()
     const credential = this.credentials.get(kind)
     if (!credential) return false
     return sameDigest(hashToken(candidate), credential.tokenHash)
   }
 
   public state(kind: CompanionKind): PairingState {
+    this.refreshIfChanged()
     const credential = this.credentials.get(kind)
     if (!credential) return { paired: false }
     return { paired: true, createdAtMs: credential.createdAtMs }
