@@ -65,7 +65,7 @@ export function resolveHistoryDataDirectory(
     ?? dshHomePath('computer-history')
 }
 
-class ManagedCapture implements CaptureController {
+export class ManagedCapture implements CaptureController {
   public constructor(
     private readonly manager: () => CollectorManager | undefined,
     private readonly enabled: boolean,
@@ -140,7 +140,11 @@ class ManagedCapture implements CaptureController {
       ...(
         snapshot?.state?.reason
           ? { reason: snapshot.state.reason }
-          : this.enabled && !manager
+          // Ownership, not the existence of a manager object. A manager is created by a start attempt and by
+          // `recover()`, so its presence says nothing about whether this Host holds capture - and testing for it
+          // suppressed this very reason. Measured 2026-10-06 on the Windows machine: the state read
+          // `capture: degraded` with no reason at all, while the Host knew it did not own capture.
+          : this.enabled && !this.ownsCapture()
             ? { reason: 'capture-owned-by-another-host' }
             : {}
       ),
