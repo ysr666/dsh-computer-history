@@ -7,6 +7,7 @@ import {
   PROTECTED_BUNDLES,
   SECURE_PATH,
   isProtectedText,
+  isProtectedWorkspace,
   isUnlocatableFileName,
   policyAllows,
 } from '../ingestion/normalize.js'
@@ -38,6 +39,7 @@ export function buildRedactionPreview(input: {
       // the window title, and only then the application.
       label: observation.resource?.displayLabel
         ?? observation.resource?.canonicalUri
+        ?? observation.workspace.title
         ?? observation.surface.title
         ?? observation.app.bundleId,
       bundleId: observation.app.bundleId,
@@ -69,6 +71,9 @@ function exclusionReason(
   }
   if (!policyAllows(observation.app.bundleId, observation.resource, policy)) {
     return 'the policy does not allow this application or resource'
+  }
+  if (isProtectedWorkspace(observation.workspace, policy)) {
+    return 'the workspace root is denied or protected by resource policy'
   }
   // The same secure-path screen ingestion applies to a resource, so the preview
   // cannot miss a row that ingestion would have dropped.
