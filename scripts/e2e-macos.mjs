@@ -17,6 +17,18 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import os from 'node:os'
 import path from 'node:path'
 
+// Windows has no process groups, so `process.kill(-pid, ...)` fails there and the old `catch {}` swallowed it -
+// measured 2026-10-06 on the Windows machine: the Host survived, kept its throwaway home busy and the cleanup
+// ended the run with EPERM. `taskkill /T /F` is the Windows way to take down a process tree (the Host starts the
+// collector as a child), and POSIX keeps the group-first, pid-second order it already had.
+const killTree = pid => {
+  if (process.platform === 'win32') {
+    spawnSync(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', `taskkill /pid ${pid} /T /F`], { stdio: 'ignore' })
+    return
+  }
+  try { process.kill(-pid, 'SIGTERM') } catch { try { process.kill(pid, 'SIGTERM') } catch { /* already gone */ } }
+}
+
 const REPO = path.resolve(import.meta.dirname, '..')
 process.chdir(REPO)
 
@@ -46,8 +58,24 @@ const record = (name, ok, detail) => {
   checks.push({ name, ok, detail })
   console.log(`  ${ok ? '✓' : '✗'} ${name}: ${detail}`)
 }
+// The Host is started with `spawn`; on Windows the CLI is a .cmd shim, same measurement as run() above.
+// cmd.exe does not parse the escaping Node applies to a quoted argument: measured 2026-10-06 on the Windows
+// machine, '"pnpm" "--version"' arrives as '\"pnpm\"' and is not recognised, while the unquoted command line
+// exits 0. So the line is assembled unquoted and only arguments that contain whitespace are quoted.
+const quoteForCmd = a => (/[\s"]/.test(String(a)) ? `"${a}"` : String(a))
+
+const spawnCmd = (command, args, options) => process.platform === 'win32'
+  ? spawn(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', [command, ...args].map(quoteForCmd).join(' ')], options)
+  : spawn(command, args, options)
+
+// `dsh` and `pnpm` are .cmd shims on Windows and Node refuses to spawn those without a shell; measured
+// 2026-10-06 on the Windows machine: direct spawn -> ENOENT, "<name>.cmd" -> EINVAL, cmd.exe /d /s /c -> exit 0.
+// On POSIX this is the same single spawnSync as before.
 const run = (command, args, options = {}) => {
-  const result = spawnSync(command, args, { encoding: 'utf8', ...options })
+  const shim = process.platform === 'win32' && ['dsh', 'pnpm', 'npx'].includes(command)
+  const result = shim
+    ? spawnSync(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', [command, ...args].map(quoteForCmd).join(' ')], { encoding: 'utf8', ...options })
+    : spawnSync(command, args, { encoding: 'utf8', ...options })
   return { status: result.status ?? 1, out: `${result.stdout ?? ''}${result.stderr ?? ''}` }
 }
 
@@ -132,7 +160,7 @@ try {
 
   // 4. Boot and wait for the web port.
   const log = path.join(artifacts, 'host.log')
-  host = spawn(cli, ['--profile', profile, '--port', String(webPort), '--no-open'], {
+  host = spawnCmd(cli, ['--profile', profile, '--port', String(webPort), '--no-open'], {
     env, cwd: os.tmpdir(), detached: false, stdio: ['ignore', 'pipe', 'pipe'],
   })
   let output = ''
@@ -185,7 +213,7 @@ try {
   record('run', false, error instanceof Error ? error.message : String(error))
 } finally {
   if (host?.pid !== undefined) {
-    host.kill('SIGTERM')
+    killTree(host.pid)
     await new Promise(resolve => setTimeout(resolve, 2_000))
     if (host.exitCode === null) host.kill('SIGKILL')
   }
@@ -193,7 +221,7 @@ try {
   if (process.env.DSH_E2E_KEEP === '1') {
     console.log(`  (kept ${home} because DSH_E2E_KEEP=1)`)
   } else {
-    rmSync(home, { recursive: true, force: true })
+    rmSync(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 })
     rmSync(path.join(REPO, 'e2e-pack'), { recursive: true, force: true })
   }
 }

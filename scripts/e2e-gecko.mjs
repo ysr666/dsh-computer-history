@@ -41,8 +41,17 @@ if (built.status !== 0) process.exit(1)
 // browser another agent started in the same workspace - the independent verifier flagged exactly that.
 const profileDir = mkdtempSync(path.join(os.tmpdir(), 'dsh-gecko-profile-'))
 const log = path.join(artifacts, 'web-ext.log')
-const runner = spawn('npx', ['--yes', 'web-ext', 'run', '-s', 'dist/extension-firefox', `--firefox=${firefox}`,
-  `--firefox-profile=${profileDir}`, '--arg=-headless', '--no-reload'], {
+// cmd.exe does not parse the escaping Node applies to a quoted argument: measured 2026-10-06 on the Windows
+// machine, '"pnpm" "--version"' arrives as '\"pnpm\"' and is not recognised, while the unquoted command line
+// exits 0. So the line is assembled unquoted and only arguments that contain whitespace are quoted.
+const quoteForCmd = a => (/[\s"]/.test(String(a)) ? `"${a}"` : String(a))
+
+const webExtArgs = ['--yes', 'web-ext', 'run', '-s', 'dist/extension-firefox', `--firefox=${firefox}`,
+  `--firefox-profile=${profileDir}`, '--arg=-headless', '--no-reload']
+// `npx` is a .cmd shim on Windows, same measurement as runCmd above.
+const runner = spawn(...(process.platform === 'win32'
+  ? [process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', ['npx', ...webExtArgs].map(quoteForCmd).join(' ')]]
+  : ['npx', webExtArgs]), {
   stdio: ['ignore', 'pipe', 'pipe'],
   // Its own process group, so the whole tree goes down together: killing by name or by a before/after diff
   // leaves the browser's helper processes behind - measured, 8 of them survived the first version of this.
@@ -81,7 +90,7 @@ await new Promise(resolve => setTimeout(resolve, 2_000))
 sweep()
 await new Promise(resolve => setTimeout(resolve, 1_000))
 const survived = browsersOnThisProfile().length
-rmSync(profileDir, { recursive: true, force: true })
+rmSync(profileDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 })
 record('cleaned up', !psAvailable || survived === 0, psAvailable
   ? (survived === 0
     ? `stopped the browser running ${path.basename(profileDir)} (its own profile), nothing left`

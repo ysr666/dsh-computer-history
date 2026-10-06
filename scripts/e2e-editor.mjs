@@ -13,6 +13,47 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync
 import os from 'node:os'
 import path from 'node:path'
 
+// Windows has no process groups, so `process.kill(-pid, ...)` fails there and the old `catch {}` swallowed it -
+// measured 2026-10-06 on the Windows machine: the Host survived, kept its throwaway home busy and the cleanup
+// ended the run with EPERM. `taskkill /T /F` is the Windows way to take down a process tree (the Host starts the
+// collector as a child), and POSIX keeps the group-first, pid-second order it already had.
+const killTree = pid => {
+  if (process.platform === 'win32') {
+    spawnSync(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', `taskkill /pid ${pid} /T /F`], { stdio: 'ignore' })
+    return
+  }
+  try { process.kill(-pid, 'SIGTERM') } catch { try { process.kill(pid, 'SIGTERM') } catch { /* already gone */ } }
+}
+
+// Windows resolves `dsh`, `pnpm` and `npx` to .cmd shims, and Node refuses to spawn a .cmd without a shell.
+// Measured on the Windows machine 2026-10-06: `spawnSync('dsh', ...)` -> status null, error ENOENT;
+// `spawnSync('dsh.cmd', ...)` -> EINVAL; `cmd.exe /d /s /c` -> exit 0. Real executables (node, curl.exe, git, tar)
+// are spawned directly, exactly as before.
+// Same measurement as runCmd: the Host is started with `spawn`, and `dsh` is a .cmd shim on Windows.
+
+const spawnCmd = (command, args, options) => process.platform === 'win32'
+  ? spawn(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', [command, ...args].map(quoteForCmd).join(' ')], options)
+  : spawn(command, args, options)
+
+// cmd.exe does not parse the escaping Node applies to a quoted argument: measured 2026-10-06 on the Windows
+// machine, '"pnpm" "--version"' arrives as '\"pnpm\"' and is not recognised, while the unquoted command line
+// exits 0. So the line is assembled unquoted and only arguments that contain whitespace are quoted.
+// A failure in the install steps used to print only "install failed", which is a dead end on a machine nobody can
+// debug interactively: say which call failed, with the status, the error code and the tail of the CLI's own pnpm log.
+const why = r => {
+  if (r.status === 0) return 'exit 0'
+  const text = `${r.stdout ?? ''}${r.stderr ?? ''}`.trim()
+  const logPath = /((?:[A-Za-z]:\\|\/)[^\s"']*\.plugin-manager[\\/]logs[\\/][^\s"']*pnpm\.log)/.exec(text)?.[1]
+  const tail = logPath && existsSync(logPath) ? ` | log: ${readFileSync(logPath, 'utf8').trim().split('\n').slice(-3).join(' ').slice(0, 200)}` : ''
+  return `status=${r.status} error=${r.error?.code ?? '-'} ${text.split('\n').slice(-3).join(' ').slice(0, 220)}${tail}`
+}
+
+const quoteForCmd = a => (/[\s"]/.test(String(a)) ? `"${a}"` : String(a))
+
+const runCmd = (command, args, options) => process.platform === 'win32'
+  ? spawnSync(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', [command, ...args].map(quoteForCmd).join(' ')], options)
+  : spawnSync(command, args, options)
+
 const REPO = path.resolve(import.meta.dirname, '..')
 process.chdir(REPO)
 const cli = process.env.DSH_CLI ?? 'dsh'
@@ -42,7 +83,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms))
 const home = path.join(os.tmpdir(), `dsh-editor-${path.basename(artifacts)}`)
 const web = 19980 + Math.floor(Math.random() * 15)
 const companion = web + 1
-rmSync(home, { recursive: true, force: true })
+rmSync(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 })
 // The install steps keep the real HOME (pnpm's store lives there); only the Host runs with HOME pointed at the
 // throwaway directory, because the editor bootstrap is staged under $HOME/.dsh/computer-history and the editor
 // installer shells out to the operator's `code`. That is what makes the pairing route safe to call from a test:
@@ -57,18 +98,22 @@ let host
 try {
   const add = spec => {
     allowBuildsOff(path.join(home, 'profiles', 'editor', 'pnpm-workspace.yaml'))
-    let r = spawnSync(cli, ['plugin', '--profile', 'editor', 'add', spec], { env, encoding: 'utf8' })
+    let r = runCmd(cli, ['plugin', '--profile', 'editor', 'add', spec], { env, encoding: 'utf8' })
     if (r.status !== 0) {
       const workspace = path.join(home, 'profiles', 'editor', 'pnpm-workspace.yaml')
       if (existsSync(workspace)) allowBuildsOff(workspace)
-      r = spawnSync(cli, ['plugin', '--profile', 'editor', 'add', spec], { env, encoding: 'utf8' })
+      r = runCmd(cli, ['plugin', '--profile', 'editor', 'add', spec], { env, encoding: 'utf8' })
     }
     return r
   }
-  spawnSync('pnpm', ['pack', '--pack-destination', home])
+  const packed = runCmd('pnpm', ['pack', '--pack-destination', home], { encoding: 'utf8' })
+  record('pack', packed.status === 0, packed.status === 0 ? 'the package tarball exists' : why(packed))
+  if (packed.status !== 0) throw new Error('pack failed')
   const version = JSON.parse(readFileSync('package.json', 'utf8')).version
-  const ok = add('@deepseek-ai/dsh-web-app@0.2.0-rc.2').status === 0 && add(path.join(home, `dsh-computer-history-${version}.tgz`)).status === 0
-  record('install', ok, ok ? 'the throwaway profile has the plugin' : 'install failed')
+  const webApp = add('@deepseek-ai/dsh-web-app@0.2.0-rc.2')
+  const plugin = add(path.join(home, `dsh-computer-history-${version}.tgz`))
+  const ok = webApp.status === 0 && plugin.status === 0
+  record('install', ok, ok ? 'the throwaway profile has the plugin' : `web-app: ${why(webApp)}; plugin: ${why(plugin)}`)
   if (!ok) throw new Error('install failed')
   {
     const manifestPath = path.join(home, 'profiles', 'editor', 'package.json')
@@ -79,7 +124,7 @@ try {
       `- id: computer-history\n  config:\n    enabled: true\n    dataDirectory: ${path.join(home, 'computer-history')}\n    companionPort: ${companion}\n    collectorRestart: false\n`)
   }
 
-  host = spawn(cli, ['--profile', 'editor', '--port', String(web), '--no-open'], { env: hostEnv, cwd: os.tmpdir(), stdio: ['ignore', 'pipe', 'pipe'], detached: true })
+  host = spawnCmd(cli, ['--profile', 'editor', '--port', String(web), '--no-open'], { env: hostEnv, cwd: os.tmpdir(), stdio: ['ignore', 'pipe', 'pipe'], detached: true })
   let out = ''
   host.stdout.on('data', c => { out += c }); host.stderr.on('data', c => { out += c })
   for (let i = 0; i < 40 && !/token=/.test(out); i++) await sleep(1000)
@@ -177,9 +222,12 @@ try {
 } catch (error) {
   record('run', false, error instanceof Error ? error.message : String(error))
 } finally {
-  if (host?.pid !== undefined) { try { process.kill(-host.pid, 'SIGTERM') } catch {} }
+  if (host?.pid !== undefined) killTree(host.pid)
   await sleep(2000)
-  rmSync(home, { recursive: true, force: true })
+  try { rmSync(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }) } catch (error) {
+    // Never let a cleanup that Windows still has a handle on replace the run's real result.
+    console.error(`warning: the throwaway home is still there (${error instanceof Error ? error.message : error})`)
+  }
 }
 
 const failed = checks.filter(c => !c.ok)

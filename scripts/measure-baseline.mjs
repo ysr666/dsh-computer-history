@@ -17,6 +17,37 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import os from 'node:os'
 import path from 'node:path'
 
+// Windows has no process groups, so `process.kill(-pid, ...)` fails there and the old `catch {}` swallowed it -
+// measured 2026-10-06 on the Windows machine: the Host survived, kept its throwaway home busy and the cleanup
+// ended the run with EPERM. `taskkill /T /F` is the Windows way to take down a process tree (the Host starts the
+// collector as a child), and POSIX keeps the group-first, pid-second order it already had.
+const killTree = pid => {
+  if (process.platform === 'win32') {
+    spawnSync(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', `taskkill /pid ${pid} /T /F`], { stdio: 'ignore' })
+    return
+  }
+  try { process.kill(-pid, 'SIGTERM') } catch { try { process.kill(pid, 'SIGTERM') } catch { /* already gone */ } }
+}
+
+// Windows resolves `dsh`, `pnpm` and `npx` to .cmd shims, and Node refuses to spawn a .cmd without a shell.
+// Measured on the Windows machine 2026-10-06: `spawnSync('dsh', ...)` -> status null, error ENOENT;
+// `spawnSync('dsh.cmd', ...)` -> EINVAL; `cmd.exe /d /s /c` -> exit 0. Real executables (node, curl.exe, git, tar)
+// are spawned directly, exactly as before.
+// Same measurement as runCmd: the Host is started with `spawn`, and `dsh` is a .cmd shim on Windows.
+
+const spawnCmd = (command, args, options) => process.platform === 'win32'
+  ? spawn(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', [command, ...args].map(quoteForCmd).join(' ')], options)
+  : spawn(command, args, options)
+
+// cmd.exe does not parse the escaping Node applies to a quoted argument: measured 2026-10-06 on the Windows
+// machine, '"pnpm" "--version"' arrives as '\"pnpm\"' and is not recognised, while the unquoted command line
+// exits 0. So the line is assembled unquoted and only arguments that contain whitespace are quoted.
+const quoteForCmd = a => (/[\s"]/.test(String(a)) ? `"${a}"` : String(a))
+
+const runCmd = (command, args, options) => process.platform === 'win32'
+  ? spawnSync(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', [command, ...args].map(quoteForCmd).join(' ')], options)
+  : spawnSync(command, args, options)
+
 const REPO = path.resolve(import.meta.dirname, '..')
 process.chdir(REPO)
 const cli = process.env.DSH_CLI ?? 'dsh'
@@ -46,7 +77,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms))
 const home = path.join(os.tmpdir(), `dsh-baseline-${path.basename(artifacts)}`)
 const web = 19970 + Math.floor(Math.random() * 9)
 const companion = web + 1
-rmSync(home, { recursive: true, force: true })
+rmSync(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 })
 const env = { ...process.env, DSH_HOME: home }
 let host
 // Two counters, because conflating them is how a number starts lying. `userActions` counts what a person has to
@@ -59,16 +90,16 @@ let internalSteps = 0
 try {
   const add = spec => {
     userActions += 1
-    let r = spawnSync(cli, ['plugin', '--profile', 'baseline', 'add', spec], { env, encoding: 'utf8' })
+    let r = runCmd(cli, ['plugin', '--profile', 'baseline', 'add', spec], { env, encoding: 'utf8' })
     if (r.status !== 0) {
       const workspace = path.join(home, 'profiles', 'baseline', 'pnpm-workspace.yaml')
       if (existsSync(workspace)) allowBuildsOff(workspace)
-      r = spawnSync(cli, ['plugin', '--profile', 'baseline', 'add', spec], { env, encoding: 'utf8' })
+      r = runCmd(cli, ['plugin', '--profile', 'baseline', 'add', spec], { env, encoding: 'utf8' })
     }
     return r.status === 0
   }
   internalSteps += 1 // packing is a build/publish step, not something a user does
-  spawnSync('pnpm', ['pack', '--pack-destination', home])
+  runCmd('pnpm', ['pack', '--pack-destination', home])
   const version = JSON.parse(readFileSync('package.json', 'utf8')).version
   const installed = add('@deepseek-ai/dsh-web-app@0.2.0-rc.2') && add(path.join(home, `dsh-computer-history-${version}.tgz`))
   // The layer list only needs repairing after a half-failed install; a clean one gets it right (docs/development.md:126).
@@ -83,7 +114,7 @@ try {
   }
   if (!installed) say('setup actions to a Host', 'install failed', `${userActions} attempted`)
   userActions += 1 // starting the Host (the desktop application does this by itself)
-  host = spawn(cli, ['--profile', 'baseline', '--port', String(web), '--no-open'], { env, cwd: os.tmpdir(), stdio: ['ignore', 'pipe', 'pipe'], detached: true })
+  host = spawnCmd(cli, ['--profile', 'baseline', '--port', String(web), '--no-open'], { env, cwd: os.tmpdir(), stdio: ['ignore', 'pipe', 'pipe'], detached: true })
   let out = ''
   host.stdout.on('data', c => { out += c }); host.stderr.on('data', c => { out += c })
   for (let i = 0; i < 40 && !/token=/.test(out); i++) await sleep(1000)
@@ -146,9 +177,12 @@ try {
   say('run', 'failed', error instanceof Error ? error.message : String(error))
   process.exitCode = 1
 } finally {
-  if (host?.pid !== undefined) { try { process.kill(-host.pid, 'SIGTERM') } catch {} }
+  if (host?.pid !== undefined) killTree(host.pid)
   await sleep(2000)
-  rmSync(home, { recursive: true, force: true })
+  try { rmSync(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }) } catch (error) {
+    // Never let a cleanup that Windows still has a handle on replace the run's real result.
+    console.error(`warning: the throwaway home is still there (${error instanceof Error ? error.message : error})`)
+  }
 }
 
 console.log(`\nartifacts: ${path.relative(REPO, artifacts)}`)
