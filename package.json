@@ -47,7 +47,8 @@
     "verify:docs": "node scripts/verify-docs.mjs",
     "verify:collector-windows": "node scripts/verify-collector-windows.mjs",
     "build:extension:firefox": "node scripts/build-extension.mjs --target=firefox",
-    "verify:ci-boundaries": "node scripts/verify-ci-boundaries.mjs"
+    "verify:ci-boundaries": "node scripts/verify-ci-boundaries.mjs",
+    "check:app-path": "node scripts/check-app-path.mjs"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "4.0.4",
