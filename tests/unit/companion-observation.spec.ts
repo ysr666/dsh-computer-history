@@ -41,6 +41,19 @@ describe('companion observation', () => {
 })
 
 describe('editor observations (ADR 0009)', () => {
+  it('derives a short workspace title from a native Windows path', () => {
+    const observation = companionObservation({
+      source: 'editor',
+      app: { bundleId: 'com.microsoft.VSCode', name: 'Visual Studio Code' },
+      workspaceRoot: 'C:\\Users\\someone\\Projects\\demo',
+      filePath: 'C:\\Users\\someone\\Projects\\demo\\src\\main.ts',
+      editorSession: 'editor-win',
+      seq: 1,
+      observedAtMs: 20_000,
+    })
+    expect(observation.workspace?.title).toBe('demo')
+  })
+
   it('maps the editor payload to a file resource with companion provenance', () => {
     const observation = companionObservation({
       source: 'editor',
