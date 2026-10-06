@@ -139,6 +139,12 @@ export class CollectorManager {
 
   public start(): void {
     if (this.handle || this.restartTimer) {
+      // Refusing to start twice is correct, and it used to be the one exit from this path that left the state
+      // untouched - so a Host that called start() on a manager which already had a handle or a pending restart
+      // reported "still starting" for ever. Measured on Windows 2026-10-06: `/state` answered
+      // `capture: degraded, reason: collector-starting` (= this manager has no state at all) while none of the
+      // four spawn-path names ever appeared, which is only possible if the spawn was never reached.
+      this.markDegraded('collector-start-refused')
       throw new Error('collector already started')
     }
 
