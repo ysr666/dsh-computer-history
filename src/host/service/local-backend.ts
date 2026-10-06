@@ -265,25 +265,33 @@ implements ComputerHistoryServiceContract {
   }
 
   public getState(): ComputerHistoryState {
-    const maintenance = this.maintenance?.()
-    return {
-      ...this.capture.getState(),
-      // Why things were refused, when the host can tell us: a bare count is a
-      // number, and this is the sentence a new installation needs.
-      ...(this.refusalCounts
-        ? { refusedByReason: Object.fromEntries(this.refusalCounts()) }
-        : {}),
-      ...(this.firstRunPreset
-        ? { firstRunPreset: this.firstRunPreset() }
-        : {}),
-      ...(this.release ? { release: this.release() } : {}),
-      ...(maintenance === undefined ? {} : { maintenance }),
-      observationRetentionHours:
-        this.currentRetention.observationRetentionHours,
-      episodeRetentionDays:
-        this.currentRetention.episodeRetentionDays,
-      autoResume: this.config.autoResume,
-    }
+    return this.withSynchronousOperation(() => {
+      // Retention is shared SQLite state, not Host-local state. Another Host may
+      // change it while this process keeps running; refresh it before composing
+      // /state so the UI cannot disagree with the TTL ingestion is actually using.
+      if (this.db) {
+        this.currentRetention = new RetentionSettingsStore(this.db).get()
+      }
+      const maintenance = this.maintenance?.()
+      return {
+        ...this.capture.getState(),
+        // Why things were refused, when the host can tell us: a bare count is a
+        // number, and this is the sentence a new installation needs.
+        ...(this.refusalCounts
+          ? { refusedByReason: Object.fromEntries(this.refusalCounts()) }
+          : {}),
+        ...(this.firstRunPreset
+          ? { firstRunPreset: this.firstRunPreset() }
+          : {}),
+        ...(this.release ? { release: this.release() } : {}),
+        ...(maintenance === undefined ? {} : { maintenance }),
+        observationRetentionHours:
+          this.currentRetention.observationRetentionHours,
+        episodeRetentionDays:
+          this.currentRetention.episodeRetentionDays,
+        autoResume: this.config.autoResume,
+      }
+    })
   }
 
   public pairing(kind: CompanionKind = 'browser'): PairingState {
