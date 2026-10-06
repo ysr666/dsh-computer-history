@@ -60,7 +60,11 @@ const runner = spawn(...(process.platform === 'win32'
   stdio: ['ignore', 'pipe', 'pipe'],
   // Its own process group, so the whole tree goes down together: killing by name or by a before/after diff
   // leaves the browser's helper processes behind - measured, 8 of them survived the first version of this.
-  detached: true,
+  // detached gives the browser its own process group on POSIX, which is how it is killed afterwards. On Windows it
+  // silently drops the piped output instead: measured 2026-10-06, the same command closes with code 0 and an empty
+  // stdout with `detached: true`, and with the version there without it. Windows does not need the group - the
+  // tree is taken down by pid with taskkill below.
+  detached: process.platform !== 'win32',
 })
 let output = ''
 runner.stdout.on('data', chunk => { output += String(chunk) })
@@ -88,7 +92,11 @@ const browsersOnThisProfile = () => (psAvailable ? (psProbe.stdout ?? '').split(
   .filter(line => /^\s*\d+\s+\/Applications\/Firefox\.app\//.test(line) && line.includes(profileDir))
   .map(line => line.trim().split(/\s+/)[0])
 const sweep = () => { for (const pid of browsersOnThisProfile()) { try { process.kill(Number(pid), 'SIGKILL') } catch { /* already gone */ } } }
-try { process.kill(-runner.pid, 'SIGTERM') } catch { /* already gone */ }
+if (process.platform === 'win32') {
+  spawnSync(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', `taskkill /pid ${runner.pid} /T /F`], { stdio: 'ignore' })
+} else {
+  try { process.kill(-runner.pid, 'SIGTERM') } catch { /* already gone */ }
+}
 await new Promise(resolve => setTimeout(resolve, 2_000))
 sweep()
 await new Promise(resolve => setTimeout(resolve, 2_000))
