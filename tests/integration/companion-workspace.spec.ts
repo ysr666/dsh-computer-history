@@ -122,6 +122,40 @@ describe('a vouched workspace (ADR 0009)', () => {
     history.close()
   })
 
+  it('stores nothing when a resource deny rule matches the vouched workspace root', async () => {
+    const { root } = workspaceOnDisk()
+    const { history, ingestion, now } = service(root, {
+      extraRules: [{
+        id: PolicyRuleId('deny-workspace'),
+        dimension: 'resource',
+        action: 'deny',
+        matcher: 'exact',
+        pattern: root,
+        builtIn: false,
+        createdAtMs: 1,
+        updatedAtMs: 1,
+      }],
+    })
+    const message: NativeObservation = {
+      v: 1,
+      type: 'observation',
+      collectorSession: 'editor-workspace-deny',
+      seq: 1,
+      observedAtMs: now,
+      app: { pid: 0, bundleId: 'com.microsoft.VSCode', name: 'Visual Studio Code' },
+      // Terminal/output-shaped editor observations can name the workspace
+      // without naming a file. ADR 0009 still says the workspace rule decides.
+      window: { title: 'Build output' },
+      workspace: { root, title: path.basename(root) },
+      privacy: { secure: false, protected: false },
+      source: { provider: 'companion', adapter: 'vscode' },
+    }
+
+    expect(await ingestion.ingest(message)).toBe(false)
+    expect(new ObservationStore(history.db).count()).toBe(0)
+    history.close()
+  })
+
   it('anchors an episode to the vouched workspace', async () => {
     const { root, file } = workspaceOnDisk()
     const { history, ingestion, now } = service(root)
