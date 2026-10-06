@@ -56,7 +56,7 @@ let host
 
 try {
   const add = spec => {
-    allowBuildsOff(path.join(home, 'profiles', PROFILE, 'pnpm-workspace.yaml'))
+    allowBuildsOff(path.join(home, 'profiles', 'editor', 'pnpm-workspace.yaml'))
     let r = spawnSync(cli, ['plugin', '--profile', 'editor', 'add', spec], { env, encoding: 'utf8' })
     if (r.status !== 0) {
       const workspace = path.join(home, 'profiles', 'editor', 'pnpm-workspace.yaml')
