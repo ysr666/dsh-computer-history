@@ -170,7 +170,21 @@ export class CompanionIntake {
   public start(): Promise<number> {
     return new Promise((resolve, reject) => {
       const server = createServer((request, response) => {
-        void this.handle(request, response)
+        void this.handle(request, response).catch(() => {
+          // A delivery failure is a request failure, not a process-level unhandled rejection. Ingestion can reject
+          // for real runtime reasons (database/canonicalisation/teardown); keep the loopback server and Host alive
+          // and give the companion an answer it can diagnose.
+          try {
+            if (response.destroyed || response.writableEnded) return
+            if (!response.headersSent) {
+              this.send(response, 500, { error: 'observation delivery failed' })
+            } else {
+              response.end()
+            }
+          } catch {
+            response.destroy()
+          }
+        })
       })
       server.on('error', (error: NodeJS.ErrnoException) => {
         this.server = undefined
