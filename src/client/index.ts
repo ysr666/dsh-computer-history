@@ -23,11 +23,16 @@ import { createHistoryControlStore } from './store.js'
 const PANEL_ID = 'computer-history' as MainPanelId
 
 function HistoryIcon(): React.ReactElement {
+  // The drawing sits in the middle of a 24 viewBox: measured, its ink spans 16.0 x 13.6 there, so a 20px icon
+  // showed only ~13px of ink and read smaller than the platform icons beside it in the sidebar. Crop the frame
+  // rather than redraw - and leave a margin, because a stroke is painted outside the path it belongs to: the first
+  // crop (4.4 3 17.6 17.6) cut into the 1.9-wide stroke on the left. `2 1 22 22` puts the ink at ~15.5px, between
+  // the untouched 13px and the too-tight 19px, with at least a pixel of room on every side.
   return React.createElement(
     'svg',
     {
       'aria-hidden': true,
-      viewBox: '0 0 24 24',
+      viewBox: '2 1 22 22',
       width: 20,
       height: 20,
       fill: 'none',
