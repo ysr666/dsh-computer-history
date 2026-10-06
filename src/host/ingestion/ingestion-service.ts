@@ -19,7 +19,10 @@ import {
   ObservationStore,
   ResourceStore,
 } from '../store/index.js'
-import { canonicalizeResource } from './canonicalize.js'
+import {
+  canonicalizeLocalPath,
+  canonicalizeResource,
+} from './canonicalize.js'
 import {
   normalizeObservation,
   type RefusalReason,
@@ -251,17 +254,46 @@ export class IngestionService {
     const vouched = message.source.provider === 'companion'
       ? message.workspace
       : undefined
-    const workspace: WorkspaceRef = vouched
-      ? {
-          id: vouched.root,
-          root: vouched.root,
-          ...(vouched.title === undefined ? {} : { title: vouched.title }),
-          source: 'companion',
-          confidence: 1,
-        }
-      : await this.workspaceResolver.resolve(
-          canonicalPreliminary.resource,
-        )
+    let workspace: WorkspaceRef
+    if (vouched) {
+      const rawWorkspace: WorkspaceRef = {
+        id: vouched.root,
+        root: vouched.root,
+        ...(vouched.title === undefined ? {} : { title: vouched.title }),
+        source: 'companion',
+        confidence: 1,
+      }
+
+      // Preserve policy semantics for the exact alias the editor vouched for.
+      // Then canonicalise the root and run the final normaliser again below,
+      // so a symlink such as /safe/project -> ~/.ssh cannot make a protected
+      // workspace storable merely because its alias looks harmless.
+      const rawWorkspaceRefusal: RefusalReport = {}
+      const rawWorkspaceObservation = normalizeObservation(
+        message,
+        this.policy(),
+        this.now(),
+        rawWorkspace,
+        canonicalResource,
+        this.observationRetentionMs(),
+        rawWorkspaceRefusal,
+      )
+      if (!rawWorkspaceObservation) {
+        return this.refuse(rawWorkspaceRefusal.reason ?? 'unknown')
+      }
+
+      const canonicalRoot = await canonicalizeLocalPath(vouched.root)
+      if (!canonicalRoot) return false
+      workspace = {
+        ...rawWorkspace,
+        id: canonicalRoot,
+        root: canonicalRoot,
+      }
+    } else {
+      workspace = await this.workspaceResolver.resolve(
+        canonicalPreliminary.resource,
+      )
+    }
 
     this.db.exec('BEGIN IMMEDIATE')
     try {

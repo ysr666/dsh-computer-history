@@ -106,7 +106,7 @@ export function rotateAndStageEditorCompanionBootstrap(input: {
         : { homeDirectory: input.homeDirectory }),
     })
   } catch (error) {
-    input.tokens.restore('editor', checkpoint)
+    input.tokens.restore('editor', checkpoint, token)
     throw error
   }
 }

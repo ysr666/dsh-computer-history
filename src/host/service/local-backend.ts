@@ -339,7 +339,7 @@ implements ComputerHistoryServiceContract {
       try {
         return publish(rotation)
       } catch (error) {
-        this.pairingTokens.restore(kind, checkpoint)
+        this.pairingTokens.restore(kind, checkpoint, token)
         throw error
       }
     })

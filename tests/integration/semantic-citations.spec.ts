@@ -133,6 +133,45 @@ describe('turn off and purge (ADR 0004, Consequences)', () => {
     db.close()
   })
 
+  it('purges an app model summary after raw provenance has compacted away', () => {
+    const db = database()
+    insertEpisode(db, 'episode-remote-app', 'remote')
+    insertEpisode(db, 'episode-plain-app', 'deterministic')
+    for (const episodeId of ['episode-remote-app', 'episode-plain-app']) {
+      db.prepare(`
+        INSERT INTO episode_surfaces(
+          episode_id, bundle_id, surface_kind,
+          first_seen_at_ms, last_seen_at_ms, observation_count
+        ) VALUES (?, 'com.example.Editor', 'editor', 1, 2, 2)
+      `).run(episodeId)
+    }
+
+    // No observation or episode_observations rows remain: this is the normal
+    // post-retention state for a still-live Episode. The durable surface
+    // aggregate is the only app identity that survives with the summary.
+    expect(db.prepare(
+      'SELECT COUNT(*) AS count FROM observations',
+    ).get()).toEqual({ count: 0 })
+    expect(db.prepare(
+      'SELECT COUNT(*) AS count FROM episode_observations',
+    ).get()).toEqual({ count: 0 })
+
+    const optIns = new SemanticOptInStore(db)
+    const purged = optIns.purge({
+      kind: 'app',
+      bundleId: 'com.example.Editor',
+    })
+
+    expect(purged).toBe(1)
+    const remaining = db.prepare(
+      'SELECT id FROM episodes ORDER BY id',
+    ).all() as Array<{ id: string }>
+    expect(remaining.map(row => row.id)).toEqual([
+      'episode-plain-app',
+    ])
+    db.close()
+  })
+
   it('refuses a scope key it cannot parse', () => {
     expect(() => parseScopeKey('nonsense')).toThrow(/unrecognised scope key/)
     expect(parseScopeKey('workspace:w1')).toEqual({ kind: 'workspace', id: 'w1' })
