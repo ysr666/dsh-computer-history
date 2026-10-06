@@ -26,7 +26,10 @@ type Credential = {
 }
 
 export interface CompanionPairingCheckpoint {
-  readonly credential?: Credential
+  readonly credential?: {
+    readonly tokenHash: string
+    readonly createdAtMs: number
+  }
 }
 
 /**
