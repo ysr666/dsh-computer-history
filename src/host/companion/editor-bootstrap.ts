@@ -69,8 +69,10 @@ export function stageEditorCompanionBootstrap(input: {
       flag: 'wx',
     })
     chmodSync(temporary, 0o600)
+    // The temporary file is already 0600; rename preserves its mode.
+    // Keep rename as the publication point and do nothing fallible afterwards,
+    // so a thrown staging operation never leaves a newly-published credential.
     renameSync(temporary, target)
-    chmodSync(target, 0o600)
   } finally {
     rmSync(temporary, { force: true })
   }
