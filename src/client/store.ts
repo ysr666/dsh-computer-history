@@ -196,6 +196,8 @@ export function createHistoryControlStore(
       mutationEpoch += 1
       publish({
         ...snapshot,
+        status: 'ready',
+        error: undefined,
         historyRevision: snapshot.historyRevision + 1,
       })
       return result
@@ -205,6 +207,8 @@ export function createHistoryControlStore(
       mutationEpoch += 1
       publish({
         ...snapshot,
+        status: 'ready',
+        error: undefined,
         historyRevision: snapshot.historyRevision + 1,
       })
       return result
@@ -218,6 +222,8 @@ export function createHistoryControlStore(
         const editorLastSeenAtMs = state.companion?.editorLastSeenAtMs
         publish({
           ...snapshot,
+          status: 'ready',
+          error: undefined,
           state: {
             ...state,
             companion: {
@@ -231,6 +237,8 @@ export function createHistoryControlStore(
             },
           },
         })
+      } else {
+        publish({ ...snapshot, status: 'ready', error: undefined })
       }
       return rotation
     },
