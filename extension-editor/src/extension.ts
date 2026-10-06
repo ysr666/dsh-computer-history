@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import * as vscode from 'vscode'
 import {
   buildEditorPayload,
@@ -8,7 +9,7 @@ import {
 
 let reporter: ((message: string) => void) | undefined
 let seq = 0
-const session = `vscode-${Date.now().toString(36)}`
+const session = `vscode-${randomUUID()}`
 const TOKEN_SECRET = 'companionToken'
 const PORT_STATE = 'companionPort'
 const DEFAULT_PORT = 19388
@@ -190,7 +191,28 @@ async function send(context: vscode.ExtensionContext): Promise<void> {
         observedAtMs: Date.now(),
       })),
     })
-    if (!response.ok) {
+    if (response.status === 202) {
+      let delivery: { readonly stored?: unknown; readonly reason?: unknown } | undefined
+      try {
+        delivery = await response.json() as {
+          readonly stored?: unknown
+          readonly reason?: unknown
+        }
+      } catch {
+        delivery = undefined
+      }
+      if (delivery?.stored === false) {
+        report(
+          `send not stored: ${
+            typeof delivery.reason === 'string'
+              ? delivery.reason
+              : 'policy-or-duplicate'
+          }`,
+        )
+      } else {
+        report('send not stored: Host answered HTTP 202')
+      }
+    } else if (!response.ok) {
       report(`send rejected: HTTP ${response.status}`)
     }
   } catch {
