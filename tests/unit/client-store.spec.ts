@@ -199,6 +199,69 @@ describe('client control store', () => {
     expect(store.getSnapshot().status).toBe('ready')
   })
 
+  it('returns to ready when delete supersedes an older reload', async () => {
+    const backend = fakeControlApi()
+    const store = createHistoryControlStore(backend)
+    await store.load()
+
+    let resolveOldPolicy!: (value: PolicySnapshot) => void
+    backend.getPolicy.mockReturnValueOnce(new Promise<PolicySnapshot>(resolve => {
+      resolveOldPolicy = resolve
+    }))
+
+    const reloading = store.reload()
+    expect(store.getSnapshot().status).toBe('loading')
+
+    await store.deleteHistory({ scope: { kind: 'all' } })
+    expect(store.getSnapshot().status).toBe('ready')
+
+    resolveOldPolicy(readyPolicy)
+    await reloading
+    expect(store.getSnapshot().status).toBe('ready')
+  })
+
+  it('returns to ready when import supersedes an older reload', async () => {
+    const backend = fakeControlApi()
+    const store = createHistoryControlStore(backend)
+    await store.load()
+
+    let resolveOldPolicy!: (value: PolicySnapshot) => void
+    backend.getPolicy.mockReturnValueOnce(new Promise<PolicySnapshot>(resolve => {
+      resolveOldPolicy = resolve
+    }))
+
+    const reloading = store.reload()
+    expect(store.getSnapshot().status).toBe('loading')
+
+    await store.importHistory({ schema: 'test' })
+    expect(store.getSnapshot().status).toBe('ready')
+
+    resolveOldPolicy(readyPolicy)
+    await reloading
+    expect(store.getSnapshot().status).toBe('ready')
+  })
+
+  it('returns to ready when pairing rotation supersedes an older reload', async () => {
+    const backend = fakeControlApi()
+    const store = createHistoryControlStore(backend)
+    await store.load()
+
+    let resolveOldPolicy!: (value: PolicySnapshot) => void
+    backend.getPolicy.mockReturnValueOnce(new Promise<PolicySnapshot>(resolve => {
+      resolveOldPolicy = resolve
+    }))
+
+    const reloading = store.reload()
+    expect(store.getSnapshot().status).toBe('loading')
+
+    await store.rotatePairing()
+    expect(store.getSnapshot().status).toBe('ready')
+
+    resolveOldPolicy(readyPolicy)
+    await reloading
+    expect(store.getSnapshot().status).toBe('ready')
+  })
+
   it('bumps historyRevision after destructive history changes', async () => {
     const backend = fakeControlApi()
     const store = createHistoryControlStore(backend)
