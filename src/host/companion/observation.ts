@@ -44,7 +44,7 @@ export function companionObservation(
       // than letting the resolver infer one from the document path.
       workspace: {
         root: payload.workspaceRoot,
-        title: payload.workspaceRoot.split('/').findLast(segment => segment !== '')
+        title: payload.workspaceRoot.split(/[\\/]/).findLast(segment => segment !== '')
           ?? payload.workspaceRoot,
       },
       // Derived from the bundle the editor claimed, through the same table the collector path uses, so a row
