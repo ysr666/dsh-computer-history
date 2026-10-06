@@ -57,8 +57,19 @@ export class SupportedApplicationInventoryReader {
   }
 
   public read(): Promise<SupportedApplicationInventory> {
-    this.promise ??= this.readNow()
-    return this.promise
+    if (this.promise) return this.promise
+
+    const running = this.readNow()
+    this.promise = running
+    void running.then(
+      () => {
+        if (this.promise === running) this.promise = undefined
+      },
+      () => {
+        if (this.promise === running) this.promise = undefined
+      },
+    )
+    return running
   }
 
   private async readNow(): Promise<SupportedApplicationInventory> {

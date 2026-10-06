@@ -79,18 +79,29 @@ describe('supported application inventory', () => {
     }
   })
 
-  it('coalesces repeated reads into one inventory probe', async () => {
-    const child = runtime({
+  it('coalesces concurrent reads but refreshes a later inventory snapshot', async () => {
+    const found: Record<string, string> = {
       'com.apple.Terminal': '/System/Applications/Utilities/Terminal.app\n',
-    })
+    }
+    const child = runtime(found)
     const inventory = new SupportedApplicationInventoryReader({
       subprocess: child as never,
       cwd: '/tmp',
       platform: 'darwin',
     })
-    await Promise.all([inventory.read(), inventory.read()])
-    const calls = child.spawn.mock.calls.length
-    await inventory.read()
-    expect(child.spawn).toHaveBeenCalledTimes(calls)
+
+    const [first, concurrent] = await Promise.all([
+      inventory.read(),
+      inventory.read(),
+    ])
+    expect(concurrent).toEqual(first)
+    const firstProbeCalls = child.spawn.mock.calls.length
+
+    found['com.microsoft.VSCode'] = '/Applications/Visual Studio Code.app\n'
+    const refreshed = await inventory.read()
+    expect(refreshed.applications).toEqual(expect.arrayContaining([
+      expect.objectContaining({ bundleId: 'com.microsoft.VSCode' }),
+    ]))
+    expect(child.spawn.mock.calls.length).toBeGreaterThan(firstProbeCalls)
   })
 })

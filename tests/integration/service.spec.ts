@@ -27,6 +27,7 @@ import {
   ResourceStore,
 } from '../../src/host/store/index.js'
 import { SemanticOptInStore } from '../../src/host/semantic/opt-in.js'
+import { CompanionTokenStore } from '../../src/host/companion/token-store.js'
 import { RemoteSendStore } from '../../src/host/semantic/send-store.js'
 
 const roots: string[] = []
@@ -435,6 +436,230 @@ describe('local computer history backend', () => {
       'SELECT id FROM episodes WHERE id = ?',
     ).get('remote-ep')).toEqual({ id: 'remote-ep' })
     expect(sends.listForScope('workspace:w1')).toHaveLength(1)
+    history.close()
+  })
+
+  it('refuses a delayed editor pairing publication once backend drain has begun', async () => {
+    const history = openTempDatabase()
+    const policies = new PolicyStore(history.db)
+    policies.ensureInitial(1)
+    const tokens = new CompanionTokenStore(history.db)
+    const previous = tokens.rotate('editor', 1_000)
+
+    const backend = new LocalComputerHistoryBackend(
+      new EpisodeStore(history.db),
+      policies,
+      new DeletionService(history.db),
+      new FakeCapture(),
+      {
+        observationRetentionHours: 24,
+        episodeRetentionDays: 30,
+        autoResume: false,
+        now: () => 2_000,
+      },
+      tokens,
+      undefined,
+      history.db,
+    )
+
+    await backend.drain()
+
+    let published = false
+    expect(() => backend.publishPairingRotation('editor', () => {
+      published = true
+    })).toThrow(/disposing/)
+    expect(published).toBe(false)
+
+    // A delayed installer finishing after drain must not invalidate the
+    // credential that was working before teardown began.
+    expect(tokens.verify('editor', previous)).toBe(true)
+    expect(tokens.state('editor')).toEqual({
+      paired: true,
+      createdAtMs: 1_000,
+    })
+    history.close()
+  })
+
+  it('rolls pairing publication back if the handoff publisher fails', () => {
+    const history = openTempDatabase()
+    const policies = new PolicyStore(history.db)
+    policies.ensureInitial(1)
+    const tokens = new CompanionTokenStore(history.db)
+    const previous = tokens.rotate('editor', 1_000)
+
+    const backend = new LocalComputerHistoryBackend(
+      new EpisodeStore(history.db),
+      policies,
+      new DeletionService(history.db),
+      new FakeCapture(),
+      {
+        observationRetentionHours: 24,
+        episodeRetentionDays: 30,
+        autoResume: false,
+        now: () => 2_000,
+      },
+      tokens,
+      undefined,
+      history.db,
+    )
+
+    expect(() => backend.publishPairingRotation('editor', () => {
+      throw new Error('forced bootstrap publication failure')
+    })).toThrow(/forced bootstrap publication failure/)
+    expect(tokens.verify('editor', previous)).toBe(true)
+    expect(tokens.state('editor')).toEqual({
+      paired: true,
+      createdAtMs: 1_000,
+    })
+    history.close()
+  })
+
+  it('does not let an in-flight remote request recreate state after its scope is revoked', async () => {
+    const history = openTempDatabase()
+    const episodeId = seedEpisode(history)
+    const episodes = new EpisodeStore(history.db)
+    const policies = new PolicyStore(history.db)
+    policies.ensureInitial(1)
+    const optIns = new SemanticOptInStore(history.db)
+    const backend = new LocalComputerHistoryBackend(
+      episodes,
+      policies,
+      new DeletionService(history.db),
+      new FakeCapture(),
+      {
+        observationRetentionHours: 24,
+        episodeRetentionDays: 30,
+        autoResume: false,
+        now: () => 5_000,
+      },
+      undefined,
+      optIns,
+      history.db,
+    )
+    backend.grantSemanticOptIn({
+      scopeKey: 'workspace:alpha',
+      providerKind: 'remote',
+      model: 'm',
+    })
+    const citation = episodes.get(episodeId)?.summaryObservationIds[0]
+    expect(citation).toBeDefined()
+
+    let releaseResponse!: () => void
+    let requestStarted!: () => void
+    const started = new Promise<void>(resolve => {
+      requestStarted = resolve
+    })
+    const response = new Promise<Response>(resolve => {
+      releaseResponse = () => resolve(Response.json({
+        summary: 'Too late.',
+        citations: [Number(citation)],
+      }))
+    })
+
+    const remote = backend.summariseRemotely({
+      scopeKey: 'workspace:alpha',
+      endpoint: 'https://models.example.test/v1',
+      model: 'm',
+      fetchImpl: async () => {
+        requestStarted()
+        return response
+      },
+    })
+    await started
+
+    expect(backend.revokeSemanticOptIn({
+      scopeKey: 'workspace:alpha',
+    })).toMatchObject({
+      revoked: true,
+      forgotten: 0,
+    })
+    expect(optIns.get({ kind: 'workspace', id: 'alpha' })).toBeUndefined()
+
+    releaseResponse()
+    await expect(remote).rejects.toThrow(/no recorded opt-in/)
+    expect(new RemoteSendStore(history.db).listForScope('workspace:alpha'))
+      .toHaveLength(0)
+    history.close()
+  })
+
+  it('does not return a remote summary if consent is revoked while its response body is still streaming', async () => {
+    const history = openTempDatabase()
+    const episodeId = seedEpisode(history)
+    const episodes = new EpisodeStore(history.db)
+    const policies = new PolicyStore(history.db)
+    policies.ensureInitial(1)
+    const optIns = new SemanticOptInStore(history.db)
+    const sends = new RemoteSendStore(history.db)
+    const backend = new LocalComputerHistoryBackend(
+      episodes,
+      policies,
+      new DeletionService(history.db),
+      new FakeCapture(),
+      {
+        observationRetentionHours: 24,
+        episodeRetentionDays: 30,
+        autoResume: false,
+        now: () => 5_000,
+      },
+      undefined,
+      optIns,
+      history.db,
+    )
+    backend.grantSemanticOptIn({
+      scopeKey: 'workspace:alpha',
+      providerKind: 'remote',
+      model: 'm',
+    })
+    const citation = episodes.get(episodeId)?.summaryObservationIds[0]
+    expect(citation).toBeDefined()
+
+    let releaseBody!: () => void
+    const bodyGate = new Promise<void>(resolve => {
+      releaseBody = resolve
+    })
+    let bodyStarted!: () => void
+    const bodyHasStarted = new Promise<void>(resolve => {
+      bodyStarted = resolve
+    })
+
+    const remote = backend.summariseRemotely({
+      scopeKey: 'workspace:alpha',
+      endpoint: 'https://models.example.test/v1',
+      model: 'm',
+      fetchImpl: async () => new Response(new ReadableStream<Uint8Array>({
+        start(controller) {
+          bodyStarted()
+          void bodyGate.then(() => {
+            controller.enqueue(new TextEncoder().encode(JSON.stringify({
+              summary: 'Too late after body read.',
+              citations: [Number(citation)],
+            })))
+            controller.close()
+          })
+        },
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    })
+
+    await bodyHasStarted
+    for (let i = 0; i < 10 && sends.listForScope('workspace:alpha').length === 0; i += 1) {
+      await Promise.resolve()
+    }
+    expect(sends.listForScope('workspace:alpha')).toHaveLength(1)
+
+    expect(backend.revokeSemanticOptIn({
+      scopeKey: 'workspace:alpha',
+    })).toMatchObject({
+      revoked: true,
+      forgotten: 1,
+    })
+    expect(sends.listForScope('workspace:alpha')).toHaveLength(0)
+
+    releaseBody()
+    await expect(remote).rejects.toThrow(/no recorded opt-in/)
+    expect(sends.listForScope('workspace:alpha')).toHaveLength(0)
     history.close()
   })
 

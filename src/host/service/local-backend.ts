@@ -294,16 +294,18 @@ implements ComputerHistoryServiceContract {
     })
   }
 
+  private pairingNow(kind: CompanionKind): PairingState {
+    const state = this.pairingTokens?.state(kind) ?? { paired: false }
+    const companion = this.capture.getCompanionState?.()
+    return {
+      ...state,
+      listening: companion?.listening ?? false,
+      ...(companion?.port === undefined ? {} : { port: companion.port }),
+    }
+  }
+
   public pairing(kind: CompanionKind = 'browser'): PairingState {
-    return this.withSynchronousOperation(() => {
-      const state = this.pairingTokens?.state(kind) ?? { paired: false }
-      const companion = this.capture.getCompanionState?.()
-      return {
-        ...state,
-        listening: companion?.listening ?? false,
-        ...(companion?.port === undefined ? {} : { port: companion.port }),
-      }
-    })
+    return this.withSynchronousOperation(() => this.pairingNow(kind))
   }
 
   /** Rotate one companion kind without invalidating the other. */
@@ -313,7 +315,33 @@ implements ComputerHistoryServiceContract {
         throw new Error('companion pairing is unavailable')
       }
       const token = this.pairingTokens.rotate(kind, this.now())
-      return { ...this.pairing(kind), token }
+      return { ...this.pairingNow(kind), token }
+    })
+  }
+
+  /**
+   * Rotate a credential and publish its cleartext handoff as one tracked Host
+   * operation. The publisher is intentionally synchronous: filesystem staging
+   * is the only supported use, so teardown can either reject before touching
+   * SQLite or wait until the rotate/publish/compensate sequence is complete.
+   */
+  public publishPairingRotation<T>(
+    kind: CompanionKind,
+    publish: (rotation: PairingRotation) => T,
+  ): T {
+    return this.withSynchronousOperation(() => {
+      if (!this.pairingTokens) {
+        throw new Error('companion pairing is unavailable')
+      }
+      const checkpoint = this.pairingTokens.checkpoint(kind)
+      const token = this.pairingTokens.rotate(kind, this.now())
+      const rotation = { ...this.pairingNow(kind), token }
+      try {
+        return publish(rotation)
+      } catch (error) {
+        this.pairingTokens.restore(kind, checkpoint)
+        throw error
+      }
     })
   }
 
