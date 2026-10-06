@@ -51,7 +51,16 @@ try {
 } catch { observations = undefined }
 
 const step1 = pluginInstalled ? 'done' : 'not done'
-const step2 = restartNeeded === true ? 'not done (restart the application)' : 'done'
+// Three states, never a silent "done": an application that is not running has no running process to judge, and a
+// profile with no manifest cannot have loaded anything. The first version defaulted both to 'done', which the edge
+// runs caught: with no `.dsh` at all it reported step 2 as done.
+const step2 = appStartedMs === undefined
+  ? 'unknown (application not running)'
+  : !pluginInstalled
+    ? 'not done (the plugin is not installed)'
+    : restartNeeded
+      ? 'not done (restart the application)'
+      : 'done'
 const step3 = observations === undefined ? 'unreadable' : observations > 0 ? 'done' : 'not done'
 const rows = [
   ['1. the plugin is installed as a layer', step1],
