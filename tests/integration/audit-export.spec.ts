@@ -277,6 +277,14 @@ describe('audit export and import', () => {
       .toThrow(HistoryImportError)
     expect(() => importHistory(db, {
       ...good,
+      schemaVersion: undefined,
+    })).toThrow(/unsupported schema version/)
+    expect(() => importHistory(db, {
+      ...good,
+      schemaVersion: good.schemaVersion + 1,
+    })).toThrow(/unsupported schema version/)
+    expect(() => importHistory(db, {
+      ...good,
       tables: { ...good.tables, surprise_table: [] },
     })).toThrow(/unknown table: surprise_table/)
     expect(() => importHistory(db, {
