@@ -15,6 +15,7 @@ const enCore = {
   andMore: ' and {count} more',
   unnamedWorkspace: 'an unnamed workspace',
   reasonCaptureOwnedByAnotherHost: 'Another DSH Host is already recording on this machine. History remains readable here; close the other Host, then retry recording to take over.',
+  reasonNoAppsAllowed: 'No applications are allowed yet, so Computer History cannot record anything. Allow the recommended apps here, or choose participating apps in Settings.',
   reasonCaptureDisabled: 'Recording is switched off in the Host configuration.',
   reasonCaptureUnavailable: 'Recording is not available right now. Retry recording.',
   reasonPolicyOwnedByAnotherHost: 'Application rules are controlled by another DSH Host. Close the other Host before changing participating applications.',
@@ -58,6 +59,9 @@ const enCore = {
   firstRunPrivacy: 'No screen contents, document text, selections, keystrokes, or clipboard content are recorded.',
   firstRunProtected: 'Password managers always stay excluded.',
   firstRunApps: 'Supported applications detected on this Mac are enabled by default; the optional browser companion stays ready but records nothing until you connect it. You can change participating apps anytime in Settings.',
+  allowRecommendedApps: 'Allow recommended apps',
+  allowingRecommendedApps: 'Allowing apps…',
+  chooseAppsInSettings: 'Prefer to choose manually? Open Settings → Computer History → Applications.',
   startRecording: 'Start recording',
   startAndAuthorize: 'Start and grant permission',
   setupPermissionTitle: 'One system permission to go',
@@ -312,6 +316,7 @@ export const zh: Record<HistoryLocaleKey, string> = {
   andMore: ' 等 {count} 项',
   unnamedWorkspace: '未命名的工作区',
   reasonCaptureOwnedByAnotherHost: '这台机器上已有另一个 DSH 宿主在记录，这里仍可查看历史。关闭另一宿主后，点击“重试记录”即可接管。',
+  reasonNoAppsAllowed: '还没有允许任何应用，所以电脑使用记录现在不会记录任何内容。可以在这里允许推荐应用，或到设置中选择参与记录的应用。',
   reasonCaptureDisabled: '宿主配置里已关闭记录。',
   reasonCaptureUnavailable: '当前暂时无法记录。可以点击“重试记录”重新连接。',
   reasonPolicyOwnedByAnotherHost: '应用规则正由另一个 DSH 宿主掌管。关闭另一宿主后，再修改参与记录的应用。',
@@ -355,6 +360,9 @@ export const zh: Record<HistoryLocaleKey, string> = {
   firstRunPrivacy: '不会记录屏幕内容、文档正文、选中文字、按键或剪贴板内容。',
   firstRunProtected: '密码管理器始终排除在记录之外。',
   firstRunApps: '默认启用这台 Mac 上检测到的受支持应用；浏览器伴侣只预留入口，未连接前不会记录任何内容。你可以随时在设置中修改参与记录的应用。',
+  allowRecommendedApps: '允许推荐应用',
+  allowingRecommendedApps: '正在允许…',
+  chooseAppsInSettings: '想自己选择？打开“设置 → 电脑使用记录 → 参与的应用”。',
   startRecording: '开始记录',
   startAndAuthorize: '开始并授权',
   setupPermissionTitle: '还差一个系统权限',
@@ -622,6 +630,7 @@ export function failureText(t: (key: HistoryLocaleKey, params?: Record<string, s
  */
 const REASON_KEYS: Record<string, HistoryLocaleKey> = {
   'capture-owned-by-another-host': 'reasonCaptureOwnedByAnotherHost',
+  'no-apps-allowed': 'reasonNoAppsAllowed',
   'computer history capture is owned by another DSH Host': 'reasonCaptureOwnedByAnotherHost',
   'capture policy is owned by another DSH Host': 'reasonPolicyOwnedByAnotherHost',
   'computer history capture is disabled': 'reasonCaptureDisabled',
@@ -645,6 +654,11 @@ const REASON_KEYS: Record<string, HistoryLocaleKey> = {
 export function reasonText(t: HistoryTranslate, reason: string): string {
   const key = REASON_KEYS[reason.trim()]
   return key ? t(key) : reason
+}
+
+/** Whether this Host reason can be repaired in-place by applying the existing first-run app preset. */
+export function reasonNeedsAllowedApps(reason: string | undefined): boolean {
+  return reason?.trim() === 'no-apps-allowed'
 }
 
 function labels(resources: readonly { displayLabel?: string; canonicalUri: string }[], limit: number, t: HistoryTranslate): string {
