@@ -12,6 +12,7 @@
 // another Host on the machine owns capture, so the cells that need a stored row say so instead of reporting a
 // zero that means nothing.
 import { spawn, spawnSync } from 'node:child_process'
+import { DatabaseSync } from 'node:sqlite'
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -75,7 +76,7 @@ try {
   if (token === undefined) throw new Error('the Host never started; see host.log')
   const api = `http://127.0.0.1:${web}/api/computer-history`
   const jar = path.join(artifacts, 'cookies.txt')
-  spawnSync('curl', ['-s', '-c', jar, '-o', '/dev/null', `http://127.0.0.1:${web}/?token=${token}`])
+  spawnSync('curl', ['-s', '-c', jar, '-o', path.join(artifacts, 'bootstrap.html'), `http://127.0.0.1:${web}/?token=${token}`])
   const get = (p) => { try { return JSON.parse(spawnSync('curl', ['-s', '-b', jar, `${api}${p}`], { encoding: 'utf8' }).stdout) } catch { return {} } }
 
   // ① setup actions a user performs, and what a stored row would additionally need.
@@ -87,7 +88,14 @@ try {
 
   // ② observations that appear with no action at all: read before doing anything else.
   const db = path.join(home, 'computer-history', 'history.sqlite')
-  const rowsWithNoAction = spawnSync('sqlite3', [db, 'select count(*) from observations;'], { encoding: 'utf8' }).stdout.trim()
+  // node:sqlite, not the `sqlite3` CLI: the CLI is absent on Windows, and this measurement is meant to run
+  // wherever the Host does.
+  let rowsWithNoAction = '0'
+  try {
+    const store = new DatabaseSync(db, { readOnly: true })
+    rowsWithNoAction = String(store.prepare('select count(*) as n from observations').get().n)
+    store.close()
+  } catch { rowsWithNoAction = 'unreadable' }
   say('② rows with no action', rowsWithNoAction, `companion paired=${state.companion?.paired ?? 'unknown'}`)
 
   // ③ the retrieval engine.

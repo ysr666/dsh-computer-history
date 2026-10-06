@@ -65,10 +65,14 @@ record(
 // Firefox re-parents itself out of the group web-ext was started in, so a group kill misses it: measured, the
 // "cleaned up" line printed while eleven of its processes were still alive. Kill by this run's own profile
 // directory instead, then check rather than assume - the check fails if anything is left.
-const browsersOnThisProfile = () => spawnSync('ps', ['-eo', 'pid,command'], { encoding: 'utf8' }).stdout.split('\n')
+// `ps` and `kill` are not on Windows. Where `ps` is missing the survivor check cannot run at all, and saying
+// "0 survivors" then would be a claim nobody verified - so the check reports that it was skipped instead.
+const psProbe = spawnSync('ps', ['-eo', 'pid,command'], { encoding: 'utf8' })
+const psAvailable = !psProbe.error
+const browsersOnThisProfile = () => (psAvailable ? (psProbe.stdout ?? '').split('\n') : [])
   .filter(line => /^\s*\d+\s+\/Applications\/Firefox\.app\//.test(line) && line.includes(profileDir))
   .map(line => line.trim().split(/\s+/)[0])
-const sweep = () => { for (const pid of browsersOnThisProfile()) spawnSync('kill', ['-KILL', pid]) }
+const sweep = () => { for (const pid of browsersOnThisProfile()) { try { process.kill(Number(pid), 'SIGKILL') } catch { /* already gone */ } } }
 try { process.kill(-runner.pid, 'SIGTERM') } catch { /* already gone */ }
 await new Promise(resolve => setTimeout(resolve, 2_000))
 sweep()
@@ -77,9 +81,11 @@ sweep()
 await new Promise(resolve => setTimeout(resolve, 1_000))
 const survived = browsersOnThisProfile().length
 rmSync(profileDir, { recursive: true, force: true })
-record('cleaned up', survived === 0, survived === 0
-  ? `stopped the browser running ${path.basename(profileDir)} (its own profile), nothing left`
-  : `${survived} of this run's browser processes survived`)
+record('cleaned up', !psAvailable || survived === 0, psAvailable
+  ? (survived === 0
+    ? `stopped the browser running ${path.basename(profileDir)} (its own profile), nothing left`
+    : `${survived} of this run's browser processes survived`)
+  : 'not verifiable here: no ps on this platform, so no survivor could be counted')
 
 writeFileSync(path.join(artifacts, 'checks.json'), `${JSON.stringify(checks, null, 2)}\n`)
 const failed = checks.filter(check => !check.ok)
