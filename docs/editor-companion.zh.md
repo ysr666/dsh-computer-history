@@ -8,7 +8,7 @@
 
 | 发送 | 编辑器里的来源 |
 |---|---|
-| `workspaceRoot` | `workspace.workspaceFolders[0].uri.fsPath` |
+| `workspaceRoot` | 当前活动文档所属的工作区（`workspace.getWorkspaceFolder(...)`）；没有活动编辑器时才使用唯一/默认工作区 |
 | `filePath` | `window.activeTextEditor.document.uri.fsPath` |
 | `languageId` | `document.languageId` |
 | `surfaceKind` | 当前视图：editor、diff、terminal |
@@ -59,7 +59,7 @@ content-type: application/json
 }
 ```
 
-`201 {"stored":true}` 表示**存下了**；`202 {"stored":false}` 表示**宿主拒绝了它**（请求本身是合法的，这个回答是关于存储的）。如果拒绝是**采集本身**决定的（`capture-paused`、`collector-not-running`、`capture-disabled`、`capture-not-owned`），响应里还会带 `reason` —— 这样客户端能分辨"你暂停了"和"策略拒绝了它"，而不是在日志里什么都不留。`400` 会带原因，`401` 表示令牌不对，`403` 表示无痕（仅浏览器形状）。
+`201 {"stored":true}` 表示**存下了**；`202 {"stored":false}` 表示**宿主拒绝了它**（请求本身是合法的，这个回答是关于存储的）。随包提供的 VS Code companion 会读取 202 响应体，并把拒绝原因写进 Computer History 输出/追踪日志，而不是把所有 2xx 都当成“已经存储”。如果拒绝是**采集本身**决定的（`capture-paused`、`collector-not-running`、`capture-disabled`、`capture-not-owned`），响应里还会带 `reason`。`400` 会带原因，`401` 表示令牌不对，`403` 表示无痕（仅浏览器形状）。
 
 **`app` 是什么意思。** 它是一个**声明**：宿主以 `source.provider = 'companion'` 记录这条观测，所以审计**永远能分辨**"某个编辑器说自己是 Cursor"和"操作系统看到的是 Cursor"。这个声明**会被校验**（`bundleId` 必须像应用 id、`name` 非空、不得有多余字段），而且**它无法解锁任何东西**：用户没有允许的应用**什么都不存**；被内置保护清单覆盖的应用**即使用户允许了也照样被丢弃**。
 
