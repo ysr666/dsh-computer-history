@@ -31,6 +31,7 @@ declare module 'vscode' {
 
   export interface Workspace {
     readonly workspaceFolders: readonly WorkspaceFolder[] | undefined
+    getWorkspaceFolder(uri: Uri): WorkspaceFolder | undefined
     getConfiguration(section: string): WorkspaceConfiguration
     onDidChangeWorkspaceFolders(listener: () => void): Disposable
   }
