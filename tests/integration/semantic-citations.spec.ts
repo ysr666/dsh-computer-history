@@ -163,10 +163,12 @@ describe('turn off and purge (ADR 0004, Consequences)', () => {
     })
 
     expect(purged).toBe(1)
-    expect(
-      (db.prepare('SELECT id FROM episodes ORDER BY id').all()
-        as Array<{ id: string }>).map(row => row.id),
-    ).toEqual(['episode-plain-app'])
+    const remaining = db.prepare(
+      'SELECT id FROM episodes ORDER BY id',
+    ).all() as Array<{ id: string }>
+    expect(remaining.map(row => row.id)).toEqual([
+      'episode-plain-app',
+    ])
     db.close()
   })
 
