@@ -17,23 +17,20 @@ import {
 const DEFAULT_PORT = 19388
 
 let seq = 0
-let session
+// The Host deduplicates by (session, seq). Keep those lifetimes identical: MV3 may destroy and recreate this
+// worker at any time, so a persisted session paired with an in-memory sequence would replay seq=1..N and be
+// silently dropped after every worker restart.
+const session = `browser-${crypto.randomUUID()}`
 let config = { port: DEFAULT_PORT, token: '' }
 
 async function loadConfig() {
   const stored = await ext.storage.local.get([
     'companionPort',
     'companionToken',
-    'companionSession',
   ])
   config = {
     port: Number(stored.companionPort ?? DEFAULT_PORT),
     token: String(stored.companionToken ?? ''),
-  }
-  session = stored.companionSession
-  if (typeof session !== 'string' || session.length === 0) {
-    session = `browser-${crypto.randomUUID()}`
-    await ext.storage.local.set({ companionSession: session })
   }
   return config
 }
@@ -47,9 +44,14 @@ async function reportTab(tab) {
   const payload = buildPayload(tab, session, seq)
   if (!payload) return
   try {
-    const status = await sendObservation(fetch, config, payload)
-    if (status >= 400 && status !== 429) {
-      console.debug('companion: intake answered', status)
+    const result = await sendObservation(fetch, config, payload)
+    if (result.status === 202 && result.stored === false) {
+      console.debug(
+        'companion: observation not stored',
+        result.reason ?? 'policy-or-duplicate',
+      )
+    } else if (result.status >= 400 && result.status !== 429) {
+      console.debug('companion: intake answered', result.status)
     }
   } catch (error) {
     // The intake is not running, or the token is wrong: stay quiet and let the
