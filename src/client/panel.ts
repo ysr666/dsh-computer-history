@@ -510,6 +510,12 @@ export function createHistoryPage({
           ),
         )
       : null
+    const maintenanceSection = state?.maintenance?.retention === 'failed'
+      ? React.createElement(
+          'section', { className: 'ch-alert' },
+          React.createElement('p', { role: 'status' }, t('maintenanceWarning')),
+        )
+      : null
 
     const setup: SetupStage | undefined =
       controls.status === 'ready'
@@ -1194,6 +1200,7 @@ export function createHistoryPage({
         ),
       ),
       staleSection,
+      maintenanceSection,
       accessibilityRecovery,
       captureRecovery,
       state?.reason && !captureNeedsRecovery && !(isFirstRun && state.reason === 'no-apps-allowed')
