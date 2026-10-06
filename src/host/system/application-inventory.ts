@@ -1,6 +1,6 @@
 import path from 'node:path'
 import os from 'node:os'
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, realpath, rm } from 'node:fs/promises'
 import type { SubprocessRuntime } from '@deepseek-ai/dsh-subprocess'
 import {
   PHASE1_ADAPTERS,
@@ -170,7 +170,29 @@ export class SupportedApplicationInventoryReader {
     const iconFile = iconName.toLowerCase().endsWith('.icns')
       ? iconName
       : `${iconName}.icns`
-    const iconPath = path.join(appPath, 'Contents', 'Resources', iconFile)
+    const resourcesDirectory = path.join(appPath, 'Contents', 'Resources')
+    const iconPath = path.join(resourcesDirectory, iconFile)
+    // The plist value is app-controlled metadata. Reject symlinks that escape
+    // the app bundle as well as lexical traversal: otherwise a bundle claiming
+    // a supported id could make the icon endpoint convert arbitrary local
+    // image content, violating the metadata-only boundary.
+    let containedIconPath: string
+    try {
+      const [resolvedResources, resolvedIcon] = await Promise.all([
+        realpath(resourcesDirectory),
+        realpath(iconPath),
+      ])
+      const relative = path.relative(resolvedResources, resolvedIcon)
+      if (
+        relative === ''
+        || relative === '..'
+        || relative.startsWith('..' + path.sep)
+        || path.isAbsolute(relative)
+      ) return undefined
+      containedIconPath = resolvedIcon
+    } catch {
+      return undefined
+    }
 
     const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), 'dsh-computer-history-icon-'))
     const outputPath = path.join(temporaryDirectory, 'icon.png')
@@ -179,7 +201,7 @@ export class SupportedApplicationInventoryReader {
         sips,
         '-s', 'format', 'png',
         '-z', '64', '64',
-        iconPath,
+        containedIconPath,
         '--out', outputPath,
       ], 16 * 1024)
       if (!converted) return undefined
