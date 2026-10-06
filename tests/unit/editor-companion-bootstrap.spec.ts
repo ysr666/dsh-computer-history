@@ -2,9 +2,12 @@ import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import { CompanionTokenStore } from '../../src/host/companion/token-store.js'
+import { openHistoryDatabase } from '../../src/host/store/index.js'
 import {
   EDITOR_BOOTSTRAP_TTL_MS,
   editorCompanionBootstrapPath,
+  rotateAndStageEditorCompanionBootstrap,
   stageEditorCompanionBootstrap,
 } from '../../src/host/companion/editor-bootstrap.js'
 
@@ -39,6 +42,62 @@ describe('editor companion bootstrap', () => {
       expect(statSync(target).mode & 0o777).toBe(0o600)
       expect(statSync(path.dirname(target)).mode & 0o777).toBe(0o700)
     }
+  })
+
+  it('restores the previous editor credential when bootstrap publication fails', () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'dsh-editor-bootstrap-rollback-'))
+    roots.push(root)
+    const history = openHistoryDatabase({
+      dataDirectory: path.join(root, 'history'),
+      nowMs: 1,
+    })
+    const tokens = new CompanionTokenStore(history.db)
+    const previous = tokens.rotate('editor', 1_000)
+
+    expect(() => rotateAndStageEditorCompanionBootstrap({
+      tokens,
+      port: 19388,
+      nowMs: 2_000,
+      stage: () => {
+        throw new Error('forced bootstrap failure')
+      },
+    })).toThrow(/forced bootstrap failure/)
+
+    expect(tokens.verify('editor', previous)).toBe(true)
+    expect(tokens.state('editor')).toEqual({
+      paired: true,
+      createdAtMs: 1_000,
+    })
+
+    // The compensation is durable, not merely an in-memory repair.
+    const reopened = new CompanionTokenStore(history.db)
+    expect(reopened.verify('editor', previous)).toBe(true)
+    history.close()
+  })
+
+  it('leaves an unpaired editor unpaired when its first bootstrap fails', () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'dsh-editor-bootstrap-empty-'))
+    roots.push(root)
+    const history = openHistoryDatabase({
+      dataDirectory: path.join(root, 'history'),
+      nowMs: 1,
+    })
+    const tokens = new CompanionTokenStore(history.db)
+
+    expect(() => rotateAndStageEditorCompanionBootstrap({
+      tokens,
+      port: 19388,
+      nowMs: 2_000,
+      stage: () => {
+        throw new Error('forced first bootstrap failure')
+      },
+    })).toThrow(/forced first bootstrap failure/)
+
+    expect(tokens.state('editor')).toEqual({ paired: false })
+    expect(history.db.prepare(
+      'SELECT COUNT(*) AS n FROM companion_pairing WHERE kind = ?',
+    ).get('editor')).toEqual({ n: 0 })
+    history.close()
   })
 
   it('refuses invalid ports and implausibly short credentials', () => {

@@ -73,4 +73,9 @@ export class RetentionSettingsStore {
   public observationRetentionMs(): number {
     return this.get().observationRetentionHours * 3_600_000
   }
+
+  /** The Episode TTL to stamp on summaries recorded from now on. */
+  public episodeRetentionMs(): number {
+    return this.get().episodeRetentionDays * 86_400_000
+  }
 }

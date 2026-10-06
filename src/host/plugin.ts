@@ -204,6 +204,7 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
     () => policies.get(),
     undefined,
     () => retentionSettings.observationRetentionMs(),
+    () => retentionSettings.episodeRetentionMs(),
   )
 
   let retentionMaintenanceFailureAtMs: number | undefined
@@ -597,7 +598,7 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
 
   try {
     await ctx.plugin(ComputerHistoryService, { backend })
-    registerHistoryApi(ctx)
+    registerHistoryApi(ctx, { companionTokens })
   } catch (error) {
     // Roll back the capture ownership acquired above: this apply() is
     // failing, so no teardown will run for a lock this call still holds.

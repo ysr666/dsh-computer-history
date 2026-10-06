@@ -51,6 +51,8 @@ export class IngestionService {
     // in the middle silently re-points every caller that passed `now`.
     private readonly observationRetentionMs: () => number = () =>
       OBSERVATION_RETENTION_MS,
+    private readonly episodeRetentionMs: () => number = () =>
+      EPISODE_RETENTION_MS,
   ) {
     this.observations = new ObservationStore(db)
     this.resources = new ResourceStore(db)
@@ -479,7 +481,7 @@ export class IngestionService {
       updatedAtMs: timestamp,
       expiresAtMs: Math.min(
         Number.MAX_SAFE_INTEGER,
-        episode.endedAtMs + EPISODE_RETENTION_MS,
+        episode.endedAtMs + this.episodeRetentionMs(),
       ),
       observationIds: episode.observationIds,
       // Aggregate provenance is derived by EpisodeStore from whatever

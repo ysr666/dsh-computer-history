@@ -3,6 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
+  EPISODE_RETENTION_MS,
   OBSERVATION_RETENTION_MS,
   PolicyRuleId,
   type NativeObservation,
@@ -93,13 +94,20 @@ describe('retention settings', () => {
         updatedAtMs: 1,
       }],
     }
+    const settings = new RetentionSettingsStore(history.db)
+    settings.set({
+      observationRetentionHours: 12,
+      episodeRetentionDays: 9,
+    }, now - 1)
     const twelveHours = 12 * 3_600_000
+    const nineDays = 9 * 86_400_000
     const ingestion = new IngestionService(
       history.db,
       { resolve: async () => ({ source: 'none' as const, confidence: 0 }) },
       () => policy,
       () => now,
-      () => twelveHours,
+      () => settings.observationRetentionMs(),
+      () => settings.episodeRetentionMs(),
     )
     const message: NativeObservation = {
       v: 1,
@@ -119,6 +127,14 @@ describe('retention settings', () => {
     ).get('retention') as { expires_at_ms: number }
     expect(row.expires_at_ms).toBe(now + twelveHours)
     expect(row.expires_at_ms).toBeLessThan(now + OBSERVATION_RETENTION_MS)
+
+    const episode = history.db.prepare(
+      'SELECT ended_at_ms, expires_at_ms FROM episodes LIMIT 1',
+    ).get() as { ended_at_ms: number; expires_at_ms: number }
+    expect(episode.expires_at_ms).toBe(episode.ended_at_ms + nineDays)
+    expect(episode.expires_at_ms).toBeLessThan(
+      episode.ended_at_ms + EPISODE_RETENTION_MS,
+    )
     history.close()
   })
 })

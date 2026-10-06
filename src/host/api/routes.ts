@@ -15,7 +15,11 @@ import {
   bundledEditorCompanionVsix,
   EditorCompanionInstaller,
 } from '../companion/editor-install.js'
-import { stageEditorCompanionBootstrap } from '../companion/editor-bootstrap.js'
+import {
+  rotateAndStageEditorCompanionBootstrap,
+  stageEditorCompanionBootstrap,
+} from '../companion/editor-bootstrap.js'
+import type { CompanionTokenStore } from '../companion/token-store.js'
 import {
   ResumeOpenLaunchError,
   ResumeOpenRequestError,
@@ -118,7 +122,10 @@ function requestFailure(error: unknown): Response {
   return textResponse('Request failed.', 500)
 }
 
-export function registerHistoryApi(ctx: Context): void {
+export function registerHistoryApi(
+  ctx: Context,
+  options: { readonly companionTokens?: CompanionTokenStore } = {},
+): void {
   const history = computerHistoryService(ctx)
   const resumeOpener = new ResumeResourceOpener({
     subprocess: ctx.subprocess,
@@ -562,11 +569,21 @@ export function registerHistoryApi(ctx: Context): void {
             reason: 'pairing-unavailable',
           })
         }
-        const pairing = history.rotatePairing('editor')
-        stageEditorCompanionBootstrap({
-          port: current.port,
-          token: pairing.token,
-        })
+        if (options.companionTokens) {
+          rotateAndStageEditorCompanionBootstrap({
+            tokens: options.companionTokens,
+            port: current.port,
+          })
+        } else {
+          // Unit/embed callers that do not own the token store retain the old
+          // service-only path. Production passes the store from plugin.ts so a
+          // filesystem staging failure can compensate the rotation.
+          const pairing = history.rotatePairing('editor')
+          stageEditorCompanionBootstrap({
+            port: current.port,
+            token: pairing.token,
+          })
+        }
         return json({ ...install, configured: true })
       } catch {
         return json({

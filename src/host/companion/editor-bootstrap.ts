@@ -7,6 +7,7 @@ import {
 } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import type { CompanionTokenStore } from './token-store.js'
 
 export const EDITOR_BOOTSTRAP_FILENAME = 'editor-companion-bootstrap.json'
 export const EDITOR_BOOTSTRAP_TTL_MS = 5 * 60_000
@@ -68,10 +69,44 @@ export function stageEditorCompanionBootstrap(input: {
       flag: 'wx',
     })
     chmodSync(temporary, 0o600)
+    // The temporary file is already 0600; rename preserves its mode.
+    // Keep rename as the publication point and do nothing fallible afterwards,
+    // so a thrown staging operation never leaves a newly-published credential.
     renameSync(temporary, target)
-    chmodSync(target, 0o600)
   } finally {
     rmSync(temporary, { force: true })
   }
   return bootstrap
+}
+
+
+/**
+ * Rotate the editor credential and publish its cleartext handoff as one user
+ * action. Filesystem publication is not part of SQLite, so compensate the
+ * credential rotation if staging fails; otherwise a failed install attempt
+ * would silently invalidate a previously working editor token.
+ */
+export function rotateAndStageEditorCompanionBootstrap(input: {
+  readonly tokens: CompanionTokenStore
+  readonly port: number
+  readonly nowMs?: number
+  readonly homeDirectory?: string
+  readonly stage?: typeof stageEditorCompanionBootstrap
+}): EditorCompanionBootstrap {
+  const checkpoint = input.tokens.checkpoint('editor')
+  const nowMs = input.nowMs ?? Date.now()
+  const token = input.tokens.rotate('editor', nowMs)
+  try {
+    return (input.stage ?? stageEditorCompanionBootstrap)({
+      port: input.port,
+      token,
+      nowMs,
+      ...(input.homeDirectory === undefined
+        ? {}
+        : { homeDirectory: input.homeDirectory }),
+    })
+  } catch (error) {
+    input.tokens.restore('editor', checkpoint)
+    throw error
+  }
 }
