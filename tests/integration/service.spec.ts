@@ -117,6 +117,31 @@ function seedEpisode(history: ReturnType<typeof openTempDatabase>): EpisodeId {
   return id
 }
 
+class BlockingRecoverCapture implements CaptureController {
+  public enteredRecover!: () => void
+  public releaseRecover!: () => void
+  public readonly recoverEntered = new Promise<void>(resolve => {
+    this.enteredRecover = resolve
+  })
+  private readonly recoverGate = new Promise<void>(resolve => {
+    this.releaseRecover = resolve
+  })
+
+  public pause(): Promise<void> { return Promise.resolve() }
+  public resume(): Promise<void> { return Promise.resolve() }
+  public async recover(): Promise<void> {
+    this.enteredRecover()
+    await this.recoverGate
+  }
+  public getState() {
+    return {
+      enabled: true,
+      capture: 'degraded' as const,
+      accessibilityTrusted: true,
+    }
+  }
+}
+
 class FakeCapture implements CaptureController {
   public paused = false
 
@@ -142,6 +167,49 @@ class FakeCapture implements CaptureController {
     }
   }
 }
+
+describe('backend teardown gate', () => {
+  it('waits for in-flight recover and rejects every new operation after drain starts', async () => {
+    const history = openTempDatabase()
+    const policies = new PolicyStore(history.db)
+    policies.ensureInitial(1)
+    const capture = new BlockingRecoverCapture()
+    const backend = new LocalComputerHistoryBackend(
+      new EpisodeStore(history.db),
+      policies,
+      new DeletionService(history.db),
+      capture,
+      {
+        observationRetentionHours: 24,
+        episodeRetentionDays: 30,
+        autoResume: false,
+      },
+      undefined,
+      undefined,
+      history.db,
+    )
+
+    const recovering = backend.recover()
+    await capture.recoverEntered
+
+    let drained = false
+    const draining = backend.drain().then(() => {
+      drained = true
+    })
+    await Promise.resolve()
+    expect(drained).toBe(false)
+
+    expect(() => backend.getPolicy()).toThrow(/backend is disposing/)
+    expect(() => backend.getState()).toThrow(/backend is disposing/)
+    await expect(backend.recent()).rejects.toThrow(/backend is disposing/)
+
+    capture.releaseRecover()
+    await recovering
+    await draining
+    expect(drained).toBe(true)
+    history.close()
+  })
+})
 
 describe('local computer history backend', () => {
   it('composes store, resume, policy, capture, and deletion behavior', async () => {
