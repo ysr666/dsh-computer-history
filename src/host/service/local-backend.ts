@@ -137,6 +137,17 @@ implements ComputerHistoryServiceContract {
     }
   }
 
+  private withSyncOperation<T>(
+    operation: () => T,
+  ): T {
+    const release = this.acquireOperation()
+    try {
+      return operation()
+    } finally {
+      release()
+    }
+  }
+
   public drain(): Promise<void> {
     this.acceptingOperations = false
     if (this.activeOperations === 0) return Promise.resolve()
@@ -242,56 +253,69 @@ implements ComputerHistoryServiceContract {
   }
 
   public pause(): Promise<void> {
-    return this.capture.pause()
+    return this.withOperation(() => this.capture.pause())
   }
 
   public resume(): Promise<void> {
-    return this.capture.resume()
+    return this.withOperation(() => this.capture.resume())
   }
 
   public recover(): Promise<void> {
-    return this.capture.recover()
+    return this.withOperation(() => this.capture.recover())
   }
 
   public getState(): ComputerHistoryState {
-    const maintenance = this.maintenance?.()
-    return {
-      ...this.capture.getState(),
-      // Why things were refused, when the host can tell us: a bare count is a
-      // number, and this is the sentence a new installation needs.
-      ...(this.refusalCounts
-        ? { refusedByReason: Object.fromEntries(this.refusalCounts()) }
-        : {}),
-      ...(this.firstRunPreset
-        ? { firstRunPreset: this.firstRunPreset() }
-        : {}),
-      ...(this.release ? { release: this.release() } : {}),
-      ...(maintenance === undefined ? {} : { maintenance }),
-      observationRetentionHours:
-        this.currentRetention.observationRetentionHours,
-      episodeRetentionDays:
-        this.currentRetention.episodeRetentionDays,
-      autoResume: this.config.autoResume,
-    }
+    return this.withSyncOperation(() => {
+      const maintenance = this.maintenance?.()
+      return {
+        ...this.capture.getState(),
+        // Why things were refused, when the host can tell us: a bare count is a
+        // number, and this is the sentence a new installation needs.
+        ...(this.refusalCounts
+          ? { refusedByReason: Object.fromEntries(this.refusalCounts()) }
+          : {}),
+        ...(this.firstRunPreset
+          ? { firstRunPreset: this.firstRunPreset() }
+          : {}),
+        ...(this.release ? { release: this.release() } : {}),
+        ...(maintenance === undefined ? {} : { maintenance }),
+        observationRetentionHours:
+          this.currentRetention.observationRetentionHours,
+        episodeRetentionDays:
+          this.currentRetention.episodeRetentionDays,
+        autoResume: this.config.autoResume,
+      }
+    })
   }
 
   public pairing(kind: CompanionKind = 'browser'): PairingState {
-    const state = this.pairingTokens?.state(kind) ?? { paired: false }
-    const companion = this.capture.getCompanionState?.()
-    return {
-      ...state,
-      listening: companion?.listening ?? false,
-      ...(companion?.port === undefined ? {} : { port: companion.port }),
-    }
+    return this.withSyncOperation(() => {
+      const state = this.pairingTokens?.state(kind) ?? { paired: false }
+      const companion = this.capture.getCompanionState?.()
+      return {
+        ...state,
+        listening: companion?.listening ?? false,
+        ...(companion?.port === undefined ? {} : { port: companion.port }),
+      }
+    })
   }
 
   /** Rotate one companion kind without invalidating the other. */
   public rotatePairing(kind: CompanionKind = 'browser'): PairingRotation {
-    if (!this.pairingTokens) {
-      throw new Error('companion pairing is unavailable')
-    }
-    const token = this.pairingTokens.rotate(kind, this.now())
-    return { ...this.pairing(kind), token }
+    return this.withSyncOperation(() => {
+      if (!this.pairingTokens) {
+        throw new Error('companion pairing is unavailable')
+      }
+      const token = this.pairingTokens.rotate(kind, this.now())
+      const state = this.pairingTokens.state(kind)
+      const companion = this.capture.getCompanionState?.()
+      return {
+        ...state,
+        token,
+        listening: companion?.listening ?? false,
+        ...(companion?.port === undefined ? {} : { port: companion.port }),
+      }
+    })
   }
 
   /**
@@ -300,33 +324,35 @@ implements ComputerHistoryServiceContract {
    * model only when a scope is switched on.
    */
   public semanticState(): SemanticSummaryState {
-    return {
+    return this.withSyncOperation(() => ({
       active: 'deterministic',
       localProviderConfigured: false,
       scopes: this.semanticOptIns?.list() ?? [],
-    }
+    }))
   }
 
   /** The exact payload a provider would see for this scope (ADR 0004 §4). */
   public semanticPreview(
     request: { readonly scopeKey: string },
   ): MinimisedSummaryPayload | undefined {
-    const scope = parseScopeKey(request.scopeKey)
-    const episodes = this.episodes.listRecent({ limit: 50 })
-    const episode = scope.kind === 'workspace'
-      ? episodes.find(item => item.workspace?.id === scope.id)
-      : episodes.find(item =>
-          item.surfaces.some(surface => surface.bundleId === scope.bundleId))
-    if (!episode) return undefined
-    const detail: EpisodeSummary = this.episodes.get(episode.id) ?? episode
-    return minimiseEpisode({
-      resources: detail.resources,
-      surfaces: detail.surfaces,
-      observationIds: detail.summaryObservationIds,
-      startedAtMs: detail.startedAtMs,
-      endedAtMs: detail.endedAtMs,
-      ...(detail.threadKey === undefined ? {} : { threadKey: detail.threadKey }),
-      ...(detail.workspace === undefined ? {} : { workspace: detail.workspace }),
+    return this.withSyncOperation(() => {
+      const scope = parseScopeKey(request.scopeKey)
+      const episodes = this.episodes.listRecent({ limit: 50 })
+      const episode = scope.kind === 'workspace'
+        ? episodes.find(item => item.workspace?.id === scope.id)
+        : episodes.find(item =>
+            item.surfaces.some(surface => surface.bundleId === scope.bundleId))
+      if (!episode) return undefined
+      const detail: EpisodeSummary = this.episodes.get(episode.id) ?? episode
+      return minimiseEpisode({
+        resources: detail.resources,
+        surfaces: detail.surfaces,
+        observationIds: detail.summaryObservationIds,
+        startedAtMs: detail.startedAtMs,
+        endedAtMs: detail.endedAtMs,
+        ...(detail.threadKey === undefined ? {} : { threadKey: detail.threadKey }),
+        ...(detail.workspace === undefined ? {} : { workspace: detail.workspace }),
+      })
     })
   }
 
@@ -339,17 +365,19 @@ implements ComputerHistoryServiceContract {
     readonly scopeKey: string
     readonly model: string
   }): { readonly payload: MinimisedSummaryPayload, readonly body: string } | undefined {
-    const payload = this.semanticPreview({ scopeKey: request.scopeKey })
-    if (!payload) return undefined
-    const citations = this.citationsForScope(request.scopeKey)
-    return {
-      payload,
-      body: buildRemoteRequestBody({
-        model: request.model,
+    return this.withSyncOperation(() => {
+      const payload = this.semanticPreview({ scopeKey: request.scopeKey })
+      if (!payload) return undefined
+      const citations = this.citationsForScope(request.scopeKey)
+      return {
         payload,
-        observationIds: citations,
-      }),
-    }
+        body: buildRemoteRequestBody({
+          model: request.model,
+          payload,
+          observationIds: citations,
+        }),
+      }
+    })
   }
 
   /**
@@ -363,6 +391,7 @@ implements ComputerHistoryServiceContract {
     readonly model: string
     readonly fetchImpl?: typeof fetch
   }): Promise<{ readonly summary: string, readonly sendId: number }> {
+    return this.withOperation(async () => {
     const payload = this.semanticPreview({ scopeKey: request.scopeKey })
     if (!payload) throw new SummaryProviderError('no episode for that scope')
     const citations = this.citationsForScope(request.scopeKey)
@@ -389,6 +418,7 @@ implements ComputerHistoryServiceContract {
     let lastSendId = 0
     const summary = await provider.summarise({ scope, payload, citations })
     return { summary, sendId: lastSendId }
+    })
   }
 
   /** The episode a scope points at, and the citations behind its summary. */
@@ -413,15 +443,17 @@ implements ComputerHistoryServiceContract {
     readonly providerKind: 'local' | 'remote'
     readonly model?: string
   }): SemanticOptIn {
-    if (!this.semanticOptIns) {
-      throw new Error('semantic summaries are unavailable')
-    }
-    return this.semanticOptIns.grant(
-      parseScopeKey(request.scopeKey),
-      request.providerKind,
-      request.model,
-      this.now(),
-    )
+    return this.withSyncOperation(() => {
+      if (!this.semanticOptIns) {
+        throw new Error('semantic summaries are unavailable')
+      }
+      return this.semanticOptIns.grant(
+        parseScopeKey(request.scopeKey),
+        request.providerKind,
+        request.model,
+        this.now(),
+      )
+    })
   }
 
   /**
@@ -437,6 +469,7 @@ implements ComputerHistoryServiceContract {
     /** Local send records forgotten by this revocation (ADR 0010). */
     readonly forgotten: number
   } {
+    return this.withSyncOperation(() => {
     if (!this.semanticOptIns) {
       throw new Error('semantic summaries are unavailable')
     }
@@ -461,12 +494,14 @@ implements ComputerHistoryServiceContract {
       if (db.isTransaction) db.exec('ROLLBACK')
       throw error
     }
+    })
   }
 
 
   /** The whole store as one document, for the audit export. */
   public exportAll(): HistoryExport {
-    return exportHistory(this.requireDb(), this.now())
+    return this.withSyncOperation(() =>
+      exportHistory(this.requireDb(), this.now()))
   }
 
   public importAll(
@@ -504,44 +539,50 @@ implements ComputerHistoryServiceContract {
   public redactionPreview(request: {
     readonly scopeKey: string
   }): RedactionPreview {
-    const [kind, ...rest] = request.scopeKey.split(':')
-    const id = rest.join(':')
-    const observations = new ObservationStore(this.requireDb()).listAll()
-    const scoped = kind === 'app'
-      ? observations.filter(item => item.app.bundleId === id)
-      : observations.filter(item => item.workspace.id === id)
-    return buildRedactionPreview({
-      scopeKey: request.scopeKey,
-      policy: this.policies.get(),
-      observations: scoped,
+    return this.withSyncOperation(() => {
+      const [kind, ...rest] = request.scopeKey.split(':')
+      const id = rest.join(':')
+      const observations = new ObservationStore(this.requireDb()).listAll()
+      const scoped = kind === 'app'
+        ? observations.filter(item => item.app.bundleId === id)
+        : observations.filter(item => item.workspace.id === id)
+      return buildRedactionPreview({
+        scopeKey: request.scopeKey,
+        policy: this.policies.get(),
+        observations: scoped,
+      })
     })
   }
 
   public retention(): RetentionSettings {
-    const retention = new RetentionSettingsStore(this.requireDb()).get()
-    this.currentRetention = retention
-    return retention
+    return this.withSyncOperation(() => {
+      const retention = new RetentionSettingsStore(this.requireDb()).get()
+      this.currentRetention = retention
+      return retention
+    })
   }
 
   public setRetention(input: {
     readonly observationRetentionHours: number
     readonly episodeRetentionDays: number
   }): RetentionSettings {
-    const retention = new RetentionSettingsStore(this.requireDb())
-      .set(input, this.now())
-    // /state is polled independently from /retention. Keep the runtime snapshot
-    // in step immediately so a successful save is not overwritten two seconds
-    // later by the startup values.
-    this.currentRetention = retention
-    return retention
+    return this.withSyncOperation(() => {
+      const retention = new RetentionSettingsStore(this.requireDb())
+        .set(input, this.now())
+      // /state is polled independently from /retention. Keep the runtime snapshot
+      // in step immediately so a successful save is not overwritten two seconds
+      // later by the startup values.
+      this.currentRetention = retention
+      return retention
+    })
   }
 
   public listPolicyRules(): readonly PolicyRule[] {
-    return this.policies.get().rules
+    return this.withSyncOperation(() => this.policies.get().rules)
   }
 
   public getPolicy(): PolicySnapshot {
-    return this.policies.get()
+    return this.withSyncOperation(() => this.policies.get())
   }
 
   public async replacePolicy(
