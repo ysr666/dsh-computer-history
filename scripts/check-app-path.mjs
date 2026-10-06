@@ -44,9 +44,19 @@ const appStartedMs = appLine ? Date.parse(appLine.trim().slice(0, 24)) : undefin
 const restartNeeded = appStartedMs !== undefined && manifestMs !== undefined && appStartedMs < Math.max(manifestMs, patchMs ?? 0)
 
 let observations
+let allowedApps
 try {
   const store = new DatabaseSync(storePath, { readOnly: true })
   observations = Number(store.prepare('select count(*) as n from observations').get().n)
+  // Why a store can be empty while everything else looks healthy: `include-only` with no allow rule records
+  // nothing at all, however well the collector runs. Measured 2026-10-06 on the owner's machine - capture
+  // reported `running`, the collector was handshaken and trusted, `refusedByReason` was `{}` and the store stayed
+  // at 0: the allow list was the whole story. An older store may not have the table yet, hence the separate try.
+  try {
+    allowedApps = Number(store.prepare(
+      "select count(*) as n from policy_rules where action = 'allow' and dimension = 'app'",
+    ).get().n)
+  } catch { allowedApps = undefined }
   store.close()
 } catch { observations = undefined }
 
@@ -102,11 +112,23 @@ if (step3 === 'done' || (step1 === 'done' && step2 === 'done')) {
   if (step2 !== 'done') console.log('         (step 2 is inferred from step 3: the timestamps alone could not settle it.)')
 } else {
   console.log('\nverdict: not judgeable yet - the first step that is not done above is where it stands.')
-  if (collector.state === 'running' && step3 !== 'done') {
-    // On macOS the collector runs fine without the Accessibility permission and simply observes nothing, which is
-    // the state this line was written from. Name the switch rather than leaving "it runs but does nothing" hanging.
-    console.log(`\nthe collector is up (pid ${collector.pid}) and the store is still empty - on macOS that is what an`)
-    console.log('untrusted collector looks like: System Settings -> Privacy & Security -> Accessibility, and enable')
-    console.log(`  ${collector.path ?? 'the collector binary'}`)
+  if (step3 !== 'done' && allowedApps === 0) {
+    // The owner's actual machine, 2026-10-06. This is checkable from the store alone, so the command says it
+    // before anything else and names the only action that changes it.
+    console.log('\nno application is allowed yet, so nothing can be recorded however healthy the rest looks: the')
+    console.log('policy is include-only and carries no allow rule. Allow one application in the panel (any app you')
+    console.log('actually use, e.g. Terminal or Finder). This command reads the store directly, so it will say so.')
+    console.log('(Measured: capture reported `running`, the collector was handshaken and trusted, refusedByReason was')
+    console.log(' empty, and the store stayed at 0 - the empty allow list was the whole story.)')
+  } else if (collector.state === 'running' && step3 !== 'done') {
+    // Corrected 2026-10-06: this used to name the collector binary as the thing to enable. macOS attributes the
+    // permission to the *application* (the system log says `responsible = com.deepseek.dsh`), and the collector
+    // answers for itself when run directly, which is faster than reading the panel.
+    console.log(`\nthe collector is up (pid ${collector.pid}) and the store is still empty. On macOS the remaining`)
+    console.log('known cause is the accessibility permission, which macOS attributes to the application')
+    console.log('(com.deepseek.dsh), not to the collector binary:')
+    console.log('  System Settings -> Privacy & Security -> Accessibility, and enable DeepSeek Harness')
+    console.log(`(the collector can be asked directly - run ${collector.path ?? 'the collector binary'} and it prints`)
+    console.log(' {"type":"state","state":"running","accessibilityTrusted":...}.)')
   }
 }
