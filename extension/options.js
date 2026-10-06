@@ -4,7 +4,7 @@
 // the DOM; `verify:privacy` applies its no-content rule to the worker and
 // lib.js, not here. It never reads a page's content.
 import { ext } from './engine.js'
-import { checkPairing } from './lib.js'
+import { checkPairing, pairingFromHash } from './lib.js'
 
 const portInput = document.getElementById('port')
 const tokenInput = document.getElementById('token')
@@ -24,6 +24,18 @@ async function load() {
   // is nothing to display. A stored value is preserved on save unless replaced.
   if (typeof stored.companionToken === 'string' && stored.companionToken) {
     show('A pairing token is stored. Paste a new one to replace it.')
+  }
+  // One-click pairing: the panel can open this page with the token in the fragment. Nothing is trusted from it
+  // beyond what pairingFromHash accepts, the fragment is cleared as soon as it has been used (so the token does
+  // not sit in the address bar or the history), and pairing is verified before this reports success - a token
+  // that was installed but does not authenticate must not look like one that worked.
+  const fromLink = pairingFromHash(window.location.hash)
+  if (fromLink.token) {
+    if (fromLink.port !== undefined) portInput.value = String(fromLink.port)
+    tokenInput.value = fromLink.token
+    await save()
+    await test()
+    history.replaceState(null, '', window.location.pathname)
   }
 }
 
