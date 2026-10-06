@@ -224,8 +224,8 @@ export interface ComputerHistoryServiceContract {
   /** The audit export: everything this Host knows, as one document. */
   exportAll(): HistoryExport
 
-  /** Read an export back. Throws HistoryImportError-shaped failures as messages. */
-  importAll(document: unknown): { readonly imported: Record<string, number> }
+  /** Merge historical evidence from an export and refresh in-memory ingestion state before resolving. */
+  importAll(document: unknown): Promise<{ readonly imported: Record<string, number> }>
 
   /** The retention choice in force, or the built-in default. */
   retention(): RetentionSettings
