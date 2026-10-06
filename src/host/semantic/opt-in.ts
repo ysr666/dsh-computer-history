@@ -85,10 +85,9 @@ export class SemanticOptInStore {
       DELETE FROM episodes
       WHERE summary_kind <> 'deterministic'
         AND id IN (
-          SELECT DISTINCT eo.episode_id
-          FROM episode_observations eo
-          JOIN observations o ON o.id = eo.observation_id
-          WHERE o.bundle_id = ?
+          SELECT DISTINCT es.episode_id
+          FROM episode_surfaces es
+          WHERE es.bundle_id = ?
         )
     `).run(scope.bundleId)
     return Number(result.changes)
