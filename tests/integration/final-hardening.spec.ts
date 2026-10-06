@@ -359,6 +359,78 @@ describe('policy mutation ownership', () => {
 })
 
 describe('teardown versus in-flight ingestion', () => {
+  it('serializes concurrent producers and keeps idle false until the whole queue settles', async () => {
+    const { primary, secondary } = openPair()
+    const policy = new PolicyStore(primary.db)
+    allowCode(policy, 10)
+
+    let releaseFirst!: () => void
+    const firstGate = new Promise<void>(resolve => {
+      releaseFirst = resolve
+    })
+    let firstEnteredResolve!: () => void
+    const firstEntered = new Promise<void>(resolve => {
+      firstEnteredResolve = resolve
+    })
+    let secondEntered = false
+    let resolves = 0
+
+    const ingestion = new IngestionService(
+      primary.db,
+      {
+        resolve: async () => {
+          resolves += 1
+          if (resolves === 1) {
+            firstEnteredResolve()
+            await firstGate
+          } else {
+            secondEntered = true
+          }
+          return {
+            id: 'alpha',
+            root: '/alpha',
+            title: 'alpha',
+            source: 'dsh' as const,
+            confidence: 1,
+          }
+        },
+      },
+      () => policy.get(),
+      () => 4_000,
+    )
+
+    const first = ingestion.ingest(native(4_000))
+    await firstEntered
+    const second = ingestion.ingest({
+      ...native(4_001),
+      seq: 2,
+      window: {
+        title: 'second.ts',
+        document: '/alpha/src/second.ts',
+      },
+    })
+
+    // The second producer must not cross the first one's asynchronous resolver and enter the shared
+    // SQLite transaction path. It stays queued until the first ingest completes.
+    await Promise.resolve()
+    expect(secondEntered).toBe(false)
+
+    let idle = false
+    void ingestion.whenIdle().then(() => { idle = true })
+    await Promise.resolve()
+    expect(idle).toBe(false)
+
+    releaseFirst()
+    expect(await Promise.all([first, second])).toEqual([true, true])
+    await ingestion.whenIdle()
+    expect(secondEntered).toBe(true)
+    expect(idle).toBe(true)
+    expect(new ObservationStore(primary.db).count()).toBe(2)
+
+    secondary.close()
+    primary.close()
+  })
+
   it('reports an in-flight ingest as not idle until it settles', async () => {
     const { primary, secondary } = openPair()
     const policy = new PolicyStore(primary.db)

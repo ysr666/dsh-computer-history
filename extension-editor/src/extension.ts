@@ -138,9 +138,11 @@ async function credentials(
 }
 
 function metadataOf(): EditorMetadata | undefined {
-  const folder = vscode.workspace.workspaceFolders?.[0]
-  if (!folder) return undefined
   const editor = vscode.window.activeTextEditor
+  const folder = editor
+    ? vscode.workspace.getWorkspaceFolder(editor.document.uri)
+    : vscode.workspace.workspaceFolders?.[0]
+  if (!folder) return undefined
   const filePath = editor?.document.uri.scheme === 'file'
     ? editor.document.uri.fsPath
     : undefined
@@ -156,7 +158,7 @@ function metadataOf(): EditorMetadata | undefined {
     }),
     ...(filePath === undefined
       ? {}
-      : { title: filePath.split('/').pop() ?? filePath }),
+      : { title: filePath.split(/[\\/]/).pop() ?? filePath }),
   }
 }
 
@@ -174,7 +176,7 @@ async function send(context: vscode.ExtensionContext): Promise<void> {
 
   seq += 1
   try {
-    await fetch(`http://127.0.0.1:${port}/companion/observation`, {
+    const response = await fetch(`http://127.0.0.1:${port}/companion/observation`, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
@@ -188,8 +190,13 @@ async function send(context: vscode.ExtensionContext): Promise<void> {
         observedAtMs: Date.now(),
       })),
     })
+    if (!response.ok) {
+      report(`send rejected: HTTP ${response.status}`)
+    }
   } catch {
-    // The Host may be down; the editor must not care.
+    // The Host may be down; recording in the editor must keep working independently,
+    // but the extension's own diagnostics must not pretend the send succeeded.
+    report('send failed: Host unavailable')
   }
 }
 

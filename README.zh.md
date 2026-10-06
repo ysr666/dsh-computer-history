@@ -91,6 +91,12 @@ Computer History 补的是这层“工作连续性”。它希望回答：
 
 共享 collector contract 会在 GitHub Actions 上持续跨 macOS、Windows、Linux 检查。实机证据和已知限制记录在 [docs/validation-three-platforms.md](docs/validation-three-platforms.md)。
 
+> [!IMPORTANT]
+> 三平台“已经验证”不等于“三平台安装包已经分发”。当前 Release 工作流只构建并随插件包发布 **macOS**
+> 原生采集器；Windows 与 Linux 的采集器已有源码和实机验证，但尚未打进插件 tarball。现阶段在这两个
+> 平台做开发验证，需要本地构建对应原生采集器，并通过 `collectorExecutable` 指向它。第一版打包
+> alpha 不能描述成三平台开箱即用。
+
 ## 开发快速开始
 
 目前还没有稳定的打包 Release，因此当前支持的入口是源码检出。

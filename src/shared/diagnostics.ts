@@ -17,6 +17,8 @@ export interface ComputerHistoryDiagnosticReport {
   readonly retention: {
     readonly observationHours: number
     readonly episodeDays: number
+    readonly maintenance: 'ok' | 'failed' | 'unknown'
+    readonly lastMaintenanceFailureAtMs?: number
   }
   readonly collector?: {
     readonly version: string
@@ -65,6 +67,10 @@ export function buildDiagnosticReport(
     retention: {
       observationHours: state.observationRetentionHours,
       episodeDays: state.episodeRetentionDays,
+      maintenance: state.maintenance?.retention ?? 'unknown',
+      ...(state.maintenance?.lastFailureAtMs === undefined
+        ? {}
+        : { lastMaintenanceFailureAtMs: state.maintenance.lastFailureAtMs }),
     },
     ...(state.collector ? { collector: state.collector } : {}),
     companions: {

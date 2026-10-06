@@ -1,4 +1,5 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
+import path from 'node:path'
 import type { CompanionKind } from '../../shared/index.js'
 import type { RefusalReason } from '../ingestion/normalize.js'
 import type { CompanionTokenStore } from './token-store.js'
@@ -94,6 +95,31 @@ const DECLARED_BUNDLE_ID = /^[A-Za-z0-9][A-Za-z0-9.-]{2,127}$/
 const DEFAULT_PORT = 19388
 const DEFAULT_MAX_BODY = 8 * 1024
 const DEFAULT_RATE_LIMIT = 120
+
+type AbsolutePathStyle = 'posix' | 'win32'
+
+function absolutePathStyle(value: string): AbsolutePathStyle | undefined {
+  if (value.includes('\0')) return undefined
+  if (value.startsWith('/')) return 'posix'
+  if (/^[A-Za-z]:[\\/]/.test(value) || /^\\\\[^\\]+\\[^\\]+/.test(value)) {
+    return path.win32.isAbsolute(value) ? 'win32' : undefined
+  }
+  return undefined
+}
+
+function pathLivesUnder(root: string, candidate: string): boolean {
+  const rootStyle = absolutePathStyle(root)
+  const candidateStyle = absolutePathStyle(candidate)
+  if (!rootStyle || rootStyle !== candidateStyle) return false
+  const flavour = rootStyle === 'win32' ? path.win32 : path.posix
+  const relative = flavour.relative(root, candidate)
+  return relative === ''
+    || (
+      relative !== '..'
+      && !relative.startsWith(`..${flavour.sep}`)
+      && !flavour.isAbsolute(relative)
+    )
+}
 
 /**
  * The companion's own intake (ADR 0007).
@@ -412,10 +438,9 @@ export class CompanionIntake {
     const workspaceRoot = record.workspaceRoot
     if (
       typeof workspaceRoot !== 'string'
-      || !workspaceRoot.startsWith('/')
-      || workspaceRoot.includes('\0')
+      || absolutePathStyle(workspaceRoot) === undefined
     ) {
-      return 'workspaceRoot must be an absolute path'
+      return 'workspaceRoot must be an absolute POSIX or Windows path'
     }
     const editorSession = record.editorSession
     if (typeof editorSession !== 'string' || editorSession.length === 0) {
@@ -435,9 +460,10 @@ export class CompanionIntake {
     }
     const filePath = rawFilePath === undefined ? undefined : rawFilePath
     if (filePath !== undefined) {
-      if (!filePath.startsWith('/')) return 'filePath must be absolute'
-      const root = workspaceRoot.endsWith('/') ? workspaceRoot : `${workspaceRoot}/`
-      if (!filePath.startsWith(root)) {
+      if (absolutePathStyle(filePath) === undefined) {
+        return 'filePath must be an absolute POSIX or Windows path'
+      }
+      if (!pathLivesUnder(workspaceRoot, filePath)) {
         return 'filePath must live under workspaceRoot'
       }
     }

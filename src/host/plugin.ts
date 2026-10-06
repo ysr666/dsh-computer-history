@@ -206,14 +206,17 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
     () => retentionSettings.observationRetentionMs(),
   )
 
+  let retentionMaintenanceFailureAtMs: number | undefined
   const retentionTimer = setInterval(
     () => {
       try {
         retention.sweep(Date.now())
         ingestion.reseed()
+        retentionMaintenanceFailureAtMs = undefined
       } catch {
-        // Ambient maintenance must never crash the DSH Host.
-        // The next scheduled sweep or explicit mutation retries.
+        // Ambient maintenance must never crash the DSH Host, but retention is a privacy promise: a failed sweep
+        // cannot disappear. Keep the failure visible until a later maintenance cycle completes successfully.
+        retentionMaintenanceFailureAtMs = Date.now()
       }
     },
     15 * 60 * 1000,
@@ -527,6 +530,12 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
       const stale = findStaleInstall(release.loadedFrom, dshHomePath('profiles'))
       return stale ? { ...release, stale } : release
     },
+    () => ({
+      retention: retentionMaintenanceFailureAtMs === undefined ? 'ok' : 'failed',
+      ...(retentionMaintenanceFailureAtMs === undefined
+        ? {}
+        : { lastFailureAtMs: retentionMaintenanceFailureAtMs }),
+    }),
   )
 
   // Teardown is registered immediately, before anything that can throw,

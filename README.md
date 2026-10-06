@@ -91,6 +91,12 @@ Capture starts **off**, application access is **include-only**, protected surfac
 
 The shared collector contract is continuously checked on GitHub Actions across macOS, Windows and Linux. Live evidence and known limits are recorded in [docs/validation-three-platforms.md](docs/validation-three-platforms.md).
 
+> [!IMPORTANT]
+> Platform validation and packaged distribution are different claims. The current release workflow builds and ships
+> the native collector for **macOS only**. Windows and Linux collectors are source/live validated, but are not yet
+> bundled into the plugin tarball; development runs on those platforms currently build the native collector locally
+> and point `collectorExecutable` at it. Do not describe the first packaged alpha as a three-platform install.
+
 ## Development quick start
 
 There is no stable packaged release yet, so the supported entry point today is a source checkout.

@@ -99,6 +99,7 @@ implements ComputerHistoryServiceContract {
     private readonly refusalCounts?: () => ReadonlyMap<string, number>,
     private readonly firstRunPreset?: () => ComputerHistoryState['firstRunPreset'],
     private readonly release?: () => ComputerHistoryState['release'],
+    private readonly maintenance?: () => ComputerHistoryState['maintenance'],
   ) {
     this.now = config.now ?? Date.now
   }
@@ -247,6 +248,7 @@ implements ComputerHistoryServiceContract {
   }
 
   public getState(): ComputerHistoryState {
+    const maintenance = this.maintenance?.()
     return {
       ...this.capture.getState(),
       // Why things were refused, when the host can tell us: a bare count is a
@@ -258,6 +260,7 @@ implements ComputerHistoryServiceContract {
         ? { firstRunPreset: this.firstRunPreset() }
         : {}),
       ...(this.release ? { release: this.release() } : {}),
+      ...(maintenance === undefined ? {} : { maintenance }),
       observationRetentionHours:
         this.config.observationRetentionHours,
       episodeRetentionDays:

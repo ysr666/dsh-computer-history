@@ -333,6 +333,46 @@ describe('editor payloads (ADR 0009)', () => {
     await intake.stop()
   })
 
+  it('accepts native Windows editor paths and keeps containment drive-aware', async () => {
+    const { intake, port, delivered } = await harness()
+    const accepted = await post(
+      port,
+      JSON.stringify(editorPayload({
+        workspaceRoot: 'C:\\Users\\someone\\Projects\\demo',
+        filePath: 'C:\\Users\\someone\\Projects\\demo\\src\\main.ts',
+      })),
+    )
+    expect(accepted.status).toBe(201)
+    expect(delivered.at(-1)).toMatchObject({
+      workspaceRoot: 'C:\\Users\\someone\\Projects\\demo',
+      filePath: 'C:\\Users\\someone\\Projects\\demo\\src\\main.ts',
+    })
+
+    const escaped = await post(
+      port,
+      JSON.stringify(editorPayload({
+        workspaceRoot: 'C:\\Users\\someone\\Projects\\demo',
+        filePath: 'C:\\Users\\someone\\Projects\\demo-other\\main.ts',
+        seq: 2,
+      })),
+    )
+    expect(escaped.status).toBe(400)
+    expect(escaped.json).toMatchObject({
+      error: expect.stringContaining('must live under workspaceRoot'),
+    })
+
+    const otherDrive = await post(
+      port,
+      JSON.stringify(editorPayload({
+        workspaceRoot: 'C:\\Users\\someone\\Projects\\demo',
+        filePath: 'D:\\elsewhere\\main.ts',
+        seq: 3,
+      })),
+    )
+    expect(otherDrive.status).toBe(400)
+    await intake.stop()
+  })
+
   it('refuses a file outside the root it claims', async () => {
     const { intake, port } = await harness()
     const response = await post(

@@ -180,6 +180,14 @@ export interface ComputerHistoryState {
   } | undefined
   readonly reason?: string
   /**
+   * Background retention/reseed maintenance is deliberately non-fatal to the Host, but a failure must not be
+   * invisible: until a later maintenance pass succeeds, the panel and diagnostics report that retention may lag.
+   */
+  readonly maintenance?: {
+    readonly retention: 'ok' | 'failed'
+    readonly lastFailureAtMs?: number
+  }
+  /**
    * The browser companion's intake state (ADR 0007). `listening: false` with a
    * reason means the port could not be bound; the panel shows it rather than
    * leaving pairing looking available.
