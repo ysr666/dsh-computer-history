@@ -534,12 +534,11 @@ implements ComputerHistoryServiceContract {
     readonly scopeKey: string
   }): RedactionPreview {
     return this.withSynchronousOperation(() => {
-      const [kind, ...rest] = request.scopeKey.split(':')
-      const id = rest.join(':')
+      const scope = parseScopeKey(request.scopeKey)
       const observations = new ObservationStore(this.requireDb()).listAll()
-      const scoped = kind === 'app'
-        ? observations.filter(item => item.app.bundleId === id)
-        : observations.filter(item => item.workspace.id === id)
+      const scoped = scope.kind === 'app'
+        ? observations.filter(item => item.app.bundleId === scope.bundleId)
+        : observations.filter(item => item.workspace.id === scope.id)
       return buildRedactionPreview({
         scopeKey: request.scopeKey,
         policy: this.policies.get(),
