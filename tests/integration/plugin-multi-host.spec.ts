@@ -217,7 +217,9 @@ describe('plugin multi-Host capture composition', () => {
       // oxlint-disable-next-line no-await-in-loop -- waiting for the real loopback bind is the assertion setup
       await new Promise(resolve => setTimeout(resolve, 5))
     }
-    expect(ownerPort).toBeDefined()
+    if (ownerPort === undefined) {
+      throw new Error('owner companion did not bind')
+    }
 
     const second = fakeHost(spawned)
     await apply(second.ctx, {
