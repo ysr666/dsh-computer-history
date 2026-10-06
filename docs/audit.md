@@ -29,8 +29,17 @@ than being replaced, so importing another non-empty store cannot fire SQLite
 `REPLACE` cascades through unrelated local provenance. The import validator is
 still whitelist-based (`PRAGMA table_info`): unknown tables, unknown columns,
 non-primitive values and conflicting observation identities are refused before
-a partial merge can be committed. Importing the same document twice is
-idempotent.
+a partial merge can be committed. Because `(collector_session, collector_seq)`
+is an observation identity, a v1 observation row must also carry the complete
+v1 observation field set; a partial row cannot reuse an existing identity while
+omitting fields that would reveal a conflict. Importing the same document twice
+is idempotent.
+
+The audit export also includes `remote_summary_sends`: the content-free ledger
+of which remote endpoint/model received a request, when it happened and the
+digest of the exact bytes. That table is **export-only**. Importing a backup does
+not replay those rows, because an imported document must not manufacture claims
+about what this device itself sent off-machine.
 
 Two tables are deliberately absent, and `src/host/audit/export.ts` says why next
 to them:

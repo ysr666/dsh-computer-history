@@ -186,6 +186,33 @@ describe('audit export and import', () => {
     target.close()
   })
 
+  it('refuses a partial observation row when its session/seq already exists locally', () => {
+    const source = database('dsh-ch-export-partial-src-')
+    seed(source.db)
+    const document = exportHistory(source.db, 5_000)
+    source.close()
+
+    const target = database('dsh-ch-export-partial-dst-')
+    importHistory(target.db, document)
+
+    const partial = structuredClone(document) as unknown as {
+      tables: Record<string, Array<Record<string, unknown>>>
+    }
+    delete partial.tables.observations?.[0]?.bundle_id
+
+    expect(() => importHistory(target.db, partial))
+      .toThrow(/observations\.bundle_id is required/)
+    expect(counts(target.db)).toEqual({
+      resources: 1,
+      observations: 1,
+      episodes: 1,
+      citations: 1,
+      rules: 0,
+      optIns: 0,
+    })
+    target.close()
+  })
+
   it('is idempotent for the same document', () => {
     const source = database('dsh-ch-export-same-')
     seed(source.db)
@@ -200,6 +227,36 @@ describe('audit export and import', () => {
       optIns: 1,
     })
     source.close()
+  })
+
+  it('exports remote-send audit facts but never imports them as local history', () => {
+    const source = database('dsh-ch-export-remote-audit-src-')
+    seed(source.db)
+    source.db.prepare(`
+      INSERT INTO remote_summary_sends(
+        episode_id, scope_key, endpoint_host, model, payload_digest, sent_at_ms
+      ) VALUES ('ep1', 'workspace:w1', 'models.example.test', 'm', ?, 6)
+    `).run('a'.repeat(64))
+
+    const document = exportHistory(source.db, 5_000)
+    expect(document.tables.remote_summary_sends).toEqual([{
+      id: 1,
+      episode_id: 'ep1',
+      scope_key: 'workspace:w1',
+      endpoint_host: 'models.example.test',
+      model: 'm',
+      payload_digest: 'a'.repeat(64),
+      sent_at_ms: 6,
+    }])
+    source.close()
+
+    const target = database('dsh-ch-export-remote-audit-dst-')
+    const result = importHistory(target.db, document)
+    expect(result.imported.remote_summary_sends).toBe(0)
+    expect(target.db.prepare(
+      'SELECT COUNT(*) AS n FROM remote_summary_sends',
+    ).get()).toEqual({ n: 0 })
+    target.close()
   })
 
   it('never carries the pairing digest', () => {

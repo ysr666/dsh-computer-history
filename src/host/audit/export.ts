@@ -21,6 +21,7 @@ export const EXPORTED_TABLES = [
   'policy_state',
   'policy_rules',
   'semantic_opt_ins',
+  'remote_summary_sends',
   'observations',
   'episodes',
   'episode_observations',
@@ -48,6 +49,36 @@ export class HistoryImportError extends Error {}
 
 type Primitive = string | number | null
 type ImportRow = Record<string, Primitive>
+
+const OBSERVATION_V1_COLUMNS = [
+  'id',
+  'collector_session',
+  'collector_seq',
+  'observed_at_ms',
+  'pid',
+  'bundle_id',
+  'app_name',
+  'surface_kind',
+  'window_title',
+  'element_role',
+  'element_subrole',
+  'element_identifier',
+  'element_title',
+  'resource_id',
+  'workspace_id',
+  'workspace_root',
+  'workspace_title',
+  'workspace_source',
+  'workspace_confidence',
+  'idle_seconds',
+  'privacy_secure',
+  'privacy_protected',
+  'privacy_reason',
+  'source_provider',
+  'source_adapter',
+  'policy_revision',
+  'expires_at_ms',
+] as const
 
 function schemaVersion(db: DatabaseSync): number {
   return Number(db.prepare('PRAGMA user_version').get()?.user_version ?? 0)
@@ -137,6 +168,15 @@ function validateDocument(
           throw new HistoryImportError(
             `${table}.${name} is not a primitive value`,
           )
+        }
+      }
+      if (table === 'observations') {
+        for (const name of OBSERVATION_V1_COLUMNS) {
+          if (!Object.prototype.hasOwnProperty.call(row, name)) {
+            throw new HistoryImportError(
+              `observations.${name} is required by the v1 export schema`,
+            )
+          }
         }
       }
       rows.push(row as ImportRow)

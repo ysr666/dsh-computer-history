@@ -368,12 +368,7 @@ implements ComputerHistoryServiceContract {
   private semanticPreviewNow(
     request: { readonly scopeKey: string },
   ): MinimisedSummaryPayload | undefined {
-    const scope = parseScopeKey(request.scopeKey)
-    const episodes = this.episodes.listRecent({ limit: 50 })
-    const episode = scope.kind === 'workspace'
-      ? episodes.find(item => item.workspace?.id === scope.id)
-      : episodes.find(item =>
-          item.surfaces.some(surface => surface.bundleId === scope.bundleId))
+    const episode = this.latestEpisodeForScope(request.scopeKey)
     if (!episode) return undefined
     const detail: EpisodeSummary = this.episodes.get(episode.id) ?? episode
     return minimiseEpisode({
@@ -452,15 +447,16 @@ implements ComputerHistoryServiceContract {
     })
   }
 
+  private latestEpisodeForScope(scopeKey: string): EpisodeSummary | undefined {
+    const scope = parseScopeKey(scopeKey)
+    return scope.kind === 'workspace'
+      ? this.episodes.latestForWorkspace(scope.id)
+      : this.episodes.latestForBundle(scope.bundleId)
+  }
+
   /** The episode a scope points at, and the citations behind its summary. */
   private episodeIdForScope(scopeKey: string): EpisodeId | undefined {
-    const scope = parseScopeKey(scopeKey)
-    const episodes = this.episodes.listRecent({ limit: 50 })
-    const episode = scope.kind === 'workspace'
-      ? episodes.find(item => item.workspace?.id === scope.id)
-      : episodes.find(item =>
-          item.surfaces.some(surface => surface.bundleId === scope.bundleId))
-    return episode?.id
+    return this.latestEpisodeForScope(scopeKey)?.id
   }
 
   private citationsForScope(scopeKey: string): readonly ObservationId[] {
