@@ -254,6 +254,40 @@ describe('local computer history backend', () => {
 
     history.close()
   })
+  it('rejects malformed semantic scopes instead of aliasing them to app scopes', () => {
+    const history = openTempDatabase()
+    seedEpisode(history)
+    const policies = new PolicyStore(history.db)
+    policies.ensureInitial(1)
+    const backend = new LocalComputerHistoryBackend(
+      new EpisodeStore(history.db),
+      policies,
+      new DeletionService(history.db),
+      new FakeCapture(),
+      {
+        observationRetentionHours: 24,
+        episodeRetentionDays: 30,
+        autoResume: false,
+      },
+      undefined,
+      new SemanticOptInStore(history.db),
+      history.db,
+    )
+
+    expect(
+      backend.semanticPreview({
+        scopeKey: 'app:com.microsoft.VSCode',
+      }),
+    ).toBeDefined()
+    expect(() => backend.semanticPreview({
+      scopeKey: 'not-a-scope:com.microsoft.VSCode',
+    })).toThrow(/unrecognised scope key/)
+    expect(() => backend.semanticPreview({
+      scopeKey: 'workspace:',
+    })).toThrow(/unrecognised scope key/)
+    history.close()
+  })
+
   it('keeps /state retention in step with a successful retention change', () => {
     const history = openTempDatabase()
     const policies = new PolicyStore(history.db)
