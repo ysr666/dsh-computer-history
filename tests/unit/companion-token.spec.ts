@@ -87,6 +87,36 @@ describe('companion pairing tokens', () => {
     second.close()
   })
 
+  it('does not let a stale compensation overwrite a newer Host rotation', () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'dsh-ch-pairing-compensate-'))
+    roots.push(root)
+    const dataDirectory = path.join(root, 'history')
+    const first = openHistoryDatabase({ dataDirectory, nowMs: 1 })
+    const second = openHistoryDatabase({ dataDirectory, nowMs: 1 })
+    const hostA = new CompanionTokenStore(first.db)
+    const hostB = new CompanionTokenStore(second.db)
+
+    const original = hostA.rotate('editor', 1_000)
+    const checkpoint = hostA.checkpoint('editor')
+    const attempted = hostA.rotate('editor', 2_000)
+
+    // Another Host completes a legitimate rotation before A discovers that
+    // its filesystem publication failed.
+    const winner = hostB.rotate('editor', 3_000)
+
+    expect(hostA.restore('editor', checkpoint, attempted)).toBe(false)
+    expect(hostA.verify('editor', original)).toBe(false)
+    expect(hostA.verify('editor', attempted)).toBe(false)
+    expect(hostA.verify('editor', winner)).toBe(true)
+    expect(hostA.state('editor')).toEqual({
+      paired: true,
+      createdAtMs: 3_000,
+    })
+
+    first.close()
+    second.close()
+  })
+
   it('survives a reopen of the store', () => {
     const root = mkdtempSync(path.join(os.tmpdir(), 'dsh-ch-pairing-reopen-'))
     roots.push(root)
