@@ -51,7 +51,10 @@ import {
 } from '../episodes/threads.js'
 import { resolveResume } from '../resume/index.js'
 import { phase1AdapterForBundle } from '../ingestion/index.js'
-import { DeletionService } from '../retention/index.js'
+import {
+  DeletionService,
+  RetentionService,
+} from '../retention/index.js'
 import { ObservationStore } from '../store/observation-store.js'
 import { RetentionSettingsStore } from '../store/retention-settings.js'
 import {
@@ -511,10 +514,16 @@ implements ComputerHistoryServiceContract {
     document: unknown,
   ): Promise<{ readonly imported: Record<string, number> }> {
     return this.withOperation(async () => {
-      const result = importHistory(this.requireDb(), document)
-      // importHistory writes through this same SQLite connection, so PRAGMA data_version cannot be relied on to
-      // make ingestion notice the change later. Reseed explicitly before reporting success: the next live
-      // observation must see every imported sequence and the correct chronological tail immediately.
+      const db = this.requireDb()
+      const result = importHistory(db, document)
+      // An export carries the absolute TTL stamped on each row. Do not expose
+      // already-expired imported evidence until the 15-minute maintenance pass:
+      // enforce those persisted deadlines before rebuilding live ingestion state
+      // or reporting the import complete.
+      new RetentionService(db).sweep(this.now())
+      // importHistory writes through this same SQLite connection, so PRAGMA
+      // data_version cannot be relied on to make ingestion notice the change
+      // later. Reseed explicitly after retention has removed any expired tail.
       await this.config.onHistoryChanged?.()
       return result
     })
