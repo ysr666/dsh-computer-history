@@ -219,6 +219,28 @@ export function summaryDisplayStatus(
   return 'deterministic'
 }
 
+export interface LatestRequestGate {
+  begin(): number
+  isCurrent(request: number): boolean
+  invalidate(): void
+}
+
+export function createLatestRequestGate(): LatestRequestGate {
+  let current = 0
+  return {
+    begin() {
+      current += 1
+      return current
+    },
+    isCurrent(request) {
+      return request === current
+    },
+    invalidate() {
+      current += 1
+    },
+  }
+}
+
 function dayLabel(t: HistoryTranslate, dayKey: string): string {
   const today = localDayKey(Date.now())
   if (dayKey === today) return t('today')
@@ -273,8 +295,17 @@ export function createHistoryPage({
     const [actionError, setActionError] = React.useState<string>()
     const [captureRecoveryPending, setCaptureRecoveryPending] = React.useState(false)
     const [startRecordingPending, setStartRecordingPending] = React.useState(false)
+    const contentRequests = React.useRef(createLatestRequestGate())
+    const timelineRequests = React.useRef(createLatestRequestGate())
+    const activityRequests = React.useRef(createLatestRequestGate())
+    const threadRequests = React.useRef(createLatestRequestGate())
+    const previewRequests = React.useRef(createLatestRequestGate())
+    const hintRequests = React.useRef(createLatestRequestGate())
 
     const refreshContent = React.useCallback(async () => {
+      const request = contentRequests.current.begin()
+      const timelineRequest = timelineRequests.current.begin()
+      setTimelineMorePending(false)
       const results = await Promise.allSettled([
         historyApi.getRecent(1),
         historyApi.getThreads(20),
@@ -282,6 +313,7 @@ export function createHistoryPage({
         historyApi.getTimeline(8),
       ] as const)
       const [recentResult, threadResult, semanticResult, timelineResult] = results
+      if (!contentRequests.current.isCurrent(request)) return
       setHasAnyEpisode(recentResult.status === 'fulfilled'
         ? recentResult.value.length > 0
         : null)
@@ -290,13 +322,15 @@ export function createHistoryPage({
         : null)
       setThreads(threadResult.status === 'fulfilled' ? threadResult.value : null)
       setSemantic(semanticResult.status === 'fulfilled' ? semanticResult.value : null)
-      if (timelineResult.status === 'fulfilled') {
-        setTimelineDays(7)
-        setTimelineHasMore(timelineResult.value.length > 7)
-        setTimeline(timelineResult.value.slice(0, 7))
-      } else {
-        setTimelineHasMore(false)
-        setTimeline(null)
+      if (timelineRequests.current.isCurrent(timelineRequest)) {
+        if (timelineResult.status === 'fulfilled') {
+          setTimelineDays(7)
+          setTimelineHasMore(timelineResult.value.length > 7)
+          setTimeline(timelineResult.value.slice(0, 7))
+        } else {
+          setTimelineHasMore(false)
+          setTimeline(null)
+        }
       }
       const failures = results.filter(result => result.status === 'rejected')
       const failure = failures[0]
@@ -333,9 +367,14 @@ export function createHistoryPage({
     }, [awaitingAccessibility, store])
     React.useEffect(() => {
       if (controls.historyRevision <= 0) return
+      activityRequests.current.invalidate()
+      threadRequests.current.invalidate()
+      previewRequests.current.invalidate()
+      hintRequests.current.invalidate()
       setSelected(undefined)
       setSelectedActivity(undefined)
       setThreadDetail(undefined)
+      setThreadDetailPendingKey(undefined)
       setThreadDetailError(undefined)
       setHint(undefined)
       setPreview(undefined)
@@ -373,23 +412,31 @@ export function createHistoryPage({
     }
 
     const showEarlierHistory = async (): Promise<void> => {
+      const request = timelineRequests.current.begin()
       const nextDays = timelineDays + 7
       setTimelineMorePending(true)
       setActionError(undefined)
       try {
         const next = await historyApi.getTimeline(nextDays + 1)
+        if (!timelineRequests.current.isCurrent(request)) return
         setTimelineDays(nextDays)
         setTimelineHasMore(next.length > nextDays)
         setTimeline(next.slice(0, nextDays))
       } catch (cause) {
-        setActionError(failureText(t, cause))
+        if (timelineRequests.current.isCurrent(request)) {
+          setActionError(failureText(t, cause))
+        }
       } finally {
-        setTimelineMorePending(false)
+        if (timelineRequests.current.isCurrent(request)) {
+          setTimelineMorePending(false)
+        }
       }
     }
 
     const findWhereILeftOff = async (): Promise<void> => {
-      setHint(await historyApi.resolveResume(resumeQuery))
+      const request = hintRequests.current.begin()
+      const result = await historyApi.resolveResume(resumeQuery)
+      if (hintRequests.current.isCurrent(request)) setHint(result)
     }
 
     const continueRecordedWork = async (
@@ -420,42 +467,57 @@ export function createHistoryPage({
     }
 
     const revokeScope = async (scopeKey: string): Promise<void> => {
+      previewRequests.current.invalidate()
       await historyApi.revokeSemantic(scopeKey)
       setPreview(undefined)
       setSemantic(await historyApi.getSemanticState())
     }
 
     const previewScope = async (scopeKey: string): Promise<void> => {
+      const request = previewRequests.current.begin()
       const payload = await historyApi.previewSemantic(scopeKey)
-      setPreview(JSON.stringify(payload, null, 2))
+      if (previewRequests.current.isCurrent(request)) {
+        setPreview(JSON.stringify(payload, null, 2))
+      }
     }
 
     const openActivity = async (activity: TimelineActivity): Promise<void> => {
       if (selectedActivity?.activityKey === activity.activityKey) {
+        activityRequests.current.invalidate()
         setSelected(undefined)
         setSelectedActivity(undefined)
         return
       }
+      const request = activityRequests.current.begin()
       const detail = await historyApi.getEpisode(String(activity.representativeEpisodeId))
+      if (!activityRequests.current.isCurrent(request)) return
       setSelectedActivity(activity)
       setSelected(detail)
     }
 
     const openThread = async (thread: WorkThread): Promise<void> => {
       if (threadDetail?.thread.threadKey === thread.threadKey) {
+        threadRequests.current.invalidate()
         setThreadDetail(undefined)
+        setThreadDetailPendingKey(undefined)
         setThreadDetailError(undefined)
         return
       }
+      const request = threadRequests.current.begin()
       setThreadDetailPendingKey(thread.threadKey)
       setThreadDetailError(undefined)
       try {
-        setThreadDetail(await historyApi.getThread(thread.threadKey))
+        const detail = await historyApi.getThread(thread.threadKey)
+        if (!threadRequests.current.isCurrent(request)) return
+        setThreadDetail(detail)
       } catch (cause) {
+        if (!threadRequests.current.isCurrent(request)) return
         setThreadDetail(undefined)
         setThreadDetailError(failureText(t, cause))
       } finally {
-        setThreadDetailPendingKey(undefined)
+        if (threadRequests.current.isCurrent(request)) {
+          setThreadDetailPendingKey(undefined)
+        }
       }
     }
 
@@ -830,6 +892,8 @@ export function createHistoryPage({
         placeholder: t('resumePlaceholder'),
         value: resumeQuery,
         onChange: (event: React.ChangeEvent<HTMLInputElement>) => {
+          hintRequests.current.invalidate()
+          setHint(undefined)
           setResumeQuery(event.target.value)
         },
       }),
@@ -938,7 +1002,11 @@ export function createHistoryPage({
                 type: 'button',
                 className: 'ch-text-action',
                 'aria-label': t('closeProjectHistory'),
-                onClick: () => { setThreadDetail(undefined) },
+                onClick: () => {
+                  threadRequests.current.invalidate()
+                  setThreadDetail(undefined)
+                  setThreadDetailPendingKey(undefined)
+                },
               }, '×'),
             ),
             React.createElement(

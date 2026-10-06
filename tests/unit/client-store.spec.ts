@@ -136,6 +136,69 @@ describe('client control store', () => {
     }
   })
 
+  it('does not let an older state poll overwrite a successful retention save', async () => {
+    const backend = fakeControlApi()
+    const store = createHistoryControlStore(backend)
+    await store.load()
+
+    let resolveOldState!: (value: ComputerHistoryState) => void
+    const oldState = new Promise<ComputerHistoryState>(resolve => {
+      resolveOldState = resolve
+    })
+    backend.getState.mockReturnValueOnce(oldState)
+    const refreshing = store.refreshState()
+
+    const changed: RetentionSettings = {
+      observationRetentionHours: 6,
+      episodeRetentionDays: 14,
+      updatedAtMs: 2,
+    }
+    backend.setRetention.mockResolvedValueOnce(changed)
+    await store.setRetention({
+      observationRetentionHours: 6,
+      episodeRetentionDays: 14,
+    })
+
+    resolveOldState(readyState)
+    await refreshing
+
+    expect(store.getSnapshot().state).toMatchObject({
+      observationRetentionHours: 6,
+      episodeRetentionDays: 14,
+    })
+    expect(store.getSnapshot().retention).toEqual(changed)
+  })
+
+  it('does not let a reload started before a policy write restore the old policy', async () => {
+    const backend = fakeControlApi()
+    const store = createHistoryControlStore(backend)
+    await store.load()
+
+    let resolveOldPolicy!: (value: PolicySnapshot) => void
+    const oldPolicy = new Promise<PolicySnapshot>(resolve => {
+      resolveOldPolicy = resolve
+    })
+    backend.getPolicy.mockReturnValueOnce(oldPolicy)
+
+    const reloading = store.reload()
+    const changed: PolicySnapshot = {
+      ...readyPolicy,
+      revision: 2,
+      updatedAtMs: 2,
+    }
+    backend.replacePolicy.mockResolvedValueOnce(changed)
+    await store.replacePolicy({
+      mode: 'include-only',
+      rules: [],
+    })
+
+    resolveOldPolicy(readyPolicy)
+    await reloading
+
+    expect(store.getSnapshot().policy).toEqual(changed)
+    expect(store.getSnapshot().status).toBe('ready')
+  })
+
   it('bumps historyRevision after destructive history changes', async () => {
     const backend = fakeControlApi()
     const store = createHistoryControlStore(backend)

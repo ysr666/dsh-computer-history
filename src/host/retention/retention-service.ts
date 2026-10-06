@@ -1,7 +1,10 @@
 import type { DatabaseSync } from 'node:sqlite'
-import { OBSERVATION_RETENTION_MS } from '../../shared/index.js'
+import { RETENTION_BOUNDS } from '../../shared/index.js'
 import { DeletionLogStore } from '../store/index.js'
 import { DeletionService } from './deletion.js'
+
+const MAX_OBSERVATION_RETENTION_MS =
+  RETENTION_BOUNDS.observationRetentionHours.max * 3_600_000
 
 export interface RetentionSweepResult {
   readonly observationsDeleted: number
@@ -42,8 +45,14 @@ export class RetentionService {
         `).run(nowMs).changes,
       )
 
+      // Tombstones must outlive every delayed observation the Host
+      // could still accept. Retention is user-configurable up to the shared
+      // maximum, and a user may raise it after the deletion; pruning at the
+      // 24-hour default would let an older pre-delete observation become valid
+      // again and resurrect history. The maximum accepted raw window is the
+      // point after which no pre-delete observation can pass normalization.
       new DeletionLogStore(this.db).deleteOlderThan(
-        nowMs - OBSERVATION_RETENTION_MS,
+        nowMs - MAX_OBSERVATION_RETENTION_MS,
       )
       this.deletion.cleanupOrphanResources()
       this.db.exec('COMMIT')

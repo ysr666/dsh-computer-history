@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { summaryDisplayStatus } from '../../src/client/panel.js'
+import {
+  createLatestRequestGate,
+  summaryDisplayStatus,
+} from '../../src/client/panel.js'
 import type { SemanticSummaryState } from '../../src/shared/index.js'
 
 const deterministic: SemanticSummaryState = {
@@ -7,6 +10,21 @@ const deterministic: SemanticSummaryState = {
   localProviderConfigured: false,
   scopes: [],
 }
+
+describe('latest request gate', () => {
+  it('lets only the newest async request publish', () => {
+    const gate = createLatestRequestGate()
+    const first = gate.begin()
+    expect(gate.isCurrent(first)).toBe(true)
+
+    const second = gate.begin()
+    expect(gate.isCurrent(first)).toBe(false)
+    expect(gate.isCurrent(second)).toBe(true)
+
+    gate.invalidate()
+    expect(gate.isCurrent(second)).toBe(false)
+  })
+})
 
 describe('summary presentation state', () => {
   it('does not call deterministic summaries a local model', () => {

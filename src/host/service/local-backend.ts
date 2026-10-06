@@ -311,12 +311,12 @@ implements ComputerHistoryServiceContract {
   public semanticPreview(
     request: { readonly scopeKey: string },
   ): MinimisedSummaryPayload | undefined {
-    const [kind, ...rest] = request.scopeKey.split(':')
-    const id = rest.join(':')
+    const scope = parseScopeKey(request.scopeKey)
     const episodes = this.episodes.listRecent({ limit: 50 })
-    const episode = kind === 'workspace'
-      ? episodes.find(item => item.workspace?.id === id)
-      : episodes.find(item => item.surfaces.some(surface => surface.bundleId === id))
+    const episode = scope.kind === 'workspace'
+      ? episodes.find(item => item.workspace?.id === scope.id)
+      : episodes.find(item =>
+          item.surfaces.some(surface => surface.bundleId === scope.bundleId))
     if (!episode) return undefined
     const detail: EpisodeSummary = this.episodes.get(episode.id) ?? episode
     return minimiseEpisode({
@@ -393,12 +393,12 @@ implements ComputerHistoryServiceContract {
 
   /** The episode a scope points at, and the citations behind its summary. */
   private episodeIdForScope(scopeKey: string): EpisodeId | undefined {
-    const [kind, ...rest] = scopeKey.split(':')
-    const id = rest.join(':')
+    const scope = parseScopeKey(scopeKey)
     const episodes = this.episodes.listRecent({ limit: 50 })
-    const episode = kind === 'workspace'
-      ? episodes.find(item => item.workspace?.id === id)
-      : episodes.find(item => item.surfaces.some(surface => surface.bundleId === id))
+    const episode = scope.kind === 'workspace'
+      ? episodes.find(item => item.workspace?.id === scope.id)
+      : episodes.find(item =>
+          item.surfaces.some(surface => surface.bundleId === scope.bundleId))
     return episode?.id
   }
 

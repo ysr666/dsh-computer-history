@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import {
   PHASE1_ADAPTERS,
   PolicyRuleId,
+  RETENTION_BOUNDS,
   type NativeObservation,
   type PolicySnapshot,
 } from '../../src/shared/index.js'
@@ -243,6 +244,70 @@ describe('live ingestion', () => {
 
     secondary.close()
     primary.close()
+  })
+
+  it('keeps a deletion tombstone while an old observation is still admissible under a longer retention choice', async () => {
+    const root = mkdtempSync(
+      path.join(os.tmpdir(), 'dsh-ch-live-'),
+    )
+    roots.push(root)
+    const history = openHistoryDatabase({
+      dataDirectory: path.join(root, 'history'),
+      nowMs: 1,
+    })
+    const policies = new PolicyStore(history.db)
+    policies.ensureInitial(1)
+    policies.replace('include-only', [{
+      id: PolicyRuleId('allow-code'),
+      dimension: 'app',
+      action: 'allow',
+      matcher: 'exact',
+      pattern: 'com.microsoft.VSCode',
+      builtIn: false,
+      createdAtMs: 1,
+      updatedAtMs: 1,
+    }], 2)
+
+    const hour = 3_600_000
+    const deletedAt = 100 * hour
+    new DeletionService(history.db).delete({
+      scope: { kind: 'all' },
+    }, deletedAt)
+
+    // Twenty-five hours later the old implementation pruned this marker using
+    // the 24-hour default, even though a 30-day retention setting still accepts
+    // observations from before the deletion.
+    new RetentionService(history.db).sweep(
+      deletedAt + 25 * hour,
+    )
+    expect(history.db.prepare(
+      'SELECT COUNT(*) AS count FROM deletion_log',
+    ).get()).toEqual({ count: 1 })
+
+    const now = deletedAt + 25 * hour
+    const ingestion = new IngestionService(
+      history.db,
+      {
+        resolve: async () => ({
+          id: 'alpha',
+          root: '/alpha',
+          title: 'alpha',
+          source: 'dsh',
+          confidence: 1,
+        }),
+      },
+      () => policies.get(),
+      () => now,
+      () => RETENTION_BOUNDS.observationRetentionHours.max * hour,
+    )
+
+    expect(await ingestion.ingest({
+      ...native(),
+      collectorSession: 'late-after-delete',
+      observedAtMs: deletedAt - hour,
+    })).toBe(false)
+    expect(new ObservationStore(history.db).count()).toBe(0)
+    history.close()
   })
 
   it('bounds episode tombstones instead of blocking unrelated late work', async () => {
