@@ -91,3 +91,20 @@ describe('host data rendered in the reader\'s language', () => {
     expect(threadSubjectText(en_t, { resources: [] })).toBe('an unnamed workspace')
   })
 })
+
+/**
+ * The reason the panel shows for a policy that allows nothing used to be the raw code, because nothing mapped it,
+ * and the panel could only print it. A code is not copy: the notice says what is happening, and it carries the
+ * button that fixes it.
+ */
+describe('the reason a policy that allows nothing produces', () => {
+  const en_t = translator(en)
+  const zh_t = translator(zh)
+
+  it('is translated rather than echoed as a code', () => {
+    expect(reasonText(zh_t, 'no-apps-allowed'))
+      .toBe('还没有允许任何应用，所以现在什么都不会被记录。')
+    expect(reasonText(en_t, 'no-apps-allowed'))
+      .toBe('No application is allowed yet, so nothing can be recorded.')
+  })
+})
