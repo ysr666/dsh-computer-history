@@ -8,9 +8,10 @@
 // .debug/e2e-macos/, and cleans up after itself. It never touches the user's own ~/.dsh: every path it uses is
 // inside a temporary home, and every port is its own.
 //
-// What it deliberately does not claim: the macOS collector needs an Accessibility grant, and a collector
-// spawned by a command-line Host does not have one. The script prints the collector's own state and reason
-// instead of asserting anything about it, so a reader can see exactly which part of the flow this run covered.
+// What it deliberately does not claim by default: the macOS collector needs an Accessibility grant, and a
+// collector spawned by a command-line Host may not have one. Without COLLECTOR_EXECUTABLE this run reports that
+// state instead of asserting it. Supplying COLLECTOR_EXECUTABLE changes the contract: the caller has provided the
+// collector under test, so the Host must finish its handshake and expose a live collector within the startup bound.
 import { spawn, spawnSync } from 'node:child_process'
 import { DatabaseSync } from 'node:sqlite'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -35,6 +36,8 @@ const killTree = pid => {
 const collectorLine = process.env.COLLECTOR_EXECUTABLE
   ? `    collectorExecutable: ${process.env.COLLECTOR_EXECUTABLE}\n`
   : ''
+const collectorRequired = Boolean(process.env.COLLECTOR_EXECUTABLE)
+const diagnosticTimeline = process.env.DSH_E2E_DIAGNOSTIC_TIMELINE === '1'
 
 const REPO = path.resolve(import.meta.dirname, '..')
 process.chdir(REPO)
@@ -200,12 +203,10 @@ ${collectorLine}    collectorRestart: false
     companion.listening === true || typeof companion.reason === 'string',
     companion.listening === true ? `listening on ${companion.port}` : `not listening, reason=${companion.reason ?? '(none!)'}`,
   )
-  // Reported, not asserted: see the header. A command-line Host has no Accessibility grant to hand its helper.
-  //
   // Read a state the Host has settled on, not the one it has one second after boot. Measured on Windows
   // 2026-10-06: the first read answered `capture: degraded, reason: collector-starting` and two seconds later the
-  // same Host answered `running` with its collector field present - the handshake simply had not finished. Three
-  // rounds of investigation read a boot and called it an anomaly; a check that samples once reports the boot.
+  // same Host answered `running` with its collector field present - the handshake simply had not finished. The
+  // earlier false diagnosis came from separate runs that each sampled only once during that startup window.
   let settled = state
   for (let i = 0; i < 12; i += 1) {
     const waiting = settled.reason === 'collector-starting' || settled.collector === undefined
@@ -213,27 +214,40 @@ ${collectorLine}    collectorRestart: false
     await new Promise(resolve => setTimeout(resolve, 1000))
     try { settled = JSON.parse(run('curl', ['-s', '-b', jar, `${api}/state`]).out) } catch { /* keep the last read */ }
   }
+
+  const collectorHealthy = Boolean(settled.collector)
+    && ['running', 'paused', 'permission-required'].includes(settled.capture)
+  const collectorDetail =
+    `state=${settled.capture} reason=${settled.reason ?? '(none)'} collector=${settled.collector ? 'yes' : 'no'}`
   record(
-    'collector (reported, not asserted)',
-    true,
-    `state=${settled.capture} reason=${settled.reason ?? '(none)'} collector=${settled.collector ? 'yes' : 'no'}`,
+    collectorRequired ? 'collector settles' : 'collector (reported, not asserted)',
+    collectorRequired ? collectorHealthy : true,
+    collectorDetail,
   )
 
-  // One read a second or two after boot is earlier than several named states can exist: the manager's hello timer
-  // is five seconds, so "no reason at all" is exactly what that window looks like. Measured on Windows 2026-10-06 -
-  // every single read answered `collector-starting` while a probe had already proven both the transport and the
-  // collector healthy, which sent three rounds chasing a state nobody had waited for. So watch it instead.
-  const watched = []
-  for (let i = 0; i < 8; i += 1) {
-    const raw = run('curl', ['-s', '-b', jar, `${api}/state`]).out
-    let seen = {}
-    try { seen = JSON.parse(raw) } catch { /* recorded as unknown below */ }
-    const line = `${seen.capture ?? '?'}/reason=${seen.reason ?? '(none)'}/collector=${seen.collector ? 'yes' : 'no'}`
-    if (watched.at(-1)?.line !== line) watched.push({ atMs: i * 2000, line })
-    await new Promise(resolve => setTimeout(resolve, 2000))
+  // The normal happy path no longer sleeps another sixteen seconds merely to prove it is still healthy. A timeline
+  // is diagnostic evidence: collect it only when a supplied collector failed to settle, or when explicitly asked.
+  if ((collectorRequired && !collectorHealthy) || diagnosticTimeline) {
+    const watched = []
+    for (let i = 0; i < 8; i += 1) {
+      const raw = run('curl', ['-s', '-b', jar, `${api}/state`]).out
+      let seen = {}
+      try { seen = JSON.parse(raw) } catch { /* recorded as unknown below */ }
+      const line = `${seen.capture ?? '?'}/reason=${seen.reason ?? '(none)'}/collector=${seen.collector ? 'yes' : 'no'}`
+      if (watched.at(-1)?.line !== line) watched.push({ atMs: i * 2000, line })
+      if (i < 7) await new Promise(resolve => setTimeout(resolve, 2000))
+    }
+    writeFileSync(path.join(artifacts, 'state-timeline.json'), `${JSON.stringify(watched, null, 2)}\n`)
+    record(
+      'collector over time (diagnostic)',
+      true,
+      watched.map(w => `${w.atMs}ms ${w.line}`).join('  ->  '),
+    )
   }
-  writeFileSync(path.join(artifacts, 'state-timeline.json'), `${JSON.stringify(watched, null, 2)}\n`)
-  record('collector over time (reported, not asserted)', true, watched.map(w => `${w.atMs}ms ${w.line}`).join('  ->  '))
+
+  if (collectorRequired && !collectorHealthy) {
+    throw new Error(`collector did not settle within 12s: ${collectorDetail}`)
+  }
 
   const db = path.join(home, 'computer-history', 'history.sqlite')
   // node:sqlite rather than the `sqlite3` CLI (absent on Windows, and this command is meant to be runnable on
