@@ -63,6 +63,10 @@ export function createHistoryControlStore(
   let loadPromise: Promise<void> | undefined
   let stateRefreshPromise: Promise<ComputerHistoryState> | undefined
   let statePollTimer: ReturnType<typeof setInterval> | undefined
+  // A response that started before a successful write is historical evidence,
+  // not current state. Network scheduling can return that old GET after the
+  // mutation response, so keep one epoch for every state-changing operation.
+  let mutationEpoch = 0
 
   const publish = (next: HistoryControlSnapshot): void => {
     snapshot = next
@@ -71,6 +75,7 @@ export function createHistoryControlStore(
   const readAll = async (): Promise<void> => {
     if (loadPromise) return loadPromise
     loadPromise = (async () => {
+      const startedAtEpoch = mutationEpoch
       publish({ ...snapshot, status: 'loading', error: undefined })
       try {
         const [state, policy, retention] = await Promise.all([
@@ -78,20 +83,24 @@ export function createHistoryControlStore(
           api.getPolicy(),
           api.getRetention(),
         ])
-        publish({
-          ...snapshot,
-          status: 'ready',
-          state,
-          policy,
-          retention,
-          error: undefined,
-        })
+        if (startedAtEpoch === mutationEpoch) {
+          publish({
+            ...snapshot,
+            status: 'ready',
+            state,
+            policy,
+            retention,
+            error: undefined,
+          })
+        }
       } catch (cause) {
-        publish({
-          ...snapshot,
-          status: 'error',
-          error: cause instanceof Error ? cause.message : String(cause),
-        })
+        if (startedAtEpoch === mutationEpoch) {
+          publish({
+            ...snapshot,
+            status: 'error',
+            error: cause instanceof Error ? cause.message : String(cause),
+          })
+        }
         throw cause
       } finally {
         loadPromise = undefined
@@ -106,8 +115,12 @@ export function createHistoryControlStore(
   }
   const refreshState = (): Promise<ComputerHistoryState> => {
     if (stateRefreshPromise) return stateRefreshPromise
+    const startedAtEpoch = mutationEpoch
     stateRefreshPromise = api.getState()
-      .then(foldState)
+      .then((state) => {
+        if (startedAtEpoch === mutationEpoch) foldState(state)
+        return state
+      })
       .finally(() => { stateRefreshPromise = undefined })
     return stateRefreshPromise
   }
@@ -139,21 +152,29 @@ export function createHistoryControlStore(
     reload: readAll,
     refreshState,
     async pause() {
-      return foldState(await api.pause())
+      const state = await api.pause()
+      mutationEpoch += 1
+      return foldState(state)
     },
     async resume() {
-      return foldState(await api.resume())
+      const state = await api.resume()
+      mutationEpoch += 1
+      return foldState(state)
     },
     async recover() {
-      return foldState(await api.recover())
+      const state = await api.recover()
+      mutationEpoch += 1
+      return foldState(state)
     },
     async replacePolicy(update) {
       const policy = await api.replacePolicy(update)
+      mutationEpoch += 1
       publish({ ...snapshot, status: 'ready', policy, error: undefined })
       return policy
     },
     async setRetention(input) {
       const retention = await api.setRetention(input)
+      mutationEpoch += 1
       const state = snapshot.state
         ? {
             ...snapshot.state,
@@ -172,6 +193,7 @@ export function createHistoryControlStore(
     },
     async deleteHistory(request) {
       const result = await api.deleteHistory(request)
+      mutationEpoch += 1
       publish({
         ...snapshot,
         historyRevision: snapshot.historyRevision + 1,
@@ -180,6 +202,7 @@ export function createHistoryControlStore(
     },
     async importHistory(document) {
       const result = await api.importHistory(document)
+      mutationEpoch += 1
       publish({
         ...snapshot,
         historyRevision: snapshot.historyRevision + 1,
@@ -188,6 +211,7 @@ export function createHistoryControlStore(
     },
     async rotatePairing() {
       const rotation = await api.rotatePairing()
+      mutationEpoch += 1
       const state = snapshot.state
       if (state) {
         const editorPaired = state.companion?.editorPaired
