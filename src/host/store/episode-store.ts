@@ -181,6 +181,10 @@ function resourceKind(value: string): ResourceKind {
   throw new Error(`invalid resource kind: ${value}`)
 }
 
+function escapeLikePattern(value: string): string {
+  return value.replace(/[\\%_]/g, match => `\\${match}`)
+}
+
 export class EpisodeStore {
   public constructor(private readonly db: DatabaseSync) {}
 
@@ -622,6 +626,39 @@ export class EpisodeStore {
     `).all(key, bounded).map(row => this.materialize(row))
   }
 
+  public latestForWorkspace(workspaceId: string): EpisodeSummary | undefined {
+    const id = workspaceId.trim()
+    if (!id) return undefined
+    const row = this.db.prepare(`
+      SELECT e.*
+      FROM episodes e
+      WHERE e.state != 'invalidated'
+        AND e.primary_workspace_id = ?
+      ORDER BY e.ended_at_ms DESC
+      LIMIT 1
+    `).get(id)
+    return row ? this.materialize(row) : undefined
+  }
+
+  public latestForBundle(bundleId: string): EpisodeSummary | undefined {
+    const id = bundleId.trim()
+    if (!id) return undefined
+    const row = this.db.prepare(`
+      SELECT e.*
+      FROM episodes e
+      WHERE e.state != 'invalidated'
+        AND EXISTS (
+          SELECT 1
+          FROM episode_surfaces es
+          WHERE es.episode_id = e.id
+            AND es.bundle_id = ?
+        )
+      ORDER BY e.ended_at_ms DESC
+      LIMIT 1
+    `).get(id)
+    return row ? this.materialize(row) : undefined
+  }
+
   public search(
     query: EpisodeSearchQuery,
   ): readonly EpisodeSummary[] {
@@ -648,19 +685,19 @@ export class EpisodeStore {
       params.push(query.bundleId)
     }
 
-    const needle = `%${query.query.toLowerCase()}%`
+    const needle = `%${escapeLikePattern(query.query.toLowerCase())}%`
     clauses.push(`(
-      lower(e.summary_text) LIKE ?
-      OR lower(COALESCE(e.primary_workspace_id, '')) LIKE ?
-      OR lower(COALESCE(e.primary_workspace_title, '')) LIKE ?
+      lower(e.summary_text) LIKE ? ESCAPE '\\'
+      OR lower(COALESCE(e.primary_workspace_id, '')) LIKE ? ESCAPE '\\'
+      OR lower(COALESCE(e.primary_workspace_title, '')) LIKE ? ESCAPE '\\'
       OR EXISTS (
         SELECT 1
         FROM episode_resources er
         JOIN resources r ON r.id = er.resource_id
         WHERE er.episode_id = e.id
           AND (
-            lower(r.canonical_uri) LIKE ?
-            OR lower(COALESCE(r.display_label, '')) LIKE ?
+            lower(r.canonical_uri) LIKE ? ESCAPE '\\'
+            OR lower(COALESCE(r.display_label, '')) LIKE ? ESCAPE '\\'
           )
       )
     )`)
