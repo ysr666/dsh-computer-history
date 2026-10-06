@@ -392,32 +392,32 @@ implements ComputerHistoryServiceContract {
     readonly fetchImpl?: typeof fetch
   }): Promise<{ readonly summary: string, readonly sendId: number }> {
     return this.withOperation(async () => {
-    const payload = this.semanticPreview({ scopeKey: request.scopeKey })
-    if (!payload) throw new SummaryProviderError('no episode for that scope')
-    const citations = this.citationsForScope(request.scopeKey)
-    const scope = parseScopeKey(request.scopeKey)
-    if (!this.semanticOptIns) {
-      throw new SummaryProviderError('semantic summaries are unavailable')
-    }
-    const sends = new RemoteSendStore(this.requireDb())
-    const episodeId = this.episodeIdForScope(request.scopeKey)
-    const provider = new RemoteSummaryProvider({
-      endpoint: request.endpoint,
-      model: request.model,
-      optIns: this.semanticOptIns,
-      ...(request.fetchImpl ? { fetchImpl: request.fetchImpl } : {}),
-      now: () => this.now(),
-      onSent: (record) => {
-        lastSendId = sends.record({
-          ...record,
-          scopeKey: request.scopeKey,
-          ...(episodeId === undefined ? {} : { episodeId }),
-        })
-      },
-    })
-    let lastSendId = 0
-    const summary = await provider.summarise({ scope, payload, citations })
-    return { summary, sendId: lastSendId }
+      const payload = this.semanticPreview({ scopeKey: request.scopeKey })
+      if (!payload) throw new SummaryProviderError('no episode for that scope')
+      const citations = this.citationsForScope(request.scopeKey)
+      const scope = parseScopeKey(request.scopeKey)
+      if (!this.semanticOptIns) {
+        throw new SummaryProviderError('semantic summaries are unavailable')
+      }
+      const sends = new RemoteSendStore(this.requireDb())
+      const episodeId = this.episodeIdForScope(request.scopeKey)
+      const provider = new RemoteSummaryProvider({
+        endpoint: request.endpoint,
+        model: request.model,
+        optIns: this.semanticOptIns,
+        ...(request.fetchImpl ? { fetchImpl: request.fetchImpl } : {}),
+        now: () => this.now(),
+        onSent: (record) => {
+          lastSendId = sends.record({
+            ...record,
+            scopeKey: request.scopeKey,
+            ...(episodeId === undefined ? {} : { episodeId }),
+          })
+        },
+      })
+      let lastSendId = 0
+      const summary = await provider.summarise({ scope, payload, citations })
+      return { summary, sendId: lastSendId }
     })
   }
 
@@ -470,30 +470,30 @@ implements ComputerHistoryServiceContract {
     readonly forgotten: number
   } {
     return this.withSyncOperation(() => {
-    if (!this.semanticOptIns) {
-      throw new Error('semantic summaries are unavailable')
-    }
-    const db = this.requireDb()
-    if (db.isTransaction) {
-      throw new Error('semantic revocation must own the outer transaction')
-    }
-    const scope = parseScopeKey(request.scopeKey)
-    db.exec('BEGIN IMMEDIATE')
-    try {
-      const revoked = this.semanticOptIns.revoke(scope)
-      const purged = this.semanticOptIns.purge(scope)
-      // Revoking is an instruction to forget, so the local record of what left
-      // goes too (ADR 0010). These three writes are one user action: a failure
-      // after the permission row is removed must roll the whole action back
-      // rather than leave model output or send audit rows behind.
-      const forgotten = new RemoteSendStore(db)
-        .deleteForScope(request.scopeKey)
-      db.exec('COMMIT')
-      return { revoked, purged, forgotten }
-    } catch (error) {
-      if (db.isTransaction) db.exec('ROLLBACK')
-      throw error
-    }
+      if (!this.semanticOptIns) {
+        throw new Error('semantic summaries are unavailable')
+      }
+      const db = this.requireDb()
+      if (db.isTransaction) {
+        throw new Error('semantic revocation must own the outer transaction')
+      }
+      const scope = parseScopeKey(request.scopeKey)
+      db.exec('BEGIN IMMEDIATE')
+      try {
+        const revoked = this.semanticOptIns.revoke(scope)
+        const purged = this.semanticOptIns.purge(scope)
+        // Revoking is an instruction to forget, so the local record of what left
+        // goes too (ADR 0010). These three writes are one user action: a failure
+        // after the permission row is removed must roll the whole action back
+        // rather than leave model output or send audit rows behind.
+        const forgotten = new RemoteSendStore(db)
+          .deleteForScope(request.scopeKey)
+        db.exec('COMMIT')
+        return { revoked, purged, forgotten }
+      } catch (error) {
+        if (db.isTransaction) db.exec('ROLLBACK')
+        throw error
+      }
     })
   }
 
