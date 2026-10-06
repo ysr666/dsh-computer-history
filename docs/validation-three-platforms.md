@@ -694,8 +694,34 @@ curl -H "$C" "$BASE/recent"
 ```
 
 Passing means: three rows naming three applications with the same three refusal reason strings macOS
-produces, and the accessibility-off case reporting a reason rather than silence. Until that run exists,
-every sentence above about Linux behaviour is a design, not a measurement.
+produces, and the accessibility-off case reporting a reason rather than silence. The historical run above
+closed that measurement gap; the repeatable current-main acceptance below replaces the old one-off `/tmp`
+recipe as the way to prove it again after collector or Host changes.
+
+### Current-main Linux Host acceptance, repeatable — 2026-10-07
+
+`pnpm e2e:linux-host` now owns the full live path instead of relying on the temporary helper scripts used by
+the first 2026-10-05 run. It builds the current Linux collector inside Colima, proves both accessibility
+states, starts a real Xvfb + D-Bus + AT-SPI desktop with Nautilus in the foreground, and supplies that collector
+to a throwaway DSH 0.2.0-rc.2 Host. The Host uses its own temporary profile and store.
+
+Measured on the current working tree based on `33f28b9`:
+
+```text
+Linux collector gate       6 checks passed
+foreground window          Home (org.gnome.Nautilus.desktop)
+Host                       capture settles to running
+store                      episodes/observations = 1|1
+latest observation         org.gnome.Nautilus.desktop / at-spi / finder
+/recent                    1 row, episode:linux-177806:1
+```
+
+The first version of this repeatable run found one real Host bug: the collector emitted `provider: "at-spi"`,
+but `parseCollectorLine()` discarded that field, so normalization used its compatibility fallback and stored the
+row as `macos-ax`. The parser now preserves the three native collector providers (`macos-ax`, `windows-uia`,
+`at-spi`) and explicitly refuses `companion` on collector wire input; companion provenance remains available only
+through the authenticated companion intake. The live command asserts `source_provider = at-spi`, so that audit
+regression cannot silently return.
 
 ## P7 - a third editor, and what can be proven without a JVM
 

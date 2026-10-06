@@ -209,6 +209,22 @@ function parseObservation(
     privacy.reason,
     'observation.privacy.reason',
   )
+  const sourceProvider = optionalString(
+    source.provider,
+    'observation.source.provider',
+    128,
+  )
+  if (
+    sourceProvider !== undefined
+    && sourceProvider !== 'macos-ax'
+    && sourceProvider !== 'windows-uia'
+    && sourceProvider !== 'at-spi'
+  ) {
+    // `companion` is intentionally not a collector-wire value. Companion intake is authenticated on a
+    // separate endpoint and constructs its message locally; letting a collector claim that provider would
+    // let it cross the URL/workspace trust boundary in ingestion (ADR 0007/0009).
+    throw new Error(`unsupported collector observation provider: ${sourceProvider}`)
+  }
   const window = parseOptionalStringRecord(
     message.window,
     'observation.window',
@@ -273,6 +289,7 @@ function parseObservation(
         'observation.source.adapter',
         128,
       ),
+      ...(sourceProvider === undefined ? {} : { provider: sourceProvider }),
     },
   }
 }

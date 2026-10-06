@@ -64,10 +64,10 @@ export interface NativeObservation {
   readonly source: {
     readonly adapter: string
     /**
-     * Where the observation came from. The wire parser never sets it, so an
-     * observation decoded from a collector that does not say is 'macos-ax' (the
-     * Accessibility path on macOS); the Windows collector sends 'windows-uia', and the companion
-     * intake sets 'companion' on the messages it builds locally (ADR 0007).
+     * Where the observation came from. Native collectors may declare `macos-ax`, `windows-uia`, or `at-spi`;
+     * the Host preserves that provenance. `companion` is never accepted from collector wire input - the paired
+     * companion intake sets it only on messages it constructs locally (ADR 0007/0009). Older collectors that
+     * omit the field retain the historical macOS fallback during normalization for wire compatibility.
      */
     readonly provider?: ObservationProvider
   }

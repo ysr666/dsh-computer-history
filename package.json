@@ -26,6 +26,7 @@
     "verify:release:blockers": "node scripts/release-blockers.mjs",
     "e2e:macos": "node scripts/e2e-macos.mjs",
     "e2e:linux": "node scripts/e2e-linux.mjs",
+    "e2e:linux-host": "node scripts/e2e-linux-host.mjs",
     "e2e:gecko": "node scripts/e2e-gecko.mjs",
     "e2e:chromium": "node scripts/e2e-chromium.mjs",
     "e2e:editor": "node scripts/e2e-editor.mjs",

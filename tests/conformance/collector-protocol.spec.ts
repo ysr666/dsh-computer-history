@@ -36,6 +36,22 @@ describe('collector protocol conformance: what is enforced today', () => {
     expect((parseCollectorLine(observation()) as { type: string }).type).toBe('observation')
   })
 
+  it('preserves native collector provenance but never lets collector wire impersonate a companion', () => {
+    const parsed = parseCollectorLine(observation({
+      source: { adapter: 'vscode', provider: 'windows-uia' },
+    }))
+    expect(parsed.type).toBe('observation')
+    if (parsed.type === 'observation') {
+      expect(parsed.source.provider).toBe('windows-uia')
+    }
+    expect(() => parseCollectorLine(observation({
+      source: { adapter: 'vscode', provider: 'companion' },
+    }))).toThrowError(/unsupported collector observation provider/)
+    expect(() => parseCollectorLine(observation({
+      source: { adapter: 'vscode', provider: 'invented' },
+    }))).toThrowError(/unsupported collector observation provider/)
+  })
+
   it('drops an unknown field instead of refusing it - recorded, not endorsed', () => {
     const parsed = parseCollectorLine(observation({ documentText: 'secret' })) as unknown as Record<string, unknown>
     expect(parsed.type).toBe('observation')
