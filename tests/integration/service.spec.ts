@@ -582,6 +582,87 @@ describe('local computer history backend', () => {
     history.close()
   })
 
+  it('does not return a remote summary if consent is revoked while its response body is still streaming', async () => {
+    const history = openTempDatabase()
+    const episodeId = seedEpisode(history)
+    const episodes = new EpisodeStore(history.db)
+    const policies = new PolicyStore(history.db)
+    policies.ensureInitial(1)
+    const optIns = new SemanticOptInStore(history.db)
+    const sends = new RemoteSendStore(history.db)
+    const backend = new LocalComputerHistoryBackend(
+      episodes,
+      policies,
+      new DeletionService(history.db),
+      new FakeCapture(),
+      {
+        observationRetentionHours: 24,
+        episodeRetentionDays: 30,
+        autoResume: false,
+        now: () => 5_000,
+      },
+      undefined,
+      optIns,
+      history.db,
+    )
+    backend.grantSemanticOptIn({
+      scopeKey: 'workspace:alpha',
+      providerKind: 'remote',
+      model: 'm',
+    })
+    const citation = episodes.get(episodeId)?.summaryObservationIds[0]
+    expect(citation).toBeDefined()
+
+    let releaseBody!: () => void
+    const bodyGate = new Promise<void>(resolve => {
+      releaseBody = resolve
+    })
+    let bodyStarted!: () => void
+    const bodyHasStarted = new Promise<void>(resolve => {
+      bodyStarted = resolve
+    })
+
+    const remote = backend.summariseRemotely({
+      scopeKey: 'workspace:alpha',
+      endpoint: 'https://models.example.test/v1',
+      model: 'm',
+      fetchImpl: async () => new Response(new ReadableStream<Uint8Array>({
+        start(controller) {
+          bodyStarted()
+          void bodyGate.then(() => {
+            controller.enqueue(new TextEncoder().encode(JSON.stringify({
+              summary: 'Too late after body read.',
+              citations: [Number(citation)],
+            })))
+            controller.close()
+          })
+        },
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    })
+
+    await bodyHasStarted
+    for (let i = 0; i < 10 && sends.listForScope('workspace:alpha').length === 0; i += 1) {
+      await Promise.resolve()
+    }
+    expect(sends.listForScope('workspace:alpha')).toHaveLength(1)
+
+    expect(backend.revokeSemanticOptIn({
+      scopeKey: 'workspace:alpha',
+    })).toMatchObject({
+      revoked: true,
+      forgotten: 1,
+    })
+    expect(sends.listForScope('workspace:alpha')).toHaveLength(0)
+
+    releaseBody()
+    await expect(remote).rejects.toThrow(/no recorded opt-in/)
+    expect(sends.listForScope('workspace:alpha')).toHaveLength(0)
+    history.close()
+  })
+
   it('keeps a remote summary operation alive through drain until its send audit is durable', async () => {
     const history = openTempDatabase()
     const episodeId = seedEpisode(history)
