@@ -37,8 +37,9 @@ export interface CompanionPairingCheckpoint {
  *
  * Browser and editor credentials are independent so rotating one cannot silently
  * disconnect the other. Only SHA-256 digests persist in SQLite. The current
- * digests are mirrored in memory so the loopback intake never needs to touch the
- * database after plugin teardown has started.
+ * digests are mirrored in memory, with SQLite data_version used to notice a
+ * rotation committed by another Host. Plugin teardown stops the loopback intake
+ * before the database can close, so this coherence check never outlives SQLite.
  */
 export class CompanionTokenStore {
   private readonly credentials = new Map<CompanionKind, Credential>()
