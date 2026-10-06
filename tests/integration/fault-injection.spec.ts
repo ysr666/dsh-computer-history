@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -28,10 +28,13 @@ afterEach(() => {
 function database(label: string) {
   const root = mkdtempSync(path.join(os.tmpdir(), `dsh-ch-fault-${label}-`))
   roots.push(root)
-  return openHistoryDatabase({
-    dataDirectory: path.join(root, 'history'),
-    nowMs: 1,
-  })
+  return {
+    ...openHistoryDatabase({
+      dataDirectory: path.join(root, 'history'),
+      nowMs: 1,
+    }),
+    root,
+  }
 }
 
 function allowedPolicy(db: ReturnType<typeof database>['db']): PolicyStore {
@@ -50,7 +53,13 @@ function allowedPolicy(db: ReturnType<typeof database>['db']): PolicyStore {
   return policies
 }
 
-function message(session: string, atMs = 1_000, seq = 1): NativeObservation {
+function message(
+  session: string,
+  atMs = 1_000,
+  seq = 1,
+  documentPath?: string,
+): NativeObservation {
+  if (documentPath) writeFileSync(documentPath, '// fault fixture\n')
   return {
     v: 1,
     type: 'observation',
@@ -64,7 +73,7 @@ function message(session: string, atMs = 1_000, seq = 1): NativeObservation {
     },
     window: {
       title: 'fault.ts',
-      document: '/tmp/fault.ts',
+      ...(documentPath === undefined ? {} : { document: documentPath }),
     },
     privacy: {
       secure: false,
@@ -115,14 +124,24 @@ describe('SQLite fault injection', () => {
       END;
     `)
 
-    await expect(service.ingest(message('fault-ingest')))
+    await expect(service.ingest(message(
+      'fault-ingest',
+      1_000,
+      1,
+      path.join(history.root, 'fault-ingest.ts'),
+    )))
       .rejects.toThrow(/forced episode insert failure/)
     expect(count(history.db, 'observations')).toBe(0)
     expect(count(history.db, 'episodes')).toBe(0)
     expect(count(history.db, 'resources')).toBe(0)
 
     history.db.exec('DROP TRIGGER fail_episode_insert')
-    await expect(service.ingest(message('fault-ingest'))).resolves.toBe(true)
+    await expect(service.ingest(message(
+      'fault-ingest',
+      1_000,
+      1,
+      path.join(history.root, 'fault-ingest.ts'),
+    ))).resolves.toBe(true)
     expect(new ObservationStore(history.db).count()).toBe(1)
     expect(new EpisodeStore(history.db).listRecent()).toHaveLength(1)
     history.close()
@@ -132,7 +151,12 @@ describe('SQLite fault injection', () => {
     const history = database('delete')
     const policies = allowedPolicy(history.db)
     const service = ingestion(history.db, policies)
-    await service.ingest(message('fault-delete'))
+    await service.ingest(message(
+      'fault-delete',
+      1_000,
+      1,
+      path.join(history.root, 'fault-delete.ts'),
+    ))
 
     const before = {
       observations: count(history.db, 'observations'),
@@ -168,7 +192,12 @@ describe('SQLite fault injection', () => {
   it('rolls an import back when a late Episode insert fails', async () => {
     const source = database('import-source')
     const sourcePolicies = allowedPolicy(source.db)
-    await ingestion(source.db, sourcePolicies).ingest(message('fault-import'))
+    await ingestion(source.db, sourcePolicies).ingest(message(
+      'fault-import',
+      1_000,
+      1,
+      path.join(source.root, 'fault-import.ts'),
+    ))
     const document = exportHistory(source.db, 2_000)
 
     const target = database('import-target')
@@ -225,7 +254,12 @@ describe('SQLite fault injection', () => {
     const history = database('retention')
     const policies = allowedPolicy(history.db)
     const service = ingestion(history.db, policies, 1_000, 1, 1)
-    await service.ingest(message('fault-retention', 1_000))
+    await service.ingest(message(
+      'fault-retention',
+      1_000,
+      1,
+      path.join(history.root, 'fault-retention.ts'),
+    ))
 
     expect(count(history.db, 'observations')).toBe(1)
     expect(count(history.db, 'episodes')).toBe(1)
