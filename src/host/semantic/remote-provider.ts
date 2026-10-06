@@ -121,6 +121,13 @@ export class RemoteSummaryProvider implements SummaryProvider {
       clearTimeout(timer)
     }
 
+    // Consent can change while fetch() is in flight. Revocation means
+    // "turn off and purge" locally: an old request that returns afterwards must
+    // not recreate the send audit row that revocation just deleted, nor may its
+    // response become a new summary. Re-check before any post-response side
+    // effect. The remote copy cannot be recalled; docs/UI state that explicitly.
+    assertRemoteOptIn(this.options.optIns, request.scope)
+
     // A response is proof that the request left this Host. Record that
     // before judging whether the remote side returned a usable summary: a 500,
     // malformed JSON, an empty summary or bad citations do not unsend bytes.
