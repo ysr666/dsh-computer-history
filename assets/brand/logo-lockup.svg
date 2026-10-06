@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="360" viewBox="0 0 1200 360" role="img" aria-labelledby="title desc">
+  <title id="title">DSH Computer History wordmark</title>
+  <desc id="desc">Timeline orbit logo with DSH Computer History wordmark.</desc>
+  <defs>
+    <linearGradient id="orbit" x1="38" y1="300" x2="300" y2="52" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4B5CFF"/>
+      <stop offset="0.48" stop-color="#2C8FFF"/>
+      <stop offset="1" stop-color="#48E0D2"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(18 18) scale(.63)">
+    <path d="M132 383A178 178 0 1 1 394 139" fill="none" stroke="url(#orbit)" stroke-width="34" stroke-linecap="round"/>
+    <circle cx="394" cy="139" r="27" fill="#7DE7E3" stroke="#0B1324" stroke-width="10"/>
+    <circle cx="427" cy="259" r="22" fill="#39AAFF" stroke="#0B1324" stroke-width="9"/>
+    <circle cx="389" cy="374" r="18" fill="#65D9D5" stroke="#0B1324" stroke-width="8"/>
+    <path d="M220 367A116 116 0 1 1 354 334" fill="none" stroke="url(#orbit)" stroke-width="24" stroke-linecap="round"/>
+    <circle cx="256" cy="256" r="13" fill="#F5F8FF"/>
+    <path d="M256 256V190M256 256L309 291" fill="none" stroke="#F5F8FF" stroke-width="18" stroke-linecap="round"/>
+  </g>
+  <g font-family="Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+    <text x="370" y="166" fill="#F5F8FF" font-size="104" font-weight="800" letter-spacing="-3">DSH</text>
+    <text x="370" y="248" fill="#D8E1F0" font-size="60" font-weight="540" letter-spacing="-1">Computer History</text>
+  </g>
+</svg>

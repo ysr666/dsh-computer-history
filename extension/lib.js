@@ -107,3 +107,25 @@ export async function checkPairing(fetchImpl, config) {
   )
   return response.status === 200
 }
+
+/**
+ * One-click pairing: the panel opens this extension's options page with the pairing token in the URL fragment
+ * (`options.html#token=…&port=…`). A fragment never leaves the browser - it is not sent to any server and not
+ * forwarded in a Referer - which is why the token travels there and not in the query.
+ *
+ * Pure on purpose: the options page does the DOM work, and this stays testable without one. Anything that does
+ * not look like a pairing token is left out rather than passed on, so a malformed link cannot replace a working
+ * pairing with something that will silently fail to authenticate.
+ */
+export function pairingFromHash(hash) {
+  const raw = String(hash ?? '').replace(/^#/, '')
+  if (raw.length === 0) return {}
+  const params = new URLSearchParams(raw)
+  const result = {}
+  const token = params.get('token')
+  // The host's tokens are long random strings; the editor companion already refuses anything under 32 characters.
+  if (typeof token === 'string' && token.length >= 32) result.token = token
+  const port = Number(params.get('port'))
+  if (Number.isInteger(port) && port >= 1 && port <= 65535) result.port = port
+  return result
+}

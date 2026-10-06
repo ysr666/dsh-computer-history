@@ -17,33 +17,85 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import os from 'node:os'
 import path from 'node:path'
 
+// Windows has no process groups, so `process.kill(-pid, ...)` fails there and the old `catch {}` swallowed it -
+// measured 2026-10-06 on the Windows machine: the Host survived, kept its throwaway home busy and the cleanup
+// ended the run with EPERM. `taskkill /T /F` is the Windows way to take down a process tree (the Host starts the
+// collector as a child), and POSIX keeps the group-first, pid-second order it already had.
+const killTree = pid => {
+  if (process.platform === 'win32') {
+    spawnSync(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', `taskkill /pid ${pid} /T /F`], { stdio: 'ignore' })
+    return
+  }
+  try { process.kill(-pid, 'SIGTERM') } catch { try { process.kill(pid, 'SIGTERM') } catch { /* already gone */ } }
+}
+
+// Windows resolves `dsh`, `pnpm` and `npx` to .cmd shims, and Node refuses to spawn a .cmd without a shell.
+// Measured on the Windows machine 2026-10-06: `spawnSync('dsh', ...)` -> status null, error ENOENT;
+// `spawnSync('dsh.cmd', ...)` -> EINVAL; `cmd.exe /d /s /c` -> exit 0. Real executables (node, curl.exe, git, tar)
+// are spawned directly, exactly as before.
+// Same measurement as runCmd: the Host is started with `spawn`, and `dsh` is a .cmd shim on Windows.
+
+const spawnCmd = (command, args, options) => process.platform === 'win32'
+  ? spawn(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', [command, ...args].map(quoteForCmd).join(' ')], { ...options, windowsVerbatimArguments: true })
+  : spawn(command, args, options)
+
+// cmd.exe does not parse the escaping Node applies to a quoted argument: measured 2026-10-06 on the Windows
+// machine, '"pnpm" "--version"' arrives as '\"pnpm\"' and is not recognised, while the unquoted command line
+// exits 0. So the line is assembled unquoted and only arguments that contain whitespace are quoted.
+const quoteForCmd = a => (/[\s"]/.test(String(a)) ? `"${a}"` : String(a))
+
+const runCmd = (command, args, options) => process.platform === 'win32'
+  ? spawnSync(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', [command, ...args].map(quoteForCmd).join(' ')], { ...options, windowsVerbatimArguments: true })
+  : spawnSync(command, args, options)
+const allowBuildsOff = (workspace) => {
+  try {
+    if (!existsSync(workspace)) return false
+    const text = readFileSync(workspace, 'utf8')
+    const fixed = text.replace(/^(\s+[^\s:]+:\s*)set this to true or false\s*$/gm, '$1false')
+    if (fixed === text) return false
+    writeFileSync(workspace, fixed)
+    return true
+  } catch { return false }
+}
+
+
+// The plugin carries a collector for macOS only. On a machine without one (Windows, or a checkout that has not
+// built it) the Host starts, reports collector-exited and stops at a boundary - honest, but it exercises less than
+// the machine can. Set COLLECTOR_EXECUTABLE to the binary and the runs use it.
+const collectorLine = process.env.COLLECTOR_EXECUTABLE
+  ? `    collectorExecutable: ${process.env.COLLECTOR_EXECUTABLE}\n`
+  : ''
+
 const REPO = path.resolve(import.meta.dirname, '..')
 process.chdir(REPO)
 const cli = process.env.DSH_CLI ?? 'dsh'
 const stamp = new Date().toISOString().replaceAll(/[:.]/g, '-')
 const artifacts = path.join(REPO, '.debug', 'e2e-chromium', `run-${stamp}`)
 mkdirSync(artifacts, { recursive: true })
+// The matrix prints one PASS/FAIL line per cell; collecting them is what makes a boundary run leave a
+// structured record instead of only a log. The other three commands write checks.json too.
+const evidence = []
 const log = (...a) => console.log(' ', ...a)
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 
 const home = path.join(os.tmpdir(), `dsh-chromium-${path.basename(artifacts)}`)
 const web = 19960 + Math.floor(Math.random() * 20)
 const companion = web + 1
-rmSync(home, { recursive: true, force: true })
+rmSync(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 })
 const env = { ...process.env, DSH_HOME: home }
 let host
 
 try {
   const add = spec => {
-    let r = spawnSync(cli, ['plugin', '--profile', 'chromium', 'add', spec], { env, encoding: 'utf8' })
+    let r = runCmd(cli, ['plugin', '--profile', 'chromium', 'add', spec], { env, encoding: 'utf8' })
     if (r.status !== 0) {
       const workspace = path.join(home, 'profiles', 'chromium', 'pnpm-workspace.yaml')
-      if (existsSync(workspace)) writeFileSync(workspace, readFileSync(workspace, 'utf8').replaceAll(': set this to true or false', ': false'))
-      r = spawnSync(cli, ['plugin', '--profile', 'chromium', 'add', spec], { env, encoding: 'utf8' })
+      if (existsSync(workspace)) allowBuildsOff(workspace)
+      r = runCmd(cli, ['plugin', '--profile', 'chromium', 'add', spec], { env, encoding: 'utf8' })
     }
     return r
   }
-  const packed = spawnSync('pnpm', ['pack', '--pack-destination', home], { encoding: 'utf8' })
+  const packed = runCmd('pnpm', ['pack', '--pack-destination', home], { encoding: 'utf8' })
   const version = JSON.parse(readFileSync('package.json', 'utf8')).version
   const tarball = path.join(home, `dsh-computer-history-${version}.tgz`)
   const webApp = add('@deepseek-ai/dsh-web-app@0.2.0-rc.2')
@@ -58,10 +110,10 @@ try {
     manifest.dsh = { ...manifest.dsh, profile: { bundles: [...new Set([...(manifest.dsh?.profile?.bundles ?? []), ...Object.keys(manifest.dependencies ?? {})])] } }
     writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
     writeFileSync(path.join(home, 'profiles', 'chromium', 'cordis.patch.yml'),
-      `- id: computer-history\n  config:\n    enabled: true\n    dataDirectory: ${path.join(home, 'computer-history')}\n    companionPort: ${companion}\n    collectorRestart: false\n`)
+      `- id: computer-history\n  config:\n    enabled: true\n    dataDirectory: ${path.join(home, 'computer-history')}\n    companionPort: ${companion}\n${collectorLine}    collectorRestart: false\n`)
   }
 
-  host = spawn(cli, ['--profile', 'chromium', '--port', String(web), '--no-open'], { env, cwd: os.tmpdir(), stdio: ['ignore', 'pipe', 'pipe'], detached: true })
+  host = spawnCmd(cli, ['--profile', 'chromium', '--port', String(web), '--no-open'], { env, cwd: os.tmpdir(), stdio: ['ignore', 'pipe', 'pipe'], detached: true })
   let out = ''
   host.stdout.on('data', c => { out += c }); host.stderr.on('data', c => { out += c })
   for (let i = 0; i < 40 && !/token=/.test(out); i++) await sleep(1000)
@@ -78,7 +130,7 @@ try {
   }
 
   const jar = path.join(artifacts, 'cookies.txt')
-  spawnSync('curl', ['-s', '-c', jar, '-o', '/dev/null', `http://127.0.0.1:${web}/?token=${token}`])
+  spawnSync('curl', ['-s', '-c', jar, '-o', path.join(artifacts, 'bootstrap.html'), `http://127.0.0.1:${web}/?token=${token}`])
   const pairing = JSON.parse(spawnSync('curl', ['-s', '-b', jar, '-X', 'POST', `http://127.0.0.1:${web}/api/computer-history/pairing/rotate`], { encoding: 'utf8' }).stdout)
   // The matrix script wants a file whose one line is `cookie=<name>=<value>`.
   const cookieLine = readFileSync(jar, 'utf8').split('\n').filter(l => l.includes('dsh-auth'))
@@ -92,7 +144,10 @@ try {
     '--extension', path.join(REPO, 'dist/extension'), '--port', String(companion)], { encoding: 'utf8' })
   writeFileSync(path.join(artifacts, 'matrix.log'), `${matrix.stdout ?? ''}${matrix.stderr ?? ''}`)
   const lines = `${matrix.stdout ?? ''}`.split('\n').filter(l => /^(PASS|FAIL|extension id|.the control cell)/.test(l))
-  for (const line of lines) log(line.slice(0, 150))
+  for (const line of lines) {
+    log(line.slice(0, 150))
+    evidence.push({ line: line.slice(0, 200), ok: line.startsWith('PASS') })
+  }
 
   // Ask the Host why anything was refused: that is where `capture-not-owned` shows up by name.
   const state = JSON.parse(spawnSync('curl', ['-s', '-b', jar, `http://127.0.0.1:${web}/api/computer-history/state`], { encoding: 'utf8' }).stdout || '{}')
@@ -120,16 +175,33 @@ try {
   console.error(`e2e (Chromium) failed: ${error instanceof Error ? error.message : String(error)}`)
   process.exitCode = 1
 } finally {
-  if (host?.pid !== undefined) { try { process.kill(-host.pid, 'SIGTERM') } catch {} }
+  // Written on every exit path, including the boundary and the failure ones: a run that stops at a boundary is
+  // still a run whose evidence someone will want, and the other three commands write this file.
+  writeFileSync(path.join(artifacts, 'checks.json'), `${JSON.stringify(evidence, null, 2)}\n`)
+  // The earlier version only tried the process group and swallowed every error, so a Host that was not a group
+  // leader survived the run silently - measured, two `--profile chromium` Hosts left behind by two failure-path
+  // runs. killTree takes the group on POSIX and the whole tree on Windows, where groups do not exist at all.
+  if (host?.pid !== undefined) killTree(host.pid)
   await sleep(2500)
   // Browsers started by the matrix script: only those whose profile lives in the temp directory, checked by
   // prefix on the executable too - a substring test can match the shell that runs it. This sweep knows the
   // macOS paths only; elsewhere the matrix script removes the profile it created itself.
-  for (const line of spawnSync('ps', ['-eo', 'pid,command'], { encoding: 'utf8' }).stdout.split('\n')) {
-    if (/^\s*\d+\s+\/Applications\/Google Chrome\.app\//.test(line) && /\/var\/folders\/|\/tmp\//.test(line)) {
-      spawnSync('kill', ['-KILL', line.trim().split(/\s+/)[0]])
+  // `ps` and `kill` do not exist on Windows. Where they do, this sweep still does its job; where they do not,
+  // say so instead of implying the sweep ran (the matrix script removes the profile it created itself).
+  const listing = spawnSync('ps', ['-eo', 'pid,command'], { encoding: 'utf8' })
+  if (listing.error) {
+    console.log(`  (browser sweep skipped: no ps on this platform - ${listing.error.code ?? 'unavailable'})`)
+  } else {
+    for (const line of (listing.stdout ?? '').split('\n')) {
+      if (/^\s*\d+\s+\/Applications\/Google Chrome\.app\//.test(line) && /\/var\/folders\/|\/tmp\//.test(line)) {
+        try { process.kill(Number(line.trim().split(/\s+/)[0]), 'SIGKILL') } catch { /* already gone */ }
+      }
     }
   }
-  writeFileSync(path.join(artifacts, 'done.json'), `${JSON.stringify({ exit: process.exitCode ?? 0 }, null, 2)}\n`)
-  rmSync(home, { recursive: true, force: true })
+  await sleep(1500)
+  // A cleanup that reports success while leaving a process behind is a claim, not a cleanup: say it out loud.
+  const survived = host?.pid !== undefined && spawnSync('ps', ['-p', String(host.pid)], { encoding: 'utf8' }).status === 0
+  writeFileSync(path.join(artifacts, 'done.json'), `${JSON.stringify({ exit: process.exitCode ?? 0, hostSurvived: survived }, null, 2)}\n`)
+  if (survived) console.error(`warning: the Host (pid ${host.pid}) outlived the run; done.json records hostSurvived: true`)
+  rmSync(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 })
 }

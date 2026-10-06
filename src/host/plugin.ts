@@ -14,6 +14,7 @@ import {
   runningRelease,
   type CollectorToHost,
   type ComputerHistoryState,
+  type PolicySnapshot,
 } from '../shared/index.js'
 import { registerHistoryApi } from './api/index.js'
 import { CompanionIntake } from './companion/intake.js'
@@ -65,12 +66,13 @@ export function resolveHistoryDataDirectory(
     ?? dshHomePath('computer-history')
 }
 
-class ManagedCapture implements CaptureController {
+export class ManagedCapture implements CaptureController {
   public constructor(
     private readonly manager: () => CollectorManager | undefined,
     private readonly enabled: boolean,
     private readonly ownsCapture: () => boolean,
     private readonly recoverCapture: () => Promise<void>,
+    private readonly policy: () => PolicySnapshot,
     private readonly companion: () => NonNullable<
       ComputerHistoryState['companion']
     > = () => ({ listening: false, paired: false }),
@@ -140,9 +142,27 @@ class ManagedCapture implements CaptureController {
       ...(
         snapshot?.state?.reason
           ? { reason: snapshot.state.reason }
-          : this.enabled && !manager
+          // Ownership, not the existence of a manager object. A manager is created by a start attempt and by
+          // `recover()`, so its presence says nothing about whether this Host holds capture - and testing for it
+          // suppressed this very reason. Measured 2026-10-06 on the Windows machine: the state read
+          // `capture: degraded` with no reason at all, while the Host knew it did not own capture.
+          : this.enabled && !this.ownsCapture()
             ? { reason: 'capture-owned-by-another-host' }
-            : {}
+            // Capture can be running, trusted and handshaken while the policy allows nothing at all: the initial
+            // policy is include-only and carries only the built-in protections, so a Host whose first-run consent
+            // never ran reports `running` and stores nothing. Measured 2026-10-06 on the owner's machine and
+            // reproduced in an isolated Host: capture=running, collector={0.1.0, arm64}, refusedByReason={},
+            // store 0|0. A paused capture is a separate, already-named state, so it is left alone here.
+            : this.enabled
+                && snapshot?.state?.state !== 'paused'
+                && !this.policy().rules.some(rule => rule.action === 'allow' && rule.dimension === 'app')
+              ? { reason: 'no-apps-allowed' }
+            // Owning capture without a state yet means the collector has been started and has not answered.
+            // The manager is right not to claim a state it has not seen, but the Host reporting `degraded` with
+            // nothing else is the silence this product keeps being measured on; the wait itself is a fact.
+            : this.enabled && snapshot?.state === undefined
+              ? { reason: 'collector-starting' }
+              : {}
       ),
       ...(snapshot?.hello
         ? {
@@ -437,6 +457,7 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
       enabled,
       () => ownsCapture,
       recoverCapture,
+      () => policies.get(),
       () => {
         const browserPairing = companionTokens.state('browser')
         const editorPairing = companionTokens.state('editor')

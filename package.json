@@ -2,6 +2,7 @@
   "name": "dsh-computer-history",
   "version": "0.1.0-dev.0",
   "description": "Privacy-first work continuity for DeepSeek Harness: metadata-only computer history, deterministic work episodes, and selective resume context.",
+  "icon": "./assets/brand/app-icon.svg",
   "license": "MIT",
   "private": true,
   "type": "module",
@@ -46,7 +47,9 @@
     "verify:docs": "node scripts/verify-docs.mjs",
     "verify:collector-windows": "node scripts/verify-collector-windows.mjs",
     "build:extension:firefox": "node scripts/build-extension.mjs --target=firefox",
-    "verify:ci-boundaries": "node scripts/verify-ci-boundaries.mjs"
+    "verify:ci-boundaries": "node scripts/verify-ci-boundaries.mjs",
+    "check:app-path": "node scripts/check-app-path.mjs",
+    "e2e:collector-transport": "node scripts/e2e-collector-transport.mjs"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "4.0.4",
@@ -83,11 +86,15 @@
       "default": "./lib/index.js"
     },
     "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json",
     "./client": {
       "types": "./lib/client.d.ts",
       "default": "./lib/client.js"
     },
     "./cordis.patch.yml": "./cordis.patch.yml"
+  },
+  "bin": {
+    "dsh-computer-history-collector": "bin/dsh-computer-history-collector"
   },
   "files": [
     "lib",
@@ -103,7 +110,9 @@
     "scripts/build-native.mjs",
     "scripts/test-native.mjs",
     "presets",
-    "cordis.patch.yml"
+    "cordis.patch.yml",
+    "assets/brand/app-icon.svg",
+    "locale"
   ],
   "peerDependencies": {
     "@deepseek-ai/cordis": "~4.0.4",

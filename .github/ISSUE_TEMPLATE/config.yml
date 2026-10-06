@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/ysr666/dsh-computer-history/security/advisories/new
+    about: Report a security or privacy vulnerability privately. Do not open a public issue.

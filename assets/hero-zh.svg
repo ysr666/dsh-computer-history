@@ -1,0 +1,120 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640">
+<defs>
+  <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#081425"/>
+    <stop offset="0.55" stop-color="#0A1628"/>
+    <stop offset="1" stop-color="#06111F"/>
+  </linearGradient>
+  <linearGradient id="brand" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#4D63FF"/>
+    <stop offset="0.55" stop-color="#2EA7FF"/>
+    <stop offset="1" stop-color="#56E5C7"/>
+  </linearGradient>
+  <linearGradient id="arc" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0" stop-color="#4D63FF" stop-opacity=".28"/>
+    <stop offset=".55" stop-color="#339BFF" stop-opacity=".88"/>
+    <stop offset="1" stop-color="#50E4C5" stop-opacity=".92"/>
+  </linearGradient>
+  <radialGradient id="glow" cx="78%" cy="48%" r="46%">
+    <stop offset="0" stop-color="#2EA7FF" stop-opacity=".16"/>
+    <stop offset=".5" stop-color="#2EA7FF" stop-opacity=".05"/>
+    <stop offset="1" stop-color="#2EA7FF" stop-opacity="0"/>
+  </radialGradient>
+  <filter id="soft"><feGaussianBlur stdDeviation="10"/></filter>
+  <filter id="nodeglow"><feGaussianBlur stdDeviation="7" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  <pattern id="dots" width="28" height="28" patternUnits="userSpaceOnUse">
+    <circle cx="1.5" cy="1.5" r="1.1" fill="#7290BD" opacity=".08"/>
+  </pattern>
+</defs>
+<rect width="1280" height="640" rx="32" fill="url(#bg)"/>
+<rect width="1280" height="640" rx="32" fill="url(#dots)"/>
+<rect width="1280" height="640" rx="32" fill="url(#glow)"/>
+
+<!-- subtle ambient lines -->
+<path d="M650 68 C865 10 1095 40 1254 180" fill="none" stroke="#5D77FF" stroke-opacity=".12" stroke-width="1.2"/>
+<path d="M634 574 C861 624 1084 590 1247 438" fill="none" stroke="#4DE0C9" stroke-opacity=".10" stroke-width="1.2"/>
+
+<!-- RIGHT: deeper abstract timeline through episode layers -->
+<g>
+  <!-- back orbit structure -->
+  <path d="M704 184 C851 72 1114 88 1231 257" fill="none" stroke="#385FBE" stroke-opacity=".34" stroke-width="1.7"/>
+  <path d="M689 391 C823 513 1092 540 1231 397" fill="none" stroke="#214E86" stroke-opacity=".42" stroke-width="1.5"/>
+  <path d="M701 236 C848 160 1088 172 1222 318" fill="none" stroke="#1D5A8E" stroke-opacity=".32" stroke-width="1.3"/>
+
+  <!-- episode cards, perspective stack -->
+  <g opacity=".92">
+    <rect x="861" y="154" width="88" height="286" rx="22" fill="#0B1C31" fill-opacity=".26" stroke="#234D75" stroke-opacity=".65"/>
+    <rect x="927" y="129" width="103" height="336" rx="24" fill="#0C2038" fill-opacity=".34" stroke="#2A5B89" stroke-opacity=".78"/>
+    <rect x="1009" y="167" width="84" height="260" rx="21" fill="#0B2037" fill-opacity=".30" stroke="#25557D" stroke-opacity=".74"/>
+    <rect x="1084" y="116" width="115" height="364" rx="26" fill="#0E253F" fill-opacity=".40" stroke="#2B658F" stroke-opacity=".82"/>
+    <rect x="1170" y="155" width="88" height="278" rx="22" fill="#0A1E34" fill-opacity=".29" stroke="#245478" stroke-opacity=".68"/>
+  </g>
+
+  <!-- faint card labels / metadata lines, abstract not UI -->
+  <g stroke="#5C769A" stroke-opacity=".15" stroke-linecap="round">
+    <path d="M946 189 h44"/><path d="M946 211 h30"/><path d="M1108 182 h57"/><path d="M1108 204 h40"/><path d="M1189 218 h42"/>
+  </g>
+
+  <!-- sweeping time paths in front -->
+  <path d="M510 270 C640 230 770 236 880 278 C969 312 1080 360 1220 463" fill="none" stroke="url(#arc)" stroke-width="3.2" stroke-linecap="round"/>
+  <path d="M530 370 C650 396 758 422 870 462 C978 500 1092 510 1224 482" fill="none" stroke="#3EABFF" stroke-opacity=".64" stroke-width="2.2" stroke-dasharray="2 13" stroke-linecap="round"/>
+
+  <!-- vertical timeline cutting through layers -->
+  <path d="M1083 78 V558" stroke="#3C90FF" stroke-width="1.5" stroke-opacity=".66"/>
+  <circle cx="1083" cy="104" r="8" fill="#5365FF"/>
+  <circle cx="1083" cy="160" r="17" fill="#3F66F2"/>
+  <circle cx="1083" cy="242" r="24" fill="#39B9EE" filter="url(#nodeglow)"/>
+  <circle cx="1083" cy="341" r="27" fill="#54DDBF" filter="url(#nodeglow)"/>
+  <circle cx="1083" cy="430" r="10" fill="#4CC5C8"/>
+  <circle cx="1083" cy="493" r="15" fill="#2E79C8"/>
+  <circle cx="1083" cy="548" r="8" fill="#204785"/>
+
+  <!-- tiny ambient nodes -->
+  <g fill="#3D72D9" opacity=".65"><circle cx="780" cy="433" r="4"/><circle cx="817" cy="451" r="3"/><circle cx="850" cy="470" r="3"/><circle cx="1180" cy="510" r="3"/><circle cx="1208" cy="527" r="3"/></g>
+</g>
+
+<!-- LEFT: grid-aligned brand hierarchy -->
+<g transform="translate(72,56)">
+  <!-- canonical Timeline Orbit mark; visible bounds align to the 72px master grid -->
+  <svg x="-42" y="42" width="253" height="253" viewBox="0 0 512 512" overflow="visible">
+    <defs>
+      <linearGradient id="heroLogoOrbit" x1="92" y1="396" x2="420" y2="112" gradientUnits="userSpaceOnUse">
+        <stop offset="0" stop-color="#4B5CFF"/>
+        <stop offset="0.48" stop-color="#2C8FFF"/>
+        <stop offset="1" stop-color="#48E0D2"/>
+      </linearGradient>
+      <linearGradient id="heroLogoInner" x1="174" y1="344" x2="354" y2="164" gradientUnits="userSpaceOnUse">
+        <stop offset="0" stop-color="#4058E8"/>
+        <stop offset="0.56" stop-color="#2F9BFF"/>
+        <stop offset="1" stop-color="#4EE0D4"/>
+      </linearGradient>
+    </defs>
+    <path d="M 132 383 A 178 178 0 1 1 394 139" fill="none" stroke="url(#heroLogoOrbit)" stroke-width="34" stroke-linecap="round"/>
+    <circle cx="394" cy="139" r="27" fill="#7DE7E3" stroke="#0B1324" stroke-width="10"/>
+    <circle cx="427" cy="259" r="22" fill="#39AAFF" stroke="#0B1324" stroke-width="9"/>
+    <circle cx="389" cy="374" r="18" fill="#65D9D5" stroke="#0B1324" stroke-width="8"/>
+    <path d="M 220 367 A 116 116 0 1 1 354 334" fill="none" stroke="url(#heroLogoInner)" stroke-width="24" stroke-linecap="round"/>
+    <circle cx="256" cy="256" r="13" fill="#F5F8FF"/>
+    <path d="M256 256V190" fill="none" stroke="#F5F8FF" stroke-width="18" stroke-linecap="round"/>
+    <path d="M256 256L309 291" fill="none" stroke="#F5F8FF" stroke-width="18" stroke-linecap="round"/>
+  </svg>
+
+  <!-- title column begins on the 304px gridline -->
+  <text x="232" y="104" fill="#93A8C4" font-family="Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif" font-size="22" font-weight="720" letter-spacing="4.8">DSH</text>
+  <text x="232" y="184" fill="#F5F8FF" font-family="Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif" font-size="80" font-weight="750" letter-spacing="1.4">Computer History</text>
+  <text x="232" y="232" fill="#C5D1E2" font-family="Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif" font-size="21" font-weight="520">记住你在做什么。<tspan fill="#56E5C7" font-weight="680">不记录屏幕内容。</tspan></text>
+
+  <!-- lower information rail uses the same master left edge as the visible mark -->
+  <text x="0" y="344" fill="#AAB9CE" font-family="Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif" font-size="19" font-weight="500">本地优先、仅元数据的工作连续性</text>
+  <text x="0" y="376" fill="#AAB9CE" font-family="Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif" font-size="19" font-weight="500">为 DeepSeek Harness 而生。</text>
+
+  <g transform="translate(0,424)">
+    <g><rect width="150" height="46" rx="23" fill="#0D1B30" fill-opacity=".92" stroke="#28466D"/><circle cx="18" cy="23" r="4" fill="#4D63FF"/><text x="32" y="29" fill="#C6D3E5" font-family="Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif" font-size="13.5" font-weight="700" letter-spacing="0">本地优先</text></g>
+    <g transform="translate(164,0)"><rect width="178" height="46" rx="23" fill="#0D1B30" fill-opacity=".92" stroke="#28466D"/><circle cx="18" cy="23" r="4" fill="#35A4FF"/><text x="32" y="29" fill="#C6D3E5" font-family="Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif" font-size="13.5" font-weight="700" letter-spacing="0">仅元数据</text></g>
+    <g transform="translate(356,0)"><rect width="184" height="46" rx="23" fill="#0D1B30" fill-opacity=".92" stroke="#2A5A61"/><circle cx="18" cy="23" r="4" fill="#56E5C7"/><text x="32" y="29" fill="#CFE9E3" font-family="Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif" font-size="13.5" font-weight="700" letter-spacing="0">工作连续性</text></g>
+  </g>
+
+  <text x="0" y="536" fill="#637D9F" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="14">github.com/ysr666/dsh-computer-history</text>
+</g>
+
+</svg>

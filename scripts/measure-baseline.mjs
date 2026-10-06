@@ -12,9 +12,48 @@
 // another Host on the machine owns capture, so the cells that need a stored row say so instead of reporting a
 // zero that means nothing.
 import { spawn, spawnSync } from 'node:child_process'
+import { DatabaseSync } from 'node:sqlite'
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+
+// Windows has no process groups, so `process.kill(-pid, ...)` fails there and the old `catch {}` swallowed it -
+// measured 2026-10-06 on the Windows machine: the Host survived, kept its throwaway home busy and the cleanup
+// ended the run with EPERM. `taskkill /T /F` is the Windows way to take down a process tree (the Host starts the
+// collector as a child), and POSIX keeps the group-first, pid-second order it already had.
+const killTree = pid => {
+  if (process.platform === 'win32') {
+    spawnSync(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', `taskkill /pid ${pid} /T /F`], { stdio: 'ignore' })
+    return
+  }
+  try { process.kill(-pid, 'SIGTERM') } catch { try { process.kill(pid, 'SIGTERM') } catch { /* already gone */ } }
+}
+
+// Windows resolves `dsh`, `pnpm` and `npx` to .cmd shims, and Node refuses to spawn a .cmd without a shell.
+// Measured on the Windows machine 2026-10-06: `spawnSync('dsh', ...)` -> status null, error ENOENT;
+// `spawnSync('dsh.cmd', ...)` -> EINVAL; `cmd.exe /d /s /c` -> exit 0. Real executables (node, curl.exe, git, tar)
+// are spawned directly, exactly as before.
+// Same measurement as runCmd: the Host is started with `spawn`, and `dsh` is a .cmd shim on Windows.
+
+const spawnCmd = (command, args, options) => process.platform === 'win32'
+  ? spawn(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', [command, ...args].map(quoteForCmd).join(' ')], { ...options, windowsVerbatimArguments: true })
+  : spawn(command, args, options)
+
+// cmd.exe does not parse the escaping Node applies to a quoted argument: measured 2026-10-06 on the Windows
+// machine, '"pnpm" "--version"' arrives as '\"pnpm\"' and is not recognised, while the unquoted command line
+// exits 0. So the line is assembled unquoted and only arguments that contain whitespace are quoted.
+const quoteForCmd = a => (/[\s"]/.test(String(a)) ? `"${a}"` : String(a))
+
+const runCmd = (command, args, options) => process.platform === 'win32'
+  ? spawnSync(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', [command, ...args].map(quoteForCmd).join(' ')], { ...options, windowsVerbatimArguments: true })
+  : spawnSync(command, args, options)
+
+// The plugin carries a collector for macOS only. On a machine without one (Windows, or a checkout that has not
+// built it) the Host starts, reports collector-exited and stops at a boundary - honest, but it exercises less than
+// the machine can. Set COLLECTOR_EXECUTABLE to the binary and the runs use it.
+const collectorLine = process.env.COLLECTOR_EXECUTABLE
+  ? `    collectorExecutable: ${process.env.COLLECTOR_EXECUTABLE}\n`
+  : ''
 
 const REPO = path.resolve(import.meta.dirname, '..')
 process.chdir(REPO)
@@ -22,6 +61,22 @@ const cli = process.env.DSH_CLI ?? 'dsh'
 const stamp = new Date().toISOString().replaceAll(/[:.]/g, '-')
 const artifacts = path.join(REPO, '.debug', 'baseline', `run-${stamp}`)
 mkdirSync(artifacts, { recursive: true })
+// The CLI's profile template ships `allowBuilds:` with placeholder values (`<pkg>: set this to true or false`), and
+// pnpm then refuses the install with ERR_PNPM_IGNORED_BUILDS for packages like koffi. Patching that used to be a
+// single literal replacement attempted only after a failure; measured 2026-08-06 against the current CLI on a
+// fresh profile, both attempts failed because the file only exists after the first attempt. This sets every
+// placeholder to false - a rule, not one literal - and runs before the first attempt and again after a failure.
+const allowBuildsOff = (workspace) => {
+  try {
+    if (!existsSync(workspace)) return false
+    const text = readFileSync(workspace, 'utf8')
+    const fixed = text.replace(/^(\s+[^\s:]+:\s*)set this to true or false\s*$/gm, '$1false')
+    if (fixed === text) return false
+    writeFileSync(workspace, fixed)
+    return true
+  } catch { return false }
+}
+
 const rows = []
 const say = (name, value, note) => { rows.push({ name, value, note }); console.log(`  ${name.padEnd(26)} ${value}   ${note}`) }
 const sleep = ms => new Promise(r => setTimeout(r, ms))
@@ -29,38 +84,44 @@ const sleep = ms => new Promise(r => setTimeout(r, ms))
 const home = path.join(os.tmpdir(), `dsh-baseline-${path.basename(artifacts)}`)
 const web = 19970 + Math.floor(Math.random() * 9)
 const companion = web + 1
-rmSync(home, { recursive: true, force: true })
+rmSync(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 })
 const env = { ...process.env, DSH_HOME: home }
 let host
-let actions = 0
+// Two counters, because conflating them is how a number starts lying. `userActions` counts what a person has to
+// do; `internalSteps` counts what this script does to isolate itself (packing, and repairing a layer list that
+// the platform only needs after a half-failed install - docs/development.md:126 measured that a clean install
+// needs no repair). The baseline's target is about the first counter.
+let userActions = 0
+let internalSteps = 0
 
 try {
   const add = spec => {
-    actions += 1
-    let r = spawnSync(cli, ['plugin', '--profile', 'baseline', 'add', spec], { env, encoding: 'utf8' })
+    userActions += 1
+    let r = runCmd(cli, ['plugin', '--profile', 'baseline', 'add', spec], { env, encoding: 'utf8' })
     if (r.status !== 0) {
       const workspace = path.join(home, 'profiles', 'baseline', 'pnpm-workspace.yaml')
-      if (existsSync(workspace)) writeFileSync(workspace, readFileSync(workspace, 'utf8').replaceAll(': set this to true or false', ': false'))
-      r = spawnSync(cli, ['plugin', '--profile', 'baseline', 'add', spec], { env, encoding: 'utf8' })
+      if (existsSync(workspace)) allowBuildsOff(workspace)
+      r = runCmd(cli, ['plugin', '--profile', 'baseline', 'add', spec], { env, encoding: 'utf8' })
     }
     return r.status === 0
   }
-  actions += 1 // pack
-  spawnSync('pnpm', ['pack', '--pack-destination', home])
+  internalSteps += 1 // packing is a build/publish step, not something a user does
+  runCmd('pnpm', ['pack', '--pack-destination', home])
   const version = JSON.parse(readFileSync('package.json', 'utf8')).version
   const installed = add('@deepseek-ai/dsh-web-app@0.2.0-rc.2') && add(path.join(home, `dsh-computer-history-${version}.tgz`))
-  actions += 1 // the profile layer list, which the CLI leaves incomplete (measured: a dependency that is not a layer does not boot)
+  // The layer list only needs repairing after a half-failed install; a clean one gets it right (docs/development.md:126).
+  internalSteps += 1
   {
     const manifestPath = path.join(home, 'profiles', 'baseline', 'package.json')
     const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
     manifest.dsh = { ...manifest.dsh, profile: { bundles: [...new Set([...(manifest.dsh?.profile?.bundles ?? []), ...Object.keys(manifest.dependencies ?? {})])] } }
     writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
     writeFileSync(path.join(home, 'profiles', 'baseline', 'cordis.patch.yml'),
-      `- id: computer-history\n  config:\n    enabled: true\n    dataDirectory: ${path.join(home, 'computer-history')}\n    companionPort: ${companion}\n    collectorRestart: false\n`)
+      `- id: computer-history\n  config:\n    enabled: true\n    dataDirectory: ${path.join(home, 'computer-history')}\n    companionPort: ${companion}\n${collectorLine}    collectorRestart: false\n`)
   }
-  if (!installed) say('setup actions to a Host', 'install failed', `${actions} attempted`)
-  actions += 1 // boot
-  host = spawn(cli, ['--profile', 'baseline', '--port', String(web), '--no-open'], { env, cwd: os.tmpdir(), stdio: ['ignore', 'pipe', 'pipe'], detached: true })
+  if (!installed) say('setup actions to a Host', 'install failed', `${userActions} attempted`)
+  userActions += 1 // starting the Host (the desktop application does this by itself)
+  host = spawnCmd(cli, ['--profile', 'baseline', '--port', String(web), '--no-open'], { env, cwd: os.tmpdir(), stdio: ['ignore', 'pipe', 'pipe'], detached: true })
   let out = ''
   host.stdout.on('data', c => { out += c }); host.stderr.on('data', c => { out += c })
   for (let i = 0; i < 40 && !/token=/.test(out); i++) await sleep(1000)
@@ -69,18 +130,26 @@ try {
   if (token === undefined) throw new Error('the Host never started; see host.log')
   const api = `http://127.0.0.1:${web}/api/computer-history`
   const jar = path.join(artifacts, 'cookies.txt')
-  spawnSync('curl', ['-s', '-c', jar, '-o', '/dev/null', `http://127.0.0.1:${web}/?token=${token}`])
+  spawnSync('curl', ['-s', '-c', jar, '-o', path.join(artifacts, 'bootstrap.html'), `http://127.0.0.1:${web}/?token=${token}`])
   const get = (p) => { try { return JSON.parse(spawnSync('curl', ['-s', '-b', jar, `${api}${p}`], { encoding: 'utf8' }).stdout) } catch { return {} } }
 
   // ① setup actions a user performs, and what a stored row would additionally need.
   const state = get('/state')
   const needsPermission = state.capture !== 'running'
-  say('① setup actions', String(actions + (needsPermission ? 1 : 0) + (state.companion?.paired ? 0 : 1)),
-    `(${actions} to a running Host + ${needsPermission ? '1 accessibility grant' : 'no grant needed'} + ${state.companion?.paired ? 'already paired' : '1 pairing'})`)
+  const total = userActions + (needsPermission ? 1 : 0) + (state.companion?.paired ? 0 : 1)
+  say('① user actions', String(total),
+    `(${userActions} install/boot + ${needsPermission ? '1 accessibility grant' : 'no grant'} + ${state.companion?.paired ? 'already paired' : '1 pairing'}; this script also took ${internalSteps} internal step(s) - packing and, only after a half-failed install, repairing the layer list - which are not user actions)`)
 
   // ② observations that appear with no action at all: read before doing anything else.
   const db = path.join(home, 'computer-history', 'history.sqlite')
-  const rowsWithNoAction = spawnSync('sqlite3', [db, 'select count(*) from observations;'], { encoding: 'utf8' }).stdout.trim()
+  // node:sqlite, not the `sqlite3` CLI: the CLI is absent on Windows, and this measurement is meant to run
+  // wherever the Host does.
+  let rowsWithNoAction = '0'
+  try {
+    const store = new DatabaseSync(db, { readOnly: true })
+    rowsWithNoAction = String(store.prepare('select count(*) as n from observations').get().n)
+    store.close()
+  } catch { rowsWithNoAction = 'unreadable' }
   say('② rows with no action', rowsWithNoAction, `companion paired=${state.companion?.paired ?? 'unknown'}`)
 
   // ③ the retrieval engine.
@@ -115,9 +184,12 @@ try {
   say('run', 'failed', error instanceof Error ? error.message : String(error))
   process.exitCode = 1
 } finally {
-  if (host?.pid !== undefined) { try { process.kill(-host.pid, 'SIGTERM') } catch {} }
+  if (host?.pid !== undefined) killTree(host.pid)
   await sleep(2000)
-  rmSync(home, { recursive: true, force: true })
+  try { rmSync(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }) } catch (error) {
+    // Never let a cleanup that Windows still has a handle on replace the run's real result.
+    console.error(`warning: the throwaway home is still there (${error instanceof Error ? error.message : error})`)
+  }
 }
 
 console.log(`\nartifacts: ${path.relative(REPO, artifacts)}`)

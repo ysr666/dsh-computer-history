@@ -91,3 +91,177 @@ describe('collector manager lifecycle', () => {
     await manager.stop('plugin-dispose')
   })
 })
+
+/**
+ * A collector that starts and then says nothing, which is what the Windows machine showed: the process is spawned
+ * (sampled at +17.35s) and no hello ever reaches the Host. Sampling once is not enough to judge it - every timeout
+ * writes a named state and every spawn used to clear it, so a snapshot taken at the wrong moment reads as silence.
+ */
+function silentHandle(waitForExit: () => Promise<boolean>): SubprocessHandle {
+  return {
+    stdin: new PassThrough(),
+    stdout: new PassThrough(),
+    stderr: undefined,
+    control: undefined,
+    collected: {},
+    done: new Promise(() => {}),
+    terminate() {},
+    waitForExit,
+  }
+}
+
+function managerFor(handle: SubprocessHandle, helloTimeoutMs: number, restartDelaysMs?: readonly number[]) {
+  const ctx = { subprocess: { spawn: () => handle } } as unknown as Context
+  return new CollectorManager(ctx, {
+    executable: '/collector-that-never-speaks',
+    cwd: '/tmp',
+    helloTimeoutMs,
+    ...(restartDelaysMs ? { restartDelaysMs } : {}),
+    onMessage: () => {},
+    onUnexpectedExit: () => {},
+  })
+}
+
+describe('a collector that never says hello', () => {
+  it('ends in a named degraded state rather than in silence', async () => {
+    const manager = managerFor(silentHandle(async () => true), 120)
+    manager.start()
+    await new Promise(resolve => setTimeout(resolve, 400))
+    const snapshot = manager.snapshot()
+    expect(snapshot.state?.state).toBe('degraded')
+    expect(snapshot.state?.reason).toBe('hello-timeout')
+    await manager.stop('plugin-dispose')
+  })
+
+  it('keeps a named reason across restarts instead of going silent again', async () => {
+    const manager = managerFor(silentHandle(async () => true), 80, [40])
+    manager.start()
+    await new Promise(resolve => setTimeout(resolve, 600))
+    const snapshot = manager.snapshot()
+    expect(snapshot.state?.state).toBe('degraded')
+    expect(snapshot.state?.reason).toBeDefined()
+    await manager.stop('plugin-dispose')
+  })
+
+})
+
+/**
+ * The Host on Windows spawned a collector that never spoke, and the state could not say whether a byte had arrived.
+ * These three cases are the three worlds that used to share one name.
+ */
+describe('a collector that says nothing, and what the manager saw', () => {
+  function managerWith(handle: SubprocessHandle, helloTimeoutMs: number) {
+    const ctx = { subprocess: { spawn: () => handle } } as unknown as Context
+    return new CollectorManager(ctx, {
+      executable: '/collector',
+      cwd: '/tmp',
+      helloTimeoutMs,
+      onMessage: () => {},
+      onUnexpectedExit: () => {},
+    })
+  }
+
+  it('names a missing stdin rather than only throwing it', () => {
+    const handle = {
+      stdin: undefined,
+      stdout: new PassThrough(),
+      stderr: undefined,
+      control: undefined,
+      collected: {},
+      done: new Promise(() => {}),
+      terminate() {},
+      async waitForExit() { return true },
+    } as unknown as SubprocessHandle
+    const manager = managerWith(handle, 5000)
+    expect(() => manager.start()).toThrow(/piped stdio/)
+    expect(manager.snapshot().state?.state).toBe('degraded')
+    expect(manager.snapshot().state?.reason).toBe('collector-stdio-missing')
+  })
+
+  it('says the collector spoke without a hello when bytes arrived but nothing parsed', async () => {
+    const stdout = new PassThrough()
+    const handle: SubprocessHandle = {
+      stdin: new PassThrough(),
+      stdout,
+      stderr: undefined,
+      control: undefined,
+      collected: {},
+      done: new Promise(() => {}),
+      terminate() {},
+      async waitForExit() { return true },
+    }
+    const manager = managerWith(handle, 120)
+    manager.start()
+    stdout.write('not a protocol line at all')
+    await new Promise(resolve => setTimeout(resolve, 400))
+    const state = manager.snapshot().state
+    expect(state?.state).toBe('degraded')
+    expect(state?.reason).toBe('collector-spoke-without-hello')
+    await manager.stop('plugin-dispose')
+  })
+
+  it('keeps hello-timeout for a collector that said nothing at all', async () => {
+    const handle: SubprocessHandle = {
+      stdin: new PassThrough(),
+      stdout: new PassThrough(),
+      stderr: undefined,
+      control: undefined,
+      collected: {},
+      done: new Promise(() => {}),
+      terminate() {},
+      async waitForExit() { return true },
+    }
+    const manager = managerWith(handle, 120)
+    manager.start()
+    await new Promise(resolve => setTimeout(resolve, 400))
+    expect(manager.snapshot().state?.reason).toBe('hello-timeout')
+    await manager.stop('plugin-dispose')
+  })
+})
+
+describe('a spawn that never produced a child', () => {
+  it('names the failure instead of leaving the state looking like it is still starting', () => {
+    const ctx = {
+      subprocess: {
+        spawn: () => { throw Object.assign(new Error('spawn ENOENT'), { code: 'ENOENT' }) },
+      },
+    } as unknown as Context
+    const manager = new CollectorManager(ctx, {
+      executable: '/missing-collector',
+      cwd: '/tmp',
+      onMessage: () => {},
+      onUnexpectedExit: () => {},
+    })
+    expect(() => manager.start()).toThrow(/ENOENT/)
+    // The state is what an interface reads; before this it said nothing at all while `start()` had already failed.
+    expect(manager.snapshot().state?.state).toBe('degraded')
+    expect(manager.snapshot().state?.reason).toBe('collector-spawn-failed')
+  })
+})
+
+describe('a start that is refused because one already ran', () => {
+  it('says so, instead of leaving the state looking like it is still starting', () => {
+    const handle: SubprocessHandle = {
+      stdin: new PassThrough(),
+      stdout: new PassThrough(),
+      stderr: undefined,
+      control: undefined,
+      collected: {},
+      done: new Promise(() => {}),
+      terminate() {},
+      async waitForExit() { return true },
+    }
+    const ctx = { subprocess: { spawn: () => handle } } as unknown as Context
+    const manager = new CollectorManager(ctx, {
+      executable: '/collector',
+      cwd: '/tmp',
+      onMessage: () => {},
+      onUnexpectedExit: () => {},
+    })
+    manager.start()
+    // A manager that already has a handle refuses the second start. Before this the refusal was an exception the
+    // caller could swallow, and the state stayed empty - which an interface reads as "still starting".
+    expect(() => manager.start()).toThrow(/already started/)
+    expect(manager.snapshot().state?.reason).toBe('collector-start-refused')
+  })
+})

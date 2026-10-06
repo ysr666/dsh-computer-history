@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">DSH Computer History compact logo</title>
+  <desc id="desc">Compact timeline orbit and clock mark for small sizes.</desc>
+  <defs>
+    <linearGradient id="g" x1="18" y1="104" x2="108" y2="24" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4B5CFF"/>
+      <stop offset="0.52" stop-color="#2C8FFF"/>
+      <stop offset="1" stop-color="#48E0D2"/>
+    </linearGradient>
+  </defs>
+  <path d="M31 98A46 46 0 1 1 99 35" fill="none" stroke="url(#g)" stroke-width="12" stroke-linecap="round"/>
+  <circle cx="99" cy="35" r="8" fill="#75E4DF" stroke="#0B1324" stroke-width="4"/>
+  <circle cx="109" cy="65" r="7" fill="#3FAEFF" stroke="#0B1324" stroke-width="4"/>
+  <path d="M55 95A30 30 0 1 1 91 86" fill="none" stroke="url(#g)" stroke-width="8" stroke-linecap="round"/>
+  <circle cx="64" cy="64" r="4" fill="#F5F8FF"/>
+  <path d="M64 64V46M64 64L78 73" stroke="#F5F8FF" stroke-width="6" stroke-linecap="round" fill="none"/>
+</svg>

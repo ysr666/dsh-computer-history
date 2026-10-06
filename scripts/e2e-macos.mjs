@@ -8,13 +8,36 @@
 // .debug/e2e-macos/, and cleans up after itself. It never touches the user's own ~/.dsh: every path it uses is
 // inside a temporary home, and every port is its own.
 //
-// What it deliberately does not claim: the macOS collector needs an Accessibility grant, and a collector
-// spawned by a command-line Host does not have one. The script prints the collector's own state and reason
-// instead of asserting anything about it, so a reader can see exactly which part of the flow this run covered.
+// What it deliberately does not claim by default: the macOS collector needs an Accessibility grant, and a
+// collector spawned by a command-line Host may not have one. Without COLLECTOR_EXECUTABLE this run reports that
+// state instead of asserting it. Supplying COLLECTOR_EXECUTABLE changes the contract: the caller has provided the
+// collector under test, so the Host must finish its handshake and expose a live collector within the startup bound.
 import { spawn, spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { DatabaseSync } from 'node:sqlite'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+
+// Windows has no process groups, so `process.kill(-pid, ...)` fails there and the old `catch {}` swallowed it -
+// measured 2026-10-06 on the Windows machine: the Host survived, kept its throwaway home busy and the cleanup
+// ended the run with EPERM. `taskkill /T /F` is the Windows way to take down a process tree (the Host starts the
+// collector as a child), and POSIX keeps the group-first, pid-second order it already had.
+const killTree = pid => {
+  if (process.platform === 'win32') {
+    spawnSync(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', `taskkill /pid ${pid} /T /F`], { stdio: 'ignore' })
+    return
+  }
+  try { process.kill(-pid, 'SIGTERM') } catch { try { process.kill(pid, 'SIGTERM') } catch { /* already gone */ } }
+}
+
+// The plugin carries a collector for macOS only. On a machine without one (Windows, or a checkout that has not
+// built it) the Host starts, reports collector-exited and stops at a boundary - honest, but it exercises less than
+// the machine can. Set COLLECTOR_EXECUTABLE to the binary and the runs use it.
+const collectorLine = process.env.COLLECTOR_EXECUTABLE
+  ? `    collectorExecutable: ${process.env.COLLECTOR_EXECUTABLE}\n`
+  : ''
+const collectorRequired = Boolean(process.env.COLLECTOR_EXECUTABLE)
+const diagnosticTimeline = process.env.DSH_E2E_DIAGNOSTIC_TIMELINE === '1'
 
 const REPO = path.resolve(import.meta.dirname, '..')
 process.chdir(REPO)
@@ -24,13 +47,45 @@ const stamp = new Date().toISOString().replaceAll(/[:.]/g, '-')
 const artifacts = path.join(REPO, '.debug', 'e2e-macos', `run-${stamp}`)
 mkdirSync(artifacts, { recursive: true })
 
+// The CLI's profile template ships `allowBuilds:` with placeholder values (`<pkg>: set this to true or false`), and
+// pnpm then refuses the install with ERR_PNPM_IGNORED_BUILDS for packages like koffi. Patching that used to be a
+// single literal replacement attempted only after a failure; measured 2026-08-06 against the current CLI on a
+// fresh profile, both attempts failed because the file only exists after the first attempt. This sets every
+// placeholder to false - a rule, not one literal - and runs before the first attempt and again after a failure.
+const allowBuildsOff = (workspace) => {
+  try {
+    if (!existsSync(workspace)) return false
+    const text = readFileSync(workspace, 'utf8')
+    const fixed = text.replace(/^(\s+[^\s:]+:\s*)set this to true or false\s*$/gm, '$1false')
+    if (fixed === text) return false
+    writeFileSync(workspace, fixed)
+    return true
+  } catch { return false }
+}
+
 const checks = []
 const record = (name, ok, detail) => {
   checks.push({ name, ok, detail })
   console.log(`  ${ok ? '✓' : '✗'} ${name}: ${detail}`)
 }
+// The Host is started with `spawn`; on Windows the CLI is a .cmd shim, same measurement as run() above.
+// cmd.exe does not parse the escaping Node applies to a quoted argument: measured 2026-10-06 on the Windows
+// machine, '"pnpm" "--version"' arrives as '\"pnpm\"' and is not recognised, while the unquoted command line
+// exits 0. So the line is assembled unquoted and only arguments that contain whitespace are quoted.
+const quoteForCmd = a => (/[\s"]/.test(String(a)) ? `"${a}"` : String(a))
+
+const spawnCmd = (command, args, options) => process.platform === 'win32'
+  ? spawn(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', [command, ...args].map(quoteForCmd).join(' ')], { ...options, windowsVerbatimArguments: true })
+  : spawn(command, args, options)
+
+// `dsh` and `pnpm` are .cmd shims on Windows and Node refuses to spawn those without a shell; measured
+// 2026-10-06 on the Windows machine: direct spawn -> ENOENT, "<name>.cmd" -> EINVAL, cmd.exe /d /s /c -> exit 0.
+// On POSIX this is the same single spawnSync as before.
 const run = (command, args, options = {}) => {
-  const result = spawnSync(command, args, { encoding: 'utf8', ...options })
+  const shim = process.platform === 'win32' && ['dsh', 'pnpm', 'npx'].includes(command)
+  const result = shim
+    ? spawnSync(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', [command, ...args].map(quoteForCmd).join(' ')], { encoding: 'utf8', ...options, windowsVerbatimArguments: true })
+    : spawnSync(command, args, { encoding: 'utf8', ...options })
   return { status: result.status ?? 1, out: `${result.stdout ?? ''}${result.stderr ?? ''}` }
 }
 
@@ -65,16 +120,25 @@ try {
   // way a person would answer it in the UI; the retry then succeeds.
   const env = { ...process.env, DSH_HOME: home }
   for (const spec of ['@deepseek-ai/dsh-web-app@0.2.0-rc.2', tarball]) {
+    allowBuildsOff(path.join(home, 'profiles', profile, 'pnpm-workspace.yaml'))
     let added = run(cli, ['plugin', '--profile', profile, 'add', spec], { env })
     if (added.status !== 0) {
       const workspace = path.join(home, 'profiles', profile, 'pnpm-workspace.yaml')
       try {
-        writeFileSync(workspace, readFileSync(workspace, 'utf8').replaceAll(': set this to true or false', ': false'))
+        allowBuildsOff(workspace)
       } catch { /* the gate file may not be there; the retry reports it */ }
+      allowBuildsOff(path.join(home, 'profiles', profile, 'pnpm-workspace.yaml'))
       added = run(cli, ['plugin', '--profile', profile, 'add', spec], { env })
     }
     const label = spec === tarball ? 'install plugin' : 'install web app'
-    record(label, added.status === 0, added.status === 0 ? 'exit 0' : added.out.trim().slice(-160))
+    // Show the CLI's own diagnostics path and the tail of its pnpm log, not a 160-character truncation: when the
+    // install fails, the reason lives in that file and a truncated path is a dead end.
+    let why = added.out.trim()
+    const logPath = /(\/[^\s]*\.plugin-manager\/logs\/operation-[^\s]*\/pnpm\.log)/.exec(added.out)?.[1]
+    if (logPath && existsSync(logPath)) {
+      why = `${why.split('\n').slice(-2).join(' ')} | ${readFileSync(logPath, 'utf8').trim().split('\n').slice(-4).join(' ')}`
+    }
+    record(label, added.status === 0, added.status === 0 ? 'exit 0' : why.slice(0, 400))
     if (added.status !== 0) throw new Error(`${label} failed`)
   }
 
@@ -101,12 +165,12 @@ try {
     enabled: true
     dataDirectory: ${path.join(home, 'computer-history')}
     companionPort: ${companionPort}
-    collectorRestart: false
+${collectorLine}    collectorRestart: false
 `)
 
   // 4. Boot and wait for the web port.
   const log = path.join(artifacts, 'host.log')
-  host = spawn(cli, ['--profile', profile, '--port', String(webPort), '--no-open'], {
+  host = spawnCmd(cli, ['--profile', profile, '--port', String(webPort), '--no-open'], {
     env, cwd: os.tmpdir(), detached: false, stdio: ['ignore', 'pipe', 'pipe'],
   })
   let output = ''
@@ -126,7 +190,40 @@ try {
   // silent-capture problem invisible.
   const jar = path.join(artifacts, 'cookies.txt')
   const api = `http://127.0.0.1:${webPort}/api/computer-history`
-  run('curl', ['-s', '-c', jar, '-o', '/dev/null', `http://127.0.0.1:${webPort}/?token=${token}`])
+  // -o into the artifacts, not /dev/null: that path does not exist on Windows, and this keeps the response.
+  run('curl', ['-s', '-c', jar, '-o', path.join(artifacts, 'bootstrap.html'), `http://127.0.0.1:${webPort}/?token=${token}`])
+  // Optional: write the product preset as an allow rule - exactly what the panel's own button does. An isolated
+  // Host allows nothing (its policy is include-only with no allow rule, because the first-run consent only runs in
+  // a real installation), so a run that generates real desktop activity still records zero rows: measured on
+  // Windows 2026-10-06 with thirteen real windows open and an empty store. Correct behaviour, useless capture test.
+  if (process.env.DSH_E2E_ALLOW_PRESET === '1') {
+    let firstRead = {}
+    try { firstRead = JSON.parse(run('curl', ['-s', '-b', jar, `${api}/state`]).out) } catch { /* recorded below */ }
+    const presets = firstRead.firstRunPreset?.bundles ?? []
+    const nowMs = Date.now()
+    const rules = presets.map(bundle => ({
+      id: `preset:${bundle}`,
+      dimension: 'app',
+      action: 'allow',
+      matcher: 'exact',
+      pattern: bundle,
+      builtIn: false,
+      createdAtMs: nowMs,
+      updatedAtMs: nowMs,
+    }))
+    const written = run('curl', [
+      '-s', '-b', jar, '-X', 'POST', '-H', 'content-type: application/json',
+      '-d', JSON.stringify({ mode: 'include-only', rules }), `${api}/policy`,
+    ]).out
+    let echoed = {}
+    try { echoed = JSON.parse(written) } catch { /* recorded below */ }
+    record(
+      'allow preset (opt-in)',
+      rules.length > 0 && Array.isArray(echoed.rules) && echoed.rules.length >= rules.length,
+      `${rules.length} preset bundles -> revision ${echoed.revision ?? '?'} with ${echoed.rules?.length ?? 0} rules`,
+    )
+  }
+
   const stateRaw = run('curl', ['-s', '-b', jar, `${api}/state`]).out
   writeFileSync(path.join(artifacts, 'state.json'), stateRaw)
   let state = {}
@@ -138,17 +235,87 @@ try {
     companion.listening === true || typeof companion.reason === 'string',
     companion.listening === true ? `listening on ${companion.port}` : `not listening, reason=${companion.reason ?? '(none!)'}`,
   )
-  // Reported, not asserted: see the header. A command-line Host has no Accessibility grant to hand its helper.
-  record('collector (reported, not asserted)', true, `state=${state.capture} reason=${state.reason ?? '(none)'}`)
+  // Read a state the Host has settled on, not the one it has one second after boot. Measured on Windows
+  // 2026-10-06: the first read answered `capture: degraded, reason: collector-starting` and two seconds later the
+  // same Host answered `running` with its collector field present - the handshake simply had not finished. The
+  // earlier false diagnosis came from separate runs that each sampled only once during that startup window.
+  let settled = state
+  for (let i = 0; i < 12; i += 1) {
+    const waiting = settled.reason === 'collector-starting' || settled.collector === undefined
+    if (!waiting) break
+    await new Promise(resolve => setTimeout(resolve, 1000))
+    try { settled = JSON.parse(run('curl', ['-s', '-b', jar, `${api}/state`]).out) } catch { /* keep the last read */ }
+  }
+
+  const collectorHealthy = Boolean(settled.collector)
+    && ['running', 'paused', 'permission-required'].includes(settled.capture)
+  const collectorDetail =
+    `state=${settled.capture} reason=${settled.reason ?? '(none)'} collector=${settled.collector ? 'yes' : 'no'}`
+  record(
+    collectorRequired ? 'collector settles' : 'collector (reported, not asserted)',
+    collectorRequired ? collectorHealthy : true,
+    collectorDetail,
+  )
+
+  // The normal happy path no longer sleeps another sixteen seconds merely to prove it is still healthy. A timeline
+  // is diagnostic evidence: collect it only when a supplied collector failed to settle, or when explicitly asked.
+  if ((collectorRequired && !collectorHealthy) || diagnosticTimeline) {
+    const watched = []
+    for (let i = 0; i < 8; i += 1) {
+      const raw = run('curl', ['-s', '-b', jar, `${api}/state`]).out
+      let seen = {}
+      try { seen = JSON.parse(raw) } catch { /* recorded as unknown below */ }
+      const line = `${seen.capture ?? '?'}/reason=${seen.reason ?? '(none)'}/collector=${seen.collector ? 'yes' : 'no'}`
+      if (watched.at(-1)?.line !== line) watched.push({ atMs: i * 2000, line })
+      if (i < 7) await new Promise(resolve => setTimeout(resolve, 2000))
+    }
+    writeFileSync(path.join(artifacts, 'state-timeline.json'), `${JSON.stringify(watched, null, 2)}\n`)
+    record(
+      'collector over time (diagnostic)',
+      true,
+      watched.map(w => `${w.atMs}ms ${w.line}`).join('  ->  '),
+    )
+  }
+
+  if (collectorRequired && !collectorHealthy) {
+    throw new Error(`collector did not settle within 12s: ${collectorDetail}`)
+  }
 
   const db = path.join(home, 'computer-history', 'history.sqlite')
-  const counts = run('sqlite3', [db, 'select (select count(*) from episodes), (select count(*) from observations);'])
-  record('store opens', counts.status === 0, counts.status === 0 ? `episodes/observations = ${counts.out.trim()}` : counts.out.trim().slice(-120))
+  // node:sqlite rather than the `sqlite3` CLI (absent on Windows, and this command is meant to be runnable on
+  // the platforms the collector supports). The repository already reads stores this way elsewhere.
+  let counts
+  try {
+    const store = new DatabaseSync(db, { readOnly: true })
+    const row = store.prepare('select (select count(*) from episodes) as e, (select count(*) from observations) as o').get()
+    store.close()
+    counts = { status: 0, out: `${row.e}|${row.o}` }
+  } catch (error) {
+    counts = { status: 1, out: error instanceof Error ? error.message : String(error) }
+  }
+  record('store opens', counts.status === 0, counts.status === 0 ? `episodes/observations = ${counts.out.trim().split('|').join('|')}` : counts.out.slice(-120))
+
+  // Read the store again at the end of a successful opt-in run. This is the capture evidence: the collector has
+  // settled and the caller has had the whole run window to generate desktop activity. It is deliberately reported,
+  // not asserted, because an idle desktop is a valid run.
+  if (process.env.DSH_E2E_ALLOW_PRESET === '1') {
+    let after = { e: '?', o: '?' }
+    try {
+      const store = new DatabaseSync(path.join(home, 'computer-history', 'history.sqlite'), { readOnly: true })
+      after = store.prepare('select (select count(*) from episodes) as e, (select count(*) from observations) as o').get()
+      store.close()
+    } catch { /* recorded as unknown */ }
+    record(
+      'store after the settle window (reported, not asserted)',
+      true,
+      `episodes/observations = ${after.e}|${after.o}`,
+    )
+  }
 } catch (error) {
   record('run', false, error instanceof Error ? error.message : String(error))
 } finally {
   if (host?.pid !== undefined) {
-    host.kill('SIGTERM')
+    killTree(host.pid)
     await new Promise(resolve => setTimeout(resolve, 2_000))
     if (host.exitCode === null) host.kill('SIGKILL')
   }
@@ -156,7 +323,7 @@ try {
   if (process.env.DSH_E2E_KEEP === '1') {
     console.log(`  (kept ${home} because DSH_E2E_KEEP=1)`)
   } else {
-    rmSync(home, { recursive: true, force: true })
+    rmSync(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 })
     rmSync(path.join(REPO, 'e2e-pack'), { recursive: true, force: true })
   }
 }

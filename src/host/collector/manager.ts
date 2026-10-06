@@ -101,6 +101,14 @@ export class CollectorManager {
   private processing: Promise<void> = Promise.resolve()
   private controlQueue: Promise<void> = Promise.resolve()
   private receiveBuffer = Buffer.alloc(0)
+  // What the transport actually delivered, per spawn. These exist because a Host on Windows reported a collector
+  // that had been spawned and never spoke, and nothing in the state could say whether a byte had arrived at all -
+  // `hello-timeout` covered both "the child said nothing" and "the child spoke but not in a way this could read",
+  // and those two point at completely different layers. Measured 2026-10-06: the platform's Windows stdio and the
+  // collector itself both check out under a probe, so the remaining question is exactly this one.
+  private bytesReceived = 0
+  private linesReceived = 0
+  private parseFailures = 0
   private lastObservationSeq: number | undefined
   private lastObservationFingerprint: string | undefined
   private helloTimer: NodeJS.Timeout | undefined
@@ -131,6 +139,12 @@ export class CollectorManager {
 
   public start(): void {
     if (this.handle || this.restartTimer) {
+      // Refusing to start twice is correct, and it used to be the one exit from this path that left the state
+      // untouched - so a Host that called start() on a manager which already had a handle or a pending restart
+      // reported "still starting" for ever. Measured on Windows 2026-10-06: `/state` answered
+      // `capture: degraded, reason: collector-starting` (= this manager has no state at all) while none of the
+      // four spawn-path names ever appeared, which is only possible if the spawn was never reached.
+      this.markDegraded('collector-start-refused')
       throw new Error('collector already started')
     }
 
@@ -191,21 +205,38 @@ export class CollectorManager {
   private spawnCollector(): void {
     this.hello = undefined
     this.state = undefined
+    this.bytesReceived = 0
+    this.linesReceived = 0
+    this.parseFailures = 0
     this.lastObservationSeq = undefined
     this.lastObservationFingerprint = undefined
 
-    const handle = this.ctx.subprocess.spawn({
-      argv: [this.options.executable],
-      cwd: this.options.cwd,
-      stdio: {
-        stdin: 'pipe',
-        stdout: 'pipe',
-        stderr: { maxBytes: 32 * 1024 },
-      },
-      graceMs: this.options.graceMs ?? DEFAULT_SHUTDOWN_GRACE_MS,
-    })
+    let handle: SubprocessHandle
+    try {
+      handle = this.ctx.subprocess.spawn({
+        argv: [this.options.executable],
+        cwd: this.options.cwd,
+        stdio: {
+          stdin: 'pipe',
+          stdout: 'pipe',
+          stderr: { maxBytes: 32 * 1024 },
+        },
+        graceMs: this.options.graceMs ?? DEFAULT_SHUTDOWN_GRACE_MS,
+      })
+    } catch (error) {
+      // A spawn that throws used to escape through `start()` with nothing recorded anywhere the state could be
+      // read from, so an interface could only report that it was still starting. Measured on Windows 2026-10-06:
+      // `/state` answered `capture: degraded, reason: collector-starting` for a Host whose collector never
+      // appeared - and the reason stayed absent whether the child was missing, unlaunchable, or fine. The spawn
+      // error still propagates (the caller decides what to do); what changes is that the state now names it.
+      this.markDegraded('collector-spawn-failed')
+      throw error
+    }
 
     if (!handle.stdin || !handle.stdout) {
+      // Name it before throwing: the throw reaches the caller, but the state is what an interface reads, and
+      // "requires piped stdio" as an exception message is not a name a panel can show.
+      this.markDegraded('collector-stdio-missing')
       try {
         handle.terminate()
       } catch {
@@ -233,6 +264,8 @@ export class CollectorManager {
         ? chunk
         : Buffer.from(chunk)
 
+      this.bytesReceived += data.byteLength
+
       this.receiveBuffer = Buffer.concat([
         this.receiveBuffer,
         data,
@@ -244,6 +277,7 @@ export class CollectorManager {
         const failure = error instanceof Error
           ? error
           : new Error(String(error))
+        this.parseFailures += 1
         this.markDegraded('protocol-error')
         this.rejectStateWaiters(failure)
         this.rejectPolicyAck(failure)
@@ -259,7 +293,13 @@ export class CollectorManager {
         && !this.hello
         && !this.stopping
       ) {
-        this.markDegraded('hello-timeout')
+        // Two different worlds behind one old name: a child that said nothing at all (the transport, the spawn,
+        // the program) and a child that spoke without saying hello (the protocol, the framing, the reader).
+        this.markDegraded(
+          this.bytesReceived === 0
+            ? 'hello-timeout'
+            : 'collector-spoke-without-hello',
+        )
         void this.stop('protocol-error').catch(() => {})
       }
     }, this.options.helloTimeoutMs ?? 5_000)
@@ -382,6 +422,7 @@ export class CollectorManager {
       }
       if (withoutCr.byteLength === 0) continue
 
+      this.linesReceived += 1
       this.acceptMessage(
         parseCollectorLine(withoutCr.toString('utf8')),
       )

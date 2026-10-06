@@ -4,22 +4,27 @@ on:
   pull_request:
     paths-ignore:
       - '**/*.md'
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**/*.md'
   workflow_dispatch:
 
 permissions:
   contents: read
 
-# Only the newest revision of a PR matters. This is intentionally true for manual runs too:
-# if a newer run starts for the same ref, keeping the stale one alive only burns private-repo minutes.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # Node 24 is the fast, always-on merge gate. Node 22 remains covered by the release workflow
-  # (and can be exercised manually) instead of doubling the bill for every intermediate PR push.
   core:
+    name: core (Node ${{ matrix.node }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['22.19.0', '24']
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -29,7 +34,7 @@ jobs:
           version: 11.7.0
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
-          node-version: '24'
+          node-version: ${{ matrix.node }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       # `pnpm verify` includes tests/integration/packaged-entry.spec.ts, which imports the built
