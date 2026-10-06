@@ -75,6 +75,31 @@ describe('editor companion bootstrap', () => {
     history.close()
   })
 
+  it('leaves an unpaired editor unpaired when its first bootstrap fails', () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'dsh-editor-bootstrap-empty-'))
+    roots.push(root)
+    const history = openHistoryDatabase({
+      dataDirectory: path.join(root, 'history'),
+      nowMs: 1,
+    })
+    const tokens = new CompanionTokenStore(history.db)
+
+    expect(() => rotateAndStageEditorCompanionBootstrap({
+      tokens,
+      port: 19388,
+      nowMs: 2_000,
+      stage: () => {
+        throw new Error('forced first bootstrap failure')
+      },
+    })).toThrow(/forced first bootstrap failure/)
+
+    expect(tokens.state('editor')).toEqual({ paired: false })
+    expect(history.db.prepare(
+      'SELECT COUNT(*) AS n FROM companion_pairing WHERE kind = ?',
+    ).get('editor')).toEqual({ n: 0 })
+    history.close()
+  })
+
   it('refuses invalid ports and implausibly short credentials', () => {
     const home = mkdtempSync(path.join(os.tmpdir(), 'dsh-editor-bootstrap-'))
     roots.push(home)
