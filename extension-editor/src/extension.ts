@@ -141,7 +141,6 @@ function metadataOf(): EditorMetadata | undefined {
   const editor = vscode.window.activeTextEditor
   const folder = editor
     ? vscode.workspace.getWorkspaceFolder(editor.document.uri)
-      ?? vscode.workspace.workspaceFolders?.[0]
     : vscode.workspace.workspaceFolders?.[0]
   if (!folder) return undefined
   const filePath = editor?.document.uri.scheme === 'file'
