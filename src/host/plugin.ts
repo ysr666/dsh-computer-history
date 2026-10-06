@@ -433,7 +433,7 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
     editorPaired,
     reason: 'companion intake not started',
   }
-  void companionIntake.start()
+  const companionStarted = companionIntake.start()
     .then((port) => {
       companionState = { listening: true, port, paired: browserPaired, editorPaired }
     })
@@ -447,8 +447,23 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
           : 'companion intake failed',
       }
     })
+  let companionStopPromise: Promise<void> | undefined
+  const stopCompanion = (): Promise<void> => {
+    companionStopPromise ??= (async () => {
+      // start() is deliberately non-fatal, but teardown must not race a listener
+      // that is still binding: wait for either listen or the recorded bind error
+      // before asking it to stop.
+      await companionStarted
+      await companionIntake.stop()
+    })()
+    return companionStopPromise
+  }
+  // Registered early so a later setup failure still closes the loopback listener.
+  // The database-owning teardown below awaits the same idempotent promise before
+  // it can close SQLite, so Cordis may dispose effects concurrently without
+  // letting an in-flight companion request outlive the database.
   ctx.effect(() => async () => {
-    await companionIntake.stop()
+    await stopCompanion()
   })
 
   const backend = new LocalComputerHistoryBackend(
@@ -545,15 +560,20 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
   // effect registered later would leak the lock file held by a live PID
   // and leave the helper running. Ordering *within* this single effect
   // is what is load-bearing:
-  //   1. stop the helper, which bounds its exit and hands capture
-  //      ownership back before it returns;
-  //   2. quiesce in-flight backend operations;
-  //   3. wait for any in-flight ingestion write to settle;
-  //   4. close the database last.
+  //   1. stop the companion listener so no new loopback request can enter;
+  //   2. stop the helper, which bounds its exit and hands capture ownership back;
+  //   3. quiesce in-flight backend operations;
+  //   4. wait for any in-flight ingestion write to settle;
+  //   5. close the database last.
   // Steps run concurrently *across* effects, so this must stay one
   // effect: a separate close effect could close the database while the
   // helper is still draining.
   ctx.effect(() => async () => {
+    // Stop accepting companion work first, and wait for the listener's active
+    // requests to be torn down before SQLite can close. The separate early
+    // effect above calls the same promise, so concurrent Cordis disposal is safe.
+    await stopCompanion()
+
     // Every step runs even if an earlier one throws.
     await releaseCaptureOwnership()
     try {
