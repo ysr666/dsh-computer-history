@@ -294,11 +294,10 @@ ${collectorLine}    collectorRestart: false
     counts = { status: 1, out: error instanceof Error ? error.message : String(error) }
   }
   record('store opens', counts.status === 0, counts.status === 0 ? `episodes/observations = ${counts.out.trim().split('|').join('|')}` : counts.out.slice(-120))
-} catch (error) {
 
-  // The store again, after everything above: with the preset allowed and activity on the machine, this is the line
-  // that says whether capture works end to end. Reported rather than asserted - whether anything happened on the
-  // desktop during a run is the caller's business, not this command's.
+  // Read the store again at the end of a successful opt-in run. This is the capture evidence: the collector has
+  // settled and the caller has had the whole run window to generate desktop activity. It is deliberately reported,
+  // not asserted, because an idle desktop is a valid run.
   if (process.env.DSH_E2E_ALLOW_PRESET === '1') {
     let after = { e: '?', o: '?' }
     try {
@@ -312,6 +311,7 @@ ${collectorLine}    collectorRestart: false
       `episodes/observations = ${after.e}|${after.o}`,
     )
   }
+} catch (error) {
   record('run', false, error instanceof Error ? error.message : String(error))
 } finally {
   if (host?.pid !== undefined) {
