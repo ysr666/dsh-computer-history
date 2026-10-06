@@ -42,6 +42,9 @@ async function harness(
     refusal?: 'capture-paused' | 'collector-not-running' | 'capture-disabled' | 'capture-not-owned'
     /** Simulate an ingestion/runtime rejection after validation and authentication. */
     deliveryError?: Error
+    /** Hold a validated request inside deliver() until this promise settles. */
+    deliveryGate?: Promise<void>
+    onDeliveryStart?: () => void
     now?: () => number
   } = {},
 ): Promise<Harness> {
@@ -51,9 +54,11 @@ async function harness(
   const delivered: CompanionPayload[] = []
   const intake = new CompanionIntake({
     tokens,
-    deliver: (report) => {
+    deliver: async (report) => {
       delivered.push(report)
-      if (options.deliveryError) return Promise.reject(options.deliveryError)
+      options.onDeliveryStart?.()
+      if (options.deliveryGate) await options.deliveryGate
+      if (options.deliveryError) throw options.deliveryError
       return options.refusal ? { stored: false, reason: options.refusal } : { stored: true }
     },
     port: 0,
@@ -287,6 +292,37 @@ describe('companion intake', () => {
     expect(response.status).toBe(403)
     expect(delivered).toHaveLength(0)
     await intake.stop()
+  })
+
+  it('does not resolve stop while an authenticated delivery is still in flight', async () => {
+    let releaseDelivery!: () => void
+    const deliveryGate = new Promise<void>(resolve => {
+      releaseDelivery = resolve
+    })
+    let enteredDelivery!: () => void
+    const deliveryStarted = new Promise<void>(resolve => {
+      enteredDelivery = resolve
+    })
+    const { intake, port } = await harness({
+      deliveryGate,
+      onDeliveryStart: enteredDelivery,
+    })
+
+    const request = post(port, JSON.stringify(payload()))
+      .catch(() => undefined)
+    await deliveryStarted
+
+    let stopped = false
+    const stopping = intake.stop().then(() => {
+      stopped = true
+    })
+    await Promise.resolve()
+    expect(stopped).toBe(false)
+
+    releaseDelivery()
+    await stopping
+    await request
+    expect(stopped).toBe(true)
   })
 
   it('frees the port when stopped', async () => {
