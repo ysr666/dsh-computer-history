@@ -59,7 +59,11 @@ const step2 = appStartedMs === undefined
   : !pluginInstalled
     ? 'not done (the plugin is not installed)'
     : restartNeeded
-      ? 'not done (restart the application)'
+      // Timestamps alone cannot settle this: a patch written seconds after the start may or may not have been
+      // picked up, and the manifest that carries the plugin as a layer may have been written long before it.
+      // Measured 2026-10-06: the running app did have the plugin active (the loader said so) while this line
+      // still said "restart the application", because the patch was six seconds newer than the start.
+      ? 'unknown (changed after startup - confirm via the panel, or the loader status)'
       : 'done'
 const step3 = observations === undefined ? 'unreadable' : observations > 0 ? 'done' : 'not done'
 const rows = [
