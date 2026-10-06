@@ -42,18 +42,33 @@
     <text x="32" y="22" fill="#AFC2DD" font-family="Inter, PingFang SC, Microsoft YaHei, Arial, sans-serif" font-size="13" font-weight="700" letter-spacing="1.8">DEEPSEEK HARNESS</text>
   </g>
 
-  <!-- logo mark -->
-  <g transform="translate(2,73)">
-    <path d="M37 118 A86 86 0 0 1 103 4" fill="none" stroke="url(#brand)" stroke-width="18" stroke-linecap="round"/>
-    <path d="M64 112 A57 57 0 1 1 111 33" fill="none" stroke="url(#brand)" stroke-width="13" stroke-linecap="round"/>
-    <circle cx="112" cy="18" r="11" fill="#6DE8D5"/>
-    <circle cx="131" cy="69" r="8" fill="#35A4FF"/>
-    <circle cx="112" cy="111" r="7" fill="#57D9CE"/>
-    <circle cx="72" cy="70" r="5" fill="#F5F7FF"/>
-    <path d="M72 70 L72 43 M72 70 L95 85" stroke="#F5F7FF" stroke-width="7" stroke-linecap="round"/>
-  </g>
+  <!-- canonical Timeline Orbit logo mark: exact geometry from assets/brand/logo-mark.svg -->
+  <svg x="0" y="72" width="150" height="150" viewBox="0 0 512 512" overflow="visible">
+    <defs>
+      <linearGradient id="heroLogoOrbit" x1="92" y1="396" x2="420" y2="112" gradientUnits="userSpaceOnUse">
+        <stop offset="0" stop-color="#4B5CFF"/>
+        <stop offset="0.48" stop-color="#2C8FFF"/>
+        <stop offset="1" stop-color="#48E0D2"/>
+      </linearGradient>
+      <linearGradient id="heroLogoInner" x1="174" y1="344" x2="354" y2="164" gradientUnits="userSpaceOnUse">
+        <stop offset="0" stop-color="#4058E8"/>
+        <stop offset="0.56" stop-color="#2F9BFF"/>
+        <stop offset="1" stop-color="#4EE0D4"/>
+      </linearGradient>
+    </defs>
+    <path d="M 132 383 A 178 178 0 1 1 394 139"
+          fill="none" stroke="url(#heroLogoOrbit)" stroke-width="34" stroke-linecap="round"/>
+    <circle cx="394" cy="139" r="27" fill="#7DE7E3" stroke="#0B1324" stroke-width="10"/>
+    <circle cx="427" cy="259" r="22" fill="#39AAFF" stroke="#0B1324" stroke-width="9"/>
+    <circle cx="389" cy="374" r="18" fill="#65D9D5" stroke="#0B1324" stroke-width="8"/>
+    <path d="M 220 367 A 116 116 0 1 1 354 334"
+          fill="none" stroke="url(#heroLogoInner)" stroke-width="24" stroke-linecap="round"/>
+    <circle cx="256" cy="256" r="13" fill="#F5F8FF"/>
+    <path d="M256 256V190" fill="none" stroke="#F5F8FF" stroke-width="18" stroke-linecap="round"/>
+    <path d="M256 256L309 291" fill="none" stroke="#F5F8FF" stroke-width="18" stroke-linecap="round"/>
+  </svg>
 
-  <text x="178" y="152" fill="#F5F7FF" font-family="Inter, PingFang SC, Microsoft YaHei, Arial, sans-serif" font-size="70" font-weight="800" letter-spacing="-2.5">DSH</text>
+    <text x="178" y="152" fill="#F5F7FF" font-family="Inter, PingFang SC, Microsoft YaHei, Arial, sans-serif" font-size="70" font-weight="800" letter-spacing="-2.5">DSH</text>
   <text x="178" y="206" fill="#F5F7FF" font-family="Inter, PingFang SC, Microsoft YaHei, Arial, sans-serif" font-size="38" font-weight="720" letter-spacing="-1.0">Computer History</text>
 
   <text x="0" y="285" fill="#F2F5FB" font-family="Inter, PingFang SC, Microsoft YaHei, Arial, sans-serif" font-size="34" font-weight="760" letter-spacing="-.8">记住你在做什么。</text>

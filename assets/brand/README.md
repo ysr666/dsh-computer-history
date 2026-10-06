@@ -23,3 +23,5 @@ The current brand direction is **Timeline Orbit**: a clock for temporal context,
 ## Usage
 
 Use the full mark at 128 px and above. Prefer `logo-mark-small.svg` below 128 px. Keep a clear area around the mark of at least one node diameter. Do not add extra orbit nodes, rotate the clock, or place the gradient mark on similarly saturated backgrounds without sufficient contrast.
+
+README heroes, social previews, release art, and other project surfaces must reuse the canonical Timeline Orbit geometry from `logo-mark.svg` (or the documented small/mono variants). Do not redraw an approximate version of the mark inside another SVG.
