@@ -24,4 +24,21 @@ describe('plugin teardown ordering', () => {
     expect(waitForStart).toBeGreaterThan(0)
     expect(waitForStart).toBeLessThan(stopBeforeClose)
   })
+
+  it('quiesces backend controls before releasing capture ownership', () => {
+    const source = readFileSync(
+      new URL('../../src/host/plugin.ts', import.meta.url),
+      'utf8',
+    )
+    const teardown = source.indexOf("computer-history: teardown")
+    expect(teardown).toBeGreaterThan(0)
+
+    const drain = source.lastIndexOf('await backend.drain()', teardown)
+    const release = source.lastIndexOf('await releaseCaptureOwnership()', teardown)
+    const close = source.lastIndexOf('history.close()', teardown)
+
+    expect(drain).toBeGreaterThan(0)
+    expect(release).toBeGreaterThan(drain)
+    expect(close).toBeGreaterThan(release)
+  })
 })
