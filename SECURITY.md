@@ -12,9 +12,9 @@ The same protection applies to every metadata field an observation can carry, no
 
 ## Local data
 
-Phase 1 stores observations and episodes locally. Raw observations expire 24 hours after the observed activity; deterministic Episodes may remain for 30 days. Raw TTL expiry is evidence compaction and does not, by itself, delete a still-live Episode.
+Phase 1 stores observations and episodes locally. The built-in defaults are 24 hours for raw observations and 30 days for deterministic Episodes; the user can configure raw retention from 1 to 720 hours and Episode retention from 1 to 365 days. A retention change applies to data recorded from then on. Raw TTL expiry is evidence compaction and does not, by itself, delete a still-live Episode.
 
-User-requested Forget/Delete is stronger than TTL compaction. When complete raw provenance remains, affected Episodes are deterministically rebuilt from the remaining evidence. When raw expiry has made provenance incomplete, the affected derived Episode is deleted in full rather than retaining a summary that may contain forgotten evidence. Short-lived deletion tombstones reject delayed pre-deletion observations while allowing genuinely new activity after the request.
+User-requested Forget/Delete is stronger than TTL compaction. When complete raw provenance remains, affected Episodes are deterministically rebuilt from the remaining evidence. When raw expiry has made provenance incomplete, the affected derived Episode is deleted in full rather than retaining a summary that may contain forgotten evidence. Deletion tombstones reject delayed pre-deletion observations while allowing genuinely new activity after the request; they are retained through the maximum raw-retention window, because an observation older than the 24-hour default can still be admissible after the user raises retention.
 
 SQLite uses restrictive filesystem permissions and `secure_delete`. After successful logical deletion, WAL checkpoint/truncation and VACUUM are best-effort cleanup only. This project does not claim forensic erasure; protection against recovered disk blocks depends on full-disk encryption such as FileVault and the underlying platform/storage guarantees.
 
