@@ -170,10 +170,10 @@ export class IngestionService {
     message: NativeObservation,
   ): Promise<boolean> {
     // Collector delivery is ordered, but the browser/editor companion is an HTTP server and can call ingest()
-    // concurrently with itself and with the collector. DatabaseSync is one connection: allowing two ingestNow()
-    // calls to cross their asynchronous workspace-resolution boundary can make both try BEGIN IMMEDIATE on the
-    // same connection. Keep one tail for all producers. The tail also makes whenIdle() mean "every ingest queued
-    // before this read has settled", rather than "the most recently started ingest happened to settle".
+    // concurrently with itself and with the collector. The transaction block itself is synchronous, but the
+    // canonicalisation/workspace awaits before it mean two producers can complete out of call order. Keep one tail
+    // so the shared builder/refusal state has deterministic producer order, and so whenIdle() means "every ingest
+    // queued before this read has settled" rather than "the most recently started ingest happened to settle".
     const running = this.inFlight.then(async () => {
       const before = this.refusedSinceStart()
       const droppedBefore = this.silentDrops
