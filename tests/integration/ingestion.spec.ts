@@ -560,6 +560,61 @@ describe('live ingestion', () => {
     history.close()
   })
 
+  it('fails closed when a companion workspace alias resolves into a protected directory', async () => {
+    const root = mkdtempSync(
+      path.join(os.tmpdir(), 'dsh-ch-workspace-alias-'),
+    )
+    roots.push(root)
+    const protectedRoot = path.join(root, '.ssh')
+    const alias = path.join(root, 'safe-project')
+    mkdirSync(protectedRoot)
+    symlinkSync(
+      protectedRoot,
+      alias,
+      process.platform === 'win32' ? 'junction' : 'dir',
+    )
+
+    const history = openHistoryDatabase({
+      dataDirectory: path.join(root, 'history'),
+      nowMs: 1,
+    })
+    const policies = new PolicyStore(history.db)
+    policies.ensureInitial(1)
+    policies.replace('include-only', [{
+      id: PolicyRuleId('allow-code'),
+      dimension: 'app',
+      action: 'allow',
+      matcher: 'exact',
+      pattern: 'com.microsoft.VSCode',
+      builtIn: false,
+      createdAtMs: 1,
+      updatedAtMs: 1,
+    }], 2)
+
+    const ingestion = new IngestionService(
+      history.db,
+      { resolve: async () => ({ source: 'none' as const, confidence: 0 }) },
+      () => policies.get(),
+      () => 2_000,
+    )
+
+    expect(await ingestion.ingest({
+      ...native(),
+      collectorSession: 'workspace-alias',
+      window: { title: 'Integrated Terminal' },
+      workspace: {
+        root: alias,
+        title: 'safe-project',
+      },
+      source: {
+        provider: 'companion',
+        adapter: 'vscode',
+      },
+    })).toBe(false)
+    expect(new ObservationStore(history.db).count()).toBe(0)
+    history.close()
+  })
+
   it('fails closed on protected canonical paths before workspace resolution', async () => {
     const root = mkdtempSync(
       path.join(os.tmpdir(), 'dsh-ch-live-'),
