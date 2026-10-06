@@ -55,7 +55,7 @@ export class EditorCompanionInstaller {
   private readonly platform: NodeJS.Platform
   private readonly exists: (path: string) => boolean
   private readonly homeDirectory: string
-  private codePromise: Promise<string | undefined> | undefined
+  private codePath: string | undefined
 
   public constructor(options: EditorCompanionInstallerOptions) {
     this.subprocess = options.subprocess
@@ -66,23 +66,31 @@ export class EditorCompanionInstaller {
     this.homeDirectory = options.homeDirectory ?? os.homedir()
   }
 
-  private resolveCode(): Promise<string | undefined> {
-    if (this.platform !== 'darwin') return Promise.resolve(undefined)
-    this.codePromise ??= (async () => {
-      const fromPath = await this.subprocess.resolveExecutable('code')
-        .catch(() => undefined)
-      if (fromPath) return fromPath
+  private async resolveCode(): Promise<string | undefined> {
+    if (this.platform !== 'darwin') return undefined
+    if (this.codePath) return this.codePath
 
-      // Installing VS Code's shell command is optional. A normal desktop user
-      // should still get the one-click companion path from the app bundle.
-      const suffix = path.join('Contents', 'Resources', 'app', 'bin', 'code')
-      const candidates = [
-        path.join('/Applications', 'Visual Studio Code.app', suffix),
-        path.join(this.homeDirectory, 'Applications', 'Visual Studio Code.app', suffix),
-      ]
-      return candidates.find(candidate => this.exists(candidate))
-    })()
-    return this.codePromise
+    const fromPath = await this.subprocess.resolveExecutable('code')
+      .catch(() => undefined)
+    if (fromPath) {
+      this.codePath = fromPath
+      return fromPath
+    }
+
+    // Installing VS Code's shell command is optional. A normal desktop user
+    // should still get the one-click companion path from the app bundle.
+    //
+    // Do not cache "not found": VS Code or its shell command can appear while
+    // this Host keeps running. A failed capability probe must be recoverable
+    // without restarting Computer History.
+    const suffix = path.join('Contents', 'Resources', 'app', 'bin', 'code')
+    const candidates = [
+      path.join('/Applications', 'Visual Studio Code.app', suffix),
+      path.join(this.homeDirectory, 'Applications', 'Visual Studio Code.app', suffix),
+    ]
+    const candidate = candidates.find(candidate => this.exists(candidate))
+    if (candidate) this.codePath = candidate
+    return candidate
   }
 
   private async run(executable: string, args: readonly string[]): Promise<CommandResult> {
@@ -141,6 +149,10 @@ export class EditorCompanionInstaller {
     }
     const installed = await this.installed(executable)
     if (installed === undefined) {
+      // A cached executable can disappear or stop launching during a long Host
+      // session. Forget it so the next capability check can rediscover a new
+      // PATH/app-bundle installation.
+      this.codePath = undefined
       return { available: false, installed: false, reason: 'code-cli-unavailable' }
     }
     if (!installed.installed) return { available: true, installed: false }
