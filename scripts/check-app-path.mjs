@@ -92,9 +92,14 @@ console.log(`\n  application started: ${appStartedMs ? new Date(appStartedMs).to
 console.log(`  manifest written:    ${manifestMs ? new Date(manifestMs).toISOString() : 'missing'}`)
 console.log(`  patch written:       ${patchMs ? new Date(patchMs).toISOString() : 'missing'}`)
 
-if (step1 === 'done' && step2 === 'done' && step3 === 'done') {
-  console.log('\nverdict: the three steps have happened. The count is 3 actions unless the owner reports extra ones -')
-  console.log('         this command reads evidence, it does not count what a person did.')
+// Step three is the decisive one and it settles step two: a stored observation could only be there if the running
+// application had loaded the plugin, whatever the timestamps say. Measured 2026-10-06 - the first observation
+// arrived while this line still read "not judgeable", purely because the patch had been written after startup.
+if (step3 === 'done' || (step1 === 'done' && step2 === 'done')) {
+  console.log('\nverdict: the three steps have happened - the plugin is a layer, the application loaded it, and the')
+  console.log('         store holds an observation. The count is 3 actions unless the owner reports extra ones; this')
+  console.log('         command reads evidence, it does not count what a person did.')
+  if (step2 !== 'done') console.log('         (step 2 is inferred from step 3: the timestamps alone could not settle it.)')
 } else {
   console.log('\nverdict: not judgeable yet - the first step that is not done above is where it stands.')
   if (collector.state === 'running' && step3 !== 'done') {
