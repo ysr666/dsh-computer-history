@@ -176,8 +176,30 @@ describe('plugin multi-Host capture composition', () => {
       collectorExecutable: '/collector',
       collectorRestart: false,
       captureLockProbeWaitMs: 25,
+      companionPort: 0,
     })
     expect(spawned.count).toBe(1)
+
+    const firstHistory = (
+      first.ctx as unknown as {
+        get(name: 'computerHistory'): {
+          getState(): {
+            companion?: { listening: boolean; port?: number }
+          }
+        }
+      }
+    ).get('computerHistory')
+    let ownerPort: number | undefined
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      const companion = firstHistory.getState().companion
+      if (companion?.listening && companion.port !== undefined) {
+        ownerPort = companion.port
+        break
+      }
+      // oxlint-disable-next-line no-await-in-loop -- waiting for the real loopback bind is the assertion setup
+      await new Promise(resolve => setTimeout(resolve, 5))
+    }
+    expect(ownerPort).toBeDefined()
 
     const second = fakeHost(spawned)
     await apply(second.ctx, {
@@ -186,6 +208,7 @@ describe('plugin multi-Host capture composition', () => {
       collectorExecutable: '/collector',
       collectorRestart: false,
       captureLockProbeWaitMs: 25,
+      companionPort: ownerPort,
     })
     expect(spawned.count).toBe(1)
 
@@ -193,7 +216,11 @@ describe('plugin multi-Host capture composition', () => {
       second.ctx as unknown as {
         get(name: 'computerHistory'): {
           recover(): Promise<void>
-          getState(): { capture: string; reason?: string }
+          getState(): {
+            capture: string
+            reason?: string
+            companion?: { listening: boolean; port?: number }
+          }
         }
       }
     ).get('computerHistory')
@@ -201,6 +228,9 @@ describe('plugin multi-Host capture composition', () => {
     expect(secondHistory.getState()).toMatchObject({
       capture: 'degraded',
       reason: 'capture-owned-by-another-host',
+      companion: {
+        listening: false,
+      },
     })
     await expect(secondHistory.recover()).rejects.toThrow(
       /owned by another DSH Host/,
@@ -244,6 +274,10 @@ describe('plugin multi-Host capture composition', () => {
 
     expect(secondHistory.getState()).toMatchObject({
       capture: 'running',
+      companion: {
+        listening: true,
+        port: ownerPort,
+      },
     })
     // This Host owns capture and its collector is running, but its data directory is fresh, so its policy is the
     // initial include-only one - which allows nothing. Asking for no reason here asserted the defect: a Host that
