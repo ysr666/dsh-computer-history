@@ -39,6 +39,8 @@ async function harness(
     maxBodyBytes?: number
     /** Make the Host refuse the payload for a capture-level reason and see what the client is told. */
     refusal?: 'capture-paused' | 'collector-not-running' | 'capture-disabled' | 'capture-not-owned'
+    /** Simulate an ingestion/runtime rejection after validation and authentication. */
+    deliveryError?: Error
   } = {},
 ): Promise<Harness> {
   const tokens = tokenStore()
@@ -49,6 +51,7 @@ async function harness(
     tokens,
     deliver: (report) => {
       delivered.push(report)
+      if (options.deliveryError) return Promise.reject(options.deliveryError)
       return options.refusal ? { stored: false, reason: options.refusal } : { stored: true }
     },
     port: 0,
@@ -132,6 +135,14 @@ describe('companion intake', () => {
     const response = await post(port, JSON.stringify(payload()))
     expect(response.status).toBe(202)
     expect(response.json).toEqual({ stored: false, reason: 'capture-paused' })
+    await intake.stop()
+  })
+
+  it('contains a rejected delivery and answers 500 instead of leaking an unhandled rejection', async () => {
+    const { intake, port } = await harness({ deliveryError: new Error('database unavailable') })
+    const response = await post(port, JSON.stringify(payload()))
+    expect(response.status).toBe(500)
+    expect(response.json).toEqual({ error: 'observation delivery failed' })
     await intake.stop()
   })
 
