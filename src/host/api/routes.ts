@@ -292,7 +292,7 @@ export function registerHistoryApi(ctx: Context): void {
         return textResponse('Invalid JSON.', 400)
       }
       try {
-        return json(history.importAll(body))
+        return json(await history.importAll(body))
       } catch (error) {
         if (error instanceof HistoryImportError) {
           return textResponse(error.message, 400)
