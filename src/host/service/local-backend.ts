@@ -266,6 +266,9 @@ implements ComputerHistoryServiceContract {
 
   public getState(): ComputerHistoryState {
     return this.withSyncOperation(() => {
+      if (this.db) {
+        this.currentRetention = new RetentionSettingsStore(this.db).get()
+      }
       const maintenance = this.maintenance?.()
       return {
         ...this.capture.getState(),
