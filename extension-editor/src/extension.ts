@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto'
 import * as vscode from 'vscode'
 import {
   buildEditorPayload,
@@ -9,7 +8,7 @@ import {
 
 let reporter: ((message: string) => void) | undefined
 let seq = 0
-const session = `vscode-${randomUUID()}`
+const session = `vscode-${crypto.randomUUID()}`
 const TOKEN_SECRET = 'companionToken'
 const PORT_STATE = 'companionPort'
 const DEFAULT_PORT = 19388
