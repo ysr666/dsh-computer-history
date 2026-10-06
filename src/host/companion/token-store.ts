@@ -25,6 +25,10 @@ type Credential = {
   readonly createdAtMs: number
 }
 
+export interface CompanionPairingCheckpoint {
+  readonly credential?: Credential
+}
+
 /**
  * Per-companion pairing credentials (ADR 0007 / ADR 0009).
  *
@@ -52,6 +56,44 @@ export class CompanionTokenStore {
         createdAtMs: Number(row.created_at_ms),
       })
     }
+  }
+
+  /**
+   * Snapshot one credential so a larger cross-resource operation can compensate
+   * if publishing the cleartext handoff fails after rotation.
+   */
+  public checkpoint(kind: CompanionKind): CompanionPairingCheckpoint {
+    const credential = this.credentials.get(kind)
+    return credential
+      ? { credential: { ...credential } }
+      : {}
+  }
+
+  /**
+   * Restore a checkpoint in SQLite first and mirror it in memory only after the
+   * durable write succeeds.
+   */
+  public restore(
+    kind: CompanionKind,
+    checkpoint: CompanionPairingCheckpoint,
+  ): void {
+    const credential = checkpoint.credential
+    if (credential) {
+      this.db.prepare(`
+        INSERT INTO companion_pairing(kind, token_hash, created_at_ms)
+        VALUES (?, ?, ?)
+        ON CONFLICT(kind) DO UPDATE SET
+          token_hash = excluded.token_hash,
+          created_at_ms = excluded.created_at_ms
+      `).run(kind, credential.tokenHash, credential.createdAtMs)
+      this.credentials.set(kind, { ...credential })
+      return
+    }
+
+    this.db.prepare(
+      'DELETE FROM companion_pairing WHERE kind = ?',
+    ).run(kind)
+    this.credentials.delete(kind)
   }
 
   /** Create a credential for one companion kind, replacing only that kind. */
