@@ -23,6 +23,9 @@ const cli = process.env.DSH_CLI ?? 'dsh'
 const stamp = new Date().toISOString().replaceAll(/[:.]/g, '-')
 const artifacts = path.join(REPO, '.debug', 'e2e-chromium', `run-${stamp}`)
 mkdirSync(artifacts, { recursive: true })
+// The matrix prints one PASS/FAIL line per cell; collecting them is what makes a boundary run leave a
+// structured record instead of only a log. The other three commands write checks.json too.
+const evidence = []
 const log = (...a) => console.log(' ', ...a)
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 
@@ -78,7 +81,7 @@ try {
   }
 
   const jar = path.join(artifacts, 'cookies.txt')
-  spawnSync('curl', ['-s', '-c', jar, '-o', '/dev/null', `http://127.0.0.1:${web}/?token=${token}`])
+  spawnSync('curl', ['-s', '-c', jar, '-o', path.join(artifacts, 'bootstrap.html'), `http://127.0.0.1:${web}/?token=${token}`])
   const pairing = JSON.parse(spawnSync('curl', ['-s', '-b', jar, '-X', 'POST', `http://127.0.0.1:${web}/api/computer-history/pairing/rotate`], { encoding: 'utf8' }).stdout)
   // The matrix script wants a file whose one line is `cookie=<name>=<value>`.
   const cookieLine = readFileSync(jar, 'utf8').split('\n').filter(l => l.includes('dsh-auth'))
@@ -92,7 +95,10 @@ try {
     '--extension', path.join(REPO, 'dist/extension'), '--port', String(companion)], { encoding: 'utf8' })
   writeFileSync(path.join(artifacts, 'matrix.log'), `${matrix.stdout ?? ''}${matrix.stderr ?? ''}`)
   const lines = `${matrix.stdout ?? ''}`.split('\n').filter(l => /^(PASS|FAIL|extension id|.the control cell)/.test(l))
-  for (const line of lines) log(line.slice(0, 150))
+  for (const line of lines) {
+    log(line.slice(0, 150))
+    evidence.push({ line: line.slice(0, 200), ok: line.startsWith('PASS') })
+  }
 
   // Ask the Host why anything was refused: that is where `capture-not-owned` shows up by name.
   const state = JSON.parse(spawnSync('curl', ['-s', '-b', jar, `http://127.0.0.1:${web}/api/computer-history/state`], { encoding: 'utf8' }).stdout || '{}')
@@ -120,16 +126,36 @@ try {
   console.error(`e2e (Chromium) failed: ${error instanceof Error ? error.message : String(error)}`)
   process.exitCode = 1
 } finally {
-  if (host?.pid !== undefined) { try { process.kill(-host.pid, 'SIGTERM') } catch {} }
+  // Written on every exit path, including the boundary and the failure ones: a run that stops at a boundary is
+  // still a run whose evidence someone will want, and the other three commands write this file.
+  writeFileSync(path.join(artifacts, 'checks.json'), `${JSON.stringify(evidence, null, 2)}\n`)
+  if (host?.pid !== undefined) {
+    // Kill the group when there is one and the process when there is not, then check: the earlier version only
+    // tried the group and swallowed every error, so a Host that was not a group leader survived the run
+    // silently - measured 2026-10-06, two `--profile chromium` Hosts left behind by two failure-path runs.
+    try { process.kill(-host.pid, 'SIGTERM') } catch { /* not a group leader */ }
+    try { process.kill(host.pid, 'SIGTERM') } catch { /* already gone */ }
+  }
   await sleep(2500)
   // Browsers started by the matrix script: only those whose profile lives in the temp directory, checked by
   // prefix on the executable too - a substring test can match the shell that runs it. This sweep knows the
   // macOS paths only; elsewhere the matrix script removes the profile it created itself.
-  for (const line of spawnSync('ps', ['-eo', 'pid,command'], { encoding: 'utf8' }).stdout.split('\n')) {
-    if (/^\s*\d+\s+\/Applications\/Google Chrome\.app\//.test(line) && /\/var\/folders\/|\/tmp\//.test(line)) {
-      spawnSync('kill', ['-KILL', line.trim().split(/\s+/)[0]])
+  // `ps` and `kill` do not exist on Windows. Where they do, this sweep still does its job; where they do not,
+  // say so instead of implying the sweep ran (the matrix script removes the profile it created itself).
+  const listing = spawnSync('ps', ['-eo', 'pid,command'], { encoding: 'utf8' })
+  if (listing.error) {
+    console.log(`  (browser sweep skipped: no ps on this platform - ${listing.error.code ?? 'unavailable'})`)
+  } else {
+    for (const line of (listing.stdout ?? '').split('\n')) {
+      if (/^\s*\d+\s+\/Applications\/Google Chrome\.app\//.test(line) && /\/var\/folders\/|\/tmp\//.test(line)) {
+        try { process.kill(Number(line.trim().split(/\s+/)[0]), 'SIGKILL') } catch { /* already gone */ }
+      }
     }
   }
-  writeFileSync(path.join(artifacts, 'done.json'), `${JSON.stringify({ exit: process.exitCode ?? 0 }, null, 2)}\n`)
+  await sleep(1500)
+  // A cleanup that reports success while leaving a process behind is a claim, not a cleanup: say it out loud.
+  const survived = host?.pid !== undefined && spawnSync('ps', ['-p', String(host.pid)], { encoding: 'utf8' }).status === 0
+  writeFileSync(path.join(artifacts, 'done.json'), `${JSON.stringify({ exit: process.exitCode ?? 0, hostSurvived: survived }, null, 2)}\n`)
+  if (survived) console.error(`warning: the Host (pid ${host.pid}) outlived the run; done.json records hostSurvived: true`)
   rmSync(home, { recursive: true, force: true })
 }

@@ -3,6 +3,30 @@
 This document states what has been **measured**. Where a step has not been
 verified, it says so rather than describing the intention.
 
+> [!IMPORTANT]
+> **First public pre-release target: `v0.1.0-alpha.1` — not published yet.**
+>
+> The packaged Host path has been measured successfully, the public repository and brand
+> surface are in place, and the release workflow is ready to build a tagged artifact.
+> The remaining product blocker is the **client half of an installed bundle**: the Host API
+> starts, but the installed bundle's panel has not yet been observed in the interface.
+> Do not create the tag until that path is verified and the release preflight is green.
+
+## v0.1.0-alpha.1 readiness
+
+| Gate | Status |
+|---|---|
+| Public repository, security reporting, issue/PR templates | ✅ |
+| Timeline Orbit brand assets and social-preview asset | ✅ |
+| Package icon and localized plugin metadata included in the tarball | ✅ |
+| Host plugin install from a packed tarball | ✅ |
+| macOS native/package build gate | ✅ |
+| Shared collector protocol checks on macOS / Windows / Linux | ✅ |
+| Installed bundle's **client panel** appears and works | ⬜ blocker |
+| `pnpm verify:release:blockers` at release cut | ⬜ run at release cut |
+| Non-`-dev` package version + matching changelog section | ⬜ set only when cutting the release |
+
+
 ## What ships
 
 | artifact | command | status |
@@ -24,103 +48,7 @@ ln -sfn "$PWD" ~/.dsh/profiles/<profile>/node_modules/dsh-computer-history
 Verified: the entry reaches `[active]`. Every phase's runtime evidence was
 produced on this path.
 
-## A correction, owed to the earlier reading
-
-A previous version of this file said the packaged plugin "does not start" while a
-checkout install does. That was wrong, and the phase that found the error is the
-one to say so: a **freshly created package under a new name**, never loaded before,
-also came back without a fiber in the same Host session, and so did the checkout.
-What looked like a property of the tarball was the state of the running Host after
-many load/unload cycles - any newly created entry stops getting a fiber.
-
-Until that is understood, treat "it did not start" in any measurement here as
-suspicious of the environment first. The tarball's contents are still verified
-byte-for-byte; whether it starts is **unknown**, not known-bad.
-
-## Installing from the tarball: **not verified**
-
-```bash
-pnpm pack:plugin
-tar xzf dsh-computer-history-*.tgz \
-  -C ~/.dsh/profiles/<profile>/node_modules/dsh-computer-history --strip-components=1
-```
-
-Measured three ways - a bare copy, the package's peers provided beside it, and the
-package declared in the profile's `dependencies` and `bundles` - the loader entry
-comes back with `fiber.state = none`: created and never started. A checkout install
-at the same path is `[active]`, and the packaged `lib/` and manifest are
-byte-identical to the working tree.
-
-The most consistent explanation is that a **profile-declared bundle is assembled at
-Host startup**, while the runtime path that starts a plugin is the development one.
-That is a hypothesis with one supporting observation, not a verification.
-
-**Until it is verified, this document does not tell you to install from the
-tarball.** The artifact is complete; "the file is fine" is not "it runs".
-
-## Upgrading
-
-```bash
-git pull && pnpm install && pnpm verify     # the gate must be green before upgrading
-pnpm build
-# restart the Host, or reload the plugin entry
-```
-
-Migrations run on open with contiguous versions; `pnpm verify:migrations` proves
-the invariants and the frozen-v1 upgrade test asserts the latest version, so an
-upgrade from a v1 store is covered by that path.
-
-## Rolling back
-
-The store is a single SQLite file in the data directory. A rollback that crosses a
-migration is **not** just reverting the code: the schema is then newer than the
-code. Instead:
-
-1. stop the Host;
-2. copy the store file aside - it is the whole history;
-3. check out the older revision, `pnpm install && pnpm build`;
-4. open the Host with a fresh data directory, or restore a store file that matches
-   that revision.
-
-Deleting the store file is a complete and irreversible rollback of local history;
-the panel's **Delete all history** does the same from inside.
-
-## Removing it: verified
-
-Run on this machine, with the output that came back:
-
-```bash
-rm -f ~/.dsh/profiles/<profile>/node_modules/dsh-computer-history   # the junction
-rm -f ~/.dsh/computer-history                                       # the store symlink
-rm -f ~/.dsh/computer-history-editor.log                            # the editor companion's trace
-code --uninstall-extension dsh-local.dsh-computer-history-editor     # the editor extension
-# and remove the settings keys dshComputerHistory.* from the editor's settings.json
-```
-
-```text
-store symlink        gone
-junction             gone
-editor log           gone
-editor extension     0 remaining
-history file         176128 bytes, still there
-port 19388           still listening
-```
-
-Two of those lines are the interesting ones:
-
-- **The history is kept.** Removing the software is not the same as deleting the
-  record, and it must not be: the store file is the whole point of the product. It
-  stays where it is until the user deletes it (the panel's "Delete all history" does
-  that from inside, and `docs/release.md` does not do it for them).
-- **The port stays open until the Host restarts**, because the running plugin holds
-  it. Nothing is left on disk, and the listener disappears at the next start - which
-  is worth knowing rather than discovering.
-
-Nothing else was left behind: no profile `dependencies` or `bundles` entries (there
-were none to remove), no patch residue in any profile, and no stray files in the
-editor's extension directory.
-
-## Installing from the tarball: verified
+## Installing from the tarball: Host path verified; client panel still open
 
 ```bash
 npm pack                                        # dsh-computer-history-<version>.tgz
@@ -162,6 +90,10 @@ the interface on this Host yet, so the install is verified for the host plugin a
 panel. Until that is fixed, this document says so rather than claiming a complete install.
 
 ## Publishing
+
+Do not publish `v0.1.0-alpha.1` until the readiness table above has no product blocker.
+The version/changelog/tag changes are intentionally deferred until that point so a public
+branch cannot accidentally look release-ready before the installed client path is proven.
 
 Push a tag named `v` + the version in `package.json` (`.github/workflows/release.yml`). The workflow runs the
 same gate as `main`, builds the collector, packs, runs `pnpm verify:release`, and creates the GitHub release with
