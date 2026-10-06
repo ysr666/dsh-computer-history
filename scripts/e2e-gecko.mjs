@@ -41,8 +41,12 @@ if (built.status !== 0) process.exit(1)
 // browser another agent started in the same workspace - the independent verifier flagged exactly that.
 const profileDir = mkdtempSync(path.join(os.tmpdir(), 'dsh-gecko-profile-'))
 const log = path.join(artifacts, 'web-ext.log')
-const runner = spawn('npx', ['--yes', 'web-ext', 'run', '-s', 'dist/extension-firefox', `--firefox=${firefox}`,
-  `--firefox-profile=${profileDir}`, '--arg=-headless', '--no-reload'], {
+const webExtArgs = ['--yes', 'web-ext', 'run', '-s', 'dist/extension-firefox', `--firefox=${firefox}`,
+  `--firefox-profile=${profileDir}`, '--arg=-headless', '--no-reload']
+// `npx` is a .cmd shim on Windows, same measurement as runCmd above.
+const runner = spawn(...(process.platform === 'win32'
+  ? [process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', `"npx" ${webExtArgs.map(a => `"${a}"`).join(' ')}`]]
+  : ['npx', webExtArgs]), {
   stdio: ['ignore', 'pipe', 'pipe'],
   // Its own process group, so the whole tree goes down together: killing by name or by a before/after diff
   // leaves the browser's helper processes behind - measured, 8 of them survived the first version of this.

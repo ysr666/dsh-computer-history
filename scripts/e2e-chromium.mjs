@@ -16,6 +16,14 @@ import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+
+// Windows resolves `dsh`, `pnpm` and `npx` to .cmd shims, and Node refuses to spawn a .cmd without a shell.
+// Measured on the Windows machine 2026-10-06: `spawnSync('dsh', ...)` -> status null, error ENOENT;
+// `spawnSync('dsh.cmd', ...)` -> EINVAL; `cmd.exe /d /s /c` -> exit 0. Real executables (node, curl.exe, git, tar)
+// are spawned directly, exactly as before.
+const runCmd = (command, args, options) => process.platform === 'win32'
+  ? spawnSync(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', `"${command}" ${args.map(a => `"${a}"`).join(' ')}`], options)
+  : spawnSync(command, args, options)
 const allowBuildsOff = (workspace) => {
   try {
     if (!existsSync(workspace)) return false
@@ -49,15 +57,15 @@ let host
 
 try {
   const add = spec => {
-    let r = spawnSync(cli, ['plugin', '--profile', 'chromium', 'add', spec], { env, encoding: 'utf8' })
+    let r = runCmd(cli, ['plugin', '--profile', 'chromium', 'add', spec], { env, encoding: 'utf8' })
     if (r.status !== 0) {
       const workspace = path.join(home, 'profiles', 'chromium', 'pnpm-workspace.yaml')
       if (existsSync(workspace)) allowBuildsOff(workspace)
-      r = spawnSync(cli, ['plugin', '--profile', 'chromium', 'add', spec], { env, encoding: 'utf8' })
+      r = runCmd(cli, ['plugin', '--profile', 'chromium', 'add', spec], { env, encoding: 'utf8' })
     }
     return r
   }
-  const packed = spawnSync('pnpm', ['pack', '--pack-destination', home], { encoding: 'utf8' })
+  const packed = runCmd('pnpm', ['pack', '--pack-destination', home], { encoding: 'utf8' })
   const version = JSON.parse(readFileSync('package.json', 'utf8')).version
   const tarball = path.join(home, `dsh-computer-history-${version}.tgz`)
   const webApp = add('@deepseek-ai/dsh-web-app@0.2.0-rc.2')

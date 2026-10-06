@@ -17,6 +17,14 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import os from 'node:os'
 import path from 'node:path'
 
+// Windows resolves `dsh`, `pnpm` and `npx` to .cmd shims, and Node refuses to spawn a .cmd without a shell.
+// Measured on the Windows machine 2026-10-06: `spawnSync('dsh', ...)` -> status null, error ENOENT;
+// `spawnSync('dsh.cmd', ...)` -> EINVAL; `cmd.exe /d /s /c` -> exit 0. Real executables (node, curl.exe, git, tar)
+// are spawned directly, exactly as before.
+const runCmd = (command, args, options) => process.platform === 'win32'
+  ? spawnSync(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', `"${command}" ${args.map(a => `"${a}"`).join(' ')}`], options)
+  : spawnSync(command, args, options)
+
 const REPO = path.resolve(import.meta.dirname, '..')
 process.chdir(REPO)
 const cli = process.env.DSH_CLI ?? 'dsh'
@@ -59,16 +67,16 @@ let internalSteps = 0
 try {
   const add = spec => {
     userActions += 1
-    let r = spawnSync(cli, ['plugin', '--profile', 'baseline', 'add', spec], { env, encoding: 'utf8' })
+    let r = runCmd(cli, ['plugin', '--profile', 'baseline', 'add', spec], { env, encoding: 'utf8' })
     if (r.status !== 0) {
       const workspace = path.join(home, 'profiles', 'baseline', 'pnpm-workspace.yaml')
       if (existsSync(workspace)) allowBuildsOff(workspace)
-      r = spawnSync(cli, ['plugin', '--profile', 'baseline', 'add', spec], { env, encoding: 'utf8' })
+      r = runCmd(cli, ['plugin', '--profile', 'baseline', 'add', spec], { env, encoding: 'utf8' })
     }
     return r.status === 0
   }
   internalSteps += 1 // packing is a build/publish step, not something a user does
-  spawnSync('pnpm', ['pack', '--pack-destination', home])
+  runCmd('pnpm', ['pack', '--pack-destination', home])
   const version = JSON.parse(readFileSync('package.json', 'utf8')).version
   const installed = add('@deepseek-ai/dsh-web-app@0.2.0-rc.2') && add(path.join(home, `dsh-computer-history-${version}.tgz`))
   // The layer list only needs repairing after a half-failed install; a clean one gets it right (docs/development.md:126).

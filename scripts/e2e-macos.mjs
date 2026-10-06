@@ -46,8 +46,14 @@ const record = (name, ok, detail) => {
   checks.push({ name, ok, detail })
   console.log(`  ${ok ? '✓' : '✗'} ${name}: ${detail}`)
 }
+// `dsh` and `pnpm` are .cmd shims on Windows and Node refuses to spawn those without a shell; measured
+// 2026-10-06 on the Windows machine: direct spawn -> ENOENT, "<name>.cmd" -> EINVAL, cmd.exe /d /s /c -> exit 0.
+// On POSIX this is the same single spawnSync as before.
 const run = (command, args, options = {}) => {
-  const result = spawnSync(command, args, { encoding: 'utf8', ...options })
+  const shim = process.platform === 'win32' && ['dsh', 'pnpm', 'npx'].includes(command)
+  const result = shim
+    ? spawnSync(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', `"${command}" ${args.map(a => `"${a}"`).join(' ')}`], { encoding: 'utf8', ...options })
+    : spawnSync(command, args, { encoding: 'utf8', ...options })
   return { status: result.status ?? 1, out: `${result.stdout ?? ''}${result.stderr ?? ''}` }
 }
 
