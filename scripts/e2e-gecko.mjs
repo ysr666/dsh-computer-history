@@ -19,6 +19,7 @@ process.chdir(REPO)
 const stamp = new Date().toISOString().replaceAll(/[:.]/g, '-')
 const artifacts = path.join(REPO, '.debug', 'e2e-gecko', `run-${stamp}`)
 mkdirSync(artifacts, { recursive: true })
+
 const checks = []
 const record = (name, ok, detail) => {
   checks.push({ name, ok, detail })

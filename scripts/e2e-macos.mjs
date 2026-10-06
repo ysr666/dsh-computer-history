@@ -13,7 +13,7 @@
 // instead of asserting anything about it, so a reader can see exactly which part of the flow this run covered.
 import { spawn, spawnSync } from 'node:child_process'
 import { DatabaseSync } from 'node:sqlite'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
@@ -24,6 +24,22 @@ const cli = process.env.DSH_CLI ?? 'dsh'
 const stamp = new Date().toISOString().replaceAll(/[:.]/g, '-')
 const artifacts = path.join(REPO, '.debug', 'e2e-macos', `run-${stamp}`)
 mkdirSync(artifacts, { recursive: true })
+
+// The CLI's profile template ships `allowBuilds:` with placeholder values (`<pkg>: set this to true or false`), and
+// pnpm then refuses the install with ERR_PNPM_IGNORED_BUILDS for packages like koffi. Patching that used to be a
+// single literal replacement attempted only after a failure; measured 2026-08-06 against the current CLI on a
+// fresh profile, both attempts failed because the file only exists after the first attempt. This sets every
+// placeholder to false - a rule, not one literal - and runs before the first attempt and again after a failure.
+const allowBuildsOff = (workspace) => {
+  try {
+    if (!existsSync(workspace)) return false
+    const text = readFileSync(workspace, 'utf8')
+    const fixed = text.replace(/^(\s+[^\s:]+:\s*)set this to true or false\s*$/gm, '$1false')
+    if (fixed === text) return false
+    writeFileSync(workspace, fixed)
+    return true
+  } catch { return false }
+}
 
 const checks = []
 const record = (name, ok, detail) => {
@@ -66,16 +82,25 @@ try {
   // way a person would answer it in the UI; the retry then succeeds.
   const env = { ...process.env, DSH_HOME: home }
   for (const spec of ['@deepseek-ai/dsh-web-app@0.2.0-rc.2', tarball]) {
+    allowBuildsOff(path.join(home, 'profiles', profile, 'pnpm-workspace.yaml'))
     let added = run(cli, ['plugin', '--profile', profile, 'add', spec], { env })
     if (added.status !== 0) {
       const workspace = path.join(home, 'profiles', profile, 'pnpm-workspace.yaml')
       try {
-        writeFileSync(workspace, readFileSync(workspace, 'utf8').replaceAll(': set this to true or false', ': false'))
+        allowBuildsOff(workspace)
       } catch { /* the gate file may not be there; the retry reports it */ }
+      allowBuildsOff(path.join(home, 'profiles', profile, 'pnpm-workspace.yaml'))
       added = run(cli, ['plugin', '--profile', profile, 'add', spec], { env })
     }
     const label = spec === tarball ? 'install plugin' : 'install web app'
-    record(label, added.status === 0, added.status === 0 ? 'exit 0' : added.out.trim().slice(-160))
+    // Show the CLI's own diagnostics path and the tail of its pnpm log, not a 160-character truncation: when the
+    // install fails, the reason lives in that file and a truncated path is a dead end.
+    let why = added.out.trim()
+    const logPath = /(\/[^\s]*\.plugin-manager\/logs\/operation-[^\s]*\/pnpm\.log)/.exec(added.out)?.[1]
+    if (logPath && existsSync(logPath)) {
+      why = `${why.split('\n').slice(-2).join(' ')} | ${readFileSync(logPath, 'utf8').trim().split('\n').slice(-4).join(' ')}`
+    }
+    record(label, added.status === 0, added.status === 0 ? 'exit 0' : why.slice(0, 400))
     if (added.status !== 0) throw new Error(`${label} failed`)
   }
 

@@ -23,6 +23,22 @@ const cli = process.env.DSH_CLI ?? 'dsh'
 const stamp = new Date().toISOString().replaceAll(/[:.]/g, '-')
 const artifacts = path.join(REPO, '.debug', 'baseline', `run-${stamp}`)
 mkdirSync(artifacts, { recursive: true })
+// The CLI's profile template ships `allowBuilds:` with placeholder values (`<pkg>: set this to true or false`), and
+// pnpm then refuses the install with ERR_PNPM_IGNORED_BUILDS for packages like koffi. Patching that used to be a
+// single literal replacement attempted only after a failure; measured 2026-08-06 against the current CLI on a
+// fresh profile, both attempts failed because the file only exists after the first attempt. This sets every
+// placeholder to false - a rule, not one literal - and runs before the first attempt and again after a failure.
+const allowBuildsOff = (workspace) => {
+  try {
+    if (!existsSync(workspace)) return false
+    const text = readFileSync(workspace, 'utf8')
+    const fixed = text.replace(/^(\s+[^\s:]+:\s*)set this to true or false\s*$/gm, '$1false')
+    if (fixed === text) return false
+    writeFileSync(workspace, fixed)
+    return true
+  } catch { return false }
+}
+
 const rows = []
 const say = (name, value, note) => { rows.push({ name, value, note }); console.log(`  ${name.padEnd(26)} ${value}   ${note}`) }
 const sleep = ms => new Promise(r => setTimeout(r, ms))
@@ -46,7 +62,7 @@ try {
     let r = spawnSync(cli, ['plugin', '--profile', 'baseline', 'add', spec], { env, encoding: 'utf8' })
     if (r.status !== 0) {
       const workspace = path.join(home, 'profiles', 'baseline', 'pnpm-workspace.yaml')
-      if (existsSync(workspace)) writeFileSync(workspace, readFileSync(workspace, 'utf8').replaceAll(': set this to true or false', ': false'))
+      if (existsSync(workspace)) allowBuildsOff(workspace)
       r = spawnSync(cli, ['plugin', '--profile', 'baseline', 'add', spec], { env, encoding: 'utf8' })
     }
     return r.status === 0
