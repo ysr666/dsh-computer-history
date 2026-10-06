@@ -353,6 +353,14 @@ describe('local computer history backend', () => {
     expect(() => backend.semanticPreview({
       scopeKey: 'workspace:',
     })).toThrow(/unrecognised scope key/)
+    expect(
+      backend.redactionPreview({
+        scopeKey: 'app:com.microsoft.VSCode',
+      }).scopeKey,
+    ).toBe('app:com.microsoft.VSCode')
+    expect(() => backend.redactionPreview({
+      scopeKey: 'not-a-scope:com.microsoft.VSCode',
+    })).toThrow(/unrecognised scope key/)
     history.close()
   })
 
