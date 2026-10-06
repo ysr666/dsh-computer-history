@@ -20,22 +20,24 @@ import { applySettings } from './settings.js'
 import { installHistoryStyles } from './styles.js'
 import { createHistoryControlStore } from './store.js'
 
+type SidebarPanelIconOwnerProps = _sidebarClientTypes.SidebarPanelIconOwnerProps
+
 const PANEL_ID = 'computer-history' as MainPanelId
 
-function HistoryIcon(): React.ReactElement {
-  // Size and weight are matched to the platform icons beside it, measured, not guessed. The drawing sits in the
-  // middle of a 24 viewBox (its ink spans 16.0 x 13.6 there), so at 20px it showed only ~13px of ink and read
-  // smaller than its neighbours; cropping to `2 1 22 22` fixed that but then read too large and too heavy next to
-  // them - the platform icons are ~15px of ink at a ~1.2px stroke, and 20px with 1.9-wide strokes came out at
-  // ~15.5px and ~1.73px. 18px with 1.5/1.4/1.35 strokes lands at ~14.1px and ~1.22px. The frame keeps a margin
-  // because a stroke is painted outside the path it belongs to: `4.4 3 17.6 17.6` clipped the left of that stroke.
+function HistoryIcon({ size }: SidebarPanelIconOwnerProps): React.ReactElement {
+  // The platform tells the icon what size it wants - `SidebarPanelIconOwnerProps = { size, active }` - so this
+  // takes it instead of guessing. Guessing is what produced the two wrong versions: the row asked for its own
+  // square edge and this hardcoded 20, then 18, and each time it read too large or too small against the shipped
+  // icons beside it. The viewBox stays cropped to the drawing (its ink spans 16.0 x 13.6 inside a 24 box, so a
+  // 24-frame leaves it small); the frame keeps a margin because a stroke is painted outside the path it belongs
+  // to - `4.4 3 17.6 17.6` clipped the left of that stroke.
   return React.createElement(
     'svg',
     {
       'aria-hidden': true,
       viewBox: '2 1 22 22',
-      width: 18,
-      height: 18,
+      width: size,
+      height: size,
       fill: 'none',
     },
     React.createElement('path', {
