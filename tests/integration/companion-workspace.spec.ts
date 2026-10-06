@@ -8,6 +8,7 @@ import {
   type NativeObservation,
 } from '../../src/shared/index.js'
 import { IngestionService } from '../../src/host/ingestion/index.js'
+import { buildRedactionPreview } from '../../src/host/audit/preview.js'
 import { ObservationStore, openHistoryDatabase } from '../../src/host/store/index.js'
 import { EpisodeStore } from '../../src/host/store/index.js'
 
@@ -153,6 +154,70 @@ describe('a vouched workspace (ADR 0009)', () => {
 
     expect(await ingestion.ingest(message)).toBe(false)
     expect(new ObservationStore(history.db).count()).toBe(0)
+    history.close()
+  })
+
+  it('fails closed on a secure vouched workspace even without a file path', async () => {
+    const { root } = workspaceOnDisk()
+    const secureRoot = path.join(root, '.ssh')
+    mkdirSync(secureRoot, { recursive: true })
+    const { history, ingestion, now } = service(root)
+    const message: NativeObservation = {
+      v: 1,
+      type: 'observation',
+      collectorSession: 'editor-secure-workspace',
+      seq: 1,
+      observedAtMs: now,
+      app: { pid: 0, bundleId: 'com.microsoft.VSCode', name: 'Visual Studio Code' },
+      window: { title: 'Terminal' },
+      workspace: { root: secureRoot, title: '.ssh' },
+      privacy: { secure: false, protected: false },
+      source: { provider: 'companion', adapter: 'vscode' },
+    }
+
+    expect(await ingestion.ingest(message)).toBe(false)
+    expect(new ObservationStore(history.db).count()).toBe(0)
+    history.close()
+  })
+
+  it('shows an already-stored vouched workspace as excluded after that root is denied', async () => {
+    const { root } = workspaceOnDisk()
+    const { history, ingestion, now } = service(root)
+    const message: NativeObservation = {
+      v: 1,
+      type: 'observation',
+      collectorSession: 'editor-preview-workspace',
+      seq: 1,
+      observedAtMs: now,
+      app: { pid: 0, bundleId: 'com.microsoft.VSCode', name: 'Visual Studio Code' },
+      window: { title: 'Build output' },
+      workspace: { root, title: path.basename(root) },
+      privacy: { secure: false, protected: false },
+      source: { provider: 'companion', adapter: 'vscode' },
+    }
+    expect(await ingestion.ingest(message)).toBe(true)
+
+    const denied: PolicySnapshot = {
+      ...policy,
+      revision: 2,
+      rules: [...policy.rules, {
+        id: PolicyRuleId('deny-workspace-after-store'),
+        dimension: 'resource',
+        action: 'deny',
+        matcher: 'exact',
+        pattern: root,
+        builtIn: false,
+        createdAtMs: 2,
+        updatedAtMs: 2,
+      }],
+    }
+    const preview = buildRedactionPreview({
+      scopeKey: `workspace:${root}`,
+      policy: denied,
+      observations: new ObservationStore(history.db).listAll(),
+    })
+    expect(preview.excluded).toHaveLength(1)
+    expect(preview.excluded[0]?.reason).toContain('workspace root')
     history.close()
   })
 
