@@ -13,6 +13,15 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
+// cmd.exe does not parse the escaping Node applies to a quoted argument: measured 2026-10-06 on the Windows
+// machine, '"pnpm" "--version"' arrives as '\"pnpm\"' and is not recognised, while the unquoted command line
+// exits 0. So the line is assembled unquoted and only arguments that contain whitespace are quoted.
+const quoteForCmd = a => (/[\s"]/.test(String(a)) ? `"${a}"` : String(a))
+
+const runCmd = (command, args, options) => process.platform === 'win32'
+  ? spawnSync(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', [command, ...args].map(quoteForCmd).join(' ')], options)
+  : spawnSync(command, args, options)
+
 const REPO = path.resolve(import.meta.dirname, '..')
 process.chdir(REPO)
 
@@ -41,14 +50,6 @@ if (built.status !== 0) process.exit(1)
 // browser another agent started in the same workspace - the independent verifier flagged exactly that.
 const profileDir = mkdtempSync(path.join(os.tmpdir(), 'dsh-gecko-profile-'))
 const log = path.join(artifacts, 'web-ext.log')
-// cmd.exe does not parse the escaping Node applies to a quoted argument: measured 2026-10-06 on the Windows
-// machine, '"pnpm" "--version"' arrives as '\"pnpm\"' and is not recognised, while the unquoted command line
-// exits 0. So the line is assembled unquoted and only arguments that contain whitespace are quoted.
-const runCmd = (command, args, options) => process.platform === 'win32'
-  ? spawnSync(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', [command, ...args].map(quoteForCmd).join(' ')], options)
-  : spawnSync(command, args, options)
-
-const quoteForCmd = a => (/[\s"]/.test(String(a)) ? `"${a}"` : String(a))
 
 const webExtArgs = ['--yes', 'web-ext', 'run', '-s', 'dist/extension-firefox', `--firefox=${firefox}`,
   `--firefox-profile=${profileDir}`, '--arg=-headless', '--no-reload']
