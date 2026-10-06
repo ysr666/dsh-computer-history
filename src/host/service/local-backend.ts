@@ -78,6 +78,7 @@ function boundedLimit(
 export class LocalComputerHistoryBackend
 implements ComputerHistoryServiceContract {
   private readonly now: () => number
+  private currentRetention: RetentionSettings
   private acceptingOperations = true
   private activeOperations = 0
   private readonly idleWaiters: Array<() => void> = []
@@ -102,6 +103,11 @@ implements ComputerHistoryServiceContract {
     private readonly maintenance?: () => ComputerHistoryState['maintenance'],
   ) {
     this.now = config.now ?? Date.now
+    this.currentRetention = {
+      observationRetentionHours: config.observationRetentionHours,
+      episodeRetentionDays: config.episodeRetentionDays,
+      updatedAtMs: 0,
+    }
   }
 
   private acquireOperation(): () => void {
@@ -262,9 +268,9 @@ implements ComputerHistoryServiceContract {
       ...(this.release ? { release: this.release() } : {}),
       ...(maintenance === undefined ? {} : { maintenance }),
       observationRetentionHours:
-        this.config.observationRetentionHours,
+        this.currentRetention.observationRetentionHours,
       episodeRetentionDays:
-        this.config.episodeRetentionDays,
+        this.currentRetention.episodeRetentionDays,
       autoResume: this.config.autoResume,
     }
   }
@@ -434,14 +440,27 @@ implements ComputerHistoryServiceContract {
     if (!this.semanticOptIns) {
       throw new Error('semantic summaries are unavailable')
     }
-    const revoked = this.semanticOptIns.revoke(parseScopeKey(request.scopeKey))
-    const purged = this.semanticOptIns.purge(parseScopeKey(request.scopeKey))
-    // Revoking is an instruction to forget, so the local record of what left
-    // goes too (ADR 0010). The remote side cannot be recalled, and the panel
-    // says so rather than letting this number imply otherwise.
-    const forgotten = new RemoteSendStore(this.requireDb())
-      .deleteForScope(request.scopeKey)
-    return { revoked, purged, forgotten }
+    const db = this.requireDb()
+    if (db.isTransaction) {
+      throw new Error('semantic revocation must own the outer transaction')
+    }
+    const scope = parseScopeKey(request.scopeKey)
+    db.exec('BEGIN IMMEDIATE')
+    try {
+      const revoked = this.semanticOptIns.revoke(scope)
+      const purged = this.semanticOptIns.purge(scope)
+      // Revoking is an instruction to forget, so the local record of what left
+      // goes too (ADR 0010). These three writes are one user action: a failure
+      // after the permission row is removed must roll the whole action back
+      // rather than leave model output or send audit rows behind.
+      const forgotten = new RemoteSendStore(db)
+        .deleteForScope(request.scopeKey)
+      db.exec('COMMIT')
+      return { revoked, purged, forgotten }
+    } catch (error) {
+      if (db.isTransaction) db.exec('ROLLBACK')
+      throw error
+    }
   }
 
 
@@ -499,15 +518,22 @@ implements ComputerHistoryServiceContract {
   }
 
   public retention(): RetentionSettings {
-    return new RetentionSettingsStore(this.requireDb()).get()
+    const retention = new RetentionSettingsStore(this.requireDb()).get()
+    this.currentRetention = retention
+    return retention
   }
 
   public setRetention(input: {
     readonly observationRetentionHours: number
     readonly episodeRetentionDays: number
   }): RetentionSettings {
-    return new RetentionSettingsStore(this.requireDb())
+    const retention = new RetentionSettingsStore(this.requireDb())
       .set(input, this.now())
+    // /state is polled independently from /retention. Keep the runtime snapshot
+    // in step immediately so a successful save is not overwritten two seconds
+    // later by the startup values.
+    this.currentRetention = retention
+    return retention
   }
 
   public listPolicyRules(): readonly PolicyRule[] {
