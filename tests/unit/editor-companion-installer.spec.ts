@@ -80,6 +80,48 @@ describe('EditorCompanionInstaller', () => {
     expect(child.resolveExecutable).not.toHaveBeenCalled()
   })
 
+  it('recovers when the VS Code CLI appears after an earlier unavailable probe', async () => {
+    let available = false
+    const resolveExecutable = vi.fn(async (command: string) =>
+      command === 'code' && available ? '/resolved/code' : undefined)
+    const spawn = vi.fn(() => ({
+      done: Promise.resolve({ exitCode: 0, signal: null }),
+      collected: {
+        stdout: {
+          readFrom: () => ({
+            text: '',
+            nextOffset: 0,
+            lossy: false,
+          }),
+        },
+      },
+    }))
+    const installer = new EditorCompanionInstaller({
+      subprocess: { resolveExecutable, spawn } as never,
+      cwd: '/tmp',
+      vsixPath: '/tmp/editor.vsix',
+      platform: 'darwin',
+      exists: candidate => candidate === '/tmp/editor.vsix',
+      homeDirectory: '/Users/tester',
+    })
+
+    await expect(installer.capability()).resolves.toEqual({
+      available: false,
+      installed: false,
+      reason: 'code-cli-unavailable',
+    })
+    expect(resolveExecutable).toHaveBeenCalledTimes(1)
+    expect(spawn).not.toHaveBeenCalled()
+
+    available = true
+    await expect(installer.capability()).resolves.toEqual({
+      available: true,
+      installed: false,
+    })
+    expect(resolveExecutable).toHaveBeenCalledTimes(2)
+    expect(spawn).toHaveBeenCalledTimes(1)
+  })
+
   it('detects the installed extension through the fixed VS Code CLI query', async () => {
     const child = runtime({
       listed: `${EDITOR_COMPANION_EXTENSION_ID}@0.1.0\nother.extension@1.0.0\n`,
