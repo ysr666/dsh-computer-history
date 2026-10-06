@@ -144,3 +144,77 @@ describe('a collector that never says hello', () => {
   })
 
 })
+
+/**
+ * The Host on Windows spawned a collector that never spoke, and the state could not say whether a byte had arrived.
+ * These three cases are the three worlds that used to share one name.
+ */
+describe('a collector that says nothing, and what the manager saw', () => {
+  function managerWith(handle: SubprocessHandle, helloTimeoutMs: number) {
+    const ctx = { subprocess: { spawn: () => handle } } as unknown as Context
+    return new CollectorManager(ctx, {
+      executable: '/collector',
+      cwd: '/tmp',
+      helloTimeoutMs,
+      onMessage: () => {},
+      onUnexpectedExit: () => {},
+    })
+  }
+
+  it('names a missing stdin rather than only throwing it', () => {
+    const handle = {
+      stdin: undefined,
+      stdout: new PassThrough(),
+      stderr: undefined,
+      control: undefined,
+      collected: {},
+      done: new Promise(() => {}),
+      terminate() {},
+      async waitForExit() { return true },
+    } as unknown as SubprocessHandle
+    const manager = managerWith(handle, 5000)
+    expect(() => manager.start()).toThrow(/piped stdio/)
+    expect(manager.snapshot().state?.state).toBe('degraded')
+    expect(manager.snapshot().state?.reason).toBe('collector-stdio-missing')
+  })
+
+  it('says the collector spoke without a hello when bytes arrived but nothing parsed', async () => {
+    const stdout = new PassThrough()
+    const handle: SubprocessHandle = {
+      stdin: new PassThrough(),
+      stdout,
+      stderr: undefined,
+      control: undefined,
+      collected: {},
+      done: new Promise(() => {}),
+      terminate() {},
+      async waitForExit() { return true },
+    }
+    const manager = managerWith(handle, 120)
+    manager.start()
+    stdout.write('not a protocol line at all')
+    await new Promise(resolve => setTimeout(resolve, 400))
+    const state = manager.snapshot().state
+    expect(state?.state).toBe('degraded')
+    expect(state?.reason).toBe('collector-spoke-without-hello')
+    await manager.stop('plugin-dispose')
+  })
+
+  it('keeps hello-timeout for a collector that said nothing at all', async () => {
+    const handle: SubprocessHandle = {
+      stdin: new PassThrough(),
+      stdout: new PassThrough(),
+      stderr: undefined,
+      control: undefined,
+      collected: {},
+      done: new Promise(() => {}),
+      terminate() {},
+      async waitForExit() { return true },
+    }
+    const manager = managerWith(handle, 120)
+    manager.start()
+    await new Promise(resolve => setTimeout(resolve, 400))
+    expect(manager.snapshot().state?.reason).toBe('hello-timeout')
+    await manager.stop('plugin-dispose')
+  })
+})
