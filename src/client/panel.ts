@@ -574,7 +574,22 @@ export function createHistoryPage({
                   : null,
               )
             : state?.reason
-              ? React.createElement('p', { className: 'ch-muted' }, reasonText(t, state.reason))
+              ? React.createElement(
+                  React.Fragment, null,
+                  React.createElement('p', { className: 'ch-muted' }, reasonText(t, state.reason)),
+                  // Naming it is only half of it. This reason exists because the first-run consent never wrote an
+                  // allow rule, so the notice offers that same consent again - the action the consent itself runs
+                  // (`startRecording`), through the same `runAction` wrapper, with no second way to write a policy.
+                  // Measured 2026-10-06: the state said `running` while nothing was recorded, and the only thing
+                  // the panel could do about it was print a line of grey text.
+                  state.reason === 'no-apps-allowed' && preset
+                    ? React.createElement('button', {
+                        type: 'button',
+                        className: 'ch-button',
+                        onClick: () => { runAction(startRecording) },
+                      }, t('allowPresetApps'))
+                    : null,
+                )
               : null,
         )
       : null
