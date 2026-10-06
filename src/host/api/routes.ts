@@ -15,11 +15,7 @@ import {
   bundledEditorCompanionVsix,
   EditorCompanionInstaller,
 } from '../companion/editor-install.js'
-import {
-  rotateAndStageEditorCompanionBootstrap,
-  stageEditorCompanionBootstrap,
-} from '../companion/editor-bootstrap.js'
-import type { CompanionTokenStore } from '../companion/token-store.js'
+import { stageEditorCompanionBootstrap } from '../companion/editor-bootstrap.js'
 import {
   ResumeOpenLaunchError,
   ResumeOpenRequestError,
@@ -124,7 +120,9 @@ function requestFailure(error: unknown): Response {
 
 export function registerHistoryApi(
   ctx: Context,
-  options: { readonly companionTokens?: CompanionTokenStore } = {},
+  options: {
+    readonly configureEditorCompanion?: (port: number) => void
+  } = {},
 ): void {
   const history = computerHistoryService(ctx)
   const resumeOpener = new ResumeResourceOpener({
@@ -569,15 +567,13 @@ export function registerHistoryApi(
             reason: 'pairing-unavailable',
           })
         }
-        if (options.companionTokens) {
-          rotateAndStageEditorCompanionBootstrap({
-            tokens: options.companionTokens,
-            port: current.port,
-          })
+        if (options.configureEditorCompanion) {
+          // Production routes publication back through the backend operation
+          // tracker. If teardown began while the editor installer was running,
+          // this fails before any pairing row is touched; if publication already
+          // began, backend.drain() waits for the compensatable rotation to end.
+          options.configureEditorCompanion(current.port)
         } else {
-          // Unit/embed callers that do not own the token store retain the old
-          // service-only path. Production passes the store from plugin.ts so a
-          // filesystem staging failure can compensate the rotation.
           const pairing = history.rotatePairing('editor')
           stageEditorCompanionBootstrap({
             port: current.port,
