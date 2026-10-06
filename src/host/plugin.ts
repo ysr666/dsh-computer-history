@@ -18,6 +18,7 @@ import {
 } from '../shared/index.js'
 import { registerHistoryApi } from './api/index.js'
 import { CompanionIntake } from './companion/intake.js'
+import { stageEditorCompanionBootstrap } from './companion/editor-bootstrap.js'
 import { companionObservation } from './companion/observation.js'
 import { CompanionTokenStore } from './companion/token-store.js'
 import { SemanticOptInStore } from './semantic/opt-in.js'
