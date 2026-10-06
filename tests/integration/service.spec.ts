@@ -291,6 +291,63 @@ describe('local computer history backend', () => {
     history.close()
   })
 
+  it('refreshes /state when another Host changes shared retention', () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'dsh-ch-service-multi-retention-'))
+    roots.push(root)
+    const dataDirectory = path.join(root, 'history')
+    const first = openHistoryDatabase({ dataDirectory, nowMs: 1 })
+    const second = openHistoryDatabase({ dataDirectory, nowMs: 1 })
+    const firstPolicies = new PolicyStore(first.db)
+    firstPolicies.ensureInitial(1)
+    const secondPolicies = new PolicyStore(second.db)
+
+    const hostA = new LocalComputerHistoryBackend(
+      new EpisodeStore(first.db),
+      firstPolicies,
+      new DeletionService(first.db),
+      new FakeCapture(),
+      {
+        observationRetentionHours: 24,
+        episodeRetentionDays: 30,
+        autoResume: false,
+      },
+      undefined,
+      undefined,
+      first.db,
+    )
+    const hostB = new LocalComputerHistoryBackend(
+      new EpisodeStore(second.db),
+      secondPolicies,
+      new DeletionService(second.db),
+      new FakeCapture(),
+      {
+        observationRetentionHours: 24,
+        episodeRetentionDays: 30,
+        autoResume: false,
+        now: () => 4_000,
+      },
+      undefined,
+      undefined,
+      second.db,
+    )
+
+    expect(hostA.getState()).toMatchObject({
+      observationRetentionHours: 24,
+      episodeRetentionDays: 30,
+    })
+    hostB.setRetention({
+      observationRetentionHours: 6,
+      episodeRetentionDays: 14,
+    })
+    expect(hostA.getState()).toMatchObject({
+      observationRetentionHours: 6,
+      episodeRetentionDays: 14,
+    })
+
+    first.close()
+    second.close()
+  })
+
   it('keeps /state retention in step with a successful retention change', () => {
     const history = openTempDatabase()
     const policies = new PolicyStore(history.db)
