@@ -74,6 +74,7 @@ describe('no view renders a raw diagnostic as copy', () => {
     // `reasonText` maps the known codes; a literal code in a view means one path bypassed it.
     const codes = [
       'capture-owned-by-another-host',
+      'no-apps-allowed',
       'computer history capture is disabled',
       'computer history capture is unavailable on this DSH Host',
     ]
