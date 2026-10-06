@@ -7,6 +7,7 @@ const state: ComputerHistoryState = {
   capture: 'running',
   accessibilityTrusted: true,
   reason: 'diagnostic-reason',
+  maintenance: { retention: 'failed', lastFailureAtMs: 456 },
   refusedByReason: { protected: 2 },
   release: {
     version: '0.1.0-dev.0',
@@ -41,7 +42,12 @@ describe('client diagnostic report', () => {
       generatedAtMs: 999,
       plugin: { version: '0.1.0-dev.0', builtAtMs: 123, stale: true },
       capture: { enabled: true, state: 'running', accessibilityTrusted: true },
-      retention: { observationHours: 24, episodeDays: 30 },
+      retention: {
+        observationHours: 24,
+        episodeDays: 30,
+        maintenance: 'failed',
+        lastMaintenanceFailureAtMs: 456,
+      },
       collector: { version: '1.2.3', arch: 'arm64' },
       companions: {
         browser: { listening: true, paired: true, lastSeenAtMs: 20 },
