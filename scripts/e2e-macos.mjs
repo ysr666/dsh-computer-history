@@ -29,6 +29,13 @@ const killTree = pid => {
   try { process.kill(-pid, 'SIGTERM') } catch { try { process.kill(pid, 'SIGTERM') } catch { /* already gone */ } }
 }
 
+// The plugin carries a collector for macOS only. On a machine without one (Windows, or a checkout that has not
+// built it) the Host starts, reports collector-exited and stops at a boundary - honest, but it exercises less than
+// the machine can. Set COLLECTOR_EXECUTABLE to the binary and the runs use it.
+const collectorLine = process.env.COLLECTOR_EXECUTABLE
+  ? `    collectorExecutable: ${process.env.COLLECTOR_EXECUTABLE}\n`
+  : ''
+
 const REPO = path.resolve(import.meta.dirname, '..')
 process.chdir(REPO)
 
@@ -155,7 +162,7 @@ try {
     enabled: true
     dataDirectory: ${path.join(home, 'computer-history')}
     companionPort: ${companionPort}
-    collectorRestart: false
+${collectorLine}    collectorRestart: false
 `)
 
   // 4. Boot and wait for the web port.

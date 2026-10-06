@@ -54,6 +54,13 @@ const runCmd = (command, args, options) => process.platform === 'win32'
   ? spawnSync(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', [command, ...args].map(quoteForCmd).join(' ')], { ...options, windowsVerbatimArguments: true })
   : spawnSync(command, args, options)
 
+// The plugin carries a collector for macOS only. On a machine without one (Windows, or a checkout that has not
+// built it) the Host starts, reports collector-exited and stops at a boundary - honest, but it exercises less than
+// the machine can. Set COLLECTOR_EXECUTABLE to the binary and the runs use it.
+const collectorLine = process.env.COLLECTOR_EXECUTABLE
+  ? `    collectorExecutable: ${process.env.COLLECTOR_EXECUTABLE}\n`
+  : ''
+
 const REPO = path.resolve(import.meta.dirname, '..')
 process.chdir(REPO)
 const cli = process.env.DSH_CLI ?? 'dsh'
@@ -121,7 +128,7 @@ try {
     manifest.dsh = { ...manifest.dsh, profile: { bundles: [...new Set([...(manifest.dsh?.profile?.bundles ?? []), ...Object.keys(manifest.dependencies ?? {})])] } }
     writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
     writeFileSync(path.join(home, 'profiles', 'editor', 'cordis.patch.yml'),
-      `- id: computer-history\n  config:\n    enabled: true\n    dataDirectory: ${path.join(home, 'computer-history')}\n    companionPort: ${companion}\n    collectorRestart: false\n`)
+      `- id: computer-history\n  config:\n    enabled: true\n    dataDirectory: ${path.join(home, 'computer-history')}\n    companionPort: ${companion}\n${collectorLine}    collectorRestart: false\n`)
   }
 
   host = spawnCmd(cli, ['--profile', 'editor', '--port', String(web), '--no-open'], { env: hostEnv, cwd: os.tmpdir(), stdio: ['ignore', 'pipe', 'pipe'], detached: true })
