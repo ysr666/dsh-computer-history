@@ -38,6 +38,14 @@ const collectorLine = process.env.COLLECTOR_EXECUTABLE
   : ''
 const collectorRequired = Boolean(process.env.COLLECTOR_EXECUTABLE)
 const diagnosticTimeline = process.env.DSH_E2E_DIAGNOSTIC_TIMELINE === '1'
+const explicitAllowBundles = (process.env.DSH_E2E_ALLOW_BUNDLES ?? '')
+  .split(',')
+  .map(value => value.trim())
+  .filter(Boolean)
+const captureOptIn = process.env.DSH_E2E_ALLOW_PRESET === '1' || explicitAllowBundles.length > 0
+const expectActivity = process.env.DSH_E2E_EXPECT_ACTIVITY === '1'
+const expectedProvider = process.env.DSH_E2E_EXPECT_PROVIDER?.trim() || undefined
+const activityTimeoutMs = Math.max(1_000, Number(process.env.DSH_E2E_ACTIVITY_TIMEOUT_MS ?? 20_000))
 
 const REPO = path.resolve(import.meta.dirname, '..')
 process.chdir(REPO)
@@ -108,7 +116,13 @@ const companionPort = webPort + 1
 let host
 
 try {
-  // 1. Pack the plugin the way it is released, into a temporary directory.
+  // 1. Pack the plugin the way it is released, into a temporary directory. The editor companion is an
+  // intentionally independent pnpm project with its own lockfile and build-script policy; the release workflow
+  // installs it before `pnpm pack`, so this one-command harness must do the same on a clean clone.
+  const editorDeps = run('pnpm', ['install', '--frozen-lockfile'], { cwd: path.join(REPO, 'extension-editor') })
+  record('install editor build deps', editorDeps.status === 0, editorDeps.status === 0 ? 'exit 0' : editorDeps.out.trim().slice(-240))
+  if (editorDeps.status !== 0) throw new Error('editor build dependency install failed')
+
   rmSync(path.join(REPO, 'e2e-pack'), { recursive: true, force: true })
   mkdirSync(path.join(REPO, 'e2e-pack'), { recursive: true })
   const packed = run('pnpm', ['pack', '--pack-destination', path.join(REPO, 'e2e-pack')])
@@ -196,13 +210,15 @@ ${collectorLine}    collectorRestart: false
   // Host allows nothing (its policy is include-only with no allow rule, because the first-run consent only runs in
   // a real installation), so a run that generates real desktop activity still records zero rows: measured on
   // Windows 2026-10-06 with thirteen real windows open and an empty store. Correct behaviour, useless capture test.
-  if (process.env.DSH_E2E_ALLOW_PRESET === '1') {
+  if (captureOptIn) {
     let firstRead = {}
     try { firstRead = JSON.parse(run('curl', ['-s', '-b', jar, `${api}/state`]).out) } catch { /* recorded below */ }
-    const presets = firstRead.firstRunPreset?.bundles ?? []
+    const allowedBundles = explicitAllowBundles.length > 0
+      ? explicitAllowBundles
+      : (firstRead.firstRunPreset?.bundles ?? [])
     const nowMs = Date.now()
-    const rules = presets.map(bundle => ({
-      id: `preset:${bundle}`,
+    const rules = allowedBundles.map(bundle => ({
+      id: `e2e:${bundle}`,
       dimension: 'app',
       action: 'allow',
       matcher: 'exact',
@@ -218,9 +234,9 @@ ${collectorLine}    collectorRestart: false
     let echoed = {}
     try { echoed = JSON.parse(written) } catch { /* recorded below */ }
     record(
-      'allow preset (opt-in)',
+      explicitAllowBundles.length > 0 ? 'allow explicit bundles (opt-in)' : 'allow preset (opt-in)',
       rules.length > 0 && Array.isArray(echoed.rules) && echoed.rules.length >= rules.length,
-      `${rules.length} preset bundles -> revision ${echoed.revision ?? '?'} with ${echoed.rules?.length ?? 0} rules`,
+      `${rules.length} allowed bundles -> revision ${echoed.revision ?? '?'} with ${echoed.rules?.length ?? 0} rules`,
     )
   }
 
@@ -295,21 +311,51 @@ ${collectorLine}    collectorRestart: false
   }
   record('store opens', counts.status === 0, counts.status === 0 ? `episodes/observations = ${counts.out.trim().split('|').join('|')}` : counts.out.slice(-120))
 
-  // Read the store again at the end of a successful opt-in run. This is the capture evidence: the collector has
-  // settled and the caller has had the whole run window to generate desktop activity. It is deliberately reported,
-  // not asserted, because an idle desktop is a valid run.
-  if (process.env.DSH_E2E_ALLOW_PRESET === '1') {
-    let after = { e: '?', o: '?' }
-    try {
-      const store = new DatabaseSync(path.join(home, 'computer-history', 'history.sqlite'), { readOnly: true })
-      after = store.prepare('select (select count(*) from episodes) as e, (select count(*) from observations) as o').get()
-      store.close()
-    } catch { /* recorded as unknown */ }
+  // A normal opt-in run merely reports whatever activity happened. A cross-platform live run can opt into the
+  // stricter contract with DSH_E2E_EXPECT_ACTIVITY=1: then a real observation and a materialized Episode must
+  // reach the throwaway store within the bound. This is what turns collector `running` into end-to-end evidence.
+  if (captureOptIn) {
+    let after = { e: 0, o: 0 }
+    let latest = undefined
+    let recent = []
+    const activityDeadline = Date.now() + activityTimeoutMs
+    do {
+      try {
+        const store = new DatabaseSync(db, { readOnly: true })
+        after = store.prepare('select (select count(*) from episodes) as e, (select count(*) from observations) as o').get()
+        latest = store.prepare('select bundle_id, window_title, source_provider, source_adapter from observations order by id desc limit 1').get()
+        store.close()
+      } catch { /* recorded below */ }
+      try {
+        const parsed = JSON.parse(run('curl', ['-s', '-b', jar, `${api}/recent?limit=10`]).out)
+        recent = Array.isArray(parsed) ? parsed : []
+      } catch { /* recorded below */ }
+      if (!expectActivity || (Number(after.o) > 0 && Number(after.e) > 0 && recent.length > 0)) break
+      // oxlint-disable-next-line no-await-in-loop -- polling must observe the next committed Host state
+      await new Promise(resolve => setTimeout(resolve, 1_000))
+    } while (Date.now() < activityDeadline)
+
     record(
-      'store after the settle window (reported, not asserted)',
-      true,
-      `episodes/observations = ${after.e}|${after.o}`,
+      expectActivity ? 'activity reaches store' : 'store after the settle window (reported, not asserted)',
+      expectActivity ? Number(after.o) > 0 : true,
+      `episodes/observations = ${after.e}|${after.o}${latest ? ` latest=${latest.bundle_id}/${latest.source_provider}/${latest.source_adapter}` : ''}`,
     )
+    if (expectActivity) {
+      record(
+        'recent episode materializes',
+        Number(after.e) > 0 && recent.length > 0,
+        recent.length > 0
+          ? `${recent.length} row(s), first=${recent[0]?.id ?? '(no id)'}`
+          : `no /recent row within ${activityTimeoutMs}ms`,
+      )
+      if (expectedProvider) {
+        record(
+          'activity provenance',
+          latest?.source_provider === expectedProvider,
+          `expected=${expectedProvider} stored=${latest?.source_provider ?? '(none)'}`,
+        )
+      }
+    }
   }
 } catch (error) {
   record('run', false, error instanceof Error ? error.message : String(error))

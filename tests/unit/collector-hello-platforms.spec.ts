@@ -42,9 +42,14 @@ describe('the hello handshake', () => {
     expect(() => parseCollectorLine(line)).toThrow(/platform mismatch/)
   })
 
-  it('accepts the lines a Linux collector really sends', () => {
+  it('accepts the lines a Linux collector really sends and preserves its provenance', () => {
     for (const line of LINUX_LINES) {
       expect(() => parseCollectorLine(line), line.slice(0, 60)).not.toThrow()
+    }
+    const observation = parseCollectorLine(LINUX_LINES[3]!)
+    expect(observation.type).toBe('observation')
+    if (observation.type === 'observation') {
+      expect(observation.source.provider).toBe('at-spi')
     }
   })
 })
