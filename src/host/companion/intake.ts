@@ -145,6 +145,9 @@ export class CompanionIntake {
 
   private server: Server | undefined
   private boundPort: number | undefined
+  private acceptingDeliveries = false
+  private readonly activeDeliveries = new Set<Promise<unknown>>()
+  private stopPromise: Promise<void> | undefined
   private readonly hits = new Map<string, number[]>()
   private readonly maxBody: number
   private readonly rateLimit: number
@@ -168,6 +171,8 @@ export class CompanionIntake {
 
   /** Resolves with the bound port; rejects when the port is unavailable. */
   public start(): Promise<number> {
+    this.acceptingDeliveries = true
+    this.stopPromise = undefined
     return new Promise((resolve, reject) => {
       const server = createServer((request, response) => {
         void this.handle(request, response).catch(() => {
@@ -206,14 +211,34 @@ export class CompanionIntake {
     })
   }
 
-  public async stop(): Promise<void> {
+  public stop(): Promise<void> {
+    if (this.stopPromise) return this.stopPromise
+
+    this.acceptingDeliveries = false
     const server = this.server
     this.server = undefined
     this.boundPort = undefined
-    if (!server) return
-    await new Promise<void>(resolve => {
-      server.closeAllConnections()
-      server.close(() => resolve())
+
+    const stopping = (async () => {
+      if (server) {
+        await new Promise<void>(resolve => {
+          server.closeAllConnections()
+          server.close(() => resolve())
+        })
+      }
+
+      // close()/closeAllConnections() only describe sockets. A request handler
+      // can still be awaiting its async delivery after the socket disappears.
+      // No new delivery can enter once acceptingDeliveries is false, so this
+      // snapshot is the complete set that can still touch ingestion/SQLite.
+      if (this.activeDeliveries.size > 0) {
+        await Promise.allSettled([...this.activeDeliveries])
+      }
+    })()
+
+    this.stopPromise = stopping
+    return stopping.finally(() => {
+      if (this.stopPromise === stopping) this.stopPromise = undefined
     })
   }
 
@@ -312,7 +337,18 @@ export class CompanionIntake {
       return this.send(response, 403, { error: 'incognito tabs are never reported' })
     }
 
-    const delivery = await this.options.deliver(payload)
+    if (!this.acceptingDeliveries) {
+      return this.send(response, 503, { error: 'companion intake is stopping' })
+    }
+
+    const deliveryPromise = Promise.resolve(this.options.deliver(payload))
+    this.activeDeliveries.add(deliveryPromise)
+    let delivery: CompanionDelivery | boolean
+    try {
+      delivery = await deliveryPromise
+    } finally {
+      this.activeDeliveries.delete(deliveryPromise)
+    }
     const stored = typeof delivery === 'boolean' ? delivery : delivery.stored
     const reason = typeof delivery === 'boolean' ? undefined : delivery.reason
     return this.send(response, stored ? 201 : 202, {
