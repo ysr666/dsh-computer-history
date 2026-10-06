@@ -36,11 +36,16 @@ function HistoryIcon({ size }: SidebarPanelIconOwnerProps): React.ReactElement {
   // its centre is (11.57, 10.96) while the frame sat on (12.78, 11.50) - about 1.1px left of centre at a 20px
   // icon, which is what the owner kept seeing. The frame keeps a margin because a stroke is painted outside the
   // path it belongs to: `4.4 3 17.6 17.6` clipped the left of that stroke.
+  //
+  // The frame then sits 0.45 units left of that measured centre on purpose. The bbox is even, but the drawing is
+  // not: the ring and the hands carry more mass than the three dots on the right, so a centred bbox still reads
+  // left-heavy - the owner saw it twice, and agreed to the deliberate nudge. 0.45 units is ~0.4px at a 20px icon
+  // and scales with whatever size the row asks for, so it stays a nudge at every size.
   return React.createElement(
     'svg',
     {
       'aria-hidden': true,
-      viewBox: '0.57 -0.04 22 22',
+      viewBox: '0.12 -0.04 22 22',
       width: size,
       height: size,
       fill: 'none',
