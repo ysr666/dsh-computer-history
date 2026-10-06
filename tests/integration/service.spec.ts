@@ -18,6 +18,7 @@ import {
   LocalComputerHistoryBackend,
   type CaptureController,
 } from '../../src/host/service/index.js'
+import { exportHistory } from '../../src/host/audit/export.js'
 import { DeletionService } from '../../src/host/retention/index.js'
 import {
   EpisodeStore,
