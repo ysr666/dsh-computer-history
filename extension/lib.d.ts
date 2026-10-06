@@ -38,7 +38,7 @@ export function sendObservation(
   fetchImpl: typeof fetch,
   config: CompanionConfig,
   payload: CompanionExtensionPayload,
-): Promise<number>
+): Promise<{ readonly status: number; readonly stored?: boolean; readonly reason?: string }>
 export function checkPairing(
   fetchImpl: typeof fetch,
   config: CompanionConfig,
