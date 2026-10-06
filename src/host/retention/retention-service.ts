@@ -1,10 +1,10 @@
 import type { DatabaseSync } from 'node:sqlite'
 import { RETENTION_BOUNDS } from '../../shared/index.js'
+import { DeletionLogStore } from '../store/index.js'
+import { DeletionService } from './deletion.js'
 
 const MAX_OBSERVATION_RETENTION_MS =
   RETENTION_BOUNDS.observationRetentionHours.max * 3_600_000
-import { DeletionLogStore } from '../store/index.js'
-import { DeletionService } from './deletion.js'
 
 export interface RetentionSweepResult {
   readonly observationsDeleted: number
