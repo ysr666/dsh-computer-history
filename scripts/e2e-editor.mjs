@@ -32,7 +32,7 @@ const killTree = pid => {
 // Same measurement as runCmd: the Host is started with `spawn`, and `dsh` is a .cmd shim on Windows.
 
 const spawnCmd = (command, args, options) => process.platform === 'win32'
-  ? spawn(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', [command, ...args].map(quoteForCmd).join(' ')], options)
+  ? spawn(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', [command, ...args].map(quoteForCmd).join(' ')], { ...options, windowsVerbatimArguments: true })
   : spawn(command, args, options)
 
 // cmd.exe does not parse the escaping Node applies to a quoted argument: measured 2026-10-06 on the Windows
@@ -51,7 +51,7 @@ const why = r => {
 const quoteForCmd = a => (/[\s"]/.test(String(a)) ? `"${a}"` : String(a))
 
 const runCmd = (command, args, options) => process.platform === 'win32'
-  ? spawnSync(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', [command, ...args].map(quoteForCmd).join(' ')], options)
+  ? spawnSync(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', [command, ...args].map(quoteForCmd).join(' ')], { ...options, windowsVerbatimArguments: true })
   : spawnSync(command, args, options)
 
 const REPO = path.resolve(import.meta.dirname, '..')
