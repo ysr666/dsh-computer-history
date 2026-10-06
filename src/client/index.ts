@@ -23,24 +23,25 @@ import { createHistoryControlStore } from './store.js'
 const PANEL_ID = 'computer-history' as MainPanelId
 
 function HistoryIcon(): React.ReactElement {
-  // The drawing sits in the middle of a 24 viewBox: measured, its ink spans 16.0 x 13.6 there, so a 20px icon
-  // showed only ~13px of ink and read smaller than the platform icons beside it in the sidebar. Crop the frame
-  // rather than redraw - and leave a margin, because a stroke is painted outside the path it belongs to: the first
-  // crop (4.4 3 17.6 17.6) cut into the 1.9-wide stroke on the left. `2 1 22 22` puts the ink at ~15.5px, between
-  // the untouched 13px and the too-tight 19px, with at least a pixel of room on every side.
+  // Size and weight are matched to the platform icons beside it, measured, not guessed. The drawing sits in the
+  // middle of a 24 viewBox (its ink spans 16.0 x 13.6 there), so at 20px it showed only ~13px of ink and read
+  // smaller than its neighbours; cropping to `2 1 22 22` fixed that but then read too large and too heavy next to
+  // them - the platform icons are ~15px of ink at a ~1.2px stroke, and 20px with 1.9-wide strokes came out at
+  // ~15.5px and ~1.73px. 18px with 1.5/1.4/1.35 strokes lands at ~14.1px and ~1.22px. The frame keeps a margin
+  // because a stroke is painted outside the path it belongs to: `4.4 3 17.6 17.6` clipped the left of that stroke.
   return React.createElement(
     'svg',
     {
       'aria-hidden': true,
       viewBox: '2 1 22 22',
-      width: 20,
-      height: 20,
+      width: 18,
+      height: 18,
       fill: 'none',
     },
     React.createElement('path', {
       d: 'M5.2 18.4A8.3 8.3 0 1 1 18.3 6.4',
       stroke: 'currentColor',
-      strokeWidth: 1.9,
+      strokeWidth: 1.5,
       strokeLinecap: 'round',
     }),
     React.createElement('circle', { cx: 18.25, cy: 6.35, r: 1.35, fill: 'currentColor' }),
@@ -49,13 +50,13 @@ function HistoryIcon(): React.ReactElement {
     React.createElement('path', {
       d: 'M9.1 17.1A5.4 5.4 0 1 1 15.9 16',
       stroke: 'currentColor',
-      strokeWidth: 1.7,
+      strokeWidth: 1.4,
       strokeLinecap: 'round',
     }),
     React.createElement('path', {
       d: 'M12 11.8V8.8M12 11.8l2.6 1.8',
       stroke: 'currentColor',
-      strokeWidth: 1.65,
+      strokeWidth: 1.35,
       strokeLinecap: 'round',
     }),
   )
