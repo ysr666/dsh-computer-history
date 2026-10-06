@@ -255,6 +255,7 @@ export class IngestionService {
       ? message.workspace
       : undefined
     let workspace: WorkspaceRef
+    let persistedWorkspace: WorkspaceRef | undefined
     if (vouched) {
       const rawWorkspace: WorkspaceRef = {
         id: vouched.root,
@@ -284,11 +285,16 @@ export class IngestionService {
 
       const canonicalRoot = await canonicalizeLocalPath(vouched.root)
       if (!canonicalRoot) return false
+      // Canonical identity is a privacy-check input, not a replacement for what the paired editor vouched for.
+      // Persisting the realpath here rewrites stable aliases such as macOS `/tmp` -> `/private/tmp`; a later deny
+      // rule for the declared workspace then cannot match the stored row. Check the canonical target below, but
+      // keep the declared identity for policy continuity, Episode anchoring and UI provenance.
       workspace = {
         ...rawWorkspace,
         id: canonicalRoot,
         root: canonicalRoot,
       }
+      persistedWorkspace = rawWorkspace
     } else {
       workspace = await this.workspaceResolver.resolve(
         canonicalPreliminary.resource,
@@ -326,10 +332,13 @@ export class IngestionService {
         this.db.exec('COMMIT')
         return this.refuse(refusal.reason ?? 'unknown')
       }
+      const storableObservation = persistedWorkspace
+        ? { ...observation, workspace: persistedWorkspace }
+        : observation
 
       if (this.deletions.blocksObservation({
-        observedAtMs: observation.observedAtMs,
-        bundleId: observation.app.bundleId,
+        observedAtMs: storableObservation.observedAtMs,
+        bundleId: storableObservation.app.bundleId,
       })) {
         this.db.exec('COMMIT')
         // The user deleted this range: that is a policy decision, not an unattributed refusal.
@@ -338,18 +347,18 @@ export class IngestionService {
 
       const outOfOrder =
         this.builder.lastObservedAt !== undefined
-        && observation.observedAtMs
+        && storableObservation.observedAtMs
           < this.builder.lastObservedAt
 
-      const resourceId = observation.resource
+      const resourceId = storableObservation.resource
         ? this.resources.upsert(
-            observation.resource,
-            observation.observedAtMs,
+            storableObservation.resource,
+            storableObservation.observedAtMs,
           )
         : undefined
 
       const observationId = this.observations.insert(
-        observation,
+        storableObservation,
         resourceId,
       )
       const persisted =
