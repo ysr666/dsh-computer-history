@@ -75,6 +75,39 @@ describe('editor companion bootstrap', () => {
     history.close()
   })
 
+  it('does not overwrite a newer Host rotation when bootstrap rollback loses the race', () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'dsh-editor-bootstrap-race-'))
+    roots.push(root)
+    const dataDirectory = path.join(root, 'history')
+    const first = openHistoryDatabase({ dataDirectory, nowMs: 1 })
+    const second = openHistoryDatabase({ dataDirectory, nowMs: 1 })
+    const firstTokens = new CompanionTokenStore(first.db)
+    const secondTokens = new CompanionTokenStore(second.db)
+    const previous = firstTokens.rotate('editor', 1_000)
+    let newer = ''
+
+    expect(() => rotateAndStageEditorCompanionBootstrap({
+      tokens: firstTokens,
+      port: 19388,
+      nowMs: 2_000,
+      stage: () => {
+        newer = secondTokens.rotate('editor', 3_000)
+        throw new Error('forced publication failure after another Host rotated')
+      },
+    })).toThrow(/forced publication failure/)
+
+    expect(firstTokens.verify('editor', previous)).toBe(false)
+    expect(firstTokens.verify('editor', newer)).toBe(true)
+    expect(secondTokens.verify('editor', newer)).toBe(true)
+    expect(firstTokens.state('editor')).toEqual({
+      paired: true,
+      createdAtMs: 3_000,
+    })
+
+    second.close()
+    first.close()
+  })
+
   it('leaves an unpaired editor unpaired when its first bootstrap fails', () => {
     const root = mkdtempSync(path.join(os.tmpdir(), 'dsh-editor-bootstrap-empty-'))
     roots.push(root)
