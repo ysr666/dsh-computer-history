@@ -31,6 +31,7 @@ interface Harness {
   readonly intake: CompanionIntake
   readonly port: number
   readonly delivered: CompanionPayload[]
+  readonly tokens: CompanionTokenStore
 }
 
 async function harness(
@@ -41,6 +42,7 @@ async function harness(
     refusal?: 'capture-paused' | 'collector-not-running' | 'capture-disabled' | 'capture-not-owned'
     /** Simulate an ingestion/runtime rejection after validation and authentication. */
     deliveryError?: Error
+    now?: () => number
   } = {},
 ): Promise<Harness> {
   const tokens = tokenStore()
@@ -62,7 +64,7 @@ async function harness(
   ;(harness as unknown as {
     tokens?: { browser: string; editor: string }
   }).tokens = { browser: browserToken, editor: editorToken }
-  return { intake, port, delivered }
+  return { intake, port, delivered, tokens }
 }
 
 function currentToken(kind: 'browser' | 'editor' = 'browser'): string {
@@ -157,6 +159,31 @@ describe('companion intake', () => {
       path: '/docs/guide',
       seq: 1,
     })
+    await intake.stop()
+  })
+
+  it('prunes expired rate-limit buckets after pairing rotation', async () => {
+    let nowMs = 1_000
+    const { intake, port, tokens } = await harness({
+      now: () => nowMs,
+    })
+    const oldToken = currentToken('browser')
+    expect((await post(port, JSON.stringify(payload()))).status).toBe(201)
+
+    const replacement = tokens.rotate('browser', 2_000)
+    nowMs += 61_000
+    expect((await post(
+      port,
+      JSON.stringify(payload({ seq: 2, observedAtMs: 20_000 })),
+      { 'x-companion-token': replacement },
+    )).status).toBe(201)
+
+    const buckets = (intake as unknown as {
+      hits: Map<string, readonly number[]>
+    }).hits
+    expect(buckets.has(oldToken)).toBe(false)
+    expect(buckets.has(replacement)).toBe(true)
+    expect(buckets.size).toBe(1)
     await intake.stop()
   })
 
