@@ -195,7 +195,7 @@ describe('audit export and import', () => {
     const target = database('dsh-ch-export-partial-dst-')
     importHistory(target.db, document)
 
-    const partial = structuredClone(document) as {
+    const partial = structuredClone(document) as unknown as {
       tables: Record<string, Array<Record<string, unknown>>>
     }
     delete partial.tables.observations?.[0]?.bundle_id
