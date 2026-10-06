@@ -238,3 +238,30 @@ describe('a spawn that never produced a child', () => {
     expect(manager.snapshot().state?.reason).toBe('collector-spawn-failed')
   })
 })
+
+describe('a start that is refused because one already ran', () => {
+  it('says so, instead of leaving the state looking like it is still starting', () => {
+    const handle: SubprocessHandle = {
+      stdin: new PassThrough(),
+      stdout: new PassThrough(),
+      stderr: undefined,
+      control: undefined,
+      collected: {},
+      done: new Promise(() => {}),
+      terminate() {},
+      async waitForExit() { return true },
+    }
+    const ctx = { subprocess: { spawn: () => handle } } as unknown as Context
+    const manager = new CollectorManager(ctx, {
+      executable: '/collector',
+      cwd: '/tmp',
+      onMessage: () => {},
+      onUnexpectedExit: () => {},
+    })
+    manager.start()
+    // A manager that already has a handle refuses the second start. Before this the refusal was an exception the
+    // caller could swallow, and the state stayed empty - which an interface reads as "still starting".
+    expect(() => manager.start()).toThrow(/already started/)
+    expect(manager.snapshot().state?.reason).toBe('collector-start-refused')
+  })
+})
