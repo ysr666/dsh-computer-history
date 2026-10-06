@@ -562,8 +562,8 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
   // and leave the helper running. Ordering *within* this single effect
   // is what is load-bearing:
   //   1. stop the companion listener so no new loopback request can enter;
-  //   2. stop the helper, which bounds its exit and hands capture ownership back;
-  //   3. quiesce in-flight backend operations;
+  //   2. close the backend gate and quiesce every in-flight API/control operation;
+  //   3. stop the helper and hand capture ownership back;
   //   4. wait for any in-flight ingestion write to settle;
   //   5. close the database last.
   // Steps run concurrently *across* effects, so this must stay one
@@ -575,13 +575,19 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
     // effect above calls the same promise, so concurrent Cordis disposal is safe.
     await stopCompanion()
 
-    // Every step runs even if an earlier one throws.
-    await releaseCaptureOwnership()
+    // Stop accepting Host API/control work before touching capture ownership.
+    // In particular, recover() may be waiting to acquire the capture lock; if
+    // teardown released ownership first, that stale request could acquire it
+    // afterwards and restart the collector after disposal had already begun.
     try {
       await backend.drain()
     } catch {
-      // Quiescing is best-effort: the database still closes below.
+      // Quiescing is best-effort: capture shutdown and database cleanup still run.
     }
+
+    // With controls quiescent, no stale pause/resume/recover/policy request can
+    // race the shutdown below or reacquire ownership after it.
+    await releaseCaptureOwnership()
 
     // Ingestion writes are not part of the backend's operation tracker,
     // and closing the database during an open transaction silently
