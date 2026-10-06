@@ -64,7 +64,9 @@ describe('editor runtime routing', () => {
   it('uses the active document workspace and treats HTTP rejection as a failed send', () => {
     const source = readFileSync(path.join(SOURCE_DIR, 'extension.ts'), 'utf8')
     expect(source).toContain('getWorkspaceFolder(editor.document.uri)')
-    expect(source).toContain('if (!response.ok)')
+    expect(source).toContain('randomUUID()')
+    expect(source).toContain('response.status === 202')
+    expect(source).toContain('send not stored:')
     expect(source).toContain('send rejected: HTTP')
     expect(source).toContain("split(/[\\\\/]/)")
   })
