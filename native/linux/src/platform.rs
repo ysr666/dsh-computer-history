@@ -37,6 +37,15 @@ pub fn accessibility_state() -> AccessibilityState {
         );
     }
 
+    // No X display, nothing to observe: the foreground window is read from X11. Measured 2026-10-06 in a container
+    // that had a session bus and a persistent `toolkit-accessibility = true` but no DISPLAY - the fallback below
+    // found the bus and the key, concluded `running`, and reported `accessibilityTrusted: true` while it could not
+    // have seen a single window. A bus with nothing on the other end is the same silence this module exists to
+    // remove, so the display is asked for first.
+    if !display_present(std::env::var("DISPLAY").ok().as_deref()) {
+        return AccessibilityState::Unknown(NO_DISPLAY);
+    }
+
     let status = status_flags();
     match status {
         Ok((enabled, screen_reader)) => {
@@ -61,6 +70,14 @@ pub fn accessibility_state() -> AccessibilityState {
 /// there is exactly the ambiguity this module exists to remove: a collector that cannot see anything looks
 /// like a machine nobody used. Measured 2026-10-05 in a headless VM - `org.a11y.Status` does not answer
 /// without a desktop session, while the dconf key still reads `true`.
+/// Whether this process has an X display to read the foreground window from.
+///
+/// XWayland exports `DISPLAY` too, so a Wayland desktop that supports this collector passes this check; a bare
+/// shell, a daemon, or a container without one does not.
+fn display_present(display: Option<&str>) -> bool {
+    display.is_some_and(|value| !value.trim().is_empty())
+}
+
 fn state_without_canonical_source(
     bus: Option<String>,
     toolkit: Result<bool, Failure>,
@@ -85,6 +102,9 @@ const NO_GDBUS: &str = "gdbus is not installed (it ships with GLib), and it is h
 
 const NO_SOURCE: &str = "neither org.a11y.Status nor the toolkit-accessibility setting answered, so \
                          whether AT-SPI may be used is unknown";
+const NO_DISPLAY: &str = "no X display: the foreground window is read from X11 and DISPLAY is not set, so \
+                        there is nothing to observe. Run this collector inside a desktop session";
+
 const NO_SESSION_BUS: &str = "no accessibility bus: neither AT_SPI_BUS_ADDRESS nor org.a11y.Bus answered, \
                               so there is nothing to observe through. Run this collector inside a desktop \
                               session (a session bus with at-spi2-core), not from a daemon or a bare shell";
@@ -265,6 +285,18 @@ mod tests {
             state_without_canonical_source(Some("unix:path=/run/user/1/bus".into()), Ok(false)),
             AccessibilityState::Disabled(_),
         ));
+    }
+
+    #[test]
+    fn no_display_is_named_instead_of_reported_as_running() {
+        // Measured 2026-10-06 in a container: session bus present, `toolkit-accessibility` true (the dconf key
+        // outlives the session that set it), DISPLAY unset. The bus-and-key fallback concluded `running` and
+        // `accessibilityTrusted: true`, and the run produced no observation at all.
+        assert!(!display_present(None));
+        assert!(!display_present(Some("")));
+        assert!(!display_present(Some("   ")));
+        assert!(display_present(Some(":0")));
+        assert!(display_present(Some(":99")));
     }
 
     #[test]
