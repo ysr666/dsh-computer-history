@@ -191,8 +191,7 @@ jobs:
           name: three-platform-package
           path: package-out
       - name: Install supported DSH CLI
-        run: |
-          node -e "const cp=require('node:child_process'),fs=require('node:fs'),os=require('node:os'),path=require('node:path'); const root=path.join(process.env.RUNNER_TEMP,'dsh-cli'); const npm=process.platform==='win32'?'npm.cmd':'npm'; cp.execFileSync(npm,['install','--prefix',root,'@deepseek-ai/dsh@0.2.0-rc.2'],{stdio:'inherit'}); fs.appendFileSync(process.env.GITHUB_PATH,path.join(root,'node_modules','.bin')+os.EOL)"
+        run: node scripts/install-ci-dsh.mjs
       - name: Locate the exact assembled package
         run: |
           node -e "const fs=require('node:fs'),os=require('node:os'),path=require('node:path'); const dir='package-out'; const name=fs.readdirSync(dir).find(x=>x.endsWith('.tgz')); if(!name) process.exit(2); fs.appendFileSync(process.env.GITHUB_ENV,'DSH_RELEASE_TARBALL='+path.resolve(dir,name)+os.EOL)"
