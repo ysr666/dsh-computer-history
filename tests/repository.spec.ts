@@ -281,6 +281,18 @@ describe('repository scaffold', () => {
     expect(panel).toContain("t('showFewerThreads')")
   })
 
+  it('keeps project history inline with the work thread that opened it', () => {
+    const panel = readFileSync(new URL('../src/client/panel.ts', import.meta.url), 'utf8')
+    const threadRow = panel.indexOf("'li', {")
+    const inlineDetail = panel.indexOf('inlineDetail,')
+    const globalAppend = panel.indexOf('threadDetailView,\n    )')
+    expect(panel).toContain('const isOpen = threadDetailKey === thread.threadKey')
+    expect(panel).toContain('threadDetailPendingKey === thread.threadKey')
+    expect(threadRow).toBeGreaterThan(-1)
+    expect(inlineDetail).toBeGreaterThan(threadRow)
+    expect(globalAppend).toBe(-1)
+  })
+
   it('renders an episode title through the shared rule, with no second copy of it', () => {
     // The surface title reaches the panel only if the row asks `episodeSubject`, and that rule exists once -
     // in `episode-subject.ts`, where it is tested with the real shapes. Measured on the Windows machine: with
