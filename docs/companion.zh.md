@@ -10,7 +10,9 @@
 | 标签页标题 | 隐私（无痕）窗口 —— **扩展在那里不被允许运行** |
 | 它发生变化的时间（切换标签、跳转） | 你在策略里拒绝的任何站点 |
 
-**查询字符串与片段会被去掉两次**：一次由扩展在发送前完成，一次由宿主在存储前完成。像 `https://example.test/docs/guide?token=secret#part-3` 这样的 URL，存下来的是 `https://example.test/docs/guide`。
+**查询字符串与片段会从 URL 资源中被去掉两次**：一次由扩展在发送前完成，一次由宿主在存储前完成。像 `https://example.test/docs/guide?token=secret#part-3` 这样的 URL，存下来的规范化 URL 是 `https://example.test/docs/guide`。
+
+标签页标题是独立的显示元数据，会按浏览器报告的内容存储。站点可以把任意文字写进标题，其中也可能包含曾经出现在 URL 里的文字。标题**永远不参与资源策略匹配**：允许/拒绝判断只使用规范化后的 `canonicalUri`。
 
 ## 安装
 
@@ -61,7 +63,7 @@ node scripts/verify/chrome-companion.mjs --token <token> \
 | 格子 | 结果 |
 |---|---|
 | 被允许的源站 | 0 → 1 行伴侣记录；资源为 `http://127.0.0.1:<port>/allowed/page` |
-| 查询字符串与片段 | 从未存储 |
+| URL 查询字符串与片段 | 从不存入规范化 URL 资源 |
 | 被拒绝的源站 | 无新行 |
 | 无痕窗口 | 无新行 |
 | 轮换后的令牌 | 无新行 |
