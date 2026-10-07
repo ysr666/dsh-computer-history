@@ -42,6 +42,11 @@ function fakeControlApi() {
       episodesRebuilt: 0,
     }),
     importHistory: vi.fn().mockResolvedValue({ imported: { episodes: 2 } }),
+    revokeSemantic: vi.fn().mockResolvedValue({
+      revoked: true,
+      purged: 1,
+      forgotten: 1,
+    }),
     rotatePairing: vi.fn().mockResolvedValue({
       token: 'once',
       paired: false,
@@ -286,6 +291,27 @@ describe('client control store', () => {
 
     expect(backend.importHistory).toHaveBeenCalledWith(document)
     expect(store.getSnapshot().historyRevision).toBe(before + 1)
+  })
+
+  it('bumps historyRevision after purging a semantic summary', async () => {
+    const backend = fakeControlApi()
+    const store = createHistoryControlStore(backend)
+    await store.load()
+    const before = store.getSnapshot().historyRevision
+
+    await expect(
+      store.revokeSemantic('workspace:alpha'),
+    ).resolves.toEqual({
+      revoked: true,
+      purged: 1,
+      forgotten: 1,
+    })
+
+    expect(backend.revokeSemantic).toHaveBeenCalledWith('workspace:alpha')
+    expect(store.getSnapshot()).toMatchObject({
+      status: 'ready',
+      historyRevision: before + 1,
+    })
   })
 
   it('keeps load failure distinct from an empty or paused state', async () => {
