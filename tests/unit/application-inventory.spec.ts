@@ -236,6 +236,143 @@ describe('supported application inventory', () => {
     expect(signals.every(signal => signal.aborted)).toBe(true)
   })
 
+  it('extracts and caches a Windows executable icon for an allowed identity', async () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'dsh-ch-win-icon-'))
+    try {
+      const calls: readonly string[][] = []
+      const mutableCalls = calls as string[][]
+      const subprocess = {
+        resolveExecutable: vi.fn(async (command: string) => command),
+        spawn: vi.fn((spec: { readonly argv: readonly string[] }) => {
+          mutableCalls.push([...spec.argv])
+          const script = spec.argv.at(-1) ?? ''
+          const outputMatch = /\$output = '([^']+)'/.exec(script)
+          if (!outputMatch) throw new Error('missing PowerShell output path')
+          writeFileSync(outputMatch[1]!, Buffer.from([
+            0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 7, 8, 9,
+          ]))
+          return {
+            done: Promise.resolve({ exitCode: 0, signal: null }),
+            collected: {
+              stdout: {
+                readFrom: () => ({ text: '', nextOffset: 0, lossy: false }),
+              },
+            },
+          }
+        }),
+      }
+      const inventory = new SupportedApplicationInventoryReader({
+        subprocess: subprocess as never,
+        cwd: root,
+        platform: 'win32',
+      })
+
+      await expect(inventory.readIcon('evil.exe')).resolves.toBeUndefined()
+      expect(subprocess.spawn).not.toHaveBeenCalled()
+
+      const first = await inventory.readIcon('notepad.exe')
+      expect(Array.from(first ?? []).slice(0, 8)).toEqual([
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+      ])
+      expect(mutableCalls).toHaveLength(1)
+      expect(mutableCalls[0]?.[0]).toBe('powershell.exe')
+      expect(mutableCalls[0]?.at(-1)).toContain("$name = 'Notepad.exe'")
+
+      await expect(inventory.readIcon('Notepad.exe')).resolves.toEqual(first)
+      expect(mutableCalls).toHaveLength(1)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('reads a Linux desktop-entry icon only from standard XDG icon roots', async () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'dsh-ch-linux-icon-'))
+    try {
+      const dataRoot = path.join(root, 'share')
+      const desktopDir = path.join(dataRoot, 'applications')
+      const iconDir = path.join(dataRoot, 'icons', 'hicolor', '64x64', 'apps')
+      mkdirSync(desktopDir, { recursive: true })
+      mkdirSync(iconDir, { recursive: true })
+      writeFileSync(
+        path.join(desktopDir, 'org.gnome.Terminal.desktop'),
+        '[Desktop Entry]\nName=Terminal\nIcon=org.gnome.Terminal\n',
+      )
+      writeFileSync(
+        path.join(iconDir, 'org.gnome.Terminal.png'),
+        Buffer.from([
+          0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3,
+        ]),
+      )
+
+      const subprocess = {
+        resolveExecutable: vi.fn(async (command: string) => command),
+        spawn: vi.fn(() => {
+          throw new Error('Linux PNG lookup must not spawn a converter')
+        }),
+      }
+      const inventory = new SupportedApplicationInventoryReader({
+        subprocess: subprocess as never,
+        cwd: root,
+        platform: 'linux',
+        environment: {
+          HOME: root,
+          XDG_DATA_HOME: dataRoot,
+          XDG_DATA_DIRS: path.join(root, 'system-share'),
+        },
+      })
+
+      const icon = await inventory.readIcon('org.gnome.Terminal.desktop')
+      expect(Array.from(icon ?? []).slice(0, 8)).toEqual([
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+      ])
+      expect(subprocess.resolveExecutable).not.toHaveBeenCalled()
+      expect(subprocess.spawn).not.toHaveBeenCalled()
+      await expect(inventory.readIcon('evil.desktop')).resolves.toBeUndefined()
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('refuses a Linux icon symlink that escapes XDG icon roots', async () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'dsh-ch-linux-icon-boundary-'))
+    try {
+      const dataRoot = path.join(root, 'share')
+      const desktopDir = path.join(dataRoot, 'applications')
+      const iconDir = path.join(dataRoot, 'icons', 'hicolor', '64x64', 'apps')
+      mkdirSync(desktopDir, { recursive: true })
+      mkdirSync(iconDir, { recursive: true })
+      writeFileSync(
+        path.join(desktopDir, 'org.gnome.Terminal.desktop'),
+        '[Desktop Entry]\nName=Terminal\nIcon=org.gnome.Terminal\n',
+      )
+      const outside = path.join(root, 'private.png')
+      writeFileSync(outside, Buffer.from([
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+      ]))
+      symlinkSync(outside, path.join(iconDir, 'org.gnome.Terminal.png'))
+
+      const inventory = new SupportedApplicationInventoryReader({
+        subprocess: {
+          resolveExecutable: vi.fn(),
+          spawn: vi.fn(),
+        } as never,
+        cwd: root,
+        platform: 'linux',
+        environment: {
+          HOME: root,
+          XDG_DATA_HOME: dataRoot,
+          XDG_DATA_DIRS: path.join(root, 'system-share'),
+        },
+      })
+
+      await expect(
+        inventory.readIcon('org.gnome.Terminal.desktop'),
+      ).resolves.toBeUndefined()
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('coalesces concurrent reads but refreshes a later inventory snapshot', async () => {
     const found: Record<string, string> = {
       'com.apple.Terminal': '/System/Applications/Utilities/Terminal.app\n',
