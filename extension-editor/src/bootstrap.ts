@@ -1,3 +1,14 @@
+import {
+  existsSync,
+  readFileSync,
+  renameSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
+
 const BOOTSTRAP_FILENAME = 'editor-companion-bootstrap.json'
 
 export type Bootstrap = {
@@ -13,36 +24,11 @@ export interface ClaimedBootstrap {
   readonly value: Bootstrap
 }
 
-type BootstrapFs = {
-  renameSync(source: string, destination: string): void
-  readFileSync(file: string, encoding: 'utf8'): string
-  statSync(file: string): { readonly mode: number; readonly uid: number }
-  unlinkSync(file: string): void
-  writeFileSync(
-    file: string,
-    data: string,
-    options: {
-      readonly encoding: 'utf8'
-      readonly mode: number
-      readonly flag: 'wx'
-    },
-  ): void
-  existsSync(file: string): boolean
-}
-
-function fsApi(): BootstrapFs {
-  return require('node:fs') as BootstrapFs
-}
-
 export function editorBootstrapPath(
   homeDirectory?: string,
 ): string {
-  const os = require('node:os') as { homedir: () => string }
-  const path = require('node:path') as {
-    join: (...parts: string[]) => string
-  }
-  return path.join(
-    homeDirectory ?? os.homedir(),
+  return join(
+    homeDirectory ?? homedir(),
     '.dsh',
     'computer-history',
     BOOTSTRAP_FILENAME,
@@ -62,19 +48,18 @@ export function claimPendingBootstrap(
   homeDirectory?: string,
   nowMs = Date.now(),
 ): ClaimedBootstrap | undefined {
-  const fs = fsApi()
   const target = editorBootstrapPath(homeDirectory)
   const claimed = `${target}.consume-${crypto.randomUUID()}`
 
   try {
-    fs.renameSync(target, claimed)
+    renameSync(target, claimed)
   } catch {
     return undefined
   }
 
   let keepClaim = false
   try {
-    const stat = fs.statSync(claimed)
+    const stat = statSync(claimed)
     if (
       process.platform !== 'win32'
       && ((stat.mode & 0o077) !== 0
@@ -86,7 +71,7 @@ export function claimPendingBootstrap(
     }
 
     const parsed = JSON.parse(
-      fs.readFileSync(claimed, 'utf8'),
+      readFileSync(claimed, 'utf8'),
     ) as Partial<Bootstrap>
     if (
       parsed.v !== 1
@@ -115,7 +100,7 @@ export function claimPendingBootstrap(
     return undefined
   } finally {
     if (!keepClaim) {
-      try { fs.unlinkSync(claimed) } catch {}
+      try { unlinkSync(claimed) } catch {}
     }
   }
 }
@@ -135,32 +120,31 @@ export function finishBootstrapClaim(
 export function restoreBootstrapClaim(
   bootstrap: ClaimedBootstrap,
 ): void {
-  const fs = fsApi()
-  if (fs.existsSync(bootstrap.targetPath)) {
-    try { fs.unlinkSync(bootstrap.path) } catch {}
+  if (existsSync(bootstrap.targetPath)) {
+    try { unlinkSync(bootstrap.path) } catch {}
     return
   }
 
   let body: string
   try {
-    body = fs.readFileSync(bootstrap.path, 'utf8')
+    body = readFileSync(bootstrap.path, 'utf8')
   } catch {
     return
   }
 
   try {
-    fs.writeFileSync(bootstrap.targetPath, body, {
+    writeFileSync(bootstrap.targetPath, body, {
       encoding: 'utf8',
       mode: 0o600,
       flag: 'wx',
     })
-    try { fs.unlinkSync(bootstrap.path) } catch {}
+    try { unlinkSync(bootstrap.path) } catch {}
   } catch {
     // A concurrent Host may have published between existsSync and writeFileSync.
     // If so, that newer target wins; otherwise leave the claim for diagnostics
     // rather than deleting the only remaining credential handoff.
-    if (fs.existsSync(bootstrap.targetPath)) {
-      try { fs.unlinkSync(bootstrap.path) } catch {}
+    if (existsSync(bootstrap.targetPath)) {
+      try { unlinkSync(bootstrap.path) } catch {}
     }
   }
 }
