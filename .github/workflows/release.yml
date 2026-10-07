@@ -1,17 +1,8 @@
 # Publishing a release: push a `v*` tag whose name is `v` + the version in package.json.
 #
-# No certificate and no secrets. This is a DSH plugin: the artifact is a tarball that `dsh plugin add` fetches
-# with Node, and Node sets no quarantine flag. Measured 2026-10-05 on an arm64 Mac with the collector this
-# repository ships:
-#
-#   * an unsigned arm64 binary is killed by the kernel ("Killed: 9") - so a signature is required;
-#   * an ad-hoc signature is enough, and that is what `scripts/build-native.mjs` has always produced;
-#   * a copy carrying a Safari quarantine flag still ran normally;
-#   * `spctl -a` reports our ad-hoc binary as "rejected" and it runs anyway - that gate is for app bundles,
-#     not for a CLI a plugin spawns.
-#
-# A Developer ID certificate only becomes necessary if this ever ships a `.app`/`.dmg`/`.pkg`, or asks a user to
-# launch the binary from Finder. See the "Publishing" section of docs/release.md.
+# Computer History is one three-platform plugin artifact. Each native collector is built on its own runner,
+# those exact bytes are assembled into one tarball, and that same tarball must clean-install and handshake on
+# macOS, Windows and Linux before GitHub Release publication is allowed.
 name: Release
 
 on:
@@ -22,11 +13,55 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  native:
+    name: native artifact (${{ matrix.platform }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            platform: darwin
+            binary: bin/dsh-computer-history-collector
+          - os: windows-latest
+            platform: win32
+            binary: bin/dsh-computer-history-collector-windows.exe
+          - os: ubuntu-latest
+            platform: linux
+            binary: bin/dsh-computer-history-collector-linux
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22.19.0
+      - name: Build the native collector on its own platform
+        run: node scripts/build-native.mjs
+      - name: Record the runner source commit
+        env:
+          NATIVE_PLATFORM: ${{ matrix.platform }}
+        run: node -e "const fs=require('node:fs'); fs.writeFileSync('bin/source-'+process.env.NATIVE_PLATFORM+'.txt', process.env.GITHUB_SHA+'\n')"
+      - uses: actions/upload-artifact@2a0ecf19e8d0087dd2e5d1785dcf764811e79fae # v4
+        with:
+          name: release-native-${{ matrix.platform }}
+          path: |
+            ${{ matrix.binary }}
+            bin/source-${{ matrix.platform }}.txt
+          if-no-files-found: error
+          retention-days: 3
+
+  assemble:
+    name: assemble + verify release tarball
+    needs: native
     runs-on: macos-14
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 11.7.0
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22.19.0
@@ -34,10 +69,43 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
       - run: pnpm verify
-      - run: pnpm native:build
       - run: pnpm install --frozen-lockfile
         working-directory: extension-editor
-      - run: pnpm pack --pack-destination /tmp
+      - uses: actions/download-artifact@7fc4fb55c7d0c7b198b1c7466e1efd7c7d05fb26 # v4
+        with:
+          name: release-native-darwin
+          path: bin
+      - uses: actions/download-artifact@7fc4fb55c7d0c7b198b1c7466e1efd7c7d05fb26 # v4
+        with:
+          name: release-native-win32
+          path: bin
+      - uses: actions/download-artifact@7fc4fb55c7d0c7b198b1c7466e1efd7c7d05fb26 # v4
+        with:
+          name: release-native-linux
+          path: bin
+      - name: Prove all native jobs came from this release commit
+        run: |
+          node - <<'NODE'
+          const fs = require('node:fs')
+          for (const platform of ['darwin', 'win32', 'linux']) {
+            const file = 'bin/source-' + platform + '.txt'
+            const actual = fs.readFileSync(file, 'utf8').trim()
+            if (actual !== process.env.GITHUB_SHA) {
+              throw new Error(platform + ' artifact came from ' + actual + ', expected ' + process.env.GITHUB_SHA)
+            }
+            fs.rmSync(file)
+          }
+          fs.chmodSync('bin/dsh-computer-history-collector', 0o755)
+          fs.chmodSync('bin/dsh-computer-history-collector-linux', 0o755)
+          NODE
+      - name: Record native hashes and provenance
+        run: pnpm native:manifest
+      - name: Pack without rebuilding native artifacts
+        env:
+          DSH_NATIVE_PREBUILT: '1'
+        run: |
+          mkdir -p "$RUNNER_TEMP/package"
+          pnpm pack --pack-destination "$RUNNER_TEMP/package"
 
       - name: Scan for release blockers
         env:
@@ -46,17 +114,68 @@ jobs:
 
       - name: Verify the release
         run: |
-          tarball=$(ls /tmp/dsh-computer-history-*.tgz | head -1)
+          tarball=$(ls "$RUNNER_TEMP"/package/dsh-computer-history-*.tgz | head -1)
           echo "verifying $tarball"
           DSH_RELEASE_TARBALL="$tarball" pnpm verify:release
 
+      - uses: actions/upload-artifact@2a0ecf19e8d0087dd2e5d1785dcf764811e79fae # v4
+        with:
+          name: release-plugin
+          path: ${{ runner.temp }}/package/dsh-computer-history-*.tgz
+          if-no-files-found: error
+          retention-days: 3
+
+  install:
+    name: release clean install (${{ matrix.os }})
+    needs: assemble
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, windows-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22.19.0
+      - uses: actions/download-artifact@7fc4fb55c7d0c7b198b1c7466e1efd7c7d05fb26 # v4
+        with:
+          name: release-plugin
+          path: ${{ runner.temp }}/package
+      - name: Install the supported DSH CLI in an isolated tool directory
+        run: npm install --prefix "${{ runner.temp }}/dsh-cli" @deepseek-ai/dsh@0.2.0-rc.2
+      - name: Put the isolated DSH CLI on PATH
+        run: node -e "require('node:fs').appendFileSync(process.env.GITHUB_PATH, require('node:path').join(process.env.RUNNER_TEMP,'dsh-cli','node_modules','.bin')+'\n')"
+      - name: Locate the exact release tarball
+        run: node -e "const fs=require('node:fs'),p=require('node:path'); const d=p.join(process.env.RUNNER_TEMP,'package'); const f=fs.readdirSync(d).find(x=>x.endsWith('.tgz')); if(!f) throw new Error('tarball missing'); fs.appendFileSync(process.env.GITHUB_ENV,'DSH_E2E_TARBALL='+p.join(d,f)+'\n')"
+      - name: Verify packaged hashes on this platform
+        run: node scripts/verify-native-package.mjs
+      - name: Strict Host -> packaged collector transport, no executable override
+        run: pnpm e2e:collector-transport
+
+  publish:
+    name: publish GitHub Release
+    needs: install
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@7fc4fb55c7d0c7b198b1c7466e1efd7c7d05fb26 # v4
+        with:
+          name: release-plugin
+          path: ${{ runner.temp }}/package
       - name: Create the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # The notes are the changelog section for this version, which the preflight has just proved exists.
           version="${GITHUB_REF_NAME#v}"
           awk -v v="$version" '$0 == "## " v {found=1; next} /^## / {found=0} found' CHANGELOG.md > /tmp/notes.md
           test -s /tmp/notes.md || { echo "no changelog section for $version"; exit 1; }
-          gh release create "$GITHUB_REF_NAME" /tmp/dsh-computer-history-*.tgz \
+          gh release create "$GITHUB_REF_NAME" "$RUNNER_TEMP"/package/dsh-computer-history-*.tgz \
             --title "$GITHUB_REF_NAME" --notes-file /tmp/notes.md
