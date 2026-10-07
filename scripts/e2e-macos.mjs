@@ -9,9 +9,9 @@
 // inside a temporary home, and every port is its own.
 //
 // What it deliberately does not claim by default: the macOS collector needs an Accessibility grant, and a
-// collector spawned by a command-line Host may not have one. Without COLLECTOR_EXECUTABLE this run reports that
-// state instead of asserting it. Supplying COLLECTOR_EXECUTABLE changes the contract: the caller has provided the
-// collector under test, so the Host must finish its handshake and expose a live collector within the startup bound.
+// collector spawned by a command-line Host may not have one. Without a strict collector request this run reports
+// that state instead of asserting it. COLLECTOR_EXECUTABLE remains a development override; release validation uses
+// DSH_E2E_TARBALL + DSH_E2E_REQUIRE_COLLECTOR=1 so the installed package must select its own platform collector.
 import { spawn, spawnSync } from 'node:child_process'
 import { DatabaseSync } from 'node:sqlite'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -30,13 +30,16 @@ const killTree = pid => {
   try { process.kill(-pid, 'SIGTERM') } catch { try { process.kill(pid, 'SIGTERM') } catch { /* already gone */ } }
 }
 
-// The plugin carries a collector for macOS only. On a machine without one (Windows, or a checkout that has not
-// built it) the Host starts, reports collector-exited and stops at a boundary - honest, but it exercises less than
-// the machine can. Set COLLECTOR_EXECUTABLE to the binary and the runs use it.
+// A direct executable is a development/test override. A packaged-install acceptance run deliberately omits it:
+ // the runtime platform resolver must find the collector inside the installed tarball.
 const collectorLine = process.env.COLLECTOR_EXECUTABLE
   ? `    collectorExecutable: ${process.env.COLLECTOR_EXECUTABLE}\n`
   : ''
-const collectorRequired = Boolean(process.env.COLLECTOR_EXECUTABLE)
+const collectorRequired =
+  Boolean(process.env.COLLECTOR_EXECUTABLE)
+  || process.env.DSH_E2E_REQUIRE_COLLECTOR === '1'
+const suppliedTarball =
+  process.env.DSH_E2E_TARBALL?.trim() || undefined
 const diagnosticTimeline = process.env.DSH_E2E_DIAGNOSTIC_TIMELINE === '1'
 const explicitAllowBundles = (process.env.DSH_E2E_ALLOW_BUNDLES ?? '')
   .split(',')
@@ -116,19 +119,50 @@ const companionPort = webPort + 1
 let host
 
 try {
-  // 1. Pack the plugin the way it is released, into a temporary directory. The editor companion is an
-  // intentionally independent pnpm project with its own lockfile and build-script policy; the release workflow
-  // installs it before `pnpm pack`, so this one-command harness must do the same on a clean clone.
-  const editorDeps = run('pnpm', ['install', '--frozen-lockfile'], { cwd: path.join(REPO, 'extension-editor') })
-  record('install editor build deps', editorDeps.status === 0, editorDeps.status === 0 ? 'exit 0' : editorDeps.out.trim().slice(-240))
-  if (editorDeps.status !== 0) throw new Error('editor build dependency install failed')
+  // 1. Either consume the exact release tarball supplied by CI, or pack the checkout for a local/dev run.
+  // The supplied path is the release-critical mode: no local native rebuild can change what gets installed.
+  let tarball
+  if (suppliedTarball) {
+    tarball = path.resolve(suppliedTarball)
+    const exists = existsSync(tarball)
+    record(
+      'supplied release tarball',
+      exists,
+      exists ? tarball : 'file is missing',
+    )
+    if (!exists) throw new Error('supplied release tarball is missing')
+  } else {
+    // The editor companion is an intentionally independent pnpm project with its own lockfile and build-script
+    // policy; the release workflow installs it before `pnpm pack`, so this one-command harness does the same.
+    const editorDeps = run('pnpm', ['install', '--frozen-lockfile'], {
+      cwd: path.join(REPO, 'extension-editor'),
+    })
+    record(
+      'install editor build deps',
+      editorDeps.status === 0,
+      editorDeps.status === 0 ? 'exit 0' : editorDeps.out.trim().slice(-240),
+    )
+    if (editorDeps.status !== 0) {
+      throw new Error('editor build dependency install failed')
+    }
 
-  rmSync(path.join(REPO, 'e2e-pack'), { recursive: true, force: true })
-  mkdirSync(path.join(REPO, 'e2e-pack'), { recursive: true })
-  const packed = run('pnpm', ['pack', '--pack-destination', path.join(REPO, 'e2e-pack')])
-  const tarball = path.join(REPO, 'e2e-pack', `dsh-computer-history-${JSON.parse(readFileSync('package.json', 'utf8')).version}.tgz`)
-  record('pack', packed.status === 0, packed.status === 0 ? path.relative(REPO, tarball) : packed.out.trim().slice(-160))
-  if (packed.status !== 0) throw new Error('pack failed')
+    rmSync(path.join(REPO, 'e2e-pack'), { recursive: true, force: true })
+    mkdirSync(path.join(REPO, 'e2e-pack'), { recursive: true })
+    const packed = run('pnpm', ['pack', '--pack-destination', path.join(REPO, 'e2e-pack')])
+    tarball = path.join(
+      REPO,
+      'e2e-pack',
+      `dsh-computer-history-${JSON.parse(readFileSync('package.json', 'utf8')).version}.tgz`,
+    )
+    record(
+      'pack',
+      packed.status === 0,
+      packed.status === 0
+        ? path.relative(REPO, tarball)
+        : packed.out.trim().slice(-160),
+    )
+    if (packed.status !== 0) throw new Error('pack failed')
+  }
 
   // 2. Install into the throwaway home. The first add stops at the build-script gate, which is answered the same
   // way a person would answer it in the UI; the retry then succeeds.
