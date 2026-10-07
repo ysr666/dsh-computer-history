@@ -162,21 +162,6 @@ jobs:
           }
           '@
 
-          $note = Join-Path $env:RUNNER_TEMP 'dch-github-windows-host.txt'
-          Set-Content -Path $note -Value 'Computer History GitHub Windows full Host acceptance' -Encoding UTF8
-          $notepad = Start-Process notepad.exe -ArgumentList ('"' + $note + '"') -PassThru
-          for ($i = 0; $i -lt 40; $i++) {
-            Start-Sleep -Milliseconds 250
-            $notepad.Refresh()
-            if ($notepad.MainWindowHandle -ne 0) { break }
-          }
-          if ($notepad.MainWindowHandle -eq 0) {
-            throw 'Host acceptance Notepad never exposed a main window handle.'
-          }
-          [void][DchHostUser32]::ShowWindow($notepad.MainWindowHandle, 5)
-          [void][DchHostUser32]::SetForegroundWindow($notepad.MainWindowHandle)
-          Start-Sleep -Milliseconds 500
-
           $cliRoot = Join-Path $env:RUNNER_TEMP 'dsh-cli-020'
           npm install --prefix $cliRoot @deepseek-ai/dsh@0.2.0-rc.2
           if ($LASTEXITCODE -ne 0) { throw 'Could not install DSH 0.2.0-rc.2 CLI.' }
@@ -189,10 +174,40 @@ jobs:
           $env:DSH_E2E_EXPECT_PROVIDER = 'windows-uia'
           $env:DSH_E2E_ACTIVITY_TIMEOUT_MS = '30000'
 
+          # Do the expensive CLI install before opening the target window. Then keep that window in front
+          # while the throwaway Host packs/installs/boots so the production collector sees the same allowed
+          # application at configure time and on every heartbeat.
+          $note = Join-Path $env:RUNNER_TEMP 'dch-github-windows-host.txt'
+          Set-Content -Path $note -Value 'Computer History GitHub Windows full Host acceptance' -Encoding UTF8
+          $notepad = Start-Process notepad.exe -ArgumentList ('"' + $note + '"') -PassThru
+          for ($i = 0; $i -lt 40; $i++) {
+            Start-Sleep -Milliseconds 250
+            $notepad.Refresh()
+            if ($notepad.MainWindowHandle -ne 0) { break }
+          }
+          if ($notepad.MainWindowHandle -eq 0) {
+            throw 'Host acceptance Notepad never exposed a main window handle.'
+          }
+
           dsh --version
-          node scripts/e2e-macos.mjs
-          if ($LASTEXITCODE -ne 0) {
-            throw "Full Windows Host E2E failed with exit $LASTEXITCODE"
+          $stdout = Join-Path $env:RUNNER_TEMP 'windows-host-e2e.stdout.txt'
+          $stderr = Join-Path $env:RUNNER_TEMP 'windows-host-e2e.stderr.txt'
+          $e2e = Start-Process node -ArgumentList 'scripts/e2e-macos.mjs' -PassThru -NoNewWindow -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+
+          while (-not $e2e.HasExited) {
+            $notepad.Refresh()
+            if ($notepad.MainWindowHandle -ne 0) {
+              [void][DchHostUser32]::ShowWindow($notepad.MainWindowHandle, 5)
+              [void][DchHostUser32]::SetForegroundWindow($notepad.MainWindowHandle)
+            }
+            Start-Sleep -Milliseconds 500
+            $e2e.Refresh()
+          }
+
+          if (Test-Path $stdout) { Get-Content $stdout }
+          if (Test-Path $stderr) { Get-Content $stderr }
+          if ($e2e.ExitCode -ne 0) {
+            throw "Full Windows Host E2E failed with exit $($e2e.ExitCode)"
           }
 
           Stop-Process -Id $notepad.Id -Force -ErrorAction SilentlyContinue
