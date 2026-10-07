@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 describe('plugin teardown ordering', () => {
-  it('stops the companion intake through one shared promise before SQLite closes', () => {
+  it('quiesces backend controls before releasing capture ownership and closing SQLite', () => {
     const source = readFileSync(
       new URL('../../src/host/plugin.ts', import.meta.url),
       'utf8',
