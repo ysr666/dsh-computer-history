@@ -46,7 +46,7 @@ try {
     { encoding: 'utf8' },
   )
     .split(/\r?\n/)
-    .map(member => member.trim().replaceAll('\\\\', '/'))
+    .map(member => member.trim())
     .filter(Boolean)
 
   for (const file of [...Object.values(expected), manifestPath]) {
