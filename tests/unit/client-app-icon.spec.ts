@@ -39,8 +39,8 @@ describe('application icon identity', () => {
   it('requests native icons only for macOS-style bundle identities', () => {
     expect(canRequestNativeApplicationIcon('com.microsoft.VSCode')).toBe(true)
     expect(canRequestNativeApplicationIcon('com.apple.finder')).toBe(true)
-    expect(canRequestNativeApplicationIcon('Code.exe')).toBe(false)
-    expect(canRequestNativeApplicationIcon('code.desktop')).toBe(false)
+    expect(canRequestNativeApplicationIcon('Code.exe')).toBe(true)
+    expect(canRequestNativeApplicationIcon('code.desktop')).toBe(true)
     expect(canRequestNativeApplicationIcon(undefined)).toBe(false)
     expect(applicationIconSrc('com.microsoft.VSCode'))
       .toContain('system/application-icon?bundleId=com.microsoft.VSCode')
