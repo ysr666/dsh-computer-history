@@ -1,6 +1,7 @@
 import {
   chmodSync,
   copyFileSync,
+  existsSync,
   mkdirSync,
   readdirSync,
 } from 'node:fs'
@@ -13,6 +14,20 @@ const windowsOutput = path.join(outputDir, 'dsh-computer-history-collector-windo
 const linuxOutput = path.join(outputDir, 'dsh-computer-history-collector-linux')
 
 mkdirSync(outputDir, { recursive: true })
+
+if (process.env.DSH_NATIVE_PREBUILT === '1') {
+  const required = [macOutput, windowsOutput, linuxOutput]
+  const missing = required.filter(file => !existsSync(file))
+  if (missing.length > 0) {
+    console.error(
+      'DSH_NATIVE_PREBUILT=1 but assembled collectors are missing: '
+      + missing.join(', '),
+    )
+    process.exit(1)
+  }
+  console.log('using prebuilt native collectors: ' + required.join(', '))
+  process.exit(0)
+}
 
 function run(command, args) {
   const result = spawnSync(command, args, { stdio: 'inherit' })
