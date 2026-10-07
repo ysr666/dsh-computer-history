@@ -163,6 +163,7 @@ describe('Computer History Host API', () => {
       '/api/computer-history/semantic/revoke',
       '/api/computer-history/state',
       '/api/computer-history/system/accessibility',
+      '/api/computer-history/system/application-icon',
       '/api/computer-history/system/applications',
       '/api/computer-history/thread',
       '/api/computer-history/threads',
@@ -187,6 +188,12 @@ describe('Computer History Host API', () => {
     expect(opened.status).toBe(200)
     const result = await opened.json() as { status?: unknown }
     expect(['opened', 'unsupported']).toContain(result.status)
+
+    const unknownIcon = await request(
+      '/system/application-icon?bundleId=not.supported',
+    )
+    expect(unknownIcon.status).toBe(404)
+    expect(await unknownIcon.text()).toBe('Application icon is unavailable.')
   })
 
   it('serves Desktop-safe export and diagnostics downloads', async () => {
