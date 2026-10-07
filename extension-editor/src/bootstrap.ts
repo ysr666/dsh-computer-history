@@ -108,7 +108,7 @@ export function claimPendingBootstrap(
 export function finishBootstrapClaim(
   bootstrap: ClaimedBootstrap,
 ): void {
-  try { fsApi().unlinkSync(bootstrap.path) } catch {}
+  try { unlinkSync(bootstrap.path) } catch {}
 }
 
 /**
