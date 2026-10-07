@@ -1,6 +1,7 @@
 param(
   [int]$WindowTimeoutSeconds = 15,
-  [int]$CollectorTimeoutSeconds = 10
+  [int]$CollectorTimeoutSeconds = 10,
+  [switch]$FullHost
 )
 
 $ErrorActionPreference = 'Stop'
@@ -210,6 +211,44 @@ try {
   $first = $notepadObservations[0] | ConvertTo-Json -Compress -Depth 6
   Write-Probe 'liveObservation' $first
   Write-Host 'GitHub-hosted Windows live UIA probe passed.'
+
+  if ($FullHost) {
+    $dshBin = Join-Path $env:RUNNER_TEMP 'dsh-cli\node_modules\.bin'
+    $dshCmd = Join-Path $dshBin 'dsh.cmd'
+    if (-not (Test-Path $dshCmd)) {
+      throw "DSH CLI missing: $dshCmd"
+    }
+
+    # Keep the same Notepad window in front while the generic throwaway-Host
+    # harness packs, installs, boots and waits for the real Windows collector.
+    # Spawning the Host must not be allowed to turn a standalone collector pass
+    # into a false full-stack pass against some other foreground application.
+    [void][DchUser32]::ShowWindow($hwnd, 9)
+    [void][DchUser32]::SetForegroundWindow($hwnd)
+    try { [void]$shell.AppActivate($notepad.Id) } catch {}
+    Start-Sleep -Milliseconds 500
+    $hostForeground = Get-ForegroundInfo
+    Write-Probe 'foregroundBeforeHost' (($hostForeground | ConvertTo-Json -Compress))
+    if ($hostForeground.Pid -ne $notepad.Id) {
+      throw "Notepad lost foreground before Host E2E; foreground=$($hostForeground.Process)/$($hostForeground.Title)"
+    }
+
+    $env:PATH = "$dshBin;$env:PATH"
+    $env:DSH_CLI = 'dsh'
+    $env:COLLECTOR_EXECUTABLE = $collector
+    $env:DSH_E2E_ALLOW_BUNDLES = 'Notepad.exe'
+    $env:DSH_E2E_EXPECT_ACTIVITY = '1'
+    $env:DSH_E2E_EXPECT_PROVIDER = 'windows-uia'
+    $env:DSH_E2E_ACTIVITY_TIMEOUT_MS = '30000'
+
+    & node (Join-Path $PSScriptRoot 'e2e-macos.mjs')
+    $hostExit = $LASTEXITCODE
+    Write-Probe 'fullHostExit' ($hostExit.ToString())
+    if ($hostExit -ne 0) {
+      throw "full Windows Host E2E failed with exit $hostExit"
+    }
+    Write-Host 'GitHub-hosted Windows full Host E2E passed.'
+  }
 }
 finally {
   if ($null -ne $notepad -and -not $notepad.HasExited) {
