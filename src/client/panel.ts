@@ -468,9 +468,11 @@ export function createHistoryPage({
 
     const revokeScope = async (scopeKey: string): Promise<void> => {
       previewRequests.current.invalidate()
-      await historyApi.revokeSemantic(scopeKey)
+      await store.revokeSemantic(scopeKey)
       setPreview(undefined)
-      setSemantic(await historyApi.getSemanticState())
+      // Semantic purge changes Episode summaries. historyRevision invalidates
+      // any old detail/timeline/thread requests and refreshes all projections
+      // together, instead of updating only the semantic toggle row here.
     }
 
     const previewScope = async (scopeKey: string): Promise<void> => {
