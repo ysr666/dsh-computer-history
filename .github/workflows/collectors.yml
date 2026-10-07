@@ -168,6 +168,7 @@ jobs:
     name: install assembled tarball on ${{ matrix.os }}
     needs: assembled-native-package
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
     strategy:
       fail-fast: false
       matrix:
