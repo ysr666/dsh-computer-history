@@ -281,6 +281,19 @@ describe('repository scaffold', () => {
     expect(panel).toContain("t('showFewerThreads')")
   })
 
+  it('keeps Resume guidance localized and its search disclosure explicit', () => {
+    const panel = readFileSync(new URL('../src/client/panel.ts', import.meta.url), 'utf8')
+    const styles = readFileSync(new URL('../src/client/styles.ts', import.meta.url), 'utf8')
+    const locale = readFileSync(new URL('../src/client/locale.ts', import.meta.url), 'utf8')
+    expect(panel).toContain('resumeResolutionMessage(t, hint)')
+    expect(panel).not.toContain("t('resumeAmbiguous', { reason: hint.reason })")
+    expect(panel).not.toContain("t('resumeNone', { reason: hint.reason })")
+    expect(locale).toContain("resumeNoneIneligible: '请描述要继续的项目或文件。'")
+    expect(locale).toContain("resumeAmbiguousResource: '“{resource}”出现在多个工作区，请再补充项目名。'")
+    expect(styles).toContain(".ch-resume-search>summary::after{content:'›'")
+    expect(styles).toContain('@media(max-width:560px){.ch-resume-controls')
+  })
+
   it('keeps project history inline and lets the thread row own its identity', () => {
     const panel = readFileSync(new URL('../src/client/panel.ts', import.meta.url), 'utf8')
     const detailStart = panel.indexOf('const threadDetailView')
