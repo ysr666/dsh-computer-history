@@ -1011,6 +1011,7 @@ export function createHistoryPage({
                       'li', { key: activity.activityKey },
                       React.createElement('span', { className: 'ch-project-time' },
                         `${formatClock(activity.startedAtMs, activeLocale)}–${formatClock(activity.endedAtMs, activeLocale)}`),
+                      appIcon(activity.surfaces[0]?.bundleId, app, { compact: true }),
                       React.createElement(
                         'span', { className: 'ch-project-activity-copy' },
                         React.createElement('span', { className: 'ch-project-activity-title' },
