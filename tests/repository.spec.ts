@@ -254,6 +254,24 @@ describe('repository scaffold', () => {
     }
   })
 
+  it('keeps selected Timeline detail inline with the activity that opened it', () => {
+    const panel = readFileSync(new URL('../src/client/panel.ts', import.meta.url), 'utf8')
+    const row = panel.indexOf("'li', { key: activity.activityKey, className: 'ch-timeline-item' }")
+    const inlineDetail = panel.indexOf('isSelected ? selectedActivityDetail : null')
+    const resume = panel.indexOf('const resumeText = hint')
+    expect(row).toBeGreaterThan(-1)
+    expect(inlineDetail).toBeGreaterThan(row)
+    expect(inlineDetail).toBeLessThan(resume)
+    expect(panel.slice(resume)).not.toContain('selectedActivityDetail')
+  })
+
+  it('does not silently hide work threads beyond the first six', () => {
+    const panel = readFileSync(new URL('../src/client/panel.ts', import.meta.url), 'utf8')
+    expect(panel).toContain('(showAllThreads ? threads : threads.slice(0, 6)).map')
+    expect(panel).toContain("t('showMoreThreads', { count: threads.length - 6 })")
+    expect(panel).toContain("t('showFewerThreads')")
+  })
+
   it('renders an episode title through the shared rule, with no second copy of it', () => {
     // The surface title reaches the panel only if the row asks `episodeSubject`, and that rule exists once -
     // in `episode-subject.ts`, where it is tested with the real shapes. Measured on the Windows machine: with
