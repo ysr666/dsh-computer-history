@@ -16,19 +16,22 @@ import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
 const collector = process.env.COLLECTOR_EXECUTABLE
-if (!collector) {
+const packaged = process.env.DSH_E2E_TARBALL
+if (!collector && !packaged) {
   console.error(
-    'COLLECTOR_EXECUTABLE is required. Point it at the collector binary built for this machine.\n'
-    + 'Example on Windows PowerShell:\n'
-    + '  $env:COLLECTOR_EXECUTABLE = (Resolve-Path native\\windows\\target\\release\\dsh-computer-history-collector-windows.exe)\n'
-    + '  pnpm e2e:collector-transport',
+    'COLLECTOR_EXECUTABLE or DSH_E2E_TARBALL is required.\n'
+    + 'Use COLLECTOR_EXECUTABLE for a focused development probe, or point DSH_E2E_TARBALL at the assembled '
+    + 'plugin package to prove its default collector path.',
   )
   process.exit(2)
 }
 
 const target = fileURLToPath(new URL('./e2e-macos.mjs', import.meta.url))
 const result = spawnSync(process.execPath, [target], {
-  env: process.env,
+  env: {
+    ...process.env,
+    ...(packaged ? { DSH_E2E_REQUIRE_COLLECTOR: '1' } : {}),
+  },
   stdio: 'inherit',
 })
 
