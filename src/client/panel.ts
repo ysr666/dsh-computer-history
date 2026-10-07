@@ -250,6 +250,7 @@ export function createHistoryPage({
     const [accessibilitySettingsAvailable, setAccessibilitySettingsAvailable] = React.useState(false)
     const [awaitingAccessibility, setAwaitingAccessibility] = React.useState(false)
     const [threads, setThreads] = React.useState<readonly WorkThread[] | null>()
+    const [showAllThreads, setShowAllThreads] = React.useState(false)
     const [threadDetail, setThreadDetail] = React.useState<WorkThreadDetail>()
     const [threadDetailPendingKey, setThreadDetailPendingKey] = React.useState<string>()
     const [threadDetailError, setThreadDetailError] = React.useState<string>()
@@ -495,6 +496,20 @@ export function createHistoryPage({
       }
     }
 
+    const toggleThreadDisclosure = (): void => {
+      if (showAllThreads && threads) {
+        const visibleKeys = new Set(threads.slice(0, 6).map(thread => thread.threadKey))
+        const openKey = threadDetail?.thread.threadKey ?? threadDetailPendingKey
+        if (openKey && !visibleKeys.has(openKey)) {
+          threadRequests.current.invalidate()
+          setThreadDetail(undefined)
+          setThreadDetailPendingKey(undefined)
+          setThreadDetailError(undefined)
+        }
+      }
+      setShowAllThreads(current => !current)
+    }
+
     const startRecording = async (): Promise<void> => {
       const preset = state?.firstRunPreset
       if (!preset || !policy) return
@@ -694,6 +709,76 @@ export function createHistoryPage({
                     })
                   : t('todayUsageNone')
 
+    const selectedActivityDetail = selectedActivity && selected
+      ? React.createElement(
+          'div', { className: 'ch-detail ch-timeline-detail' },
+          React.createElement(
+            'div', { className: 'ch-detail-head' },
+            appIcon(selectedActivity.surfaces[0]?.bundleId, episodeApp(selectedActivity), { compact: true }),
+            React.createElement(
+              'span', { className: 'ch-detail-copy' },
+              React.createElement('span', { className: 'ch-detail-title' }, episodeSubject(t, selectedActivity)),
+              React.createElement('span', { className: 'ch-detail-meta' },
+                `${episodeApp(selectedActivity)} · ${formatClock(selectedActivity.startedAtMs, activeLocale)}–${formatClock(selectedActivity.endedAtMs, activeLocale)} · ${activityDurationText(t, selectedActivity)}`),
+            ),
+          ),
+          selectedActivity.episodeCount > 1
+            ? React.createElement('p', { className: 'ch-detail-resource' },
+                t('mergedActivity', { count: selectedActivity.episodeCount }))
+            : null,
+          selectedActivity.episodeCount > 1
+            ? React.createElement(
+                'details', { className: 'ch-inspector' },
+                React.createElement('summary', null, t('activityGroupingTitle')),
+                React.createElement('p', { className: 'ch-muted' },
+                  t('activityGroupingBody', {
+                    minutes: TIMELINE_ACTIVITY_MERGE_GAP_MS / 60_000,
+                  })),
+              )
+            : null,
+          React.createElement('p', { className: 'ch-detail-resource' },
+            selectedActivity.resources.length > 0
+              ? t('resources', {
+                  resources: selectedActivity.resources
+                    .map(item => resourceLabel(t, item, episodeApp(selectedActivity)))
+                    .join(', '),
+                })
+              : t('noResourceApps', {
+                  apps: selectedActivity.surfaces.map(item => friendlyAppName(item.bundleId)).join(', '),
+                })),
+          selectedActivity.episodeCount > 1
+            ? React.createElement(
+                'details', { className: 'ch-inspector' },
+                React.createElement('summary', null, t('rawEpisodes')),
+                React.createElement(
+                  'ul', { className: 'ch-segment-list' },
+                  ...selectedRawEpisodes.map(episode => React.createElement(
+                    'li', { key: String(episode.id) },
+                    React.createElement('span', null,
+                      `${formatClock(episode.startedAtMs, activeLocale)}–${formatClock(episode.endedAtMs, activeLocale)}`),
+                    React.createElement('span', { className: 'ch-muted' },
+                      episodeMeta(t, episode, episodeApp(episode))),
+                  )),
+                ),
+              )
+            : null,
+          React.createElement(
+            'details', { className: 'ch-inspector' },
+            React.createElement('summary', null,
+              selectedActivity.episodeCount > 1
+                ? t('latestRawEpisodeWhyRecorded')
+                : t('whyRecorded')),
+            React.createElement('p', { className: 'ch-muted' },
+              t('episodeAuditMeta', {
+                citations: selected.summaryObservationIds.length,
+                confidence: selected.confidence.toFixed(2),
+                start: selected.boundary.startReason,
+                end: selected.boundary.endReason ?? '—',
+              })),
+          ),
+        )
+      : null
+
     const timelineSection = section(
       t('timeline'),
       timeline === undefined
@@ -715,6 +800,10 @@ export function createHistoryPage({
                   const displayDuration = day.activities.some(activity => activity.episodeCount > 1)
                     ? t('approxDuration', { duration })
                     : duration
+                  const maxActivityDuration = Math.max(
+                    1,
+                    ...day.activities.map(activityDisplayDuration),
+                  )
                   return React.createElement(
                     'details', {
                       key: day.dayKey,
@@ -757,8 +846,24 @@ export function createHistoryPage({
                               React.createElement('span', { className: 'ch-episode-meta' }, episodeMeta(t, activity, app)),
                             ),
                           ),
-                          React.createElement('span', { className: 'ch-duration' },
-                            activityDurationText(t, activity)),
+                          React.createElement(
+                            'span', { className: 'ch-duration-wrap' },
+                            React.createElement('span', { className: 'ch-duration' },
+                              activityDurationText(t, activity)),
+                            React.createElement(
+                              'span', { className: 'ch-duration-track', 'aria-hidden': true },
+                              React.createElement('span', {
+                                className: 'ch-duration-fill',
+                                style: {
+                                  width: `${Math.max(
+                                    10,
+                                    Math.round(activityDisplayDuration(activity) / maxActivityDuration * 100),
+                                  )}%`,
+                                },
+                              }),
+                            ),
+                          ),
+                          isSelected ? selectedActivityDetail : null,
                         )
                       }),
                     ),
@@ -774,75 +879,6 @@ export function createHistoryPage({
               disabled: timelineMorePending,
               onClick: () => { void showEarlierHistory() },
             }, timelineMorePending ? t('loadingEarlierHistory') : t('showEarlierHistory')),
-          )
-        : null,
-      selectedActivity && selected
-        ? React.createElement(
-            'div', { className: 'ch-detail' },
-            React.createElement(
-              'div', { className: 'ch-detail-head' },
-              appIcon(selectedActivity.surfaces[0]?.bundleId, episodeApp(selectedActivity)),
-              React.createElement(
-                'span', { className: 'ch-detail-copy' },
-                React.createElement('span', { className: 'ch-detail-title' }, episodeSubject(t, selectedActivity)),
-                React.createElement('span', { className: 'ch-detail-meta' },
-                  `${episodeApp(selectedActivity)} · ${formatClock(selectedActivity.startedAtMs, activeLocale)}–${formatClock(selectedActivity.endedAtMs, activeLocale)} · ${activityDurationText(t, selectedActivity)}`),
-              ),
-            ),
-            selectedActivity.episodeCount > 1
-              ? React.createElement('p', { className: 'ch-detail-resource' },
-                  t('mergedActivity', { count: selectedActivity.episodeCount }))
-              : null,
-            selectedActivity.episodeCount > 1
-              ? React.createElement(
-                  'details', { className: 'ch-inspector' },
-                  React.createElement('summary', null, t('activityGroupingTitle')),
-                  React.createElement('p', { className: 'ch-muted' },
-                    t('activityGroupingBody', {
-                      minutes: TIMELINE_ACTIVITY_MERGE_GAP_MS / 60_000,
-                    })),
-                )
-              : null,
-            React.createElement('p', { className: 'ch-detail-resource' },
-              selectedActivity.resources.length > 0
-                ? t('resources', {
-                    resources: selectedActivity.resources
-                      .map(item => resourceLabel(t, item, episodeApp(selectedActivity)))
-                      .join(', '),
-                  })
-                : t('noResourceApps', {
-                    apps: selectedActivity.surfaces.map(item => friendlyAppName(item.bundleId)).join(', '),
-                  })),
-            selectedActivity.episodeCount > 1
-              ? React.createElement(
-                  'details', { className: 'ch-inspector' },
-                  React.createElement('summary', null, t('rawEpisodes')),
-                  React.createElement(
-                    'ul', { className: 'ch-segment-list' },
-                    ...selectedRawEpisodes.map(episode => React.createElement(
-                      'li', { key: String(episode.id) },
-                      React.createElement('span', null,
-                        `${formatClock(episode.startedAtMs, activeLocale)}–${formatClock(episode.endedAtMs, activeLocale)}`),
-                      React.createElement('span', { className: 'ch-muted' },
-                        episodeMeta(t, episode, episodeApp(episode))),
-                    )),
-                  ),
-                )
-              : null,
-            React.createElement(
-              'details', { className: 'ch-inspector' },
-              React.createElement('summary', null,
-                selectedActivity.episodeCount > 1
-                  ? t('latestRawEpisodeWhyRecorded')
-                  : t('whyRecorded')),
-              React.createElement('p', { className: 'ch-muted' },
-                t('episodeAuditMeta', {
-                  citations: selected.summaryObservationIds.length,
-                  confidence: selected.confidence.toFixed(2),
-                  start: selected.boundary.startReason,
-                  end: selected.boundary.endReason ?? '—',
-                })),
-            ),
           )
         : null,
     )
@@ -898,7 +934,7 @@ export function createHistoryPage({
               resumeOpenCapability?.available
                 ? React.createElement('button', {
                     type: 'button',
-                    className: 'ch-button ch-resume-open',
+                    className: 'ch-button ch-resume-open ch-resume-open-primary',
                     disabled: resumeOpenPending,
                     onClick: () => {
                       void continueRecordedWork(
@@ -1050,7 +1086,7 @@ export function createHistoryPage({
             ? React.createElement('p', { className: 'ch-muted' }, t('workThreadsEmpty'))
             : React.createElement(
                 'ul', { className: 'ch-thread-list' },
-                ...threads.slice(0, 6).map(thread => {
+                ...(showAllThreads ? threads : threads.slice(0, 6)).map(thread => {
                   const title = thread.workspaceTitle ?? t('unnamedWorkspace')
                   const resources = thread.resources
                     .slice(0, 2)
@@ -1080,7 +1116,8 @@ export function createHistoryPage({
                         ),
                       ),
                       React.createElement('span', { className: 'ch-thread-meta' },
-                        t('threadActivityMeta', {
+                        t('threadRecentMeta', {
+                          when: formatRelativeAge(t, thread.endedAtMs),
                           activities: thread.activityCount,
                           duration: t('approxDuration', {
                             duration: formatDuration(t, thread.approxActiveDurationMs),
@@ -1091,6 +1128,18 @@ export function createHistoryPage({
                   )
                 }),
               ),
+      threads && threads.length > 6
+        ? React.createElement(
+            'div', { className: 'ch-thread-more' },
+            React.createElement('button', {
+              type: 'button',
+              className: 'ch-text-action',
+              onClick: toggleThreadDisclosure,
+            }, showAllThreads
+              ? t('showFewerThreads')
+              : t('showMoreThreads', { count: threads.length - 6 })),
+          )
+        : null,
       threadDetailView,
     )
 
