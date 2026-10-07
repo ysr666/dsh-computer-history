@@ -47,6 +47,10 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
 
+      - name: Live-probe native Notepad icon extraction
+        shell: pwsh
+        run: pnpm vitest run tests/integration/application-icon-windows-live.spec.ts
+
       - name: Build Windows collector and UIA probe
         shell: pwsh
         run: |
