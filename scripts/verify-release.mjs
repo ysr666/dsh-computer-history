@@ -9,8 +9,9 @@
 // a tarball that does not contain everything `files` promises (which is how the editor extension could have
 // shipped missing), and a collector signed ad-hoc, which Gatekeeper blocks on every machine that did not build
 // it.
+import { createHash } from 'node:crypto'
 import { execFileSync, spawnSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
@@ -46,6 +47,11 @@ if (!/^## /m.test(changelog)) {
   }
 }
 
+const expectedNative = [
+  { platform: 'darwin', file: 'bin/dsh-computer-history-collector', executable: true },
+  { platform: 'win32', file: 'bin/dsh-computer-history-collector-windows.exe', executable: false },
+  { platform: 'linux', file: 'bin/dsh-computer-history-collector-linux', executable: true },
+]
 let signatureKind = 'unknown'
 const scratch = mkdtempSync(path.join(tmpdir(), 'dsh-release-'))
 try {
@@ -66,23 +72,75 @@ try {
     }
   }
 
-  const binary = 'bin/dsh-computer-history-collector'
-  // `codesign -dv` writes its description to **stderr**, so a helper that only returns stdout reads an empty
-  // string and reports a signed binary as unsigned - which is what the first version of this check did.
+  const extracted = path.join(scratch, 'extracted')
+  execFileSync('mkdir', ['-p', extracted])
+  execFileSync('tar', ['-xzf', tarball, '-C', extracted, 'package/bin'])
+  const packageRoot = path.join(extracted, 'package')
+  const provenancePath = path.join(packageRoot, 'bin', 'native-artifacts.json')
+  let provenance
+  try {
+    provenance = JSON.parse(readFileSync(provenancePath, 'utf8'))
+  } catch (error) {
+    problems.push(
+      `native artifact provenance is unreadable: ${error instanceof Error ? error.message : String(error)}`,
+    )
+  }
+
+  const currentCommit = process.env.GITHUB_SHA
+    ?? execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()
+  if (provenance) {
+    if (provenance.schema !== 'dsh-computer-history/native-artifacts/v1') {
+      problems.push(`native-artifacts.json has unsupported schema ${provenance.schema}`)
+    }
+    if (provenance.sourceCommit !== currentCommit) {
+      problems.push(
+        `native artifacts came from ${provenance.sourceCommit ?? '(missing commit)'} instead of ${currentCommit}`,
+      )
+    }
+  }
+
+  for (const expected of expectedNative) {
+    const binary = path.join(packageRoot, expected.file)
+    let bytes
+    try {
+      bytes = readFileSync(binary)
+    } catch {
+      problems.push(`${expected.file} is missing from the extracted release tarball`)
+      continue
+    }
+    const sha256 = createHash('sha256').update(bytes).digest('hex')
+    const recorded = provenance?.binaries?.find(
+      item => item.platform === expected.platform && item.file === expected.file,
+    )
+    if (!recorded) {
+      problems.push(`native-artifacts.json has no ${expected.platform} entry for ${expected.file}`)
+    } else {
+      if (recorded.sha256 !== sha256) {
+        problems.push(`${expected.file} hash does not match native-artifacts.json`)
+      }
+      if (recorded.bytes !== bytes.byteLength) {
+        problems.push(`${expected.file} byte count does not match native-artifacts.json`)
+      }
+    }
+    if (expected.executable && (statSync(binary).mode & 0o111) === 0) {
+      problems.push(`${expected.file} lost its executable bit in the tarball`)
+    }
+  }
+
+  const binary = path.join(packageRoot, 'bin', 'dsh-computer-history-collector')
   const described = spawnSync('codesign', ['-dv', binary], { encoding: 'utf8' })
   const description = `${described.stdout ?? ''}${described.stderr ?? ''}`
   signatureKind = /Developer ID Application/.test(description) ? 'Developer ID' : 'ad-hoc'
   if (!/Signature=|Authority=/.test(description)) {
-    problems.push(
-      `${binary} is not signed at all: an unsigned arm64 binary is killed by the kernel ("Killed: 9", measured `
-      + 'on this machine), so the collector would not run for anyone. An ad-hoc signature is enough for a plugin '
-      + 'install; docs/release.md says when a Developer ID would become necessary.',
-    )
+    problems.push('the packaged macOS collector is not signed at all')
   }
   try {
     execFileSync('codesign', ['--verify', '--strict', binary], { stdio: ['ignore', 'pipe', 'pipe'] })
   } catch (error) {
-    problems.push(`${binary} fails codesign --verify --strict: ${String(error.stderr ?? '').trim().slice(-120)}`)
+    problems.push(
+      `the packaged macOS collector fails codesign --verify --strict: `
+      + String(error.stderr ?? '').trim().slice(-120),
+    )
   }
 } finally {
   rmSync(scratch, { recursive: true, force: true })
@@ -93,7 +151,6 @@ if (problems.length > 0) {
   process.exit(1)
 }
 console.log(
-  `release preflight holds for ${version}: changelog section, every promised entry in the tarball, and a `
-  + `signature that verifies (${signatureKind}). No certificate is needed for a DSH plugin install: the CLI downloads `
-  + 'the tarball with Node, which sets no quarantine flag, and a quarantined ad-hoc binary was measured to run.',
+  `release preflight holds for ${version}: changelog, every promised tarball entry, three native collectors, `
+  + `per-runner SHA-256 provenance from this commit, executable modes, and macOS signature (${signatureKind}).`,
 )
