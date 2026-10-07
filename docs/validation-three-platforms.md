@@ -291,14 +291,13 @@ is the message layer from `docs/collector-protocol.md`, and it is tested whereve
 
 ```bash
 pnpm verify:collector-windows
-# rust collectors: 34 tests passed across collector-protocol, windows, linux; these tests do not
-# exercise UI Automation or AT-SPI - only a live run counts, and docs/validation-three-platforms.md
-# records which platforms have one
+# 2026-10-07: 61 tests passed across collector-protocol, windows and linux.
+# These tests still do not exercise UI Automation or AT-SPI - only a live run counts.
 ```
 
-The Windows crate contributes 22 of those tests (the observation engine, the host-command parser and the
-adapter table), the shared message layer 9, the Linux crate 3. A missing Rust toolchain prints a **skip
-that says UNVERIFIED**, never a pass.
+A missing Rust toolchain prints a **skip that says UNVERIFIED**, never a pass. The live Windows UIA and
+Host acceptance is now a separate GitHub-hosted gate below, so a green Rust suite cannot silently stand in
+for a real foreground-window observation.
 
 Calibrated in both directions: the content boundary is asserted against the serialised line (adding a
 `selection_text` field and patching the serialiser turns it red), the cross-platform adapter guard fails
@@ -466,14 +465,11 @@ open rather than answered: a focused password input in Chrome never appeared in 
 all, so whether Chromium answers `IsPassword` is still unmeasured, and browsers keep requiring the paired
 companion for exactly the reason the preset copy gives.
 
-**Two audit columns said the wrong thing, and now do not.** Every Windows row stored
-`source_provider: "macos-ax"` - the collector never said which path produced the observation and the Host
-defaulted to the macOS one - and `refusedByReason` reported one `unknown` with nothing refused. Both are
-fixed: the observation carries `provider`, the Windows collector sends `windows-uia`, and the counter no
-longer counts a re-sent duplicate (nor a deletion-policy block) as unattributed. Evidence boundary: the
-stored row quoted above was written **before** that change, so it still says `macos-ax`; the fix is verified
-by the protocol test that asserts the field on the wire and by two integration cases, not yet by a stored
-row from that machine.
+**Two audit columns said the wrong thing, and now do not.** The 2026-10-05 physical-machine
+rows stored `source_provider: "macos-ax"` before native provenance was carried across the wire, and
+`refusedByReason` once counted a re-sent duplicate as `unknown`. Both fixes now have live evidence rather
+than only protocol tests: the 2026-10-07 hosted Windows acceptance below stores the real Notepad observation
+as `source_provider: "windows-uia"`, while duplicate/deletion-policy drops remain outside the refusal count.
 
 **The command sequence itself was rehearsed** on macOS with a temporary `DSH_HOME` and the tarball built
 from the current tree, because three of its steps are not obvious and the first version of this recipe got
@@ -508,6 +504,52 @@ provider that answers "not supported" makes the collector withhold the whole obs
 capture. VS Code is the application that would answer it, and it is not installed on that machine.
 `native/windows/examples/foreground_identity.rs` prints the element state per foreground window, so one
 command answers it once such an application is there.
+
+### Current-main Windows live acceptance on GitHub-hosted Windows — 2026-10-07
+
+The physical Windows 11 machine is no longer the only way to exercise UI Automation. A permanent
+`Windows live acceptance` workflow runs on `windows-latest` and deliberately requires an interactive
+desktop before it trusts any result. The measured runner was Windows Server 2025
+(`10.0.26100.0`), user `runneradmin`, console session 2, with `UserInteractive=True` and an available
+input desktop.
+
+The gate launches a real Notepad window, verifies that its HWND is the foreground window, runs the
+repository's `anchor_probe` through the same UI Automation seam as the collector, and then configures the
+production Windows collector. The direct live observation was:
+
+```text
+foreground.isNotepad = True
+app.bundleId          = notepad.exe
+source.provider       = windows-uia
+source.adapter        = notepad
+window.title          = dch-github-windows-live.txt - Notepad
+```
+
+That run also exposed a real cross-version Windows defect. The 2026-10-05 Windows 11 machine reported
+`Notepad.exe`, while Windows Server 2025 reported `notepad.exe`. The native collector already treated
+Windows executable identities case-insensitively, but Host adapter lookup and its second app-policy gate
+did not. A policy for `Notepad.exe` could therefore configure the collector successfully and still lose
+the observation before storage. The Host now gives only Windows `.exe` app identities case-insensitive
+semantics; macOS bundle ids and Linux desktop ids remain exact.
+
+The final acceptance intentionally keeps the policy spelling `Notepad.exe` while the live collector emits
+`notepad.exe`. It boots DSH 0.2.0-rc.2 with a throwaway home and the current packaged plugin, spawns the
+current release collector, and requires the complete storage path:
+
+```text
+allow explicit bundles      revision 2, 13 rules
+/state                      capture=running
+collector                   state=running, reason=(none)
+SQLite                      episodes/observations = 1|1
+latest observation          notepad.exe / windows-uia / notepad
+/recent                     1 row, episode:win-4972:1
+stored source_provider      windows-uia
+```
+
+This is a current-main, repeatable **real Notepad -> UIA collector -> Host -> SQLite -> /recent** proof,
+not a replay or a protocol fixture. A physical Windows 11 run still has value for consumer-OS, installed-app
+and permission differences, but it is now supplementary compatibility evidence rather than the sole Windows
+live gate.
 
 ## P6 - the Linux collector, and the rule it exists to honour
 
