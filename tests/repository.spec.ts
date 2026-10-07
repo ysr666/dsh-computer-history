@@ -375,6 +375,30 @@ describe('repository scaffold', () => {
     expect(routeSource).not.toContain("'/api/computer-history'")
   })
 
+  it('routes release packaging through executable-mode restoration', () => {
+    const packer = readFileSync(
+      new URL('../scripts/pack-native-release.mjs', import.meta.url),
+      'utf8',
+    )
+    const collectorsWorkflow = readFileSync(
+      new URL('../.github/workflows/collectors.yml', import.meta.url),
+      'utf8',
+    )
+    const releaseWorkflow = readFileSync(
+      new URL('../.github/workflows/release.yml', import.meta.url),
+      'utf8',
+    )
+
+    expect(packer).toContain("'bin/dsh-computer-history-collector'")
+    expect(packer).toContain("'bin/dsh-computer-history-collector-linux'")
+    expect(packer).toContain('chmodSync(target, 0o755)')
+    expect(packer).toContain("execFileSync('tar', ['-xzf', output")
+    expect(collectorsWorkflow).toContain('node scripts/pack-native-release.mjs package-out')
+    expect(releaseWorkflow).toContain('node scripts/pack-native-release.mjs package-out')
+    expect(collectorsWorkflow).not.toContain('DSH_NATIVE_PREBUILT=1 pnpm pack')
+    expect(releaseWorkflow).not.toContain('DSH_NATIVE_PREBUILT=1 pnpm pack')
+  })
+
   it('keeps packaged native collectors internal to the Host', () => {
     const manifest = JSON.parse(readFileSync(
       new URL('../package.json', import.meta.url),
