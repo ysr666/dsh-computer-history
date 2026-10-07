@@ -33,6 +33,13 @@ if (!members.includes(manifestMember)) {
   }
   if (!/^[0-9a-f]{40}$/i.test(manifest.sourceCommit ?? '')) {
     problems.push('native artifact manifest has no valid source commit')
+  } else if (
+    process.env.GITHUB_SHA
+    && manifest.sourceCommit.toLowerCase() !== process.env.GITHUB_SHA.toLowerCase()
+  ) {
+    problems.push(
+      `native artifact manifest source ${manifest.sourceCommit} does not match workflow source ${process.env.GITHUB_SHA}`,
+    )
   }
   const byPath = new Map((manifest.artifacts ?? []).map(item => [item.path, item]))
   for (const entry of required) {
@@ -45,6 +52,19 @@ if (!members.includes(manifestMember)) {
     const sha256 = createHash('sha256').update(bytes).digest('hex')
     if (item.sha256 !== sha256) {
       problems.push(`hash mismatch for ${entry}`)
+    }
+    const expected = {
+      'bin/dsh-computer-history-collector': ['darwin', 'universal'],
+      'bin/dsh-computer-history-collector-windows.exe': ['win32', 'x64'],
+      'bin/dsh-computer-history-collector-linux': ['linux', 'x64'],
+    }[entry]
+    if (
+      expected
+      && (item.platform !== expected[0] || item.arch !== expected[1])
+    ) {
+      problems.push(
+        `manifest identity mismatch for ${entry}: ${item.platform}/${item.arch}`,
+      )
     }
   }
 }
