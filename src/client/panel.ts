@@ -13,6 +13,7 @@ import type {
 } from '../shared/index.js'
 import { localDayKey, TIMELINE_ACTIVITY_MERGE_GAP_MS } from '../shared/audit-view.js'
 import { historyApi } from './api.js'
+import { appIcon } from './app-icon.js'
 import {
   episodeApp,
   episodeSubject,
@@ -88,33 +89,6 @@ function threadSkeleton(label: string): React.ReactElement {
       skeletonLine('ch-skeleton-small'),
     ),
     skeletonLine('ch-skeleton-tiny'),
-  )
-}
-
-function appMark(label: string): string {
-  const known: Record<string, string> = {
-    Terminal: '>_',
-    'VS Code': 'VS',
-    Xcode: 'X',
-    Finder: 'F',
-    Preview: 'P',
-    Notes: 'N',
-    Safari: 'S',
-    'Google Chrome': 'GC',
-    'Microsoft Edge': 'E',
-    ChatGPT: '✦',
-  }
-  if (known[label]) return known[label]
-  const parts = label.trim().split(/\s+/).filter(Boolean)
-  const initials = parts.slice(0, 2).map(part => part[0]).join('')
-  return (initials || '•').toUpperCase()
-}
-
-function appBadge(app: string): React.ReactElement {
-  return React.createElement(
-    'span',
-    { className: 'ch-app-mark', 'aria-hidden': true, title: app },
-    appMark(app),
   )
 }
 
@@ -776,7 +750,7 @@ export function createHistoryPage({
                               'aria-expanded': isSelected,
                               onClick: () => { runAction(() => openActivity(activity)) },
                             },
-                            appBadge(app),
+                            appIcon(activity.surfaces[0]?.bundleId, app),
                             React.createElement(
                               'span', { className: 'ch-episode-copy' },
                               React.createElement('span', { className: 'ch-episode-title' }, episodeSubject(t, activity)),
@@ -807,7 +781,7 @@ export function createHistoryPage({
             'div', { className: 'ch-detail' },
             React.createElement(
               'div', { className: 'ch-detail-head' },
-              appBadge(episodeApp(selectedActivity)),
+              appIcon(selectedActivity.surfaces[0]?.bundleId, episodeApp(selectedActivity)),
               React.createElement(
                 'span', { className: 'ch-detail-copy' },
                 React.createElement('span', { className: 'ch-detail-title' }, episodeSubject(t, selectedActivity)),
@@ -911,7 +885,7 @@ export function createHistoryPage({
         recentEpisode
           ? React.createElement(
               'div', { className: 'ch-resume-suggestion' },
-              appBadge(episodeApp(recentEpisode)),
+              appIcon(recentEpisode.surfaces[0]?.bundleId, episodeApp(recentEpisode)),
               React.createElement(
                 'span', { className: 'ch-resume-copy' },
                 React.createElement('span', { className: 'ch-resume-title' }, resumeSubject(recentEpisode) ?? episodeSubject(t, recentEpisode)),
