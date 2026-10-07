@@ -30,13 +30,17 @@ const killTree = pid => {
   try { process.kill(-pid, 'SIGTERM') } catch { try { process.kill(pid, 'SIGTERM') } catch { /* already gone */ } }
 }
 
-// The plugin carries a collector for macOS only. On a machine without one (Windows, or a checkout that has not
-// built it) the Host starts, reports collector-exited and stops at a boundary - honest, but it exercises less than
-// the machine can. Set COLLECTOR_EXECUTABLE to the binary and the runs use it.
+// A caller can still override the collector for focused development probes. Packaged-install verification instead
+// sets DSH_E2E_REQUIRE_COLLECTOR=1 without an override: that proves the installed package selected its own binary.
 const collectorLine = process.env.COLLECTOR_EXECUTABLE
   ? `    collectorExecutable: ${process.env.COLLECTOR_EXECUTABLE}\n`
   : ''
-const collectorRequired = Boolean(process.env.COLLECTOR_EXECUTABLE)
+const collectorRequired =
+  Boolean(process.env.COLLECTOR_EXECUTABLE)
+  || process.env.DSH_E2E_REQUIRE_COLLECTOR === '1'
+const providedTarball = process.env.DSH_E2E_TARBALL
+  ? path.resolve(process.env.DSH_E2E_TARBALL)
+  : undefined
 const diagnosticTimeline = process.env.DSH_E2E_DIAGNOSTIC_TIMELINE === '1'
 const explicitAllowBundles = (process.env.DSH_E2E_ALLOW_BUNDLES ?? '')
   .split(',')
@@ -116,19 +120,31 @@ const companionPort = webPort + 1
 let host
 
 try {
-  // 1. Pack the plugin the way it is released, into a temporary directory. The editor companion is an
-  // intentionally independent pnpm project with its own lockfile and build-script policy; the release workflow
-  // installs it before `pnpm pack`, so this one-command harness must do the same on a clean clone.
-  const editorDeps = run('pnpm', ['install', '--frozen-lockfile'], { cwd: path.join(REPO, 'extension-editor') })
-  record('install editor build deps', editorDeps.status === 0, editorDeps.status === 0 ? 'exit 0' : editorDeps.out.trim().slice(-240))
-  if (editorDeps.status !== 0) throw new Error('editor build dependency install failed')
+  // 1. Either consume the exact assembled release artifact or build a local package for the ordinary developer
+  // harness. Packaged-install CI always supplies DSH_E2E_TARBALL so no native binary is rebuilt here.
+  let tarball
+  if (providedTarball) {
+    record(
+      'use packaged artifact',
+      existsSync(providedTarball),
+      providedTarball,
+    )
+    if (!existsSync(providedTarball)) {
+      throw new Error('provided packaged artifact does not exist')
+    }
+    tarball = providedTarball
+  } else {
+    const editorDeps = run('pnpm', ['install', '--frozen-lockfile'], { cwd: path.join(REPO, 'extension-editor') })
+    record('install editor build deps', editorDeps.status === 0, editorDeps.status === 0 ? 'exit 0' : editorDeps.out.trim().slice(-240))
+    if (editorDeps.status !== 0) throw new Error('editor build dependency install failed')
 
-  rmSync(path.join(REPO, 'e2e-pack'), { recursive: true, force: true })
-  mkdirSync(path.join(REPO, 'e2e-pack'), { recursive: true })
-  const packed = run('pnpm', ['pack', '--pack-destination', path.join(REPO, 'e2e-pack')])
-  const tarball = path.join(REPO, 'e2e-pack', `dsh-computer-history-${JSON.parse(readFileSync('package.json', 'utf8')).version}.tgz`)
-  record('pack', packed.status === 0, packed.status === 0 ? path.relative(REPO, tarball) : packed.out.trim().slice(-160))
-  if (packed.status !== 0) throw new Error('pack failed')
+    rmSync(path.join(REPO, 'e2e-pack'), { recursive: true, force: true })
+    mkdirSync(path.join(REPO, 'e2e-pack'), { recursive: true })
+    const packed = run('pnpm', ['pack', '--pack-destination', path.join(REPO, 'e2e-pack')])
+    tarball = path.join(REPO, 'e2e-pack', `dsh-computer-history-${JSON.parse(readFileSync('package.json', 'utf8')).version}.tgz`)
+    record('pack', packed.status === 0, packed.status === 0 ? path.relative(REPO, tarball) : packed.out.trim().slice(-160))
+    if (packed.status !== 0) throw new Error('pack failed')
+  }
 
   // 2. Install into the throwaway home. The first add stops at the build-script gate, which is answered the same
   // way a person would answer it in the UI; the retry then succeeds.
