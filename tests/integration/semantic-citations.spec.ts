@@ -96,7 +96,7 @@ describe('semantic provenance in the schema (ADR 0004 §5)', () => {
 })
 
 describe('turn off and purge (ADR 0004, Consequences)', () => {
-  it('removes the model summary and leaves the deterministic one', () => {
+  it('selects model-written summaries without deleting the underlying Episodes', () => {
     const db = database()
     insertEpisode(db, 'episode-local', 'local', 'w1')
     insertEpisode(db, 'episode-remote', 'remote', 'w1')
@@ -104,36 +104,37 @@ describe('turn off and purge (ADR 0004, Consequences)', () => {
 
     const optIns = new SemanticOptInStore(db)
     const scope = { kind: 'workspace', id: 'w1' } as const
-    optIns.grant(scope, 'remote', 'some-model', 1_000)
-    expect(optIns.list()).toHaveLength(1)
-
-    const result = optIns.revoke(scope)
-    const purged = optIns.purge(scope)
-
-    expect(result).toBe(true)
-    // Both model-written summaries go; the deterministic text stays, because it
-    // never left the machine and there is nothing to withdraw.
-    expect(purged).toBe(2)
-    const left = (db.prepare('SELECT id FROM episodes ORDER BY id').all() as Array<{ id: string }>)
-      .map(row => row.id)
-    expect(left).toEqual(['episode-plain'])
-    expect(optIns.list()).toHaveLength(0)
+    expect(optIns.modelEpisodeIds(scope).map(String)).toEqual([
+      'episode-local',
+      'episode-remote',
+    ])
+    expect(
+      (db.prepare('SELECT id FROM episodes ORDER BY id').all() as Array<{ id: string }>)
+        .map(row => row.id),
+    ).toEqual([
+      'episode-local',
+      'episode-plain',
+      'episode-remote',
+    ])
     db.close()
   })
 
-  it('purges per scope, not globally', () => {
+  it('selects model summaries per scope, not globally', () => {
     const db = database()
     insertEpisode(db, 'episode-a', 'local', 'w1')
     insertEpisode(db, 'episode-b', 'local', 'w2')
     const optIns = new SemanticOptInStore(db)
-    expect(optIns.purge({ kind: 'workspace', id: 'w1' })).toBe(1)
-    const left = (db.prepare('SELECT id FROM episodes').all() as Array<{ id: string }>)
-      .map(row => row.id)
-    expect(left).toEqual(['episode-b'])
+    expect(
+      optIns.modelEpisodeIds({ kind: 'workspace', id: 'w1' }).map(String),
+    ).toEqual(['episode-a'])
+    expect(
+      (db.prepare('SELECT id FROM episodes ORDER BY id').all() as Array<{ id: string }>)
+        .map(row => row.id),
+    ).toEqual(['episode-a', 'episode-b'])
     db.close()
   })
 
-  it('purges an app model summary after raw provenance has compacted away', () => {
+  it('finds an app model summary after raw provenance has compacted away', () => {
     const db = database()
     insertEpisode(db, 'episode-remote-app', 'remote')
     insertEpisode(db, 'episode-plain-app', 'deterministic')
@@ -146,9 +147,6 @@ describe('turn off and purge (ADR 0004, Consequences)', () => {
       `).run(episodeId)
     }
 
-    // No observation or episode_observations rows remain: this is the normal
-    // post-retention state for a still-live Episode. The durable surface
-    // aggregate is the only app identity that survives with the summary.
     expect(db.prepare(
       'SELECT COUNT(*) AS count FROM observations',
     ).get()).toEqual({ count: 0 })
@@ -157,17 +155,18 @@ describe('turn off and purge (ADR 0004, Consequences)', () => {
     ).get()).toEqual({ count: 0 })
 
     const optIns = new SemanticOptInStore(db)
-    const purged = optIns.purge({
-      kind: 'app',
-      bundleId: 'com.example.Editor',
-    })
-
-    expect(purged).toBe(1)
-    const remaining = db.prepare(
-      'SELECT id FROM episodes ORDER BY id',
-    ).all() as Array<{ id: string }>
-    expect(remaining.map(row => row.id)).toEqual([
+    expect(
+      optIns.modelEpisodeIds({
+        kind: 'app',
+        bundleId: 'com.example.Editor',
+      }).map(String),
+    ).toEqual(['episode-remote-app'])
+    expect(
+      (db.prepare('SELECT id FROM episodes ORDER BY id').all() as Array<{ id: string }>)
+        .map(row => row.id),
+    ).toEqual([
       'episode-plain-app',
+      'episode-remote-app',
     ])
     db.close()
   })
