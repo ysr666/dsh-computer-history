@@ -15,7 +15,6 @@ import {
   bundledEditorCompanionVsix,
   EditorCompanionInstaller,
 } from '../companion/editor-install.js'
-import { stageEditorCompanionBootstrap } from '../companion/editor-bootstrap.js'
 import {
   ResumeOpenLaunchError,
   ResumeOpenRequestError,
@@ -121,8 +120,8 @@ function requestFailure(error: unknown): Response {
 export function registerHistoryApi(
   ctx: Context,
   options: {
-    readonly configureEditorCompanion?: (port: number) => void
-  } = {},
+    readonly configureEditorCompanion: (port: number) => void | Promise<void>
+  },
 ): void {
   const history = computerHistoryService(ctx)
   const resumeOpener = new ResumeResourceOpener({
@@ -567,19 +566,11 @@ export function registerHistoryApi(
             reason: 'pairing-unavailable',
           })
         }
-        if (options.configureEditorCompanion) {
-          // Production routes publication back through the backend operation
-          // tracker. If teardown began while the editor installer was running,
-          // this fails before any pairing row is touched; if publication already
-          // began, backend.drain() waits for the compensatable rotation to end.
-          options.configureEditorCompanion(current.port)
-        } else {
-          const pairing = history.rotatePairing('editor')
-          stageEditorCompanionBootstrap({
-            port: current.port,
-            token: pairing.token,
-          })
-        }
+        // Editor publication is deliberately supplied by the plugin rather
+        // than reconstructed here. The plugin wraps backend rotation + bootstrap
+        // rename in the cross-process publication lock; keeping a local fallback
+        // would silently reintroduce the exact multi-Host race that lock closes.
+        await options.configureEditorCompanion(current.port)
         return json({ ...install, configured: true })
       } catch {
         return json({

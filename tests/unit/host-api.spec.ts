@@ -114,7 +114,9 @@ function harness(overrides: Record<string, unknown> = {}) {
     },
   } as unknown as Context
 
-  registerHistoryApi(ctx)
+  registerHistoryApi(ctx, {
+    configureEditorCompanion: async () => {},
+  })
 
   async function request(
     suffix: string,
