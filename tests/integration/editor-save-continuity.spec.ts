@@ -12,6 +12,7 @@ import {
   ObservationStore,
   openHistoryDatabase,
 } from '../../src/host/store/index.js'
+import { buildResumeHandoff, resolveResume } from '../../src/host/resume/index.js'
 import { PolicyRuleId, type ActivityEventKind, type PolicySnapshot } from '../../src/shared/index.js'
 
 const roots: string[] = []
@@ -54,7 +55,7 @@ describe('editor save continuity', () => {
     expect(observation?.activity.event).toBeUndefined()
   })
 
-  it('turns an editor save into auditable changedResources and verification metadata', async () => {
+  it('turns an editor save into auditable changedResources and a resume handoff', async () => {
     const root = mkdtempSync(path.join(os.tmpdir(), 'dsh-ch-save-'))
     roots.push(root)
     const workspace = path.join(root, 'repo')
@@ -105,6 +106,24 @@ describe('editor save continuity', () => {
       changeCount: 1,
     }])
     expect(episodes[0]?.verifications).toEqual([{
+      kind: 'test',
+      result: 'success',
+      lastObservedAtMs: now + 3_000,
+      observationCount: 1,
+    }])
+
+    const resolution = resolveResume(episodes, {
+      query: '继续 main.ts',
+      nowMs: now + 3_000,
+      turn: 1,
+      source: 'tool',
+    })
+    const handoff = buildResumeHandoff(resolution)
+    expect(handoff.status).toBe('hit')
+    if (handoff.status !== 'hit') throw new Error('expected hit')
+    expect(handoff.changedResources.map(resource => resource.displayLabel))
+      .toEqual(['main.ts'])
+    expect(handoff.verifications).toEqual([{
       kind: 'test',
       result: 'success',
       lastObservedAtMs: now + 3_000,

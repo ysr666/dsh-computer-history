@@ -1,4 +1,4 @@
-import type { EpisodeSummary, SurfaceKind, TimelineActivity } from '../shared/index.js'
+import { isGenericContinuationCandidate, type EpisodeSummary, type SurfaceKind, type TimelineActivity } from '../shared/index.js'
 import type { HistoryTranslate } from './locale.js'
 
 /**
@@ -45,6 +45,30 @@ export function episodeApp(
 ): string {
   const first = episode.surfaces[0]?.bundleId
   return first ? friendlyAppName(first) : '—'
+}
+
+/**
+ * Human-readable anchor for the primary generic Continue candidate.
+ * Terminal-only activity deliberately yields no continuation subject.
+ */
+export function continuationSubject(
+  episode: Pick<EpisodeSummary, 'workspace' | 'lastStrongResource' | 'resources' | 'surfaces'>,
+): string | undefined {
+  if (episodeApp(episode) === 'Terminal') return undefined
+  const workspace = episode.workspace?.title?.trim()
+  if (workspace) return workspace
+  return episode.lastStrongResource?.displayLabel
+    ?? episode.resources[0]?.displayLabel
+}
+
+/** First recent Episode that is both auditable and useful as a generic Continue target. */
+export function pickContinuationEpisode(
+  episodes: readonly EpisodeSummary[],
+): EpisodeSummary | undefined {
+  return episodes.find(episode =>
+    isGenericContinuationCandidate(episode)
+    && continuationSubject(episode) !== undefined,
+  )
 }
 
 export function isHomeDirectoryResource(
