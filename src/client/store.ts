@@ -31,6 +31,7 @@ type ControlApi = Pick<typeof historyApi,
   | 'setRetention'
   | 'deleteHistory'
   | 'importHistory'
+  | 'revokeSemantic'
   | 'rotatePairing'
 >
 export interface HistoryControlStore {
@@ -49,6 +50,11 @@ export interface HistoryControlStore {
   }): Promise<RetentionSettings>
   deleteHistory(request: DeleteHistoryRequest): Promise<DeleteHistoryResult>
   importHistory(document: unknown): Promise<{ readonly imported: Record<string, number> }>
+  revokeSemantic(scopeKey: string): Promise<{
+    readonly revoked: boolean
+    readonly purged: number
+    readonly forgotten: number
+  }>
   rotatePairing(): Promise<PairingRotation>
 }
 
@@ -204,6 +210,17 @@ export function createHistoryControlStore(
     },
     async importHistory(document) {
       const result = await api.importHistory(document)
+      mutationEpoch += 1
+      publish({
+        ...snapshot,
+        status: 'ready',
+        error: undefined,
+        historyRevision: snapshot.historyRevision + 1,
+      })
+      return result
+    },
+    async revokeSemantic(scopeKey) {
+      const result = await api.revokeSemantic(scopeKey)
       mutationEpoch += 1
       publish({
         ...snapshot,
