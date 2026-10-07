@@ -718,6 +718,67 @@ export class EpisodeStore {
     `).all(...params).map((row) => this.materialize(row))
   }
 
+  /**
+   * Replace only an Episode's derived summary and citations.
+   *
+   * Semantic revocation must be able to discard model output without deleting
+   * the underlying work segment or rewriting its durable resource/surface
+   * aggregates. This method deliberately leaves all Episode identity,
+   * boundaries, workspace, thread and provenance links untouched.
+   */
+  public replaceSummary(input: {
+    readonly id: EpisodeId
+    readonly summaryKind: EpisodeSummaryKind
+    readonly summary: string
+    readonly summaryObservationIds: readonly ObservationId[]
+    readonly updatedAtMs: number
+  }): boolean {
+    const ownsTransaction = !this.db.isTransaction
+    if (ownsTransaction) this.db.exec('BEGIN IMMEDIATE')
+    const commit = (): void => {
+      if (ownsTransaction) this.db.exec('COMMIT')
+    }
+    try {
+      const updated = this.db.prepare(`
+        UPDATE episodes
+        SET summary_kind = ?,
+            summary_text = ?,
+            updated_at_ms = ?
+        WHERE id = ?
+      `).run(
+        input.summaryKind,
+        input.summary,
+        input.updatedAtMs,
+        input.id,
+      )
+      if (Number(updated.changes) === 0) {
+        commit()
+        return false
+      }
+
+      this.db.prepare(
+        'DELETE FROM episode_summary_citations WHERE episode_id = ?',
+      ).run(input.id)
+      const cite = this.db.prepare(`
+        INSERT OR IGNORE INTO episode_summary_citations(
+          episode_id,
+          observation_id
+        ) VALUES (?, ?)
+      `)
+      for (const observationId of input.summaryObservationIds) {
+        cite.run(input.id, Number(observationId))
+      }
+
+      commit()
+      return true
+    } catch (error) {
+      if (ownsTransaction && this.db.isTransaction) {
+        this.db.exec('ROLLBACK')
+      }
+      throw error
+    }
+  }
+
   public deleteAll(): number {
     return Number(this.db.prepare('DELETE FROM episodes').run().changes)
   }
