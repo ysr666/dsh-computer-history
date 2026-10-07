@@ -252,6 +252,7 @@ export function createHistoryPage({
     const [threads, setThreads] = React.useState<readonly WorkThread[] | null>()
     const [showAllThreads, setShowAllThreads] = React.useState(false)
     const [threadDetail, setThreadDetail] = React.useState<WorkThreadDetail>()
+    const [threadDetailKey, setThreadDetailKey] = React.useState<string>()
     const [threadDetailPendingKey, setThreadDetailPendingKey] = React.useState<string>()
     const [threadDetailError, setThreadDetailError] = React.useState<string>()
     const [resumeQuery, setResumeQuery] = React.useState('')
@@ -349,6 +350,7 @@ export function createHistoryPage({
       setSelected(undefined)
       setSelectedActivity(undefined)
       setThreadDetail(undefined)
+      setThreadDetailKey(undefined)
       setThreadDetailPendingKey(undefined)
       setThreadDetailError(undefined)
       setHint(undefined)
@@ -471,14 +473,17 @@ export function createHistoryPage({
     }
 
     const openThread = async (thread: WorkThread): Promise<void> => {
-      if (threadDetail?.thread.threadKey === thread.threadKey) {
+      if (threadDetailKey === thread.threadKey) {
         threadRequests.current.invalidate()
         setThreadDetail(undefined)
+        setThreadDetailKey(undefined)
         setThreadDetailPendingKey(undefined)
         setThreadDetailError(undefined)
         return
       }
       const request = threadRequests.current.begin()
+      setThreadDetail(undefined)
+      setThreadDetailKey(thread.threadKey)
       setThreadDetailPendingKey(thread.threadKey)
       setThreadDetailError(undefined)
       try {
@@ -499,10 +504,10 @@ export function createHistoryPage({
     const toggleThreadDisclosure = (): void => {
       if (showAllThreads && threads) {
         const visibleKeys = new Set(threads.slice(0, 6).map(thread => thread.threadKey))
-        const openKey = threadDetail?.thread.threadKey ?? threadDetailPendingKey
-        if (openKey && !visibleKeys.has(openKey)) {
+        if (threadDetailKey && !visibleKeys.has(threadDetailKey)) {
           threadRequests.current.invalidate()
           setThreadDetail(undefined)
+          setThreadDetailKey(undefined)
           setThreadDetailPendingKey(undefined)
           setThreadDetailError(undefined)
         }
@@ -1001,7 +1006,9 @@ export function createHistoryPage({
                 onClick: () => {
                   threadRequests.current.invalidate()
                   setThreadDetail(undefined)
+                  setThreadDetailKey(undefined)
                   setThreadDetailPendingKey(undefined)
+                  setThreadDetailError(undefined)
                 },
               }, '×'),
             ),
@@ -1050,11 +1057,7 @@ export function createHistoryPage({
             ),
           )
         })()
-      : threadDetailPendingKey
-        ? React.createElement('p', { className: 'ch-muted', role: 'status' }, t('projectHistoryLoading'))
-        : threadDetailError
-          ? React.createElement('p', { className: 'ch-muted', role: 'alert' }, t('projectHistoryUnavailable'))
-          : null
+      : null
 
     const threadSection = section(
       t('workThreads'),
@@ -1078,9 +1081,31 @@ export function createHistoryPage({
                     .slice(0, 2)
                     .map(resource => resource.displayLabel ?? resource.canonicalUri)
                     .join(', ')
-                  const isOpen = threadDetail?.thread.threadKey === thread.threadKey
+                  const isOpen = threadDetailKey === thread.threadKey
+                  const inlineDetail = !isOpen
+                    ? null
+                    : threadDetailPendingKey === thread.threadKey
+                      ? React.createElement(
+                          'p',
+                          { className: 'ch-thread-inline-status ch-muted', role: 'status' },
+                          t('projectHistoryLoading'),
+                        )
+                      : threadDetail?.thread.threadKey === thread.threadKey
+                        ? threadDetailView
+                        : threadDetailError
+                          ? React.createElement(
+                              'p',
+                              { className: 'ch-thread-inline-status ch-muted', role: 'alert' },
+                              t('projectHistoryUnavailable'),
+                            )
+                          : null
                   return React.createElement(
-                    'li', { key: thread.threadKey, className: 'ch-thread-item' },
+                    'li', {
+                      key: thread.threadKey,
+                      className: isOpen
+                        ? 'ch-thread-item ch-thread-item-open'
+                        : 'ch-thread-item',
+                    },
                     React.createElement(
                       'button', {
                         type: 'button',
@@ -1111,6 +1136,7 @@ export function createHistoryPage({
                         })),
                       React.createElement('span', { className: 'ch-thread-chevron', 'aria-hidden': true }, '›'),
                     ),
+                    inlineDetail,
                   )
                 }),
               ),
@@ -1126,7 +1152,6 @@ export function createHistoryPage({
               : t('showMoreThreads', { count: threads.length - 6 })),
           )
         : null,
-      threadDetailView,
     )
 
     const summaryStatus = (() => {
