@@ -11,8 +11,20 @@ const chromeManifest = JSON.parse(
 const firefoxManifest = JSON.parse(
   readFileSync(new URL('../../extension/manifest.firefox.json', import.meta.url), 'utf8'),
 ) as Record<string, never>
+const defaultMessages = JSON.parse(
+  readFileSync(new URL('../../extension/_locales/en/messages.json', import.meta.url), 'utf8'),
+) as Record<string, { message: string }>
+const chineseMessages = JSON.parse(
+  readFileSync(new URL('../../extension/_locales/zh_CN/messages.json', import.meta.url), 'utf8'),
+) as Record<string, { message: string }>
 
 const entry = 'service-worker.js'
+
+function localizedManifestText(value: unknown): string {
+  const raw = String(value)
+  const key = /^__MSG_(.+)__$/.exec(raw)?.[1]
+  return key ? defaultMessages[key]?.message ?? raw : raw
+}
 
 describe('companion on a second engine', () => {
   it('describes one extension, with the privacy posture identical on both engines', () => {
@@ -21,9 +33,28 @@ describe('companion on a second engine', () => {
       expect(manifest.incognito).toBe('not_allowed')
       expect(manifest.permissions).toEqual(['tabs', 'storage'])
       expect(manifest.host_permissions).toEqual(['http://127.0.0.1/*', 'http://localhost/*'])
-      expect(String(manifest.description)).toContain('no page content')
+      expect(manifest.default_locale).toBe('en')
+      expect(localizedManifestText(manifest.description)).toContain('no page content')
     }
     expect(firefoxManifest.description).toBe(chromeManifest.description)
+    expect(chineseMessages.extensionDescription?.message).toContain('不会读取页面正文')
+  })
+
+  it('keeps Browser Companion UI localization complete in English and Chinese', () => {
+    expect(Object.keys(chineseMessages).toSorted()).toEqual(Object.keys(defaultMessages).toSorted())
+
+    const optionsHtml = readFileSync(
+      new URL('../../extension/options.html', import.meta.url),
+      'utf8',
+    )
+    const referencedKeys = [...optionsHtml.matchAll(
+      /data-i18n(?:-placeholder)?="([^"]+)"/g,
+    )].flatMap(match => match[1] ? [match[1]] : [])
+
+    for (const key of referencedKeys) {
+      expect(defaultMessages[key]?.message, `missing English i18n key: ${key}`).toBeTruthy()
+      expect(chineseMessages[key]?.message, `missing Chinese i18n key: ${key}`).toBeTruthy()
+    }
   })
 
   it('uses each engine’s own background declaration for the same entry file', () => {
@@ -61,15 +92,18 @@ describe('companion on a second engine', () => {
     expect(wiring).toContain("from './engine.js'")
   })
 
-  it('resolves the promise-based namespace on either engine', async () => {
-    const chromeLike = { storage: {}, tabs: {}, windows: {}, runtime: {} }
-    const browserLike = { storage: {}, tabs: {}, windows: {}, runtime: {} }
+  it('resolves the promise-based namespace and its i18n surface on either engine', async () => {
+    const chromeI18n = { getMessage: vi.fn(() => ''), getUILanguage: vi.fn(() => 'en') }
+    const browserI18n = { getMessage: vi.fn(() => ''), getUILanguage: vi.fn(() => 'zh-CN') }
+    const chromeLike = { i18n: chromeI18n, storage: {}, tabs: {}, windows: {}, runtime: {} }
+    const browserLike = { i18n: browserI18n, storage: {}, tabs: {}, windows: {}, runtime: {} }
 
     vi.resetModules()
     vi.stubGlobal('chrome', chromeLike)
     vi.stubGlobal('browser', undefined)
     const onlyChrome = await import('../../extension/engine.js')
     expect(onlyChrome.ext).toBe(chromeLike)
+    expect(onlyChrome.ext.i18n).toBe(chromeI18n)
 
     // Gecko defines both names; only `browser.*` is promise-based there, so it must win.
     vi.resetModules()
@@ -77,6 +111,7 @@ describe('companion on a second engine', () => {
     vi.stubGlobal('browser', browserLike)
     const both = await import('../../extension/engine.js')
     expect(both.ext).toBe(browserLike)
+    expect(both.ext.i18n).toBe(browserI18n)
 
     vi.unstubAllGlobals()
   })

@@ -42,7 +42,9 @@ authenticated intake that the plugin itself controls.
    are not part of that shape. The Host validates that shape independently
    before delivery and refuses userinfo or non-canonical origin/path metadata,
    so a buggy or modified paired companion cannot smuggle credentials, queries
-   or fragments into a stored URL. `displayLabel` is the tab title.
+   or fragments into a stored URL. `displayLabel` is the tab title, stored
+   separately as display metadata; a site can put arbitrary text in that title,
+   so it is never used for resource-policy matching.
 6. **AX-derived URLs stay dropped.** Only an observation whose
    `source.provider` is `companion` may carry `resource.kind === 'url'`; the
    rule in `normalizeObservation` becomes provenance-aware rather than

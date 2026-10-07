@@ -162,6 +162,60 @@ describe('live privacy normalization', () => {
     expect(policyAllows('notepad.exe', undefined, windowsPolicy)).toBe(false)
   })
 
+  it('matches resource policy against canonicalUri, never display metadata', () => {
+    const titleOnlyDeny = {
+      ...policy,
+      rules: [
+        ...policy.rules,
+        {
+          id: PolicyRuleId('display-label-only'),
+          dimension: 'resource' as const,
+          action: 'deny' as const,
+          matcher: 'exact' as const,
+          pattern: '/allowed/page?token=secret page',
+          builtIn: false,
+          createdAtMs: 1,
+          updatedAtMs: 1,
+        },
+      ],
+    }
+
+    expect(policyAllows(
+      'com.microsoft.VSCode',
+      {
+        kind: 'url',
+        canonicalUri: 'https://example.test/allowed/page',
+        displayLabel: '/allowed/page?token=secret page',
+      },
+      titleOnlyDeny,
+    )).toBe(true)
+
+    expect(policyAllows(
+      'com.microsoft.VSCode',
+      {
+        kind: 'url',
+        canonicalUri: 'https://example.test/allowed/page',
+        displayLabel: 'harmless title',
+      },
+      {
+        ...policy,
+        rules: [
+          ...policy.rules,
+          {
+            id: PolicyRuleId('canonical-uri-deny'),
+            dimension: 'resource',
+            action: 'deny',
+            matcher: 'exact',
+            pattern: 'https://example.test/allowed/page',
+            builtIn: false,
+            createdAtMs: 1,
+            updatedAtMs: 1,
+          },
+        ],
+      },
+    )).toBe(false)
+  })
+
   it('says why the lock screen is not recorded', () => {
     // The behaviour alone was not checkable: three attempts passed for reasons
     // other than the one they named. The reason is what makes it checkable.

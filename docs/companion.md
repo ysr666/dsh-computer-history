@@ -14,10 +14,15 @@ window seen through Accessibility still contributes nothing.
 | tab title | private (incognito) windows — the extension is not allowed there |
 | when it changed (activation, navigation) | any site you deny in the policy |
 
-The query string and the fragment are removed **twice**: by the extension before
-it sends, and by the Host before it stores. A URL like
+The query string and the fragment are removed **twice from the URL resource**:
+by the extension before it sends, and by the Host before it stores. A URL like
 `https://example.test/docs/guide?token=secret#part-3` is stored as
 `https://example.test/docs/guide`.
+
+The tab title is separate display metadata and is stored as the browser reports
+it. A site may choose to echo arbitrary text into its title, including text that
+also appeared in its URL. The title never participates in resource-policy
+matching: allow/deny decisions use the normalized `canonicalUri` only.
 
 ## Install
 
@@ -91,7 +96,7 @@ Measured 2026-10-02 (Chrome 154.0.8037.95):
 | Cell | Result |
 |---|---|
 | allowed origin | 0 → 1 companion row; resource `http://127.0.0.1:<port>/allowed/page` |
-| query string and fragment | never stored |
+| URL query string and fragment | never stored in the canonical URL resource |
 | denied origin | no new rows |
 | incognito window | no new rows |
 | rotated token | no new rows |

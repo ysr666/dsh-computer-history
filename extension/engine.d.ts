@@ -22,6 +22,10 @@ export interface CompanionChangeInfo {
 }
 
 export interface CompanionNamespace {
+  readonly i18n: {
+    getMessage(messageName: string, substitutions?: string | readonly string[]): string
+    getUILanguage(): string
+  }
   readonly storage: {
     readonly local: {
       get(keys: readonly string[]): Promise<Record<string, unknown>>
