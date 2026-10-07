@@ -83,6 +83,28 @@ describe('repository scaffold', () => {
     )
   })
 
+
+  it('declares every packaged native collector as an executable package bin', () => {
+    const manifest = JSON.parse(
+      readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
+    ) as {
+      bin?: Readonly<Record<string, string>>
+      files?: readonly string[]
+    }
+    expect(manifest.bin).toEqual({
+      'dsh-computer-history-collector':
+        'bin/dsh-computer-history-collector',
+      'dsh-computer-history-collector-linux':
+        'bin/dsh-computer-history-collector-linux',
+      'dsh-computer-history-collector-windows':
+        'bin/dsh-computer-history-collector-windows.exe',
+    })
+    for (const file of Object.values(manifest.bin ?? {})) {
+      expect(manifest.files).toContain(file)
+    }
+    expect(manifest.files).toContain('bin/collector-artifacts.json')
+  })
+
   it('keeps the macOS adapter table identical to the fixture darwin ids', () => {
     const fixture = fixtureAdapters()
     const platformIds = (platform: string): readonly string[] =>
