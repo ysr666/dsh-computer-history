@@ -1,5 +1,4 @@
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { dshHomePath } from '@deepseek-ai/dsh-home-paths'
 import type { Context } from '@deepseek-ai/cordis'
 import '@deepseek-ai/dsh-agent'
@@ -29,6 +28,7 @@ import {
   CAPTURE_LOCK_PROBE_WAIT_MS,
   CaptureOwnershipLock,
   CollectorManager,
+  resolvePackagedCollectorExecutable,
 } from './collector/index.js'
 import { IngestionService } from './ingestion/index.js'
 import { DeletionService, RetentionService } from './retention/index.js'
@@ -243,12 +243,7 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
 
   const collectorExecutable =
     config.collectorExecutable
-    ?? fileURLToPath(
-      new URL(
-        '../bin/dsh-computer-history-collector',
-        import.meta.url,
-      ),
-    )
+    ?? resolvePackagedCollectorExecutable(import.meta.url)
 
   /** `true` once in-flight ingestion settles, `false` if it does not. */
   const ingestedIdle = async (): Promise<boolean> => {
