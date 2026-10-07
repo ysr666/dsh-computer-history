@@ -157,7 +157,11 @@ jobs:
               missing=1
             fi
           done < <(node -p "require('./package.json').files.join('\n')")
-          exit "$missing"
+          test "$missing" -eq 0
+          rm -rf release-check
+          mkdir -p release-check
+          tar -xzf "$tarball" -C release-check
+          node scripts/collector-artifacts.mjs verify release-check/package "$GITHUB_SHA"
 
       - name: Upload assembled plugin tarball
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
