@@ -435,6 +435,67 @@ describe('local computer history backend', () => {
     history.close()
   })
 
+  it('purges model text by restoring a deterministic summary without deleting the Episode', () => {
+    const history = openTempDatabase()
+    const episodeId = seedEpisode(history)
+    const episodes = new EpisodeStore(history.db)
+    const before = episodes.get(episodeId)
+    expect(before).toBeDefined()
+
+    history.db.prepare(`
+      UPDATE episodes
+      SET summary_kind = 'remote',
+          summary_text = 'REMOTE MODEL TEXT'
+      WHERE id = ?
+    `).run(episodeId)
+
+    const policies = new PolicyStore(history.db)
+    policies.ensureInitial(1)
+    const optIns = new SemanticOptInStore(history.db)
+    optIns.grant({ kind: 'workspace', id: 'alpha' }, 'remote', 'm', 1)
+
+    const backend = new LocalComputerHistoryBackend(
+      episodes,
+      policies,
+      new DeletionService(history.db),
+      new FakeCapture(),
+      {
+        observationRetentionHours: 24,
+        episodeRetentionDays: 30,
+        autoResume: false,
+        now: () => 5_000,
+      },
+      undefined,
+      optIns,
+      history.db,
+    )
+
+    expect(backend.revokeSemanticOptIn({
+      scopeKey: 'workspace:alpha',
+    })).toEqual({
+      revoked: true,
+      purged: 1,
+      forgotten: 0,
+    })
+
+    const after = episodes.get(episodeId)
+    expect(after).toBeDefined()
+    expect(after).toMatchObject({
+      id: episodeId,
+      summaryKind: 'deterministic',
+      workspace: before!.workspace,
+      threadKey: before!.threadKey,
+      resources: before!.resources,
+      surfaces: before!.surfaces,
+      observationIds: before!.observationIds,
+    })
+    expect(after!.summary).toContain('Worked in alpha.')
+    expect(after!.summary).not.toContain('REMOTE MODEL TEXT')
+    expect(after!.summaryObservationIds).toEqual(before!.observationIds)
+    expect(optIns.get({ kind: 'workspace', id: 'alpha' })).toBeUndefined()
+    history.close()
+  })
+
   it('rolls semantic revocation back as one action when forgetting send audit fails', () => {
     const history = openTempDatabase()
     const policies = new PolicyStore(history.db)
@@ -485,8 +546,12 @@ describe('local computer history backend', () => {
       .toThrow(/forced send-forget failure/)
     expect(optIns.get({ kind: 'workspace', id: 'w1' })).toBeDefined()
     expect(history.db.prepare(
-      'SELECT id FROM episodes WHERE id = ?',
-    ).get('remote-ep')).toEqual({ id: 'remote-ep' })
+      'SELECT id, summary_kind, summary_text FROM episodes WHERE id = ?',
+    ).get('remote-ep')).toEqual({
+      id: 'remote-ep',
+      summary_kind: 'remote',
+      summary_text: 'derived',
+    })
     expect(sends.listForScope('workspace:w1')).toHaveLength(1)
     history.close()
   })
