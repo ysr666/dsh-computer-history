@@ -38,6 +38,7 @@ if (tarballs.length !== 1) {
 
 const tarball = tarballs[0]
 const scratch = mkdtempSync(path.join(os.tmpdir(), 'dch-packaged-transport-'))
+let exitCode = 1
 try {
   const member = `package/bin/${filename}`
   const extracted = spawnSync(
@@ -49,33 +50,35 @@ try {
     console.error(
       `could not extract ${member}: ${extracted.stderr ?? extracted.stdout ?? ''}`,
     )
-    process.exit(extracted.status ?? 1)
-  }
+    exitCode = extracted.status ?? 1
+  } else {
+    const collector = path.join(scratch, member)
+    if (process.platform !== 'win32') chmodSync(collector, 0o755)
 
-  const collector = path.join(scratch, member)
-  if (process.platform !== 'win32') chmodSync(collector, 0o755)
-
-  console.log(
-    `strict packaged transport: ${process.platform} -> ${member}`,
-  )
-  const result = spawnSync(
-    process.execPath,
-    [path.resolve('scripts/e2e-collector-transport.mjs')],
-    {
-      env: {
-        ...process.env,
-        COLLECTOR_EXECUTABLE: collector,
-        DSH_E2E_TARBALL: tarball,
-        DSH_E2E_REQUIRE_PACKAGED_COLLECTOR: '1',
+    console.log(
+      `strict packaged transport: ${process.platform} -> ${member}`,
+    )
+    const result = spawnSync(
+      process.execPath,
+      [path.resolve('scripts/e2e-collector-transport.mjs')],
+      {
+        env: {
+          ...process.env,
+          COLLECTOR_EXECUTABLE: collector,
+          DSH_E2E_TARBALL: tarball,
+          DSH_E2E_REQUIRE_PACKAGED_COLLECTOR: '1',
+        },
+        stdio: 'inherit',
       },
-      stdio: 'inherit',
-    },
-  )
-  if (result.error) {
-    console.error(result.error)
-    process.exit(1)
+    )
+    if (result.error) {
+      console.error(result.error)
+      exitCode = 1
+    } else {
+      exitCode = result.status ?? 1
+    }
   }
-  process.exit(result.status ?? 1)
 } finally {
   rmSync(scratch, { recursive: true, force: true })
 }
+process.exit(exitCode)
