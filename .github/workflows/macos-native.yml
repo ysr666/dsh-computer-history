@@ -218,13 +218,13 @@ jobs:
           fs.appendFileSync(process.env.GITHUB_ENV,'DSH_E2E_TARBALL='+tarball+os.EOL+
           'COLLECTOR_EXECUTABLE='+collector+os.EOL)"
 
+      - name: Strict transport uses the byte-identical packaged collector
+        env:
+          DSH_E2E_REQUIRE_COLLECTOR: '1'
+        run: pnpm e2e:collector-transport
+
       - name: Clean install chooses its own packaged collector
         env:
           DSH_E2E_REQUIRE_COLLECTOR: '1'
           COLLECTOR_EXECUTABLE: ''
         run: pnpm e2e:macos
-
-      - name: Strict transport uses the byte-identical packaged collector
-        env:
-          DSH_E2E_REQUIRE_COLLECTOR: '1'
-        run: pnpm e2e:collector-transport
