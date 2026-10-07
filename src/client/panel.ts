@@ -32,6 +32,7 @@ import {
   type HistoryTranslate,
 } from './locale.js'
 import type { HistoryControlStore } from './store.js'
+import type { ComputerHistoryPluginNavigation } from './plugin-navigation.js'
 import {
   firstRunBundles,
   setupStage,
@@ -41,6 +42,7 @@ import {
 
 interface PanelFactoryOptions {
   readonly getActiveLocale: () => string
+  readonly getPluginNavigation?: () => ComputerHistoryPluginNavigation | undefined
   readonly continueInDsh: (episode: EpisodeSummary) => Promise<void>
   readonly store: HistoryControlStore
 }
@@ -257,6 +259,7 @@ function formatDayDate(dayKey: string, locale: string): string {
 
 export function createHistoryPage({
   getActiveLocale,
+  getPluginNavigation,
   continueInDsh,
   store,
 }: PanelFactoryOptions): (props: PanelComponentProps) => React.ReactElement {
@@ -595,10 +598,20 @@ export function createHistoryPage({
     }
 
     const staleRelease = state?.release?.stale
+    const pluginNavigation = getPluginNavigation?.()
     const staleSection = staleRelease
       ? React.createElement(
           'section', { className: 'ch-alert ch-alert-warning' },
           React.createElement('p', { role: 'status' }, t('staleRelease')),
+          pluginNavigation
+            ? React.createElement(React.Fragment, null,
+                React.createElement('p', { className: 'ch-muted' }, t('staleManagedUpdate')),
+                React.createElement('button', {
+                  type: 'button', className: 'ch-button',
+                  onClick: () => { pluginNavigation.open() },
+                }, t('openInPlugins')),
+              )
+            : null,
           React.createElement(
             'details', { className: 'ch-inspector' },
             React.createElement('summary', null, t('staleAdvanced')),

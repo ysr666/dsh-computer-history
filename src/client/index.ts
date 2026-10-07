@@ -13,7 +13,6 @@ import type * as _localeClientTypes from '@deepseek-ai/dsh-client-locale/client'
 import type * as _settingsClientTypes from '@deepseek-ai/dsh-client-ui-settings/client'
 import type * as _rendererClientTypes from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type * as _sidebarClientTypes from '@deepseek-ai/dsh-client-ui-sidebar/client'
-import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client'
 import React from 'react'
 import {
   en,
@@ -25,13 +24,16 @@ import { applySettings } from './settings.js'
 import { installHistoryStyles } from './styles.js'
 import { createHistoryControlStore } from './store.js'
 import {
+  COMPUTER_HISTORY_PANEL_ID,
+  computerHistoryPluginNavigation,
+} from './plugin-navigation.js'
+import { applyPluginManagerSurfaces } from './plugin-surfaces.js'
+import {
   continueEpisodeInDsh,
   registerComputerHistoryReferenceSource,
 } from './continuation-reference.js'
 
 type SidebarPanelIconOwnerProps = _sidebarClientTypes.SidebarPanelIconOwnerProps
-
-const PANEL_ID = 'computer-history' as MainPanelId
 
 function HistoryIcon({ size }: SidebarPanelIconOwnerProps): React.ReactElement {
   // The platform tells the icon what size it wants - `SidebarPanelIconOwnerProps = { size, active }` - so this
@@ -83,15 +85,7 @@ function HistoryIcon({ size }: SidebarPanelIconOwnerProps): React.ReactElement {
   )
 }
 
-export const inject = [
-  'slots',
-  'locale',
-  'sessions',
-  'workspaces',
-  'conversation',
-  'inputTriggers',
-  'uiWorkspace',
-]
+export const inject = ['slots', 'locale', 'layout', 'sessions', 'workspaces', 'conversation', 'inputTriggers', 'uiWorkspace']
 
 export function apply(ctx: Context): void {
   ctx.effect(
@@ -100,8 +94,10 @@ export function apply(ctx: Context): void {
   )
   const t = ctx.locale.bind(HISTORY_LOCALE_NS)
   const store = createHistoryControlStore()
+  const getPluginNavigation = () => computerHistoryPluginNavigation(ctx)
   const HistoryPage = createHistoryPage({
     getActiveLocale: () => String(ctx.locale.getLocale().active),
+    getPluginNavigation,
     continueInDsh: episode => continueEpisodeInDsh(ctx, episode),
     store,
   })
@@ -113,13 +109,14 @@ export function apply(ctx: Context): void {
   ctx.effect(installHistoryStyles, 'computer-history: client styles')
   ctx.slots.inject('main', () => ctx.slots.register({
     name: 'main',
-    key: PANEL_ID,
+    key: COMPUTER_HISTORY_PANEL_ID,
     locale: HISTORY_LOCALE_NS,
   }, HistoryPage))
-  applySettings(ctx, store)
+  applySettings(ctx, store, getPluginNavigation)
+  applyPluginManagerSurfaces(ctx, store)
   ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
     name: 'sidebar.panellist',
-    id: PANEL_ID,
+    id: COMPUTER_HISTORY_PANEL_ID,
     order: 30,
     label: () => t('title'),
   }, HistoryIcon))
