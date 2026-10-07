@@ -80,8 +80,7 @@ jobs:
           node-version: 22.19.0
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm build
-      - name: The gate, which includes tests/conformance
+      - name: The gate, which includes build and tests/conformance
         run: pnpm verify
 
   packaged-native:
