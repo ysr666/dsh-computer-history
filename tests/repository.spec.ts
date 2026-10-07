@@ -254,11 +254,18 @@ describe('repository scaffold', () => {
     }
   })
 
-  it('keeps selected Timeline detail inline with the activity that opened it', () => {
+  it('keeps selected Timeline detail inline and avoids repeating the row header', () => {
     const panel = readFileSync(new URL('../src/client/panel.ts', import.meta.url), 'utf8')
+    const detailStart = panel.indexOf('const selectedActivityDetail')
+    const timelineStart = panel.indexOf('const timelineSection')
+    const detailSource = panel.slice(detailStart, timelineStart)
     const row = panel.indexOf("'li', { key: activity.activityKey, className: 'ch-timeline-item' }")
     const inlineDetail = panel.indexOf('isSelected ? selectedActivityDetail : null')
     const resume = panel.indexOf('const resumeText = hint')
+    expect(detailStart).toBeGreaterThan(-1)
+    expect(detailSource).not.toContain('ch-detail-head')
+    expect(detailSource).not.toContain("t('mergedActivity'")
+    expect(detailSource).toContain("t('resources'")
     expect(row).toBeGreaterThan(-1)
     expect(inlineDetail).toBeGreaterThan(row)
     expect(inlineDetail).toBeLessThan(resume)
