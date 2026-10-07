@@ -507,18 +507,20 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
       ...retentionSettings.get(),
       autoResume: config.autoResume ?? false,
       acquirePolicyChangeLease,
-      ...(manager
-        ? {
-            onPolicyChanged: async policy => {
-              if (
-                ownsCapture
-                && manager?.canConfigure()
-              ) {
-                await manager.applyPolicy(policy)
-              }
-            },
-          }
-        : {}),
+      // The backend outlives any particular collector manager. A Host can start
+      // read-only because another Host owns capture, then later recover and
+      // create its manager without being reconstructed. Install the propagation
+      // hook unconditionally and resolve the current owner/manager at mutation
+      // time; otherwise every policy change after takeover would update SQLite
+      // while the recovered native collector kept its startup policy forever.
+      onPolicyChanged: async policy => {
+        if (
+          ownsCapture
+          && manager?.canConfigure()
+        ) {
+          await manager.applyPolicy(policy)
+        }
+      },
       onHistoryChanged: () => { ingestion.reseed() },
     },
      companionTokens,
