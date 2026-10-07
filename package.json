@@ -96,7 +96,9 @@
     "./cordis.patch.yml": "./cordis.patch.yml"
   },
   "bin": {
-    "dsh-computer-history-collector": "bin/dsh-computer-history-collector"
+    "dsh-computer-history-collector": "bin/dsh-computer-history-collector",
+    "dsh-computer-history-collector-linux": "bin/dsh-computer-history-collector-linux",
+    "dsh-computer-history-collector-windows": "bin/dsh-computer-history-collector-windows.exe"
   },
   "files": [
     "lib",
