@@ -53,7 +53,7 @@ export async function withEditorCompanionPublicationLock<T>(
   chmodSync(directory, 0o700)
   return withFileLock(
     `${target}.publication`,
-    work,
+    async () => work(),
     { waitMs: EDITOR_BOOTSTRAP_LOCK_WAIT_MS },
   )
 }
