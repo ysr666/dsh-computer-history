@@ -1,0 +1,234 @@
+name: Windows live acceptance
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/windows-live-probe.yml'
+      - 'native/windows/**'
+      - 'native/collector-protocol/**'
+      - 'src/host/**'
+      - 'src/shared/**'
+      - 'scripts/e2e-macos.mjs'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/windows-live-probe.yml'
+      - 'native/windows/**'
+      - 'native/collector-protocol/**'
+      - 'src/host/**'
+      - 'src/shared/**'
+      - 'scripts/e2e-macos.mjs'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+  workflow_dispatch:
+
+concurrency:
+  group: windows-live-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  live-uia:
+    name: real Notepad -> UIA -> Host -> SQLite on windows-latest
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22.19.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build Windows collector and UIA probe
+        shell: pwsh
+        run: |
+          cargo build --release --manifest-path native/windows/Cargo.toml
+          cargo build --release --example anchor_probe --manifest-path native/windows/Cargo.toml
+
+      - name: Probe the hosted runner's interactive desktop and collect a real Notepad observation
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          Add-Type @'
+          using System;
+          using System.Runtime.InteropServices;
+          public static class DchUser32 {
+            [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+            [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+            [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+            [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+            [DllImport("user32.dll")] public static extern IntPtr OpenInputDesktop(uint flags, bool inherit, uint desiredAccess);
+            [DllImport("user32.dll")] public static extern bool CloseDesktop(IntPtr hDesktop);
+          }
+          '@
+
+          Write-Host "runner.os=$env:RUNNER_OS"
+          Write-Host "windows=$([Environment]::OSVersion.VersionString)"
+          Write-Host "user=$env:USERNAME"
+          Write-Host "sessionId=$([Diagnostics.Process]::GetCurrentProcess().SessionId)"
+          Write-Host "userInteractive=$([Environment]::UserInteractive)"
+          try { qwinsta } catch { Write-Host "qwinsta unavailable: $_" }
+
+          $DESKTOP_READOBJECTS = 0x0001
+          $DESKTOP_SWITCHDESKTOP = 0x0100
+          $desktop = [DchUser32]::OpenInputDesktop(0, $false, $DESKTOP_READOBJECTS -bor $DESKTOP_SWITCHDESKTOP)
+          Write-Host ("inputDesktop=" + ($(if ($desktop -eq [IntPtr]::Zero) { 'unavailable' } else { 'available' })))
+          if ($desktop -ne [IntPtr]::Zero) { [void][DchUser32]::CloseDesktop($desktop) }
+
+          $note = Join-Path $env:RUNNER_TEMP 'dch-github-windows-live.txt'
+          Set-Content -Path $note -Value 'Computer History GitHub Windows UIA live probe' -Encoding UTF8
+          $notepad = Start-Process notepad.exe -ArgumentList ('"' + $note + '"') -PassThru
+
+          for ($i = 0; $i -lt 40; $i++) {
+            Start-Sleep -Milliseconds 250
+            $notepad.Refresh()
+            if ($notepad.MainWindowHandle -ne 0) { break }
+          }
+
+          Write-Host "notepad.pid=$($notepad.Id)"
+          Write-Host "notepad.hwnd=$($notepad.MainWindowHandle)"
+          if ($notepad.MainWindowHandle -eq 0) {
+            throw 'Notepad started but never exposed a main window handle in this runner session.'
+          }
+
+          [void][DchUser32]::ShowWindow($notepad.MainWindowHandle, 5)
+          $activated = [DchUser32]::SetForegroundWindow($notepad.MainWindowHandle)
+          if (-not $activated) {
+            $shell = New-Object -ComObject WScript.Shell
+            [void]$shell.AppActivate($notepad.Id)
+          }
+          Start-Sleep -Seconds 1
+
+          $foreground = [DchUser32]::GetForegroundWindow()
+          [uint32]$foregroundPid = 0
+          [void][DchUser32]::GetWindowThreadProcessId($foreground, [ref]$foregroundPid)
+          Write-Host "foreground.hwnd=$foreground"
+          Write-Host "foreground.pid=$foregroundPid"
+          Write-Host "foreground.isNotepad=$($foregroundPid -eq $notepad.Id)"
+
+          Write-Host '--- anchor_probe (same UIA seam as collector) ---'
+          $probe = & cargo run --quiet --release --example anchor_probe --manifest-path native/windows/Cargo.toml -- 2 2>&1
+          $probe | Tee-Object -FilePath (Join-Path $env:RUNNER_TEMP 'anchor-probe.txt')
+          if ($LASTEXITCODE -ne 0) { throw "anchor_probe failed with exit $LASTEXITCODE" }
+
+          # cargo may have changed focus while launching the probe. Put Notepad back in front immediately
+          # before the collector's configure-time reconcile.
+          [void][DchUser32]::ShowWindow($notepad.MainWindowHandle, 5)
+          [void][DchUser32]::SetForegroundWindow($notepad.MainWindowHandle)
+          Start-Sleep -Milliseconds 500
+
+          $exe = (Resolve-Path 'native/windows/target/release/dsh-computer-history-collector-windows.exe').Path
+          $configure = '{"v":1,"type":"configure","revision":7,"policy":{"mode":"include-only","allowedBundleIds":["Notepad.exe"],"blockedBundleIds":[],"protectedBundleIds":[],"protectedPathPatterns":[]}}'
+          Write-Host '--- collector stdout ---'
+          $collector = $configure | & $exe 2>&1
+          $collector | Tee-Object -FilePath (Join-Path $env:RUNNER_TEMP 'collector.txt')
+
+          $messages = @()
+          foreach ($line in $collector) {
+            $text = [string]$line
+            if ($text.TrimStart().StartsWith('{')) {
+              try { $messages += ($text | ConvertFrom-Json) } catch {}
+            }
+          }
+
+          $hello = $messages | Where-Object { $_.type -eq 'hello' } | Select-Object -First 1
+          $configured = $messages | Where-Object { $_.type -eq 'configured' -and $_.revision -eq 7 } | Select-Object -First 1
+          $observation = $messages | Where-Object { $_.type -eq 'observation' } | Select-Object -First 1
+
+          if (-not $hello) { throw 'Collector did not emit hello.' }
+          if ($hello.platform -ne 'win32') { throw "Collector hello platform was '$($hello.platform)', not win32." }
+          if (-not $configured) { throw 'Collector did not acknowledge revision 7.' }
+          if (-not $observation) {
+            throw 'No observation was emitted. The hosted runner likely has no usable foreground UIA desktop; see session/foreground/anchor_probe output above.'
+          }
+
+          Write-Host "observation.app=$($observation.app.bundleId)"
+          Write-Host "observation.provider=$($observation.source.provider)"
+          Write-Host "observation.adapter=$($observation.source.adapter)"
+          Write-Host "observation.title=$($observation.window.title)"
+
+          if ($observation.app.bundleId -ine 'Notepad.exe') {
+            throw "Observed '$($observation.app.bundleId)' instead of Notepad.exe."
+          }
+          if ($observation.source.provider -ne 'windows-uia') {
+            throw "Observed provider '$($observation.source.provider)' instead of windows-uia."
+          }
+          if ($observation.source.adapter -ne 'notepad') {
+            throw "Observed adapter '$($observation.source.adapter)' instead of notepad."
+          }
+
+          Write-Host 'PASS: GitHub-hosted Windows exposed a real foreground Notepad window to the production UIA collector.'
+
+      - name: Full throwaway Host stores the real Windows observation and materializes an episode
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          Add-Type @'
+          using System;
+          using System.Runtime.InteropServices;
+          public static class DchHostUser32 {
+            [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+            [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+          }
+          '@
+
+          $cliRoot = Join-Path $env:RUNNER_TEMP 'dsh-cli-020'
+          npm install --prefix $cliRoot @deepseek-ai/dsh@0.2.0-rc.2
+          if ($LASTEXITCODE -ne 0) { throw 'Could not install DSH 0.2.0-rc.2 CLI.' }
+          $env:Path = (Join-Path $cliRoot 'node_modules\.bin') + ';' + $env:Path
+
+          $collector = (Resolve-Path 'native/windows/target/release/dsh-computer-history-collector-windows.exe').Path
+          $env:COLLECTOR_EXECUTABLE = $collector
+          $env:DSH_E2E_ALLOW_BUNDLES = 'Notepad.exe'
+          $env:DSH_E2E_EXPECT_ACTIVITY = '1'
+          $env:DSH_E2E_EXPECT_PROVIDER = 'windows-uia'
+          $env:DSH_E2E_ACTIVITY_TIMEOUT_MS = '30000'
+
+          # Do the expensive CLI install before opening the target window. Then keep that window in front
+          # while the throwaway Host packs/installs/boots so the production collector sees the same allowed
+          # application at configure time and on every heartbeat.
+          $note = Join-Path $env:RUNNER_TEMP 'dch-github-windows-host.txt'
+          Set-Content -Path $note -Value 'Computer History GitHub Windows full Host acceptance' -Encoding UTF8
+          $notepad = Start-Process notepad.exe -ArgumentList ('"' + $note + '"') -PassThru
+          for ($i = 0; $i -lt 40; $i++) {
+            Start-Sleep -Milliseconds 250
+            $notepad.Refresh()
+            if ($notepad.MainWindowHandle -ne 0) { break }
+          }
+          if ($notepad.MainWindowHandle -eq 0) {
+            throw 'Host acceptance Notepad never exposed a main window handle.'
+          }
+
+          dsh --version
+          $stdout = Join-Path $env:RUNNER_TEMP 'windows-host-e2e.stdout.txt'
+          $stderr = Join-Path $env:RUNNER_TEMP 'windows-host-e2e.stderr.txt'
+          $e2e = Start-Process node -ArgumentList 'scripts/e2e-macos.mjs' -PassThru -NoNewWindow -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+
+          while (-not $e2e.HasExited) {
+            $notepad.Refresh()
+            if ($notepad.MainWindowHandle -ne 0) {
+              [void][DchHostUser32]::ShowWindow($notepad.MainWindowHandle, 5)
+              [void][DchHostUser32]::SetForegroundWindow($notepad.MainWindowHandle)
+            }
+            Start-Sleep -Milliseconds 500
+            $e2e.Refresh()
+          }
+
+          if (Test-Path $stdout) { Get-Content $stdout }
+          if (Test-Path $stderr) { Get-Content $stderr }
+          if ($e2e.ExitCode -ne 0) {
+            throw "Full Windows Host E2E failed with exit $($e2e.ExitCode)"
+          }
+
+          Stop-Process -Id $notepad.Id -Force -ErrorAction SilentlyContinue
+          Write-Host 'PASS: GitHub-hosted Windows completed Notepad -> UIA collector -> Host -> SQLite -> /recent.'
