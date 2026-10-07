@@ -3,6 +3,7 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import { registerExperimentalResumeHint } from './resume-hint.js'
 import { registerComputerHistoryTools } from './tools.js'
 import { registerDshCheckpoints } from './checkpoint.js'
+import { registerComputerHistoryContinueRouting } from './continue-router.js'
 
 export function registerAgentIntegration(
   ctx: Context,
@@ -14,6 +15,7 @@ export function registerAgentIntegration(
     const disposers = [
       registerComputerHistoryTools(agent.ctx),
       registerDshCheckpoints(ctx, agent),
+      registerComputerHistoryContinueRouting(ctx, agent),
     ]
     installed.set(agent, () => {
       for (const dispose of disposers.toReversed()) dispose()
