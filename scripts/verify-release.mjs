@@ -10,9 +10,10 @@
 // shipped missing), and a collector signed ad-hoc, which Gatekeeper blocks on every machine that did not build
 // it.
 import { execFileSync, spawnSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
+import { verifyCollectorArtifacts } from './collector-artifacts.mjs'
 
 const REPO = path.resolve(import.meta.dirname, '..')
 process.chdir(REPO)
@@ -66,7 +67,26 @@ try {
     }
   }
 
-  const binary = 'bin/dsh-computer-history-collector'
+  const extracted = path.join(scratch, 'extracted')
+  mkdirSync(extracted, { recursive: true })
+  execFileSync('tar', ['-xzf', tarball, '-C', extracted])
+  const packagedRoot = path.join(extracted, 'package')
+  try {
+    verifyCollectorArtifacts(
+      packagedRoot,
+      process.env.GITHUB_SHA?.trim() || undefined,
+    )
+  } catch (error) {
+    problems.push(
+      `collector artifact verification failed: ${error instanceof Error ? error.message : String(error)}`,
+    )
+  }
+
+  const binary = path.join(
+    packagedRoot,
+    'bin',
+    'dsh-computer-history-collector',
+  )
   // `codesign -dv` writes its description to **stderr**, so a helper that only returns stdout reads an empty
   // string and reports a signed binary as unsigned - which is what the first version of this check did.
   const described = spawnSync('codesign', ['-dv', binary], { encoding: 'utf8' })
@@ -93,7 +113,8 @@ if (problems.length > 0) {
   process.exit(1)
 }
 console.log(
-  `release preflight holds for ${version}: changelog section, every promised entry in the tarball, and a `
-  + `signature that verifies (${signatureKind}). No certificate is needed for a DSH plugin install: the CLI downloads `
+  `release preflight holds for ${version}: changelog section, every promised entry in the tarball, three `
+  + `collector hashes/provenance records, and a macOS signature that verifies (${signatureKind}). No certificate is needed `
+  + 'for a DSH plugin install: the CLI downloads '
   + 'the tarball with Node, which sets no quarantine flag, and a quarantined ad-hoc binary was measured to run.',
 )
