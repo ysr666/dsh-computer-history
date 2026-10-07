@@ -82,3 +82,29 @@ declare const process: {
   readonly platform: string
   getuid?: () => number
 }
+
+
+declare module 'node:fs' {
+  export function existsSync(path: string): boolean
+  export function readFileSync(path: string, encoding: 'utf8'): string
+  export function renameSync(oldPath: string, newPath: string): void
+  export function statSync(path: string): { readonly mode: number; readonly uid: number }
+  export function unlinkSync(path: string): void
+  export function writeFileSync(
+    path: string,
+    data: string,
+    options: {
+      readonly encoding: 'utf8'
+      readonly mode: number
+      readonly flag: 'wx'
+    },
+  ): void
+}
+
+declare module 'node:os' {
+  export function homedir(): string
+}
+
+declare module 'node:path' {
+  export function join(...parts: string[]): string
+}

@@ -1,5 +1,11 @@
 import * as vscode from 'vscode'
 import {
+  claimPendingBootstrap,
+  editorBootstrapPath,
+  finishBootstrapClaim,
+  restoreBootstrapClaim,
+} from './bootstrap'
+import {
   buildEditorPayload,
   declaredIdentity,
   surfaceKindOf,
@@ -12,15 +18,6 @@ const session = `vscode-${crypto.randomUUID()}`
 const TOKEN_SECRET = 'companionToken'
 const PORT_STATE = 'companionPort'
 const DEFAULT_PORT = 19388
-const BOOTSTRAP_FILENAME = 'editor-companion-bootstrap.json'
-
-type Bootstrap = {
-  readonly v: 1
-  readonly port: number
-  readonly token: string
-  readonly expiresAtMs: number
-}
-
 function report(message: string): void {
   reporter?.(message)
 }
@@ -48,93 +45,75 @@ function installReporter(): void {
   report(`activated: appName=${vscode.env.appName} host=${vscode.env.appHost}`)
 }
 
-function bootstrapPath(): string {
-  const os = require('node:os') as { homedir: () => string }
-  const path = require('node:path') as { join: (...parts: string[]) => string }
-  return path.join(
-    os.homedir(),
-    '.dsh',
-    'computer-history',
-    BOOTSTRAP_FILENAME,
-  )
+type Credentials = {
+  readonly port: number
+  readonly token: string
 }
 
-function pendingBootstrap(): { readonly path: string; readonly value: Bootstrap } | undefined {
-  const fs = require('node:fs') as {
-    readFileSync: (file: string, encoding: 'utf8') => string
-    statSync: (file: string) => { readonly mode: number; readonly uid: number }
-    unlinkSync: (file: string) => void
-  }
-  const target = bootstrapPath()
-  try {
-    const stat = fs.statSync(target)
-    if (
-      process.platform !== 'win32'
-      && ((stat.mode & 0o077) !== 0
-        || (typeof process.getuid === 'function' && stat.uid !== process.getuid()))
-    ) {
-      report('bootstrap ignored: unsafe owner or permissions')
-      return undefined
-    }
-    const parsed = JSON.parse(fs.readFileSync(target, 'utf8')) as Partial<Bootstrap>
-    if (
-      parsed.v !== 1
-      || !Number.isInteger(parsed.port)
-      || Number(parsed.port) < 1
-      || Number(parsed.port) > 65_535
-      || typeof parsed.token !== 'string'
-      || parsed.token.length < 32
-      || typeof parsed.expiresAtMs !== 'number'
-    ) {
-      report('bootstrap ignored: invalid shape')
-      fs.unlinkSync(target)
-      return undefined
-    }
-    if (parsed.expiresAtMs < Date.now()) {
-      report('bootstrap ignored: expired')
-      fs.unlinkSync(target)
-      return undefined
-    }
-    return {
-      path: target,
-      value: parsed as Bootstrap,
-    }
-  } catch {
-    return undefined
-  }
-}
+let credentialPromise: Promise<Credentials> | undefined
 
-async function credentials(
+function credentials(
   context: vscode.ExtensionContext,
-): Promise<{ readonly port: number; readonly token: string }> {
-  const fs = require('node:fs') as { unlinkSync: (file: string) => void }
-  const bootstrap = pendingBootstrap()
-  if (bootstrap) {
-    await context.secrets.store(TOKEN_SECRET, bootstrap.value.token)
-    await context.globalState.update(PORT_STATE, bootstrap.value.port)
-    try { fs.unlinkSync(bootstrap.path) } catch {}
-    report('automatic pairing bootstrap consumed')
-    return { port: bootstrap.value.port, token: bootstrap.value.token }
-  }
+): Promise<Credentials> {
+  if (credentialPromise) return credentialPromise
 
-  const storedToken = (await context.secrets.get(TOKEN_SECRET))?.trim() ?? ''
-  const storedPort = context.globalState.get<number>(PORT_STATE) ?? DEFAULT_PORT
-  if (storedToken !== '') return { port: storedPort, token: storedToken }
+  const running = (async (): Promise<Credentials> => {
+    const bootstrap = claimPendingBootstrap(report)
+    if (bootstrap) {
+      try {
+        await context.secrets.store(
+          TOKEN_SECRET,
+          bootstrap.value.token,
+        )
+        await context.globalState.update(
+          PORT_STATE,
+          bootstrap.value.port,
+        )
+        finishBootstrapClaim(bootstrap)
+        report('automatic pairing bootstrap consumed')
+        return {
+          port: bootstrap.value.port,
+          token: bootstrap.value.token,
+        }
+      } catch (error) {
+        // Do not lose the handoff merely because the editor's durable stores
+        // failed. Restore A only if no newer Host has already published B.
+        restoreBootstrapClaim(bootstrap)
+        throw error
+      }
+    }
 
-  // One-time migration for development installs that previously stored the
-  // credential in visible editor settings. Those settings are no longer
-  // contributed, but an existing value can still be read and moved to SecretStorage.
-  const legacy = vscode.workspace.getConfiguration('dshComputerHistory')
-  const legacyToken = (legacy.get<string>('token') ?? '').trim()
-  const legacyPort = legacy.get<number>('port') ?? DEFAULT_PORT
-  if (legacyToken !== '') {
-    await context.secrets.store(TOKEN_SECRET, legacyToken)
-    await context.globalState.update(PORT_STATE, legacyPort)
-    report('legacy pairing settings migrated to SecretStorage')
-    return { port: legacyPort, token: legacyToken }
-  }
+    const storedToken =
+      (await context.secrets.get(TOKEN_SECRET))?.trim() ?? ''
+    const storedPort =
+      context.globalState.get<number>(PORT_STATE) ?? DEFAULT_PORT
+    if (storedToken !== '') {
+      return { port: storedPort, token: storedToken }
+    }
 
-  return { port: DEFAULT_PORT, token: '' }
+    // One-time migration for development installs that previously stored the
+    // credential in visible editor settings. Those settings are no longer
+    // contributed, but an existing value can still be read and moved to SecretStorage.
+    const legacy =
+      vscode.workspace.getConfiguration('dshComputerHistory')
+    const legacyToken =
+      (legacy.get<string>('token') ?? '').trim()
+    const legacyPort =
+      legacy.get<number>('port') ?? DEFAULT_PORT
+    if (legacyToken !== '') {
+      await context.secrets.store(TOKEN_SECRET, legacyToken)
+      await context.globalState.update(PORT_STATE, legacyPort)
+      report('legacy pairing settings migrated to SecretStorage')
+      return { port: legacyPort, token: legacyToken }
+    }
+
+    return { port: DEFAULT_PORT, token: '' }
+  })()
+
+  credentialPromise = running.finally(() => {
+    credentialPromise = undefined
+  })
+  return credentialPromise
 }
 
 function metadataOf(): EditorMetadata | undefined {
@@ -163,7 +142,14 @@ function metadataOf(): EditorMetadata | undefined {
 }
 
 async function send(context: vscode.ExtensionContext): Promise<void> {
-  const { port, token } = await credentials(context)
+  let paired: Credentials
+  try {
+    paired = await credentials(context)
+  } catch {
+    report('pairing credential update failed')
+    return
+  }
+  const { port, token } = paired
   if (token === '') {
     report('not sending: waiting for automatic pairing')
     return
@@ -227,7 +213,7 @@ export function activate(context: vscode.ExtensionContext): void {
     watchFile: (file: string, options: { interval: number }, listener: () => void) => void
     unwatchFile: (file: string, listener: () => void) => void
   }
-  const bootstrap = bootstrapPath()
+  const bootstrap = editorBootstrapPath()
   const onBootstrapChanged = (): void => { void send(context) }
   fs.watchFile(bootstrap, { interval: 1_000 }, onBootstrapChanged)
 
