@@ -11,7 +11,7 @@
 // it.
 import { execFileSync, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
@@ -60,6 +60,8 @@ try {
     `dsh-computer-history-${version}.tgz`,
   )
   const members = execFileSync('tar', ['-tzf', tarball], { encoding: 'utf8' }).split('\n')
+  execFileSync('tar', ['-xzf', tarball, '-C', scratch])
+  const packagedRoot = path.join(scratch, 'package')
   for (const entry of manifest.files ?? []) {
     const wanted = `package/${entry}`
     if (!members.some(member => member === wanted || member.startsWith(`${wanted}/`))) {
@@ -106,7 +108,23 @@ try {
     }
   }
 
-  const binary = 'bin/dsh-computer-history-collector'
+  for (const executable of [
+    'bin/dsh-computer-history-collector',
+    'bin/dsh-computer-history-collector-linux',
+  ]) {
+    const packagedExecutable = path.join(packagedRoot, executable)
+    if ((statSync(packagedExecutable).mode & 0o111) === 0) {
+      problems.push(`release tarball has no executable bit on ${executable}`)
+    }
+  }
+
+  const binary = path.join(
+    packagedRoot,
+    'bin/dsh-computer-history-collector',
+  )
+  // Verify the exact macOS bytes extracted from the release tarball, not the
+  // checkout's bin/ copy. A valid working-tree signature proves nothing if the
+  // archive that users install contains different bytes.
   // `codesign -dv` writes its description to **stderr**, so a helper that only returns stdout reads an empty
   // string and reports a signed binary as unsigned - which is what the first version of this check did.
   const described = spawnSync('codesign', ['-dv', binary], { encoding: 'utf8' })
