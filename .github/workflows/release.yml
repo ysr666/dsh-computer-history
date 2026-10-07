@@ -137,10 +137,10 @@ jobs:
       - name: Locate the exact assembled release package
         run: |
           node -e "const fs=require('node:fs'),os=require('node:os'),path=require('node:path'); const dir='package-out'; const name=fs.readdirSync(dir).find(x=>x.endsWith('.tgz')); if(!name) process.exit(2); fs.appendFileSync(process.env.GITHUB_ENV,'DSH_RELEASE_TARBALL='+path.resolve(dir,name)+os.EOL)"
-      - name: Clean install must launch the packaged platform collector
+      - name: Strict transport through the packaged platform collector
         env:
           DSH_E2E_REQUIRE_PACKAGED_COLLECTOR: '1'
-        run: node scripts/e2e-macos.mjs
+        run: pnpm e2e:collector-transport
 
   publish:
     name: verify and publish release
