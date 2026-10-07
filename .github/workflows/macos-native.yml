@@ -1,4 +1,4 @@
-name: macOS native + package
+name: macOS native
 
 on:
   pull_request:
@@ -58,17 +58,6 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm native:build
       - run: pnpm native:test
-      - run: pnpm install --frozen-lockfile
-        working-directory: extension-editor
-      - run: pnpm pack --pack-destination /tmp
-      - name: Verify every package.json files entry is present
-        run: |
-          tarball=$(ls /tmp/dsh-computer-history-*.tgz)
-          missing=0
-          while IFS= read -r entry; do
-            if ! tar -tzf "$tarball" | grep -qE "^package/${entry}(/|$)"; then
-              echo "files promises ${entry} and the tarball does not contain it"
-              missing=1
-            fi
-          done < <(node -p "require('./package.json').files.join('\n')")
-          exit "$missing"
+      # Packaging is intentionally not tested here anymore. The released package contains native
+      # artifacts from three different runners; collectors.yml assembles that single tgz and verifies it
+      # on all supported platforms. This workflow owns only the macOS native source/build contract.
