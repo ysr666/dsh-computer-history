@@ -258,6 +258,7 @@ function chatgptGlyph(): React.ReactElement {
 export function appIcon(
   bundleId: string | undefined,
   label: string,
+  options: { readonly compact?: boolean } = {},
 ): React.ReactElement {
   const kind = appIconKind(bundleId, label)
   let content: React.ReactNode
@@ -301,7 +302,7 @@ export function appIcon(
   return React.createElement(
     'span',
     {
-      className: `ch-app-mark ch-app-icon ch-app-icon-${kind}`,
+      className: `ch-app-mark ch-app-icon ch-app-icon-${kind}${options.compact ? ' ch-app-icon-compact' : ''}`,
       'aria-hidden': true,
       title: label,
     },
