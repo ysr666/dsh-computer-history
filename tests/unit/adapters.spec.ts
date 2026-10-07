@@ -41,6 +41,12 @@ describe('Phase 1 adapter table', () => {
     expect(phase1AdapterForBundle('generic')).toBeUndefined()
   })
 
+  it('matches Windows executable identities case-insensitively', () => {
+    expect(phase1AdapterForBundle('notepad.exe')).toBe('notepad')
+    expect(phase1AdapterForBundle('NOTEPAD.EXE')).toBe('notepad')
+    expect(phase1AdapterForBundle('code.EXE')).toBe('vscode')
+  })
+
   it('declares a focus policy per adapter and keeps JetBrains window-only', () => {
     for (const adapter of PHASE1_ADAPTERS) {
       expect(['require', 'window-only']).toContain(

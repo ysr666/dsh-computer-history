@@ -185,9 +185,10 @@ export const PHASE1_ADAPTERS: readonly Phase1AdapterDefinition[] = [
     bundleIds: [
       // win32 only: Windows 11 Notepad reports its executable name (the packaged
       // `Microsoft.WindowsNotepad_8wekyb3d8bbwe!App` the Start menu publishes is not a window property -
-      // measured for Windows Terminal, same shape). Measured 2026-10-05: stored rows carry
-      // bundleId "Notepad.exe", surfaceKind "editor", the window title and adapter "notepad"; the WinUI
-      // application answers UI Automation (element role ControlType.50030).
+      // measured for Windows Terminal, same shape). Measured 2026-10-05 on Windows 11: stored rows carried
+      // bundleId "Notepad.exe". A 2026-10-07 GitHub Windows Server 2025 live UIA run reported `notepad.exe`
+      // for the same executable, which is why Host adapter/policy matching treats Windows `.exe` identities
+      // case-insensitively. The surface is an editor and the WinUI application answers UI Automation.
       'Notepad.exe',
     ],
     surfaceKind: 'editor',

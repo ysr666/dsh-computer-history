@@ -29,8 +29,15 @@ export const PROTECTED_BUNDLES = new Set([
 export function phase1AdapterForBundle(
   bundleId: string,
 ): ObservationAdapter | undefined {
+  // Windows executable names are case-insensitive identities. The 2026-10-05 Windows 11 live run reported
+  // `Notepad.exe`; GitHub Windows Server 2025 reported `notepad.exe` on 2026-10-07 for the same application.
+  // Keep macOS bundle ids and Linux desktop ids exact; only `.exe` identities get Windows semantics here.
   return PHASE1_ADAPTERS.find(adapter =>
-    adapter.bundleIds.includes(bundleId),
+    adapter.bundleIds.some(candidate =>
+      candidate.endsWith('.exe') && bundleId.toLowerCase().endsWith('.exe')
+        ? candidate.toLowerCase() === bundleId.toLowerCase()
+        : candidate === bundleId,
+    ),
   )?.id
 }
 
@@ -183,13 +190,26 @@ function resourceOf(
   return undefined
 }
 
-export function policyAllows(bundleId: string, resource: ResourceIdentity | undefined, policy: PolicySnapshot): boolean {
+export function policyAllows(
+  bundleId: string,
+  resource: ResourceIdentity | undefined,
+  policy: PolicySnapshot,
+  options: { readonly caseInsensitiveAppId?: boolean } = {},
+): boolean {
   if (policy.mode !== 'include-only') return false
 
-  const appRules = policy.rules.filter(rule =>
-    rule.dimension === 'app'
-    && policyRuleMatches(rule, bundleId),
-  )
+  const appValue = options.caseInsensitiveAppId
+    ? bundleId.toLowerCase()
+    : bundleId
+  const appRules = policy.rules.filter(rule => {
+    if (rule.dimension !== 'app') return false
+    return policyRuleMatches(
+      options.caseInsensitiveAppId
+        ? { ...rule, pattern: rule.pattern.toLowerCase() }
+        : rule,
+      appValue,
+    )
+  })
   if (appRules.some(rule =>
     rule.action === 'deny' || rule.action === 'protect'
   )) return false
@@ -312,6 +332,7 @@ export function normalizeObservation(
   if (message.privacy.secure || message.privacy.protected) return refuse('secure-field')
   if (PROTECTED_BUNDLES.has(message.app.bundleId)) return refuse('protected-app')
   if (isProtectedMetadata(message, policy)) return refuse('protected-metadata')
+  const provider = message.source.provider ?? 'macos-ax'
   const safeAdapter = phase1AdapterForBundle(message.app.bundleId)
   if (!safeAdapter) return refuse('not-an-adapter')
   const adapter = phase1AdapterDefinition(safeAdapter)
@@ -322,7 +343,6 @@ export function normalizeObservation(
   // A URL resource is accepted only from the paired companion (ADR 0007). The
   // Accessibility path still cannot tell a private window from a normal one, so
   // a browser seen through AX keeps contributing nothing.
-  const provider = message.source.provider ?? 'macos-ax'
   if (
     provider === 'companion'
     && isProtectedWorkspace(workspace, policy)
@@ -339,7 +359,12 @@ export function normalizeObservation(
       if (SECURE_PATH.test(decodeURIComponent(new URL(resource.canonicalUri).pathname))) return refuse('secure-path')
     } catch { return undefined }
   }
-  if (!policyAllows(message.app.bundleId, resource, policy)) return refuse('policy')
+  if (!policyAllows(
+    message.app.bundleId,
+    resource,
+    policy,
+    { caseInsensitiveAppId: provider === 'windows-uia' },
+  )) return refuse('policy')
 
   // A collector on another machine keeps its own clock, so "in the future" has to mean "beyond what skew
   // explains" rather than "any millisecond ahead of mine". The same-machine collectors never trip this; the

@@ -136,6 +136,32 @@ describe('live privacy normalization', () => {
     )).toBe(false)
   })
 
+  it('treats Windows executable app identities as case-insensitive at the Host boundary', () => {
+    const windowsPolicy: PolicySnapshot = {
+      ...policy,
+      rules: [{
+        ...policy.rules[0]!,
+        id: PolicyRuleId('notepad'),
+        pattern: 'Notepad.exe',
+      }],
+    }
+    const observed = normalizeObservation(native({
+      app: { pid: 7, bundleId: 'notepad.exe', name: 'notepad' },
+      window: { title: 'note.txt - Notepad' },
+      source: { provider: 'windows-uia', adapter: 'notepad' },
+    }), windowsPolicy, 2_000)
+
+    expect(observed?.app.bundleId).toBe('notepad.exe')
+    expect(observed?.source).toEqual({ provider: 'windows-uia', adapter: 'notepad' })
+    expect(policyAllows(
+      'notepad.exe',
+      undefined,
+      windowsPolicy,
+      { caseInsensitiveAppId: true },
+    )).toBe(true)
+    expect(policyAllows('notepad.exe', undefined, windowsPolicy)).toBe(false)
+  })
+
   it('says why the lock screen is not recorded', () => {
     // The behaviour alone was not checkable: three attempts passed for reasons
     // other than the one they named. The reason is what makes it checkable.
