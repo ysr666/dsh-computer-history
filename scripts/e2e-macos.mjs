@@ -37,6 +37,7 @@ const collectorLine = process.env.COLLECTOR_EXECUTABLE
   ? `    collectorExecutable: ${process.env.COLLECTOR_EXECUTABLE}\n`
   : ''
 const collectorRequired = Boolean(process.env.COLLECTOR_EXECUTABLE)
+  || process.env.DSH_E2E_REQUIRE_PACKAGED_COLLECTOR === '1'
 const diagnosticTimeline = process.env.DSH_E2E_DIAGNOSTIC_TIMELINE === '1'
 const explicitAllowBundles = (process.env.DSH_E2E_ALLOW_BUNDLES ?? '')
   .split(',')
