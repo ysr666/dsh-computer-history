@@ -1,4 +1,5 @@
 import React from 'react'
+import { historyApiPath } from './api-route.js'
 
 export type AppIconKind =
   | 'terminal'
@@ -87,6 +88,20 @@ export function appFallbackMark(label: string): string {
   const parts = label.trim().split(/\s+/).filter(Boolean)
   const initials = parts.slice(0, 2).map(part => part[0]).join('')
   return (initials || '•').toUpperCase()
+}
+
+export function canRequestNativeApplicationIcon(
+  bundleId: string | undefined,
+): bundleId is string {
+  if (!bundleId || bundleId === 'companion.browser') return false
+  if (/\.(?:exe|com|bat|desktop)$/i.test(bundleId)) return false
+  return bundleId.includes('.')
+}
+
+export function applicationIconSrc(bundleId: string): string {
+  return historyApiPath(
+    `/system/application-icon?bundleId=${encodeURIComponent(bundleId)}`,
+  )
 }
 
 function svg(...children: React.ReactNode[]): React.ReactElement {
@@ -307,5 +322,17 @@ export function appIcon(
       title: label,
     },
     content,
+    canRequestNativeApplicationIcon(bundleId)
+      ? React.createElement('img', {
+          className: 'ch-app-mark-image',
+          src: applicationIconSrc(bundleId),
+          alt: '',
+          loading: 'lazy',
+          decoding: 'async',
+          onError: (event: React.SyntheticEvent<HTMLImageElement>) => {
+            event.currentTarget.hidden = true
+          },
+        })
+      : null,
   )
 }
