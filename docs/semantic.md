@@ -55,9 +55,10 @@ actions per scope:
 
 - **Preview payload** — the same bytes a provider would see, computed by the
   same minimiser.
-- **Turn off and purge** — removes the recorded permission and deletes the
-  model-written summaries for that scope. Deterministic text is untouched: it
-  never left the machine, so there is nothing to withdraw.
+- **Turn off and purge** — removes the recorded permission and purges the
+  model-written text for that scope by restoring the local deterministic
+  projection. The underlying Episode/work history remains intact; existing
+  deterministic summaries are untouched because they never left the machine.
 
 Deleting *evidence* is separate and stricter: `episode_summary_citations` has
 `ON DELETE CASCADE` on both sides, so removing an observation removes the
