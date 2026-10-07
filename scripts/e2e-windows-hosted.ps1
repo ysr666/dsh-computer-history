@@ -241,9 +241,62 @@ try {
     $env:DSH_E2E_EXPECT_PROVIDER = 'windows-uia'
     $env:DSH_E2E_ACTIVITY_TIMEOUT_MS = '30000'
 
-    & node (Join-Path $PSScriptRoot 'e2e-macos.mjs')
-    $hostExit = $LASTEXITCODE
+    # Run the generic Host harness asynchronously. Packing/installing the plugin causes the hosted terminal
+    # to regain foreground, so focusing Notepad *before* this process is not evidence that the collector sees it.
+    # Wait until the Host has finished its collector handshake, then restore the exact same Notepad HWND while the
+    # harness is in its strict activity window. The next five-second collector heartbeat must then reach the store.
+    $hostStdout = Join-Path $env:RUNNER_TEMP 'dch-windows-host-e2e.stdout.log'
+    $hostStderr = Join-Path $env:RUNNER_TEMP 'dch-windows-host-e2e.stderr.log'
+    Remove-Item $hostStdout, $hostStderr -Force -ErrorAction SilentlyContinue
+    $hostScript = Join-Path $PSScriptRoot 'e2e-macos.mjs'
+    $hostProcess = Start-Process -FilePath 'node.exe' -ArgumentList @($hostScript) -PassThru -NoNewWindow `
+      -RedirectStandardOutput $hostStdout -RedirectStandardError $hostStderr
+
+    $hostDeadline = [DateTime]::UtcNow.AddMinutes(3)
+    $refocused = $false
+    do {
+      $hostProcess.Refresh()
+      $hostOutputSoFar = if (Test-Path $hostStdout) { Get-Content $hostStdout -Raw -ErrorAction SilentlyContinue } else { '' }
+      if (-not $refocused -and $hostOutputSoFar -match 'collector settles:') {
+        [void][DchUser32]::ShowWindow($hwnd, 9)
+        $refocusResult = [DchUser32]::SetForegroundWindow($hwnd)
+        try { [void]$shell.AppActivate($notepad.Id) } catch {}
+        Start-Sleep -Milliseconds 500
+        $captureForeground = Get-ForegroundInfo
+        Write-Probe 'refocusAfterCollectorSettles' ($refocusResult.ToString())
+        Write-Probe 'foregroundDuringCapture' (($captureForeground | ConvertTo-Json -Compress))
+        if ($captureForeground.Pid -ne $notepad.Id) {
+          Stop-Process -Id $hostProcess.Id -Force -ErrorAction SilentlyContinue
+          throw "Notepad could not regain foreground during Host capture; foreground=$($captureForeground.Process)/$($captureForeground.Title)"
+        }
+        $refocused = $true
+      }
+      if ($hostProcess.HasExited) { break }
+      Start-Sleep -Milliseconds 250
+    } while ([DateTime]::UtcNow -lt $hostDeadline)
+
+    if (-not $hostProcess.HasExited) {
+      Stop-Process -Id $hostProcess.Id -Force -ErrorAction SilentlyContinue
+      throw 'full Windows Host E2E exceeded the 3 minute probe bound'
+    }
+    $hostProcess.WaitForExit()
+    $hostOutput = if (Test-Path $hostStdout) { Get-Content $hostStdout -Raw } else { '' }
+    $hostErrors = if (Test-Path $hostStderr) { Get-Content $hostStderr -Raw } else { '' }
+    Write-Host 'probe.fullHostStdout<<EOF'
+    Write-Host $hostOutput
+    Write-Host 'EOF'
+    if ($hostErrors.Trim()) {
+      Write-Host 'probe.fullHostStderr<<EOF'
+      Write-Host $hostErrors
+      Write-Host 'EOF'
+    }
+
+    $hostExit = $hostProcess.ExitCode
+    Write-Probe 'fullHostRefocused' ($refocused.ToString())
     Write-Probe 'fullHostExit' ($hostExit.ToString())
+    if (-not $refocused) {
+      throw 'full Windows Host E2E never reached the collector-settled activity window'
+    }
     if ($hostExit -ne 0) {
       throw "full Windows Host E2E failed with exit $hostExit"
     }
