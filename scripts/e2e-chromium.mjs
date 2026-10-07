@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* oxlint-disable no-await-in-loop -- Host readiness polling is intentionally sequential */
 // One command for the Chromium companion end.
 //
 //   pnpm e2e:chromium
@@ -8,10 +9,9 @@
 // --load-extension, which docs/companion.md already records - paired from its options page, and every cell is
 // counted in the store. Artifacts land under .debug/e2e-chromium/.
 //
-// One precondition it cannot satisfy by itself, and says so instead of pretending: the companion intake refuses
-// with `capture-not-owned` while another Host on this machine owns capture. On a machine running the desktop
-// app that is the normal state, so the run reports that boundary by name and exits non-zero - a green matrix
-// here would otherwise mean nothing.
+// The Host uses scripts/fixtures/e2e-fake-collector.mjs. That fixture never reads the desktop; it only reports a
+// healthy collector lifecycle so Browser Companion can exercise the real intake/ingestion/store path without a
+// macOS Accessibility grant. Native capture remains a separate platform validation.
 import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
@@ -149,27 +149,24 @@ try {
     evidence.push({ line: line.slice(0, 200), ok: line.startsWith('PASS') })
   }
 
-  // Ask the Host why anything was refused: that is where `capture-not-owned` shows up by name.
+  // The protocol-only collector must make the Host genuinely writable. If this is not running, a green
+  // browser matrix would be impossible and the state file explains why.
   const state = JSON.parse(spawnSync('curl', ['-s', '-b', jar, `http://127.0.0.1:${web}/api/computer-history/state`], { encoding: 'utf8' }).stdout || '{}')
   writeFileSync(path.join(artifacts, 'state.json'), `${JSON.stringify(state, null, 2)}\n`)
-  const refused = state.refusedByReason ?? {}
-  log('refusedByReason:', JSON.stringify(refused))
-  if (matrix.status !== 0) {
-    if (refused['capture-not-owned'] !== undefined) {
-      console.error('\ne2e (Chromium) stopped at a boundary, not a defect: this machine already has a Host that owns')
-      console.error(`capture, so the isolated Host refused ${refused['capture-not-owned']} report(s) by name. The extension half worked: it loaded`)
-      console.error('over CDP, was paired from its options page, and its reports reached this Host. Quit the other ')
-      console.error('Host, or run scripts/verify/chrome-companion.mjs against the one that owns capture.')
-    } else {
-      // Show why, not just where: the matrix script's own sentence ("no Chrome at …", a failing cell) is the
-      // useful part, and a reader should not have to open a log to reach it.
-      const tail = `${matrix.stdout ?? ''}${matrix.stderr ?? ''}`.trim().split('\n').slice(-4).join('\n')
-      console.error(`\ne2e (Chromium) failed:\n${tail}`)
-      console.error(`\nfull log: ${path.relative(REPO, path.join(artifacts, 'matrix.log'))}`)
-    }
+  log('capture:', state.capture ?? '(missing)', '| refusedByReason:', JSON.stringify(state.refusedByReason ?? {}))
+  if (state.capture !== 'running') {
+    console.error(`\ne2e (Chromium) failed: protocol-only collector is not running (capture=${state.capture ?? 'missing'})`)
     process.exitCode = 1
-  } else {
-    log('matrix passed: every cell counted in this Host\'s own store')
+  }
+  if (matrix.status !== 0) {
+    // Show why, not just where: the matrix script's own sentence ("no Chrome at …", a failing cell) is the
+    // useful part, and a reader should not have to open a log to reach it.
+    const tail = `${matrix.stdout ?? ''}${matrix.stderr ?? ''}`.trim().split('\n').slice(-4).join('\n')
+    console.error(`\ne2e (Chromium) failed:\n${tail}`)
+    console.error(`\nfull log: ${path.relative(REPO, path.join(artifacts, 'matrix.log'))}`)
+    process.exitCode = 1
+  } else if (state.capture === 'running') {
+    log('matrix passed: real Chrome extension events reached this Host\'s own store')
   }
 } catch (error) {
   console.error(`e2e (Chromium) failed: ${error instanceof Error ? error.message : String(error)}`)
