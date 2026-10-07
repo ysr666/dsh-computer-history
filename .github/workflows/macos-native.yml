@@ -1,12 +1,18 @@
-name: macOS native + package
+name: Three-platform native + package
 
 on:
   pull_request:
     paths:
       - 'native/**'
       - 'bin/**'
+      - 'src/host/plugin.ts'
+      - 'src/shared/preset.ts'
       - 'extension-editor/**'
       - 'scripts/build-native.mjs'
+      - 'scripts/collector-artifacts.mjs'
+      - 'scripts/e2e-macos.mjs'
+      - 'scripts/e2e-collector-transport.mjs'
+      - 'scripts/verify-release.mjs'
       - 'scripts/test-native.mjs'
       - 'scripts/build-extension.mjs'
       - 'presets/**'
@@ -20,8 +26,14 @@ on:
     paths:
       - 'native/**'
       - 'bin/**'
+      - 'src/host/plugin.ts'
+      - 'src/shared/preset.ts'
       - 'extension-editor/**'
       - 'scripts/build-native.mjs'
+      - 'scripts/collector-artifacts.mjs'
+      - 'scripts/e2e-macos.mjs'
+      - 'scripts/e2e-collector-transport.mjs'
+      - 'scripts/verify-release.mjs'
       - 'scripts/test-native.mjs'
       - 'scripts/build-extension.mjs'
       - 'presets/**'
@@ -38,12 +50,70 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  macos-native:
-    runs-on: macos-15
+  native:
+    name: native collector — ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: darwin
+            os: macos-14
+            source: bin/dsh-computer-history-collector
+          - platform: win32
+            os: windows-latest
+            source: native/windows/target/release/dsh-computer-history-collector-windows.exe
+          - platform: linux
+            os: ubuntu-latest
+            source: native/linux/target/release/dsh-computer-history-collector-linux
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '22.19.0'
+
+      - name: Build macOS universal collector
+        if: matrix.platform == 'darwin'
+        run: |
+          node scripts/build-native.mjs
+          node scripts/test-native.mjs
+
+      - name: Build Windows collector
+        if: matrix.platform == 'win32'
+        run: cargo build --release --manifest-path native/windows/Cargo.toml
+
+      - name: Build Linux collector
+        if: matrix.platform == 'linux'
+        run: cargo build --release --manifest-path native/linux/Cargo.toml
+
+      - name: Record exact binary provenance
+        run: >-
+          node scripts/collector-artifacts.mjs emit
+          "${{ matrix.platform }}"
+          "${{ matrix.source }}"
+          native-out
+          "${{ github.sha }}"
+
+      - name: Upload native collector
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: collector-${{ matrix.platform }}
+          path: native-out/
+          if-no-files-found: error
+          retention-days: 3
+
+  package:
+    name: assemble one three-platform tarball
+    needs: native
+    runs-on: macos-14
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -56,14 +126,30 @@ jobs:
           node-version: '22.19.0'
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm native:build
-      - run: pnpm native:test
       - run: pnpm install --frozen-lockfile
         working-directory: extension-editor
-      - run: pnpm pack --pack-destination /tmp
-      - name: Verify every package.json files entry is present
+      - run: pnpm build
+      - run: pnpm verify
+
+      - name: Download all native collectors
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: collector-*
+          path: native-artifacts
+          merge-multiple: true
+
+      - name: Assemble exact native outputs
         run: |
-          tarball=$(ls /tmp/dsh-computer-history-*.tgz)
+          node scripts/collector-artifacts.mjs assemble native-artifacts . "$GITHUB_SHA"
+          node scripts/collector-artifacts.mjs verify . "$GITHUB_SHA"
+
+      - name: Pack without rebuilding native collectors
+        env:
+          DSH_NATIVE_PREBUILT: '1'
+        run: |
+          mkdir -p release-out
+          pnpm pack --pack-destination release-out
+          tarball=$(ls release-out/dsh-computer-history-*.tgz | head -1)
           missing=0
           while IFS= read -r entry; do
             if ! tar -tzf "$tarball" | grep -qE "^package/${entry}(/|$)"; then
@@ -72,3 +158,73 @@ jobs:
             fi
           done < <(node -p "require('./package.json').files.join('\n')")
           exit "$missing"
+
+      - name: Upload assembled plugin tarball
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: three-platform-package
+          path: release-out/dsh-computer-history-*.tgz
+          if-no-files-found: error
+          retention-days: 3
+
+  packaged-install:
+    name: clean install + strict transport — ${{ matrix.os }}
+    needs: package
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, windows-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '22.19.0'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Install supported DSH CLI
+        run: npm install --prefix "${{ runner.temp }}/dsh-cli" @deepseek-ai/dsh@0.2.0-rc.2
+
+      - name: Put DSH CLI on PATH
+        run: >-
+          node -e "const fs=require('node:fs'),path=require('node:path'),os=require('node:os');
+          fs.appendFileSync(process.env.GITHUB_PATH,
+          path.join(process.env.RUNNER_TEMP,'dsh-cli','node_modules','.bin')+os.EOL)"
+
+      - name: Download assembled plugin tarball
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: three-platform-package
+          path: package-input
+
+      - name: Extract exact packaged collector
+        run: >-
+          node -e "const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),
+          cp=require('node:child_process'); const dir=path.resolve('package-input');
+          const tgz=fs.readdirSync(dir).find(x=>x.endsWith('.tgz'));
+          if(!tgz) throw new Error('package tarball missing');
+          const tarball=path.join(dir,tgz); const out=path.resolve('package-extracted');
+          fs.mkdirSync(out,{recursive:true}); cp.execFileSync('tar',['-xzf',tarball,'-C',out],{stdio:'inherit'});
+          const names={darwin:'dsh-computer-history-collector',win32:'dsh-computer-history-collector-windows.exe',
+          linux:'dsh-computer-history-collector-linux'}; const collector=path.join(out,'package','bin',names[process.platform]);
+          if(!fs.existsSync(collector)) throw new Error('packaged collector missing for '+process.platform);
+          fs.appendFileSync(process.env.GITHUB_ENV,'DSH_E2E_TARBALL='+tarball+os.EOL+
+          'COLLECTOR_EXECUTABLE='+collector+os.EOL)"
+
+      - name: Clean install chooses its own packaged collector
+        env:
+          DSH_E2E_REQUIRE_COLLECTOR: '1'
+          COLLECTOR_EXECUTABLE: ''
+        run: pnpm e2e:macos
+
+      - name: Strict transport uses the byte-identical packaged collector
+        env:
+          DSH_E2E_REQUIRE_COLLECTOR: '1'
+        run: pnpm e2e:collector-transport
