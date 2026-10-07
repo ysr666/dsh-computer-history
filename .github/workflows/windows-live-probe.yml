@@ -169,7 +169,7 @@ jobs:
 
           $collector = (Resolve-Path 'native/windows/target/release/dsh-computer-history-collector-windows.exe').Path
           $env:COLLECTOR_EXECUTABLE = $collector
-          $env:DSH_E2E_ALLOW_BUNDLES = 'notepad.exe'
+          $env:DSH_E2E_ALLOW_BUNDLES = 'Notepad.exe'
           $env:DSH_E2E_EXPECT_ACTIVITY = '1'
           $env:DSH_E2E_EXPECT_PROVIDER = 'windows-uia'
           $env:DSH_E2E_ACTIVITY_TIMEOUT_MS = '30000'
