@@ -968,21 +968,6 @@ export function createHistoryPage({
 
     const threadDetailView = threadDetail
       ? (() => {
-          const activityCount = threadDetail.timeline.reduce(
-            (total, day) => total + day.activityCount,
-            0,
-          )
-          const durationMs = threadDetail.timeline.reduce(
-            (total, day) => total + dayDuration(day),
-            0,
-          )
-          const hasMergedActivity = threadDetail.timeline.some(day =>
-            day.activities.some(activity => activity.episodeCount > 1),
-          )
-          const durationText = formatDuration(t, durationMs)
-          const displayDuration = hasMergedActivity
-            ? t('approxDuration', { duration: durationText })
-            : durationText
           return React.createElement(
             'div', { className: 'ch-project-history' },
             React.createElement(
@@ -990,9 +975,7 @@ export function createHistoryPage({
               React.createElement('span', { className: 'ch-project-history-kicker' }, t('projectHistory')),
               React.createElement('span', { className: 'ch-muted' },
                 t('projectHistoryMeta', {
-                  activities: activityCount,
                   days: threadDetail.timeline.length,
-                  duration: displayDuration,
                 })),
             ),
             React.createElement(
