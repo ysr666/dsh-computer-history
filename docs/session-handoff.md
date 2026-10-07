@@ -15,6 +15,52 @@ bilingual; `pnpm verify` green with 0 warnings before every commit; read the gat
 up every process, window and temp directory started; **no release action** (tag, dispatch, version bump, merge)
 without explicit authorization.
 
+## Continuity semantics (2026-10-06)
+
+`autoResume` and continuity evidence are deliberately separate. A top-level DSH turn checkpoint is metadata-only
+(`sessionId`, turn, cwd/workspace and time) and is recorded only while Computer History itself is enabled and the
+capture state is `running`. Pausing or degrading capture therefore stops checkpoint writes too. `autoResume` stays
+default-off and gates only the experimental automatic Resume hint injection; a user-initiated Continue action or
+`computer_history_resume` does not require that experimental switch. Editor-companion workspaces are vouched
+workspaces and therefore anchor Episodes/Work Threads; this is covered end-to-end by
+`tests/integration/work-continuity-loop.spec.ts`.
+
+## Native Continue / Agent Work State contract (2026-10-06)
+
+The primary Continue action now means **continue inside DSH**. Opening the recorded file/application is a separate
+secondary action; older Phase 2B notes describing external-app reopening are historical implementation evidence,
+not the current primary interaction.
+
+The current continuation path is:
+
+Episode evidence -> fresh DSH Session -> native @ Computer History ReferenceChipNode -> request-time hidden
+system context -> Agent verifies authoritative workspace state -> continue.
+
+The hidden context is intentionally not a prose summary. Maintain these invariants:
+
+- User text outside the capsule is the specific instruction. A capsule with no additional text means "resume the
+  recorded work"; the Agent should not make the user restate context when authoritative resources can be inspected.
+- Workspace absolute root, newest trusted editor verification event, current Git probe timestamp/branch/HEAD/dirty
+  shape, previous DSH checkpoint and HEAD movement are high-priority state. They must survive context-size trimming.
+- Trusted historical editor saves and request-time Git dirty paths are distinct provenance channels. When they name
+  the same canonical file, render the overlap as two independent signals (for example
+  [observed-save + current-git .M]); never claim the current dirty state was caused by the recorded Episode.
+- macOS /tmp and /private/tmp can name the same file. Resource/Git overlap matching resolves existing paths
+  through filesystem metadata and falls back to lexical absolute paths for deleted/synthetic resources.
+- Explicit Continue over one exact stored Episode uses that Episode's raw observationIds as the structured handoff evidence. summaryObservationIds are only a fallback for older/summary-only callers; missing summary citations must not erase otherwise auditable save/verification/resource provenance.
+- Current Git state carries observedAtMs; "current" without a sampling time is not an auditable claim.
+- Dynamic metadata is untrusted. Workspace titles, resource labels, URLs and window titles are flattened to one
+  line and control characters are neutralized before entering system context.
+- renderResumeHandoffContext() is budgeted, but Evidence + provenance + authoritative-source recovery guidance
+  are non-droppable. Lower-priority lists are what get omitted.
+- Computer History still records no task prompt and no file/document contents. The Agent recovers intent from the
+  user's current instruction plus authoritative workspace state, not from guessed history prose.
+
+Verification spans both halves: tests/integration/work-continuity-loop.spec.ts builds a real temporary Git
+repository, ingests editor save/test events, advances HEAD, leaves a dirty file, then checks the final model
+context. pnpm verify:continuation-capsule drives a real DSH 0.2.x browser client and proves the visible node is the
+platform's native data-composer-chip="computer-history" reference with no hidden handoff text exposed in the page.
+
 ## Green, each with a command behind it
 
 | Item | Evidence |
