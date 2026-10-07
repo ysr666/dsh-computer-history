@@ -281,16 +281,24 @@ describe('repository scaffold', () => {
     expect(panel).toContain("t('showFewerThreads')")
   })
 
-  it('keeps project history inline with the work thread that opened it', () => {
+  it('keeps project history inline and lets the thread row own its identity', () => {
     const panel = readFileSync(new URL('../src/client/panel.ts', import.meta.url), 'utf8')
-    const threadRow = panel.indexOf("'li', {")
-    const inlineDetail = panel.indexOf('inlineDetail,')
-    const globalAppend = panel.indexOf('threadDetailView,\n    )')
-    expect(panel).toContain('const isOpen = threadDetailKey === thread.threadKey')
-    expect(panel).toContain('threadDetailPendingKey === thread.threadKey')
+    const detailStart = panel.indexOf('const threadDetailView')
+    const sectionStart = panel.indexOf('const threadSection = section')
+    const summaryStart = panel.indexOf('const summaryStatus')
+    const detailSource = panel.slice(detailStart, sectionStart)
+    const threadSource = panel.slice(sectionStart, summaryStart)
+    const threadRow = threadSource.indexOf("'li', {")
+    const inlineDetail = threadSource.indexOf('inlineDetail,')
+    expect(detailStart).toBeGreaterThan(-1)
+    expect(detailSource).not.toContain('closeProjectHistory')
+    expect(detailSource).not.toContain("React.createElement('h3'")
+    expect(detailSource).toContain("'ch-project-day-chevron'")
+    expect(threadSource).toContain('const isOpen = threadDetailKey === thread.threadKey')
+    expect(threadSource).toContain('threadDetailPendingKey === thread.threadKey')
     expect(threadRow).toBeGreaterThan(-1)
     expect(inlineDetail).toBeGreaterThan(threadRow)
-    expect(globalAppend).toBe(-1)
+    expect(threadSource).not.toContain('threadDetailView,\n    )')
   })
 
   it('renders an episode title through the shared rule, with no second copy of it', () => {
