@@ -7,6 +7,7 @@ import {
 } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { withFileLock } from '@deepseek-ai/dsh-atomic-write'
 import type { CompanionTokenStore } from './token-store.js'
 
 export const EDITOR_BOOTSTRAP_FILENAME = 'editor-companion-bootstrap.json'
@@ -27,6 +28,33 @@ export function editorCompanionBootstrapPath(
     '.dsh',
     'computer-history',
     EDITOR_BOOTSTRAP_FILENAME,
+  )
+}
+
+const EDITOR_BOOTSTRAP_LOCK_WAIT_MS = 5_000
+
+/**
+ * Serialise editor credential publication across DSH Host processes.
+ *
+ * Pairing lives in shared SQLite, while the cleartext handoff lives in one
+ * shared file. Failure compensation protects a single publisher, but without an
+ * outer cross-process lock two successful Hosts can interleave as:
+ * A rotates -> B rotates -> B publishes -> A publishes, leaving SQLite on B
+ * while the file contains A. Hold the atomic-write lock across rotate+publish
+ * so those two durable surfaces have one total order.
+ */
+export async function withEditorCompanionPublicationLock<T>(
+  work: () => T | Promise<T>,
+  homeDirectory = os.homedir(),
+): Promise<T> {
+  const target = editorCompanionBootstrapPath(homeDirectory)
+  const directory = path.dirname(target)
+  mkdirSync(directory, { recursive: true, mode: 0o700 })
+  chmodSync(directory, 0o700)
+  return withFileLock(
+    `${target}.publication`,
+    work,
+    { waitMs: EDITOR_BOOTSTRAP_LOCK_WAIT_MS },
   )
 }
 
