@@ -94,10 +94,10 @@ duration  0 ms
 ```
 
 The duration is still zero, and the reason is in the collector rather than the interface: the
-heartbeat timer fires every interval and calls `reconcileFrontmost()`, but observations are
-deduplicated by a fingerprint - **an unchanged state does not produce a new observation**. Sitting in
-one file for two and a half minutes therefore produces exactly one observation, an episode with a
-single sample, and a duration of zero.
+heartbeat timer fires every interval and calls `reconcileFrontmost()`, but in the build measured here observations were
+deduplicated by a fingerprint - **an unchanged state did not produce a new observation**. Sitting in
+one file for two and a half minutes therefore produced exactly one observation, an episode with a
+single sample, and a duration of zero. This paragraph is historical evidence; the 2026-10-06 correction below supersedes that sampling rule.
 
 Two ways to fix it, and they are not equivalent:
 
@@ -139,6 +139,31 @@ Three ways to make it mean "how long did this last", with what each costs:
 **Recommendation: (1).** It uses what is already known, it needs one field rather than a new cadence,
 and that field is exactly what a three-platform build needs anyway so the three can be compared
 honestly.
+
+
+### Duration decision superseded - bounded liveness, 2026-10-06
+
+The recommendation above was not the final implementation. The product now keeps the existing **5 s reconcile**
+cadence for prompt focus, policy and idle-boundary changes, but an unchanged eligible fingerprint is no longer
+suppressed forever. The macOS collector and the shared Windows/Linux engine emit one **liveness observation every
+30 s** while the same work state remains active.
+
+That choice preserves the useful property of change-driven capture - a stable state does not write one row every
+5 s - while giving Episode duration actual evidence. Eight hours in one unchanged state is bounded at about 960
+liveness rows rather than about 5,760 five-second rows, and the tail error at a state change is bounded to about
+30 s. Protected/disallowed state does not gain a liveness stream.
+
+The tests pin both halves of the contract:
+
+- `native/collector-protocol/src/engine.rs`: 5 s / 29.999 s remain deduplicated; at 30 s the same fingerprint
+  emits the next observation;
+- `scripts/test-native.mjs` and `native/macos/.../LivenessTests.swift`: the macOS liveness gate uses the same
+  30 s boundary;
+- `tests/unit/episode-builder.spec.ts`: two same-state samples 30 s apart remain one Episode whose `endedAtMs`
+  advances by 30 s.
+
+No database field or protocol field was added. Observation provenance, deletion, export/import and Episode
+rebuild semantics therefore stay on the existing path.
 
 ### The duration floor: the four places it touches
 
