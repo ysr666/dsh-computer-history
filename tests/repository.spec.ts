@@ -11,6 +11,7 @@ import {
 } from 'vitest'
 import {
   name,
+  packagedCollectorExecutable,
   resolveHistoryDataDirectory,
 } from '../src/index.js'
 import {
@@ -52,6 +53,17 @@ afterEach(() => {
 describe('repository scaffold', () => {
   it('exports the plugin identity', () => {
     expect(name).toBe('dsh-computer-history')
+  })
+
+  it('resolves the packaged collector by runtime platform', () => {
+    expect(path.basename(packagedCollectorExecutable('darwin')))
+      .toBe('dsh-computer-history-collector')
+    expect(path.basename(packagedCollectorExecutable('win32')))
+      .toBe('dsh-computer-history-collector-windows.exe')
+    expect(path.basename(packagedCollectorExecutable('linux')))
+      .toBe('dsh-computer-history-collector-linux')
+    expect(() => packagedCollectorExecutable('freebsd'))
+      .toThrow('computer history collector is unsupported on freebsd')
   })
 
   it('keeps default history under DSH_HOME', () => {
@@ -373,6 +385,29 @@ describe('repository scaffold', () => {
     }
     expect(routeSource).toContain("'api/computer-history'")
     expect(routeSource).not.toContain("'/api/computer-history'")
+  })
+
+  it('declares every native collector and its provenance manifest in the package', () => {
+    const manifest = JSON.parse(readFileSync(
+      new URL('../package.json', import.meta.url),
+      'utf8',
+    )) as {
+      files?: string[]
+      bin?: Record<string, string>
+    }
+    for (const file of [
+      'bin/dsh-computer-history-collector',
+      'bin/dsh-computer-history-collector-windows.exe',
+      'bin/dsh-computer-history-collector-linux',
+      'bin/native-artifacts.json',
+    ]) {
+      expect(manifest.files).toContain(file)
+    }
+    expect(manifest.bin).toMatchObject({
+      'dsh-computer-history-collector': 'bin/dsh-computer-history-collector',
+      'dsh-computer-history-collector-windows': 'bin/dsh-computer-history-collector-windows.exe',
+      'dsh-computer-history-collector-linux': 'bin/dsh-computer-history-collector-linux',
+    })
   })
 
   it('keeps locale and DSH runtime modules owned by the platform', () => {
