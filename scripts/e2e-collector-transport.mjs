@@ -3,6 +3,7 @@
 //
 // Usage:
 //   COLLECTOR_EXECUTABLE=<absolute collector path> pnpm e2e:collector-transport
+//   DSH_RELEASE_TARBALL=<assembled.tgz> DSH_E2E_REQUIRE_PACKAGED_COLLECTOR=1 pnpm e2e:collector-transport
 //
 // This deliberately drives the production collector through the same throwaway Host and the same
 // ctx.subprocess path as the product. The 2026-10-06 Windows investigation also used a dumb READY/PING/PONG
@@ -16,12 +17,13 @@ import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
 const collector = process.env.COLLECTOR_EXECUTABLE
-if (!collector) {
+const packaged =
+  process.env.DSH_E2E_REQUIRE_PACKAGED_COLLECTOR === '1'
+  && Boolean(process.env.DSH_RELEASE_TARBALL?.trim())
+if (!collector && !packaged) {
   console.error(
-    'COLLECTOR_EXECUTABLE is required. Point it at the collector binary built for this machine.\n'
-    + 'Example on Windows PowerShell:\n'
-    + '  $env:COLLECTOR_EXECUTABLE = (Resolve-Path native\\windows\\target\\release\\dsh-computer-history-collector-windows.exe)\n'
-    + '  pnpm e2e:collector-transport',
+    'Provide either COLLECTOR_EXECUTABLE for a development binary, or set both '
+    + 'DSH_RELEASE_TARBALL and DSH_E2E_REQUIRE_PACKAGED_COLLECTOR=1 for an assembled package.',
   )
   process.exit(2)
 }
