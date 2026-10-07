@@ -54,7 +54,7 @@ ln -sfn "$PWD" ~/.dsh/profiles/<profile>/node_modules/dsh-computer-history
 Verified: the entry reaches `[active]`. Every phase's runtime evidence was
 produced on this path.
 
-## Installing from the tarball: Host path verified; client panel still open
+## Installing from the tarball: verified
 
 ```bash
 npm pack                                        # dsh-computer-history-<version>.tgz
@@ -91,9 +91,14 @@ Three approaches recorded as measured failures, so nobody repeats them:
 - **a profile copied into a temporary `DSH_HOME`**: its bundles and `file:` dependencies do not
   resolve there at all.
 
-**Still open, and stated as such:** the **client half** of an installed bundle does not appear in
-the interface on this Host yet, so the install is verified for the host plugin and *not* for the
-panel. Until that is fixed, this document says so rather than claiming a complete install.
+**Client half verified 2026-10-06.** A second clean throwaway profile was created only through
+`dsh plugin add`, then booted with the Desktop Host/runtime actually shipped by the QA application
+(`DSH_CLIENT_VERSION=0.2.0-rc.2`). The boot manifest contained the installed
+`dsh-computer-history/client.js`; a brand-new browser profile then rendered the Computer History sidebar
+entry, the plugin first-run page, and the native Settings page. `/state`, `/timeline`, and the privacy
+redaction preview all returned 200 from that same installed profile. No checkout junction, symlink, or manual
+client injection was used. The exact measured path and the reason the machine's older global `dsh 0.1.2-rc.1`
+was not used as the runtime are recorded in `docs/validation-installed-bundle-2026-10-06.md`.
 
 ## Publishing
 
@@ -101,9 +106,44 @@ Do not publish `v0.1.0-alpha.1` until the readiness table above has no product b
 The version/changelog/tag changes are intentionally deferred until that point so a public
 branch cannot accidentally look release-ready before the installed client path is proven.
 
-Push a tag named `v` + the version in `package.json` (`.github/workflows/release.yml`). The workflow runs the
-same gate as `main`, builds the collector, packs, runs `pnpm verify:release`, and creates the GitHub release with
-the tarball attached and the changelog section as the notes. **It needs no certificate and no secrets.**
+Push a tag named `v` + the version in `package.json` (`.github/workflows/release.yml`). The workflow installs
+both the root project and the separate `extension-editor` pnpm project, builds the plugin, runs the same portable
+gate as `main`, then runs the macOS **product journey** before it creates the release artifact. The second install
+is required on a clean runner because root `pnpm install` does not populate `extension-editor/node_modules`,
+while `prepack` builds the VS Code extension through its local `@vscode/vsce` dependency.
+
+That journey installs public `@deepseek-ai/dsh@0.2.0-rc.2` into a throwaway directory, downloads the current
+Stable Chrome for Testing from Google's `last-known-good-versions-with-downloads.json`, and exercises a
+release-shaped Computer History tarball end to end. Only after that passes does the workflow build the collector,
+pack, run `pnpm verify:release`, and create the GitHub release with the tarball attached and the changelog section
+as the notes. **It needs no certificate and no secrets.**
+
+### Product-journey release gate
+
+`pnpm e2e:product-journey` is intentionally not part of ordinary `pnpm verify`: PR CI is portable Linux/Node,
+while this gate qualifies the actual macOS product surface. It creates a throwaway DSH profile and checks the
+user path that unit tests cannot prove as one system:
+
+- install the packed plugin and complete first-run consent;
+- install/pair the Editor Companion and load the real Browser Companion in Chrome with CDP `Extensions.loadUnpacked`;
+- run the Browser privacy matrix, including canonical URL query/fragment stripping, denied resources, incognito,
+  extension off, and rotated-token rejection;
+- produce `Editor → short Browser detour → Editor save/test success` and prove it remains one workspace Episode
+  with four evidence links and four summary citations;
+- Continue into a new DSH Session and prove the native `@ Computer History` capsule binds to that exact Episode
+  without sending a model request;
+- disable/re-enable without losing history, then deselect/unload and remove the package while preserving the
+  history database and continuation binding.
+
+The fixture collector at `scripts/fixtures/e2e-fake-collector.mjs` is protocol-only: it reports a healthy
+collector lifecycle so the release gate does not need macOS Accessibility permission, and it never reads the
+desktop. Native Accessibility capture is still covered by the native collector validation. Browser behavior is
+not mocked: the gate loads the built extension into a real Chrome process.
+
+A plain web-profile Host and the Desktop shell have different package-manager lifecycle ownership. The journey
+therefore accepts both correct forms: Desktop/HMR may unload immediately; a web Host may apply bundle
+deselection on restart. Package removal itself is then verified through `dsh plugin --profile ... remove`, the
+same DSH CLI package-manager path used to manage the throwaway profile.
 
 ### Why no certificate: a plugin install is not an app install
 
@@ -138,11 +178,27 @@ enforced - whether they block *this* release is a judgement, and a script that p
 
 ### Running it locally
 
+The portable artifact preflight is still:
+
 ```bash
 pnpm native:build                    # ad-hoc; the log says which signature it made
 pnpm pack --pack-destination /tmp
 DSH_RELEASE_TARBALL=/tmp/dsh-computer-history-<version>.tgz pnpm verify:release
 ```
+
+For the full installed-product gate, install the independent Editor Companion project as a clean runner would,
+then provide any DSH 0.2.x CLI and Chrome/Chrome for Testing binary:
+
+```bash
+pnpm --dir extension-editor install --frozen-lockfile
+DSH_CLI=/path/to/dsh \
+PANEL_CHROME='/path/to/Google Chrome for Testing' \
+pnpm e2e:product-journey
+```
+
+If `PANEL_CHROME` is omitted on macOS the script uses the normal Google Chrome application path. The release
+workflow does not depend on a runner's preinstalled browser: it resolves the current Stable Chrome for Testing
+from Google's official JSON endpoint and passes that binary explicitly.
 
 Measured 2026-10-05 with the version still at `0.1.0-dev.0`: `pnpm verify:release` exits 1 and names what is
 actually missing - the `-dev` version and the absent changelog section - while the signature check passes.

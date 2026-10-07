@@ -16,6 +16,8 @@ import path from 'node:path'
 const WORKFLOW = '.github/workflows/collectors.yml'
 const VALIDATION = 'docs/validation-three-platforms.md'
 const FIXTURE = 'tests/conformance/fixtures/adapters.json'
+const RELEASE_WORKFLOW = '.github/workflows/release.yml'
+const RELEASE_DOC = 'docs/release.md'
 
 // The list may now be empty - for the first time all three platforms have a live row - so the markers accept
 // an empty tail and the word `none`, which is what a reader would write.
@@ -61,6 +63,34 @@ for (const runner of ['macos-latest', 'windows-latest', 'ubuntu-latest']) {
   if (!matrixOs.includes(runner)) problems.push(`${WORKFLOW}: matrix no longer runs on ${runner}`)
 }
 
+// The product journey is intentionally too platform-specific and expensive for
+// the portable PR gate, but it is a release invariant. Freeze that split here:
+// a workflow refactor must not quietly publish a tag without exercising the
+// installed DSH/Chrome/Continue/plugin-lifecycle path.
+const releaseWorkflowSource = readFileSync(RELEASE_WORKFLOW, 'utf8')
+const releaseDocSource = readFileSync(RELEASE_DOC, 'utf8')
+if (!/^\s*runs-on:\s*macos(?:-[^\s#]+)?\s*$/m.test(releaseWorkflowSource)) {
+  problems.push(`${RELEASE_WORKFLOW}: release job is no longer a macOS job`)
+}
+if (!/\brun:\s*pnpm --dir extension-editor install --frozen-lockfile\s*$/m.test(releaseWorkflowSource)) {
+  problems.push(`${RELEASE_WORKFLOW}: Editor Companion dependencies are not installed on a clean release runner`)
+}
+if (!/\brun:\s*pnpm e2e:product-journey\s*$/m.test(releaseWorkflowSource)) {
+  problems.push(`${RELEASE_WORKFLOW}: product-journey release gate is missing`)
+}
+if (!/DSH_CLI=/.test(releaseWorkflowSource)) {
+  problems.push(`${RELEASE_WORKFLOW}: product journey no longer provisions DSH_CLI`)
+}
+if (!/PANEL_CHROME=/.test(releaseWorkflowSource)) {
+  problems.push(`${RELEASE_WORKFLOW}: product journey no longer provisions PANEL_CHROME`)
+}
+if (!releaseDocSource.includes('pnpm e2e:product-journey')) {
+  problems.push(`${RELEASE_DOC}: product-journey release command is undocumented`)
+}
+if (!releaseDocSource.includes('not part of ordinary `pnpm verify`')) {
+  problems.push(`${RELEASE_DOC}: PR-vs-release product-journey boundary is undocumented`)
+}
+
 if (problems.length > 0) {
   console.error(problems.join('\n'))
   process.exit(1)
@@ -68,7 +98,8 @@ if (problems.length > 0) {
 
 console.log(
   `ci boundary holds: unverified platforms [${fromFixture.join(', ') || 'none'}] agree in the workflow, `
-  + `the conformance fixture and the validation file; matrix runs on [${matrixOs.join(', ')}]`,
+  + `the conformance fixture and the validation file; matrix runs on [${matrixOs.join(', ')}]; `
+  + 'release keeps the macOS product-journey gate',
 )
 
 // Unused import guard: keeps the path import meaningful if the file list above ever moves.
