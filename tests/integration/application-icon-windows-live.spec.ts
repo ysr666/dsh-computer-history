@@ -9,7 +9,9 @@ function liveSubprocess() {
       readonly argv: readonly string[]
       readonly cwd: string
     }) {
-      const completed = spawnSync(spec.argv[0], spec.argv.slice(1), {
+      const [command, ...args] = spec.argv
+      if (!command) throw new Error('missing subprocess command')
+      const completed = spawnSync(command, args, {
         cwd: spec.cwd,
         encoding: 'utf8',
         windowsHide: true,
