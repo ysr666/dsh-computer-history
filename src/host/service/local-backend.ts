@@ -49,6 +49,7 @@ import {
   buildWorkThreadDetail,
   buildWorkThreads,
 } from '../episodes/threads.js'
+import { renderDeterministicSummary } from '../episodes/summary.js'
 import { resolveResume } from '../resume/index.js'
 import { phase1AdapterForBundle } from '../ingestion/index.js'
 import { DeletionService } from '../retention/index.js'
@@ -508,11 +509,37 @@ implements ComputerHistoryServiceContract {
       db.exec('BEGIN IMMEDIATE')
       try {
         const revoked = this.semanticOptIns.revoke(scope)
-        const purged = this.semanticOptIns.purge(scope)
+        const modelEpisodes = this.semanticOptIns.modelEpisodeIds(scope)
+        let purged = 0
+        const updatedAtMs = this.now()
+        for (const episodeId of modelEpisodes) {
+          const episode = this.episodes.get(episodeId)
+          if (!episode || episode.summaryKind === 'deterministic') continue
+          const summary = renderDeterministicSummary({
+            ...(episode.workspace?.title === undefined
+              ? {}
+              : { workspaceTitle: episode.workspace.title }),
+            resources: episode.resources,
+            surfaces: episode.surfaces,
+          })
+          if (this.episodes.replaceSummary({
+            id: episode.id,
+            summaryKind: 'deterministic',
+            summary,
+            // Deterministic text is a function of the Episode's full durable
+            // aggregates. Cite every raw observation link that still exists;
+            // after raw TTL compaction this may legitimately be empty, exactly
+            // as for a deterministic Episode that simply outlived its raw rows.
+            summaryObservationIds: episode.observationIds,
+            updatedAtMs,
+          })) {
+            purged += 1
+          }
+        }
         // Revoking is an instruction to forget, so the local record of what left
-        // goes too (ADR 0010). These three writes are one user action: a failure
-        // after the permission row is removed must roll the whole action back
-        // rather than leave model output or send audit rows behind.
+        // goes too (ADR 0010). Permission removal, model-summary downgrade and
+        // send-audit deletion are one transaction: a later failure restores all
+        // three instead of leaving a half-revoked scope.
         const forgotten = new RemoteSendStore(db)
           .deleteForScope(request.scopeKey)
         db.exec('COMMIT')
