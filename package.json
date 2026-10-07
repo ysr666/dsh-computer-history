@@ -50,7 +50,9 @@
     "build:extension:firefox": "node scripts/build-extension.mjs --target=firefox",
     "verify:ci-boundaries": "node scripts/verify-ci-boundaries.mjs",
     "check:app-path": "node scripts/check-app-path.mjs",
-    "e2e:collector-transport": "node scripts/e2e-collector-transport.mjs"
+    "e2e:collector-transport": "node scripts/e2e-collector-transport.mjs",
+    "native:metadata": "node scripts/write-native-artifact-metadata.mjs",
+    "native:assemble": "node scripts/assemble-native-artifacts.mjs"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "4.0.4",
@@ -100,6 +102,9 @@
   "files": [
     "lib",
     "bin/dsh-computer-history-collector",
+    "bin/native-artifacts.json",
+    "bin/dsh-computer-history-collector-linux",
+    "bin/dsh-computer-history-collector-windows.exe",
     "native/macos/Sources",
     "native/macos/Package.swift",
     "dist/extension",
