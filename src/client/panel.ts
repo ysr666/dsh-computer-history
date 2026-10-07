@@ -156,6 +156,32 @@ function formatRelativeAge(t: HistoryTranslate, atMs: number): string {
   return t('daysAgo', { days: Math.floor(hours / 24) })
 }
 
+function resumeResolutionMessage(
+  t: HistoryTranslate,
+  resolution: Exclude<ResumeResolution, { readonly status: 'hit' }>,
+): string {
+  if (resolution.status === 'ambiguous') {
+    const resourceMatch = /^resource (.+) exists in multiple workspaces$/.exec(resolution.reason)
+    if (resourceMatch?.[1]) {
+      return t('resumeAmbiguousResource', { resource: resourceMatch[1] })
+    }
+    if (resolution.reason === 'surface recency is tied across workspaces') {
+      return t('resumeAmbiguousSurfaceTie')
+    }
+    return t('resumeAmbiguousGeneric')
+  }
+
+  if (resolution.reason === 'no eligible recent episodes') return t('resumeNoneRecent')
+  if (resolution.reason === 'workspace episode unavailable') return t('resumeNoneWorkspace')
+  if (resolution.reason === 'the best match has no citations, so it is not a hint') {
+    return t('resumeNoneUnverified')
+  }
+  if (resolution.reason === 'query is not eligible for automatic resume') {
+    return t('resumeNoneIneligible')
+  }
+  return t('resumeNoneGeneric')
+}
+
 function activityDisplayDuration(activity: TimelineActivity): number {
   return activity.episodeCount > 1
     ? activity.spanDurationMs
@@ -880,9 +906,7 @@ export function createHistoryPage({
             title: hint.episode.workspace?.title ?? hint.episode.id,
             resource: hint.resource?.displayLabel ?? hint.resource?.canonicalUri ?? t('lastActivity'),
           })
-        : hint.status === 'ambiguous'
-          ? t('resumeAmbiguous', { reason: hint.reason })
-          : t('resumeNone', { reason: hint.reason })
+        : resumeResolutionMessage(t, hint)
       : undefined
 
     const resumeControls = React.createElement('div', { className: 'ch-resume-controls' },
