@@ -33,7 +33,7 @@
     "measure:baseline": "node scripts/measure-baseline.mjs",
     "verify:p1": "pnpm verify && pnpm build && pnpm benchmark:ingestion && pnpm native:build && pnpm native:test",
     "pack:plugin": "pnpm pack",
-    "prepack": "pnpm build && pnpm native:build && pnpm build:extension && pnpm build:editor-extension",
+    "prepack": "pnpm build && pnpm native:build && pnpm native:manifest && pnpm build:extension && pnpm build:editor-extension",
     "benchmark:ingestion": "vitest run --config vitest.benchmark.config.ts",
     "verify:tools": "node scripts/verify/build-tools.mjs",
     "verify:adapters": "node scripts/verify-adapters.mjs",
@@ -50,7 +50,8 @@
     "build:extension:firefox": "node scripts/build-extension.mjs --target=firefox",
     "verify:ci-boundaries": "node scripts/verify-ci-boundaries.mjs",
     "check:app-path": "node scripts/check-app-path.mjs",
-    "e2e:collector-transport": "node scripts/e2e-collector-transport.mjs"
+    "e2e:collector-transport": "node scripts/e2e-collector-transport.mjs",
+    "native:manifest": "node scripts/write-native-artifact-manifest.mjs"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "4.0.4",
@@ -99,7 +100,7 @@
   },
   "files": [
     "lib",
-    "bin/dsh-computer-history-collector",
+    "bin",
     "native/macos/Sources",
     "native/macos/Package.swift",
     "dist/extension",
@@ -113,7 +114,8 @@
     "presets",
     "cordis.patch.yml",
     "assets/brand/app-icon.svg",
-    "locale"
+    "locale",
+    "scripts/write-native-artifact-manifest.mjs"
   ],
   "peerDependencies": {
     "@deepseek-ai/cordis": "~4.0.4",
