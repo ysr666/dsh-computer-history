@@ -491,6 +491,65 @@ describe('local computer history backend', () => {
     history.close()
   })
 
+  it('drains in-flight capture recovery and refuses new controls once disposal starts', async () => {
+    const history = openTempDatabase()
+    const policies = new PolicyStore(history.db)
+    policies.ensureInitial(1)
+
+    let recoverStarted!: () => void
+    let releaseRecover!: () => void
+    const started = new Promise<void>(resolve => { recoverStarted = resolve })
+    const recoverGate = new Promise<void>(resolve => { releaseRecover = resolve })
+    const capture: CaptureController = {
+      async pause() {},
+      async resume() {},
+      async recover() {
+        recoverStarted()
+        await recoverGate
+      },
+      getState() {
+        return {
+          enabled: true,
+          capture: 'degraded' as const,
+          accessibilityTrusted: false,
+        }
+      },
+    }
+
+    const backend = new LocalComputerHistoryBackend(
+      new EpisodeStore(history.db),
+      policies,
+      new DeletionService(history.db),
+      capture,
+      {
+        observationRetentionHours: 24,
+        episodeRetentionDays: 30,
+        autoResume: false,
+      },
+      undefined,
+      undefined,
+      history.db,
+    )
+
+    const recovering = backend.recover()
+    await started
+
+    let drained = false
+    const draining = backend.drain().then(() => { drained = true })
+    await Promise.resolve()
+    expect(drained).toBe(false)
+
+    releaseRecover()
+    await recovering
+    await draining
+    expect(drained).toBe(true)
+
+    await expect(backend.pause()).rejects.toThrow(/disposing/)
+    await expect(backend.resume()).rejects.toThrow(/disposing/)
+    await expect(backend.recover()).rejects.toThrow(/disposing/)
+    history.close()
+  })
+
   it('refuses a delayed editor pairing publication once backend drain has begun', async () => {
     const history = openTempDatabase()
     const policies = new PolicyStore(history.db)
