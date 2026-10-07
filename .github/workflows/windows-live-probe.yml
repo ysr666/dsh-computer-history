@@ -18,6 +18,14 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22.19.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
 
       - name: Build Windows collector and UIA probe
         shell: pwsh
@@ -138,5 +146,54 @@ jobs:
             throw "Observed adapter '$($observation.source.adapter)' instead of notepad."
           }
 
-          Stop-Process -Id $notepad.Id -Force -ErrorAction SilentlyContinue
           Write-Host 'PASS: GitHub-hosted Windows exposed a real foreground Notepad window to the production UIA collector.'
+
+      - name: Full throwaway Host stores the real Windows observation and materializes an episode
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          Add-Type @'
+          using System;
+          using System.Runtime.InteropServices;
+          public static class DchHostUser32 {
+            [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+            [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+          }
+          '@
+
+          $note = Join-Path $env:RUNNER_TEMP 'dch-github-windows-host.txt'
+          Set-Content -Path $note -Value 'Computer History GitHub Windows full Host acceptance' -Encoding UTF8
+          $notepad = Start-Process notepad.exe -ArgumentList ('"' + $note + '"') -PassThru
+          for ($i = 0; $i -lt 40; $i++) {
+            Start-Sleep -Milliseconds 250
+            $notepad.Refresh()
+            if ($notepad.MainWindowHandle -ne 0) { break }
+          }
+          if ($notepad.MainWindowHandle -eq 0) {
+            throw 'Host acceptance Notepad never exposed a main window handle.'
+          }
+          [void][DchHostUser32]::ShowWindow($notepad.MainWindowHandle, 5)
+          [void][DchHostUser32]::SetForegroundWindow($notepad.MainWindowHandle)
+          Start-Sleep -Milliseconds 500
+
+          $cliRoot = Join-Path $env:RUNNER_TEMP 'dsh-cli-020'
+          npm install --prefix $cliRoot @deepseek-ai/dsh@0.2.0-rc.2
+          if ($LASTEXITCODE -ne 0) { throw 'Could not install DSH 0.2.0-rc.2 CLI.' }
+          $env:Path = (Join-Path $cliRoot 'node_modules\.bin') + ';' + $env:Path
+
+          $collector = (Resolve-Path 'native/windows/target/release/dsh-computer-history-collector-windows.exe').Path
+          $env:COLLECTOR_EXECUTABLE = $collector
+          $env:DSH_E2E_ALLOW_BUNDLES = 'Notepad.exe'
+          $env:DSH_E2E_EXPECT_ACTIVITY = '1'
+          $env:DSH_E2E_EXPECT_PROVIDER = 'windows-uia'
+          $env:DSH_E2E_ACTIVITY_TIMEOUT_MS = '30000'
+
+          dsh --version
+          node scripts/e2e-macos.mjs
+          if ($LASTEXITCODE -ne 0) {
+            throw "Full Windows Host E2E failed with exit $LASTEXITCODE"
+          }
+
+          Stop-Process -Id $notepad.Id -Force -ErrorAction SilentlyContinue
+          Write-Host 'PASS: GitHub-hosted Windows completed Notepad -> UIA collector -> Host -> SQLite -> /recent.'
