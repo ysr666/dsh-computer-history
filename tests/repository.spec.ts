@@ -266,6 +266,8 @@ describe('repository scaffold', () => {
     expect(detailSource).not.toContain('ch-detail-head')
     expect(detailSource).not.toContain("t('mergedActivity'")
     expect(detailSource).toContain("t('resources'")
+    expect(detailSource.indexOf("t('resources'"))
+      .toBeLessThan(detailSource.indexOf("t('activityGroupingTitle'")))
     expect(row).toBeGreaterThan(-1)
     expect(inlineDetail).toBeGreaterThan(row)
     expect(inlineDetail).toBeLessThan(resume)
