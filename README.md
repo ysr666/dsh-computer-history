@@ -85,17 +85,18 @@ Capture starts **off**, application access is **include-only**, protected surfac
 
 | Platform | Collector path | Current status |
 | --- | --- | --- |
-| **macOS** | Accessibility | Primary path; native build, privacy tests and end-to-end flow validated |
-| **Windows** | UI Automation | Live collector + Host flow validated on Windows 11 |
-| **Linux** | AT-SPI | Collector/protocol path live-validated on Ubuntu; desktop bus and permissions still matter |
+| **macOS** | Accessibility | Packaged install + default collector handshake validated; native build/privacy/E2E gates remain green |
+| **Windows** | UI Automation | Packaged install + default collector handshake validated; live Notepad → UIA → Host acceptance also green |
+| **Linux** | AT-SPI | Packaged install + collector handshake validated; a real desktop session still needs its X/AT-SPI bus and permissions |
 
 The shared collector contract is continuously checked on GitHub Actions across macOS, Windows and Linux. Live evidence and known limits are recorded in [docs/validation-three-platforms.md](docs/validation-three-platforms.md).
 
 > [!IMPORTANT]
-> Platform validation and packaged distribution are different claims. The current release workflow builds and ships
-> the native collector for **macOS only**. Windows and Linux collectors are source/live validated, but are not yet
-> bundled into the plugin tarball; development runs on those platforms currently build the native collector locally
-> and point `collectorExecutable` at it. Do not describe the first packaged alpha as a three-platform install.
+> The first public alpha is a **three-platform artifact**, not a macOS-only package. The release pipeline builds each
+> native collector on its own OS, records its source commit and SHA-256, assembles all three into one plugin tarball,
+> then clean-installs that same tarball on macOS, Windows and Linux without a `collectorExecutable` override.
+> This packaged path is validated, but no public alpha tag has been published yet; the installed client/panel release
+> gate is still being closed before the first public pre-release.
 
 ## Development quick start
 
