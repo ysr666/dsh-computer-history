@@ -22,6 +22,7 @@ export const EXPORTED_TABLES = [
   'policy_rules',
   'semantic_opt_ins',
   'remote_summary_sends',
+  'dsh_checkpoints',
   'observations',
   'episodes',
   'episode_observations',

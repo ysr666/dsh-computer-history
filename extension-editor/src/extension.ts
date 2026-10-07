@@ -9,6 +9,8 @@ import {
   buildEditorPayload,
   declaredIdentity,
   surfaceKindOf,
+  taskVerificationEvent,
+  type EditorActivityEvent,
   type EditorMetadata,
 } from './payload'
 
@@ -116,24 +118,25 @@ function credentials(
   return credentialPromise
 }
 
-function metadataOf(): EditorMetadata | undefined {
+function metadataOf(savedDocument?: vscode.TextDocument): EditorMetadata | undefined {
   const editor = vscode.window.activeTextEditor
-  const folder = editor
-    ? vscode.workspace.getWorkspaceFolder(editor.document.uri)
+  const document = savedDocument ?? editor?.document
+  const folder = document
+    ? vscode.workspace.getWorkspaceFolder(document.uri)
     : vscode.workspace.workspaceFolders?.[0]
   if (!folder) return undefined
-  const filePath = editor?.document.uri.scheme === 'file'
-    ? editor.document.uri.fsPath
+  const filePath = document?.uri.scheme === 'file'
+    ? document.uri.fsPath
     : undefined
   return {
     workspaceRoot: folder.uri.fsPath,
     ...(filePath === undefined ? {} : { filePath }),
-    ...(filePath === undefined || editor === undefined
+    ...(filePath === undefined || document === undefined
       ? {}
-      : { languageId: editor.document.languageId }),
+      : { languageId: document.languageId }),
     surfaceKind: surfaceKindOf({
-      isDiff: editor?.document.uri.scheme === 'git',
-      isTerminal: vscode.window.activeTerminal !== undefined && editor === undefined,
+      isDiff: savedDocument === undefined && editor?.document.uri.scheme === 'git',
+      isTerminal: savedDocument === undefined && vscode.window.activeTerminal !== undefined && editor === undefined,
     }),
     ...(filePath === undefined
       ? {}
@@ -141,7 +144,10 @@ function metadataOf(): EditorMetadata | undefined {
   }
 }
 
-async function send(context: vscode.ExtensionContext): Promise<void> {
+async function send(
+  context: vscode.ExtensionContext,
+  options: { readonly event?: EditorActivityEvent; readonly document?: vscode.TextDocument } = {},
+): Promise<void> {
   let paired: Credentials
   try {
     paired = await credentials(context)
@@ -154,7 +160,10 @@ async function send(context: vscode.ExtensionContext): Promise<void> {
     report('not sending: waiting for automatic pairing')
     return
   }
-  const metadata = metadataOf()
+  const baseMetadata = metadataOf(options.document)
+  const metadata = baseMetadata && options.event
+    ? { ...baseMetadata, event: options.event }
+    : baseMetadata
   if (!metadata) {
     report('not sending: no workspace folder or no file in the editor')
     return
@@ -222,6 +231,21 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.window.onDidChangeActiveTextEditor(() => { void send(context) }),
     vscode.window.onDidChangeActiveTerminal(() => { void send(context) }),
     vscode.workspace.onDidChangeWorkspaceFolders(() => { void send(context) }),
+    vscode.workspace.onDidSaveTextDocument(document => { void send(context, { event: 'save', document }) }),
+    vscode.tasks.onDidEndTaskProcess(event => {
+      const groupId = event.execution.task.group?.id
+      const kind = groupId === vscode.TaskGroup.Build.id
+        || groupId === vscode.TaskGroup.Rebuild.id
+        ? 'build'
+        : groupId === vscode.TaskGroup.Test.id
+          ? 'test'
+          : 'other'
+      const activityEvent = taskVerificationEvent({
+        kind,
+        exitCode: event.exitCode,
+      })
+      if (activityEvent) void send(context, { event: activityEvent })
+    }),
   )
   void send(context)
 }

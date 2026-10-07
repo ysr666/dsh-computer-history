@@ -410,7 +410,14 @@ export function normalizeObservation(
       : {}),
     ...(resource ? { resource } : {}),
     workspace,
-    activity: message.activity?.idleSeconds === undefined ? {} : { idleSeconds: message.activity.idleSeconds },
+    activity: {
+      ...(message.activity?.idleSeconds === undefined
+        ? {}
+        : { idleSeconds: message.activity.idleSeconds }),
+      ...(provider === 'companion' && message.activity?.event !== undefined
+        ? { event: message.activity.event }
+        : {}),
+    },
     privacy: { secure: false, protected: false },
     source: { provider, adapter: safeAdapter },
     policyRevision: policy.revision,

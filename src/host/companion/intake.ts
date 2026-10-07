@@ -1,6 +1,9 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import path from 'node:path'
-import type { CompanionKind } from '../../shared/index.js'
+import type {
+  ActivityEventKind,
+  CompanionKind,
+} from '../../shared/index.js'
 import type { RefusalReason } from '../ingestion/normalize.js'
 import type { CompanionTokenStore } from './token-store.js'
 
@@ -42,6 +45,7 @@ export interface EditorCompanionPayload {
   readonly languageId?: string
   readonly surfaceKind?: 'editor' | 'diff' | 'terminal' | 'output'
   readonly title?: string
+  readonly event?: ActivityEventKind
   readonly editorSession: string
   readonly seq: number
   readonly observedAtMs: number
@@ -82,7 +86,13 @@ const BROWSER_FIELDS = new Set([
 ])
 const EDITOR_FIELDS = new Set([
   'source', 'app', 'workspaceRoot', 'filePath', 'languageId', 'surfaceKind',
-  'title', 'editorSession', 'seq', 'observedAtMs',
+  'title', 'event', 'editorSession', 'seq', 'observedAtMs',
+])
+const EDITOR_ACTIVITY_EVENTS = new Set<ActivityEventKind>([
+  'save',
+  'verify-build-success', 'verify-build-failure',
+  'verify-test-success', 'verify-test-failure',
+  'verify-other-success', 'verify-other-failure',
 ])
 
 /**
@@ -578,6 +588,13 @@ export class CompanionIntake {
     const title = typeof record.title === 'string'
       ? record.title.slice(0, this.truncateTitleAt)
       : undefined
+    const event = record.event
+    if (
+      event !== undefined
+      && (typeof event !== 'string' || !EDITOR_ACTIVITY_EVENTS.has(event as ActivityEventKind))
+    ) {
+      return 'event must be a supported editor activity event'
+    }
 
     return {
       source: 'editor',
@@ -587,6 +604,7 @@ export class CompanionIntake {
       ...(languageId === undefined ? {} : { languageId }),
       ...(surfaceKind === undefined ? {} : { surfaceKind }),
       ...(title === undefined ? {} : { title }),
+      ...(event === undefined ? {} : { event: event as ActivityEventKind }),
       editorSession,
       seq,
       observedAtMs,

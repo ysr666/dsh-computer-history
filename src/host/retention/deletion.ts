@@ -10,6 +10,7 @@ import {
 import { buildEpisodes } from '../episodes/index.js'
 import {
   DeletionLogStore,
+  DshCheckpointStore,
   EpisodeStore,
   ObservationStore,
   ResourceStore,
@@ -44,12 +45,14 @@ export class DeletionService {
   private readonly resources: ResourceStore
   private readonly episodes: EpisodeStore
   private readonly log: DeletionLogStore
+  private readonly checkpoints: DshCheckpointStore
 
   public constructor(private readonly db: DatabaseSync) {
     this.observations = new ObservationStore(db)
     this.resources = new ResourceStore(db)
     this.episodes = new EpisodeStore(db)
     this.log = new DeletionLogStore(db)
+    this.checkpoints = new DshCheckpointStore(db)
   }
 
   public delete(
@@ -274,6 +277,18 @@ export class DeletionService {
       }
 
       this.cleanupOrphanResources()
+
+      if (plan.audit.scope === 'all') {
+        this.checkpoints.deleteAll()
+      } else if (
+        plan.audit.rangeStartMs !== undefined
+        && plan.audit.rangeEndMs !== undefined
+      ) {
+        this.checkpoints.deleteRange(
+          plan.audit.rangeStartMs,
+          plan.audit.rangeEndMs,
+        )
+      }
 
       this.log.insert({
         id: randomUUID(),

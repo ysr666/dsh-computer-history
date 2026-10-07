@@ -5,6 +5,7 @@ import {
   buildEditorPayload,
   declaredIdentity,
   surfaceKindOf,
+  taskVerificationEvent,
 } from '../src/payload'
 
 const SOURCE_DIR = path.join(import.meta.dirname, '..', 'src')
@@ -31,6 +32,22 @@ describe('editor companion payload (ADR 0009)', () => {
     expect(payload.source).toBe('editor')
   })
 
+  it('carries the closed save-event vocabulary', () => {
+    const payload = buildEditorPayload({
+      identity: { bundleId: 'com.microsoft.VSCode', name: 'Visual Studio Code' },
+      metadata: {
+        workspaceRoot: '/repo',
+        filePath: '/repo/src/main.ts',
+        event: 'save',
+      },
+      session: 's',
+      seq: 2,
+      observedAtMs: 2,
+    })
+    expect(payload.event).toBe('save')
+    expect(Object.keys(payload)).not.toContain('text')
+  })
+
   it('has no parameter a document body could travel in', () => {
     // Passing a document-like object through the metadata shape cannot leak its
     // text: the shape has fields for paths and identifiers, and the builder
@@ -51,6 +68,14 @@ describe('editor companion payload (ADR 0009)', () => {
     const serialised = JSON.stringify(payload)
     expect(serialised).not.toContain('secret')
     expect(serialised).not.toContain('getText')
+  })
+
+  it('maps task outcomes without carrying task text', () => {
+    expect(taskVerificationEvent({ kind: 'build', exitCode: 0 })).toBe('verify-build-success')
+    expect(taskVerificationEvent({ kind: 'test', exitCode: 1 })).toBe('verify-test-failure')
+    expect(taskVerificationEvent({ kind: 'build', exitCode: 0 })).toBe('verify-build-success')
+    expect(taskVerificationEvent({ kind: 'other', exitCode: 2 })).toBe('verify-other-failure')
+    expect(taskVerificationEvent({ kind: 'test' })).toBeUndefined()
   })
 
   it('names the surface the editor is showing', () => {
@@ -78,12 +103,14 @@ describe('editor runtime routing', () => {
 describe('the extension never reads what ADR 0002 forbids', () => {
   // Calibrated both ways: the pattern must match a forbidden call (red) and the
   // real sources must not contain one (green).
-  const FORBIDDEN = /getText\s*\(|\.selection\b|document\.text\b|lineAt\s*\(|getWordRangeAtPosition\s*\(/
+  const FORBIDDEN = /getText\s*\(|\.selection\b|document\.text\b|lineAt\s*\(|getWordRangeAtPosition\s*\(|\.task\.(?:name|source)\b|commandLine\b/
 
   it('would catch a forbidden read', () => {
     expect(FORBIDDEN.test('const body = editor.document.getText()')).toBe(true)
     expect(FORBIDDEN.test('editor.document.text')).toBe(true)
     expect(FORBIDDEN.test('const s = editor.selection')).toBe(true)
+    expect(FORBIDDEN.test('event.execution.task.name')).toBe(true)
+    expect(FORBIDDEN.test('execution.commandLine')).toBe(true)
   })
 
   it('finds none in the extension sources', () => {

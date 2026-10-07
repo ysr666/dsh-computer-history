@@ -245,7 +245,12 @@ describe('a vouched workspace (ADR 0009)', () => {
     expect(results).toEqual([true, true])
     const episodes = new EpisodeStore(history.db).listRecent({ limit: 10 })
     expect(episodes).toHaveLength(1)
-    expect(episodes[0]!.threadKey ?? episodes[0]!.id).toBeTruthy()
+    expect(episodes[0]?.workspace).toEqual({
+      id: root,
+      root,
+      title: 'vouched',
+    })
+    expect(episodes[0]?.threadKey).toBe(`workspace:${root}`)
     expect(
       history.db.prepare(
         'SELECT DISTINCT workspace_source, workspace_root FROM observations',

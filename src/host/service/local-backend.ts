@@ -8,6 +8,7 @@ import type {
   ComputerHistoryState,
   DeleteHistoryRequest,
   DeleteHistoryResult,
+  DshCheckpoint,
   EpisodeDetail,
   EpisodeId,
   EpisodeSummary,
@@ -15,6 +16,7 @@ import type {
   PolicySnapshot,
   PolicyUpdate,
   RecentEpisodesRequest,
+  RecordDshCheckpointRequest,
   RedactionPreview,
   RetentionSettings,
   TimelineDay,
@@ -55,6 +57,7 @@ import { DeletionService } from '../retention/index.js'
 import { ObservationStore } from '../store/observation-store.js'
 import { RetentionSettingsStore } from '../store/retention-settings.js'
 import {
+  DshCheckpointStore,
   EpisodeStore,
   PolicyStore,
 } from '../store/index.js'
@@ -235,6 +238,28 @@ implements ComputerHistoryServiceContract {
       this.episodes.listRecent({ limit: 500 }),
       request,
     ))
+  }
+
+  public recordDshCheckpoint(
+    request: RecordDshCheckpointRequest,
+  ): DshCheckpoint {
+    if (!Number.isSafeInteger(request.turn) || request.turn < 1) {
+      throw new Error('DSH checkpoint turn must be a positive safe integer')
+    }
+    if (!Number.isFinite(request.checkpointAtMs)) {
+      throw new Error('DSH checkpoint time must be finite')
+    }
+    const expiresAtMs = request.checkpointAtMs
+      + this.config.episodeRetentionDays * 86_400_000
+    return new DshCheckpointStore(this.requireDb()).upsert(request, expiresAtMs)
+  }
+
+  public latestDshCheckpoint(request: {
+    readonly workspaceId?: string
+    readonly workspaceRoot?: string
+    readonly atOrBeforeMs: number
+  }): DshCheckpoint | undefined {
+    return new DshCheckpointStore(this.requireDb()).latestForWorkspace(request)
   }
 
   public async delete(

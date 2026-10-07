@@ -55,6 +55,21 @@ export interface EpisodeResourceSummary extends ResourceIdentity {
   readonly observationCount: number
 }
 
+export interface EpisodeChangedResource extends ResourceIdentity {
+  readonly lastChangedAtMs: number
+  readonly changeCount: number
+}
+
+export type EpisodeVerificationKind = 'build' | 'test' | 'other'
+export type EpisodeVerificationResult = 'success' | 'failure'
+
+export interface EpisodeVerificationSummary {
+  readonly kind: EpisodeVerificationKind
+  readonly result: EpisodeVerificationResult
+  readonly lastObservedAtMs: number
+  readonly observationCount: number
+}
+
 export interface EpisodeSurfaceSummary {
   readonly bundleId: string
   readonly surfaceKind: SurfaceKind
@@ -100,6 +115,10 @@ export interface EpisodeSummary {
   readonly summaryObservationIds: readonly ObservationId[]
   readonly lastStrongResource?: ResourceIdentity
   readonly resources: readonly EpisodeResourceSummary[]
+  /** Resources explicitly saved by a trusted editor companion. */
+  readonly changedResources?: readonly EpisodeChangedResource[]
+  /** Build/test outcome metadata from trusted editor task events. */
+  readonly verifications?: readonly EpisodeVerificationSummary[]
   readonly surfaces: readonly EpisodeSurfaceSummary[]
   readonly confidence: number
   readonly state: EpisodeState

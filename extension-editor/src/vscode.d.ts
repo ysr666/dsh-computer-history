@@ -21,6 +21,28 @@ declare module 'vscode' {
   }
   export interface Terminal {}
 
+  export interface TaskGroup {
+    readonly id: string
+  }
+  export const TaskGroup: {
+    readonly Build: TaskGroup
+    readonly Rebuild: TaskGroup
+    readonly Test: TaskGroup
+  }
+  export interface Task {
+    readonly group?: TaskGroup
+  }
+  export interface TaskExecution {
+    readonly task: Task
+  }
+  export interface TaskProcessEndEvent {
+    readonly execution: TaskExecution
+    readonly exitCode: number | undefined
+  }
+  export interface Tasks {
+    onDidEndTaskProcess(listener: (event: TaskProcessEndEvent) => void): Disposable
+  }
+
   export interface Disposable {
     dispose(): void
   }
@@ -34,6 +56,7 @@ declare module 'vscode' {
     getWorkspaceFolder(uri: Uri): WorkspaceFolder | undefined
     getConfiguration(section: string): WorkspaceConfiguration
     onDidChangeWorkspaceFolders(listener: () => void): Disposable
+    onDidSaveTextDocument(listener: (document: TextDocument) => void): Disposable
   }
 
   export interface OutputChannel {
@@ -71,6 +94,7 @@ declare module 'vscode' {
 
   export const workspace: Workspace
   export const window: Window
+  export const tasks: Tasks
   export const env: Env
 }
 

@@ -2,6 +2,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { registerExperimentalResumeHint } from './resume-hint.js'
 import { registerComputerHistoryTools } from './tools.js'
+import { registerDshCheckpoints } from './checkpoint.js'
 
 export function registerAgentIntegration(
   ctx: Context,
@@ -10,10 +11,13 @@ export function registerAgentIntegration(
   const installed = new Map<Agent, () => void>()
   const install = (agent: Agent): void => {
     if (installed.has(agent)) return
-    installed.set(
-      agent,
+    const disposers = [
       registerComputerHistoryTools(agent.ctx),
-    )
+      registerDshCheckpoints(ctx, agent),
+    ]
+    installed.set(agent, () => {
+      for (const dispose of disposers.toReversed()) dispose()
+    })
   }
 
   for (const agent of ctx.agents.list()) install(agent)

@@ -3,7 +3,10 @@ import type { WorkspaceRef } from '../../shared/index.js'
 export function threadKeyForWorkspace(
   workspace: WorkspaceRef,
 ): string | undefined {
-  if (workspace.source === 'dsh' && workspace.id) {
+  if (
+    (workspace.source === 'dsh' || workspace.source === 'companion')
+    && workspace.id
+  ) {
     return `workspace:${workspace.id}`
   }
 

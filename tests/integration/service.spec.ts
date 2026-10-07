@@ -918,6 +918,8 @@ describe('Cordis computer history service', () => {
       async resolveResume() {
         return { status: 'none', reason: 'fixture' }
       },
+      recordDshCheckpoint(request) { return request },
+      latestDshCheckpoint() { return undefined },
       async delete() {
         return {
           observationsDeleted: 0,

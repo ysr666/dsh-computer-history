@@ -17,7 +17,12 @@ import type {
 } from './semantic.js'
 import type { PolicyRule, PolicySnapshot } from './policy.js'
 import type { SurfaceKind } from './observation.js'
-import type { ResumeRequest, ResumeResolution } from './resume.js'
+import type {
+  DshCheckpoint,
+  RecordDshCheckpointRequest,
+  ResumeRequest,
+  ResumeResolution,
+} from './resume.js'
 
 export interface RecentEpisodesRequest {
   readonly sinceMs?: number
@@ -293,6 +298,15 @@ export interface ComputerHistoryServiceContract {
     request: ResumeRequest,
     signal?: AbortSignal,
   ): Promise<ResumeResolution>
+
+  /** Persist a metadata-only top-level DSH turn boundary for continuity. */
+  recordDshCheckpoint(request: RecordDshCheckpointRequest): DshCheckpoint
+
+  latestDshCheckpoint(request: {
+    readonly workspaceId?: string
+    readonly workspaceRoot?: string
+    readonly atOrBeforeMs: number
+  }): DshCheckpoint | undefined
 
   delete(
     request: DeleteHistoryRequest,

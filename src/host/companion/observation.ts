@@ -39,6 +39,7 @@ export function companionObservation(
         ...(payload.title ? { title: payload.title } : {}),
         ...(payload.filePath ? { document: payload.filePath } : {}),
       },
+      ...(payload.event === undefined ? {} : { activity: { event: payload.event } }),
       privacy: { secure: false, protected: false },
       // The editor vouched for this root; ingestion records it as such rather
       // than letting the resolver infer one from the document path.

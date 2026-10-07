@@ -8,6 +8,7 @@ import type {
   ComputerHistoryState,
   DeleteHistoryRequest,
   DeleteHistoryResult,
+  DshCheckpoint,
   EpisodeDetail,
   EpisodeId,
   EpisodeSummary,
@@ -26,6 +27,7 @@ import type {
   PolicySnapshot,
   PolicyUpdate,
   RecentEpisodesRequest,
+  RecordDshCheckpointRequest,
   ResumeRequest,
   ResumeResolution,
   SearchEpisodesRequest,
@@ -79,6 +81,20 @@ export class ComputerHistoryService
     signal?: AbortSignal,
   ): Promise<ResumeResolution> {
     return this.backend.resolveResume(request, signal)
+  }
+
+  public recordDshCheckpoint(
+    request: RecordDshCheckpointRequest,
+  ): DshCheckpoint {
+    return this.backend.recordDshCheckpoint(request)
+  }
+
+  public latestDshCheckpoint(request: {
+    readonly workspaceId?: string
+    readonly workspaceRoot?: string
+    readonly atOrBeforeMs: number
+  }): DshCheckpoint | undefined {
+    return this.backend.latestDshCheckpoint(request)
   }
 
   public delete(

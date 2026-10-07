@@ -1,4 +1,7 @@
-import type { EpisodeSummary } from './episode.js'
+import type {
+  EpisodeSummary,
+  EpisodeWorkspaceSummary,
+} from './episode.js'
 import type { ResourceIdentity } from './resource.js'
 import type { EpisodeId, ObservationId } from './ids.js'
 
@@ -16,6 +19,18 @@ export type ResumeReason =
   | 'current-workspace'
   | 'surface-recency'
   | 'recent-episode'
+
+export interface DshCheckpoint {
+  readonly sessionId: string
+  readonly turn: number
+  readonly checkpointAtMs: number
+  readonly cwd?: string
+  readonly workspace?: EpisodeWorkspaceSummary
+  /** Repository HEAD at the DSH turn boundary; metadata only, no commit message or diff. */
+  readonly gitHead?: string
+}
+
+export interface RecordDshCheckpointRequest extends DshCheckpoint {}
 
 export type ResumeResolution =
   | {

@@ -10,6 +10,15 @@ export type SurfaceKind =
   | 'document'
   | 'unknown'
 
+export type ActivityEventKind =
+  | 'save'
+  | 'verify-build-success'
+  | 'verify-build-failure'
+  | 'verify-test-success'
+  | 'verify-test-failure'
+  | 'verify-other-success'
+  | 'verify-other-failure'
+
 export type ObservationAdapter =
   | 'generic'
   | 'vscode'
@@ -63,6 +72,8 @@ export interface ActivityObservation {
 
   readonly activity: {
     readonly idleSeconds?: number
+    /** Trusted companion metadata only; native collectors cannot assert this. */
+    readonly event?: ActivityEventKind
   }
 
   readonly privacy: {
