@@ -10,6 +10,7 @@
 // shipped missing), and a collector signed ad-hoc, which Gatekeeper blocks on every machine that did not build
 // it.
 import { execFileSync, spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -63,6 +64,45 @@ try {
     const wanted = `package/${entry}`
     if (!members.some(member => member === wanted || member.startsWith(`${wanted}/`))) {
       problems.push(`files promises ${entry} and the tarball does not contain it`)
+    }
+  }
+
+  const requiredNative = [
+    'bin/dsh-computer-history-collector',
+    'bin/dsh-computer-history-collector-windows.exe',
+    'bin/dsh-computer-history-collector-linux',
+  ]
+  for (const entry of requiredNative) {
+    if (!members.includes(`package/${entry}`)) {
+      problems.push(`release tarball is missing required native collector ${entry}`)
+    }
+  }
+
+  const nativeManifestMember = 'package/bin/native-artifacts.json'
+  if (!members.includes(nativeManifestMember)) {
+    problems.push('release tarball is missing bin/native-artifacts.json')
+  } else {
+    const nativeManifest = JSON.parse(
+      execFileSync('tar', ['-xOzf', tarball, nativeManifestMember], { encoding: 'utf8' }),
+    )
+    if (nativeManifest.schema !== 'dsh-computer-history/native-artifacts/v1') {
+      problems.push('native artifact manifest has an unknown schema')
+    }
+    const byPath = new Map((nativeManifest.artifacts ?? []).map(item => [item.path, item]))
+    for (const entry of requiredNative) {
+      const item = byPath.get(entry)
+      if (!item) {
+        problems.push(`native artifact manifest does not describe ${entry}`)
+        continue
+      }
+      const bytes = execFileSync('tar', ['-xOzf', tarball, `package/${entry}`])
+      const sha256 = createHash('sha256').update(bytes).digest('hex')
+      if (sha256 !== item.sha256) {
+        problems.push(`native artifact hash mismatch for ${entry}`)
+      }
+    }
+    if (!/^[0-9a-f]{40}$/i.test(nativeManifest.sourceCommit ?? '')) {
+      problems.push('native artifact manifest has no valid source commit')
     }
   }
 
