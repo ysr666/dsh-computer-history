@@ -22,6 +22,7 @@ afterEach(() => {
 function fakeHost(spawned: { count: number }) {
   const disposers: Array<() => void | Promise<void>> = []
   const stdouts: PassThrough[] = []
+  const writes: string[][] = []
   const services = new Map<string, unknown>()
   const ctx = {
     subprocess: {
@@ -29,7 +30,10 @@ function fakeHost(spawned: { count: number }) {
         spawned.count += 1
         const stdin = new PassThrough()
         const stdout = new PassThrough()
+        const childWrites: string[] = []
+        stdin.on('data', chunk => { childWrites.push(String(chunk)) })
         stdouts.push(stdout)
+        writes.push(childWrites)
         return {
           stdin,
           stdout,
@@ -82,6 +86,7 @@ function fakeHost(spawned: { count: number }) {
   return {
     ctx,
     stdouts,
+    writes,
     async dispose() {
       for (const dispose of disposers.toReversed()) {
         // oxlint-disable-next-line no-await-in-loop -- lifecycle teardown must remain reverse-ordered
@@ -90,6 +95,19 @@ function fakeHost(spawned: { count: number }) {
     },
   }
 }
+async function waitFor(
+  predicate: () => boolean,
+  timeoutMs = 750,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    if (predicate()) return
+    // oxlint-disable-next-line no-await-in-loop -- deliberately polling an in-process protocol transcript
+    await new Promise(resolve => setTimeout(resolve, 5))
+  }
+  throw new Error('timed out waiting for collector protocol output')
+}
+
 describe('plugin multi-Host capture composition', () => {
   it('spawns only one collector and allows takeover after owner disposal', async () => {
     const root = mkdtempSync(
@@ -193,6 +211,7 @@ describe('plugin multi-Host capture composition', () => {
       second.ctx as unknown as {
         get(name: 'computerHistory'): {
           recover(): Promise<void>
+          replacePolicy(update: unknown): Promise<{ revision: number }>
           getState(): { capture: string; reason?: string }
         }
       }
@@ -250,6 +269,51 @@ describe('plugin multi-Host capture composition', () => {
     // reports `running` while it can record nothing has to say so. Measured 2026-10-06 on the owner's machine and
     // reproduced in an isolated Host (`capture=running`, `refusedByReason={}`, `store 0|0`).
     expect(secondHistory.getState().reason).toBe('no-apps-allowed')
+
+    // This Host did not have a CollectorManager when its backend was built.
+    // Recovery created one later; policy propagation must follow that current
+    // manager rather than the manager value captured at construction time.
+    second.writes[0]!.length = 0
+    const replacing = secondHistory.replacePolicy({
+      mode: 'include-only',
+      rules: [],
+    })
+
+    await waitFor(() =>
+      second.writes[0]!.join('').includes('"type":"pause"'),
+    )
+    second.stdouts[0]!.write(JSON.stringify({
+      v: 1,
+      type: 'state',
+      state: 'paused',
+      accessibilityTrusted: true,
+    }) + '\n')
+
+    await waitFor(() =>
+      second.writes[0]!.join('').includes(
+        '"type":"configure","revision":2',
+      ),
+    )
+    second.stdouts[0]!.write(JSON.stringify({
+      v: 1,
+      type: 'configured',
+      revision: 2,
+    }) + '\n')
+
+    await waitFor(() =>
+      second.writes[0]!.join('').includes('"type":"resume"'),
+    )
+    second.stdouts[0]!.write(JSON.stringify({
+      v: 1,
+      type: 'state',
+      state: 'running',
+      accessibilityTrusted: true,
+    }) + '\n')
+
+    await expect(replacing).resolves.toMatchObject({ revision: 2 })
+    expect(second.writes[0]!.join('')).toContain(
+      '"type":"configure","revision":2',
+    )
 
     await second.dispose()
   })
