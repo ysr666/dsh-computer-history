@@ -155,10 +155,8 @@ jobs:
           path: bin
       - name: Verify runner artifacts and write combined provenance
         run: node scripts/assemble-native-artifacts.mjs
-      - name: Pack without rebuilding staged native artifacts
-        run: |
-          mkdir -p package-out
-          DSH_NATIVE_PREBUILT=1 pnpm pack --pack-destination package-out
+      - name: Pack the staged native artifacts with executable modes
+        run: node scripts/pack-native-release.mjs package-out
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: three-platform-package
