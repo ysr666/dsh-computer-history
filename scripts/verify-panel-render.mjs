@@ -29,6 +29,7 @@ const chromePath = process.env.PANEL_CHROME
 // Chinese interface - which is how the first run of this script reported two product failures that were it
 // looking at an unopened panel. Try the override first, then both names.
 const panelLabels = [process.env.PANEL_ENTRY, '电脑使用记录', 'Computer History'].filter(Boolean)
+const expectFirstRun = process.env.PANEL_EXPECT_FIRST_RUN === '1'
 
 // Strings the interface must never show a reader: a browser error, a Host reason code, or a Host-generated
 // English sentence. Each one is a real regression that shipped once.
@@ -250,7 +251,23 @@ async function main() {
   await dismissIntro()
   await openPanel()
   await sleep(4000)
-  await record('ready-light', 'panel with data')
+  await record('ready-light', expectFirstRun ? 'fresh installed panel at first run' : 'panel with data')
+  if (expectFirstRun) {
+    const firstRun = await evaluate("!!document.querySelector('.ch-first-run')")
+    const firstRunAction = await evaluate(
+      "!!document.querySelector('.ch-first-run .ch-first-run-action .ch-button')",
+    )
+    results.push({
+      state: 'ready-light',
+      label: 'fresh store renders the first-run privacy flow',
+      ok: firstRun === true,
+    })
+    results.push({
+      state: 'ready-light',
+      label: 'first-run flow exposes its start-recording action',
+      ok: firstRunAction === true,
+    })
+  }
 
   // 3. one read failing: the timeline only, which must not erase the other sections
   await send('Network.setBlockedURLs', { urls: ['*api/computer-history/timeline*'] })
