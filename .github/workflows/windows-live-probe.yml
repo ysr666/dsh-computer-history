@@ -1,0 +1,44 @@
+# Experimental but strict live UIA acceptance on GitHub's hosted Windows VM.
+#
+# This is deliberately separate from the protocol matrix: that matrix proves the
+# cross-platform message layer, while this job asks a different question - can a
+# hosted Windows runner expose a real foreground Notepad window to the real
+# Windows UI Automation collector?
+name: windows hosted live probe
+
+on:
+  pull_request:
+    paths:
+      - 'native/windows/**'
+      - 'native/collector-protocol/**'
+      - 'scripts/e2e-windows-hosted.ps1'
+      - '.github/workflows/windows-live-probe.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  live-uia:
+    name: Notepad -> UIA -> collector
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Runner identity
+        shell: pwsh
+        run: |
+          Write-Host "ImageOS=$env:ImageOS"
+          Write-Host "ImageVersion=$env:ImageVersion"
+          Write-Host "RUNNER_ARCH=$env:RUNNER_ARCH"
+          Get-ComputerInfo | Select-Object WindowsProductName, WindowsVersion, OsBuildNumber
+      - name: Build the real Windows collector
+        shell: pwsh
+        run: cargo build --release --manifest-path native/windows/Cargo.toml
+      - name: Live hosted-runner UIA probe
+        shell: pwsh
+        run: ./scripts/e2e-windows-hosted.ps1
