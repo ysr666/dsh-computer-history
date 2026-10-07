@@ -37,7 +37,5 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # `pnpm verify` includes tests/integration/packaged-entry.spec.ts, which imports the built
-      # `lib/index.js`, so the gate needs a build first on a checkout that has never built.
-      - run: pnpm build
+      # verify builds first because packaged-entry.spec.ts exercises the exact lib/ output.
       - run: pnpm verify
