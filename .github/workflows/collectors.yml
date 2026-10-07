@@ -79,3 +79,81 @@ jobs:
       - run: pnpm build
       - name: The gate, which includes tests/conformance
         run: pnpm verify
+
+  packaged-native:
+    name: packaged native collector on ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: darwin
+            os: macos-15
+            artifact: native-darwin
+            binary: bin/dsh-computer-history-collector
+          - platform: win32
+            os: windows-latest
+            artifact: native-win32
+            binary: bin/dsh-computer-history-collector-windows.exe
+          - platform: linux
+            os: ubuntu-latest
+            artifact: native-linux
+            binary: bin/dsh-computer-history-collector-linux
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22.19.0
+      - name: Build the collector on its native runner
+        run: node scripts/build-native.mjs
+      - name: Verify the expected package path exists
+        env:
+          EXPECTED_NATIVE_BINARY: ${{ matrix.binary }}
+        run: node -e "const fs=require('node:fs');const p=process.env.EXPECTED_NATIVE_BINARY;if(!fs.existsSync(p)){throw new Error('missing '+p)};console.log(p,fs.statSync(p).size+' bytes')"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.binary }}
+          if-no-files-found: error
+
+  assembled-native-package:
+    name: assemble one tarball with all three native collectors
+    needs: packaged-native
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22.19.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile
+        working-directory: extension-editor
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-darwin
+          path: bin
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-win32
+          path: bin
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-linux
+          path: bin
+      - name: Restore executable modes
+        run: chmod +x bin/dsh-computer-history-collector bin/dsh-computer-history-collector-linux
+      - name: Pack the exact assembled plugin
+        run: pnpm pack --pack-destination /tmp
+      - name: Verify all native collectors and hashes are in the tarball
+        run: |
+          tarball=$(ls /tmp/dsh-computer-history-*.tgz | head -1)
+          DSH_RELEASE_TARBALL="$tarball" node scripts/verify-native-package.mjs
+
