@@ -11,6 +11,7 @@ import {
   presetBundles,
   readFirstRunPreset,
   findStaleInstall,
+  packageRoot,
   runningRelease,
   type CollectorToHost,
   type ComputerHistoryState,
@@ -68,6 +69,34 @@ export function resolveHistoryDataDirectory(
 ): string {
   return config.dataDirectory
     ?? dshHomePath('computer-history')
+}
+
+const PACKAGED_COLLECTOR_FILENAMES: Readonly<
+  Partial<Record<NodeJS.Platform, string>>
+> = {
+  darwin: 'dsh-computer-history-collector',
+  win32: 'dsh-computer-history-collector-windows.exe',
+  linux: 'dsh-computer-history-collector-linux',
+}
+
+/**
+ * Resolve the native collector shipped for this Host platform.
+ *
+ * The package deliberately carries all three release binaries in one tarball.
+ * collectorExecutable remains a development/test override; normal installs
+ * must not need one.
+ */
+export function resolvePackagedCollectorExecutable(
+  platform: NodeJS.Platform = process.platform,
+  from: string = fileURLToPath(import.meta.url),
+): string {
+  const filename = PACKAGED_COLLECTOR_FILENAMES[platform]
+  if (!filename) {
+    throw new Error(
+      `computer history collector is not packaged for ${platform}`,
+    )
+  }
+  return path.join(packageRoot(from), 'bin', filename)
 }
 
 export class ManagedCapture implements CaptureController {
@@ -243,12 +272,7 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
 
   const collectorExecutable =
     config.collectorExecutable
-    ?? fileURLToPath(
-      new URL(
-        '../bin/dsh-computer-history-collector',
-        import.meta.url,
-      ),
-    )
+    ?? resolvePackagedCollectorExecutable()
 
   /** `true` once in-flight ingestion settles, `false` if it does not. */
   const ingestedIdle = async (): Promise<boolean> => {
