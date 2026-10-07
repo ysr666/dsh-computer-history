@@ -94,7 +94,8 @@ export function canRequestNativeApplicationIcon(
   bundleId: string | undefined,
 ): bundleId is string {
   if (!bundleId || bundleId === 'companion.browser') return false
-  if (/\.(?:exe|com|bat|desktop)$/i.test(bundleId)) return false
+  if (/\.exe$/i.test(bundleId)) return true
+  if (bundleId.endsWith('.desktop')) return true
   return bundleId.includes('.')
 }
 
