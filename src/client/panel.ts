@@ -712,20 +712,6 @@ export function createHistoryPage({
     const selectedActivityDetail = selectedActivity && selected
       ? React.createElement(
           'div', { className: 'ch-detail ch-timeline-detail' },
-          React.createElement(
-            'div', { className: 'ch-detail-head' },
-            appIcon(selectedActivity.surfaces[0]?.bundleId, episodeApp(selectedActivity), { compact: true }),
-            React.createElement(
-              'span', { className: 'ch-detail-copy' },
-              React.createElement('span', { className: 'ch-detail-title' }, episodeSubject(t, selectedActivity)),
-              React.createElement('span', { className: 'ch-detail-meta' },
-                `${episodeApp(selectedActivity)} · ${formatClock(selectedActivity.startedAtMs, activeLocale)}–${formatClock(selectedActivity.endedAtMs, activeLocale)} · ${activityDurationText(t, selectedActivity)}`),
-            ),
-          ),
-          selectedActivity.episodeCount > 1
-            ? React.createElement('p', { className: 'ch-detail-resource' },
-                t('mergedActivity', { count: selectedActivity.episodeCount }))
-            : null,
           selectedActivity.episodeCount > 1
             ? React.createElement(
                 'details', { className: 'ch-inspector' },
