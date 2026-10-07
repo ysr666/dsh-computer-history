@@ -9,6 +9,7 @@ import type {
 import { COMPANION_BUNDLE_ID } from '../shared/constants.js'
 import { RETENTION_BOUNDS } from '../shared/audit.js'
 import { historyApi } from './api.js'
+import { appIcon } from './app-icon.js'
 import { downloadHistoryRoute } from './download.js'
 import {
   captureLabel,
@@ -359,17 +360,21 @@ export function ApplicationsRow({
       allowed.length === 0
         ? React.createElement('p', { className: 'ch-row-body' }, t('applicationsNone'))
         : React.createElement('ul', { className: 'ch-list' },
-            ...visibleAllowed.map(rule => React.createElement(
-              'li', { key: rule.id },
-              React.createElement(
-                'span', { className: 'ch-app-rule-copy' },
-                React.createElement('span', { className: 'ch-app-rule-title' }, installedNames.get(rule.pattern) ?? friendlyBundleName(rule.pattern)),
-              ),
-              React.createElement('button', {
-                type: 'button', className: 'ch-button', disabled: pending,
-                onClick: () => { void stopRecordingApp(rule.pattern) },
-              }, t('stopRecordingApp')),
-            )),
+            ...visibleAllowed.map(rule => {
+              const name = installedNames.get(rule.pattern) ?? friendlyBundleName(rule.pattern)
+              return React.createElement(
+                'li', { key: rule.id },
+                appIcon(rule.pattern, name, { compact: true }),
+                React.createElement(
+                  'span', { className: 'ch-app-rule-copy' },
+                  React.createElement('span', { className: 'ch-app-rule-title' }, name),
+                ),
+                React.createElement('button', {
+                  type: 'button', className: 'ch-button', disabled: pending,
+                  onClick: () => { void stopRecordingApp(rule.pattern) },
+                }, t('stopRecordingApp')),
+              )
+            }),
           ),
       allowed.length > 5
         ? React.createElement('button', {
@@ -391,6 +396,7 @@ export function ApplicationsRow({
                 'ul', { className: 'ch-list' },
                 ...availableApps.map(app => React.createElement(
                   'li', { key: app.bundleId },
+                  appIcon(app.bundleId, app.name, { compact: true }),
                   React.createElement(
                     'span', { className: 'ch-app-rule-copy' },
                     React.createElement('span', { className: 'ch-app-rule-title' }, app.name),
