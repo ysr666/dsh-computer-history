@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   appFallbackMark,
   appIconKind,
+  applicationIconSrc,
+  canRequestNativeApplicationIcon,
 } from '../../src/client/app-icon.js'
 
 describe('application icon identity', () => {
@@ -32,5 +34,15 @@ describe('application icon identity', () => {
   it('can use the reader-facing label when a bundle id is unavailable', () => {
     expect(appIconKind(undefined, 'Google Chrome')).toBe('chrome')
     expect(appIconKind(undefined, 'ChatGPT')).toBe('chatgpt')
+  })
+
+  it('requests native icons only for macOS-style bundle identities', () => {
+    expect(canRequestNativeApplicationIcon('com.microsoft.VSCode')).toBe(true)
+    expect(canRequestNativeApplicationIcon('com.apple.finder')).toBe(true)
+    expect(canRequestNativeApplicationIcon('Code.exe')).toBe(false)
+    expect(canRequestNativeApplicationIcon('code.desktop')).toBe(false)
+    expect(canRequestNativeApplicationIcon(undefined)).toBe(false)
+    expect(applicationIconSrc('com.microsoft.VSCode'))
+      .toContain('system/application-icon?bundleId=com.microsoft.VSCode')
   })
 })
