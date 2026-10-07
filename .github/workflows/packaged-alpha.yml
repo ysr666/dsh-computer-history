@@ -65,7 +65,7 @@ jobs:
         env:
           NATIVE_PLATFORM: ${{ matrix.platform }}
         run: node -e "const fs=require('node:fs'); fs.writeFileSync('bin/source-'+process.env.NATIVE_PLATFORM+'.txt', process.env.GITHUB_SHA+'\n')"
-      - uses: actions/upload-artifact@2a0ecf19e8d0087dd2e5d1785dcf764811e79fae # v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: native-${{ matrix.platform }}
           path: |
@@ -92,15 +92,15 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm install --frozen-lockfile
         working-directory: extension-editor
-      - uses: actions/download-artifact@7fc4fb55c7d0c7b198b1c7466e1efd7c7d05fb26 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: native-darwin
           path: bin
-      - uses: actions/download-artifact@7fc4fb55c7d0c7b198b1c7466e1efd7c7d05fb26 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: native-win32
           path: bin
-      - uses: actions/download-artifact@7fc4fb55c7d0c7b198b1c7466e1efd7c7d05fb26 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: native-linux
           path: bin
@@ -131,7 +131,7 @@ jobs:
         run: |
           tarball=$(ls "$RUNNER_TEMP"/package/dsh-computer-history-*.tgz | head -1)
           DSH_RELEASE_TARBALL="$tarball" node scripts/verify-native-package.mjs
-      - uses: actions/upload-artifact@2a0ecf19e8d0087dd2e5d1785dcf764811e79fae # v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: three-platform-plugin
           path: ${{ runner.temp }}/package/dsh-computer-history-*.tgz
@@ -156,7 +156,7 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22.19.0
-      - uses: actions/download-artifact@7fc4fb55c7d0c7b198b1c7466e1efd7c7d05fb26 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: three-platform-plugin
           path: ${{ runner.temp }}/package
