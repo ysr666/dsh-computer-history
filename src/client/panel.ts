@@ -15,6 +15,7 @@ import type {
 import { localDayKey, TIMELINE_ACTIVITY_MERGE_GAP_MS } from '../shared/audit-view.js'
 import { historyApi } from './api.js'
 import { appIcon } from './app-icon.js'
+import { HistoryGlyph } from './history-icon.js'
 import {
   continuationResourceUri,
   continuationSubject,
@@ -97,6 +98,7 @@ function threadSkeleton(label: string): React.ReactElement {
   )
 }
 
+
 function resourceLabel(
   t: HistoryTranslate,
   resource: { readonly kind: string; readonly canonicalUri: string; readonly displayLabel?: string },
@@ -117,14 +119,6 @@ function episodeMeta(
   const subject = episodeSubject(t, episode)
   if (app === 'Terminal' && label === t('homeDirectory')) return label
   return label && label != subject ? `${app} · ${label}` : app
-}
-
-function resumeSubject(episode: EpisodeSummary): string | undefined {
-  if (episodeApp(episode) === 'Terminal') return undefined
-  const resource = episode.lastStrongResource?.displayLabel
-    ?? episode.resources[0]?.displayLabel
-  if (resource) return resource
-  return episode.workspace?.title
 }
 
 function formatClock(atMs: number, locale: string): string {
@@ -603,7 +597,7 @@ export function createHistoryPage({
     const staleRelease = state?.release?.stale
     const staleSection = staleRelease
       ? React.createElement(
-          'section', { className: 'ch-alert' },
+          'section', { className: 'ch-alert ch-alert-warning' },
           React.createElement('p', { role: 'status' }, t('staleRelease')),
           React.createElement(
             'details', { className: 'ch-inspector' },
@@ -636,7 +630,7 @@ export function createHistoryPage({
         : undefined
     const isFirstRun = setup !== undefined
       && setup !== 'complete'
-      && timeline?.length === 0
+      && hasAnyEpisode === false
     const preset = state?.firstRunPreset
     const setupCopy = setup === 'permission'
       ? { title: t('setupPermissionTitle'), lead: t('setupPermissionBody') }
@@ -651,31 +645,35 @@ export function createHistoryPage({
               : { title: t('startHere'), lead: t('firstRunIntro') }
     const setupAction = setup === 'choose-apps'
       ? React.createElement('button', {
-          type: 'button', className: 'ch-button', disabled: !preset || startRecordingPending,
+          type: 'button', className: 'ch-button ch-continue-primary', disabled: !preset || startRecordingPending,
           onClick: () => { runAction(startRecording) },
         }, t(!state?.accessibilityTrusted && accessibilitySettingsAvailable
           ? 'startAndAuthorize'
           : 'startRecording'))
       : setup === 'permission' && accessibilitySettingsAvailable
         ? React.createElement('button', {
-            type: 'button', className: 'ch-button', disabled: awaitingAccessibility,
+            type: 'button', className: 'ch-button ch-continue-primary', disabled: awaitingAccessibility,
             onClick: () => { runAction(openAccessibilitySettings) },
           }, awaitingAccessibility ? t('waitingForPermission') : t('openSystemSettings'))
         : setup === 'paused'
           ? React.createElement('button', {
-              type: 'button', className: 'ch-button',
+              type: 'button', className: 'ch-button ch-continue-primary',
               onClick: () => { runAction(async () => { await store.resume() }) },
             }, t('resumeRecording'))
           : setup === 'stopped' || setup === 'degraded'
             ? React.createElement('button', {
-                type: 'button', className: 'ch-button', disabled: captureRecoveryPending,
+                type: 'button', className: 'ch-button ch-continue-primary', disabled: captureRecoveryPending,
                 onClick: () => { runAction(recoverCapture) },
               }, t(captureRecoveryPending ? 'recoveringRecording' : 'retryRecording'))
             : null
     const firstRunSection = isFirstRun
       ? React.createElement(
           'section', { className: 'ch-first-run' },
-          React.createElement('div', { className: 'ch-first-run-mark', 'aria-hidden': true }, '◷'),
+          React.createElement(
+            'div',
+            { className: 'ch-first-run-mark', 'aria-hidden': true },
+            React.createElement(HistoryGlyph, { size: 21 }),
+          ),
           React.createElement('h2', null, setupCopy.title),
           React.createElement('p', { className: 'ch-first-run-lead' }, setupCopy.lead),
           React.createElement(
@@ -694,7 +692,22 @@ export function createHistoryPage({
                   : null,
               )
             : state?.reason
-              ? React.createElement('p', { className: 'ch-muted' }, reasonText(t, state.reason))
+              ? React.createElement(
+                  React.Fragment, null,
+                  React.createElement('p', { className: 'ch-muted' }, reasonText(t, state.reason)),
+                  // Naming it is only half of it. This reason exists because the first-run consent never wrote an
+                  // allow rule, so the notice offers that same consent again - the action the consent itself runs
+                  // (`startRecording`), through the same `runAction` wrapper, with no second way to write a policy.
+                  // Measured 2026-10-06: the state said `running` while nothing was recorded, and the only thing
+                  // the panel could do about it was print a line of grey text.
+                  state.reason === 'no-apps-allowed' && preset
+                    ? React.createElement('button', {
+                        type: 'button',
+                        className: 'ch-button ch-continue-primary',
+                        onClick: () => { runAction(startRecording) },
+                      }, t('allowPresetApps'))
+                    : null,
+                )
               : null,
         )
       : null
@@ -944,6 +957,7 @@ export function createHistoryPage({
             }, timelineMorePending ? t('loadingEarlierHistory') : t('showEarlierHistory')),
           )
         : null,
+
     )
 
     const resumeText = hint
@@ -976,6 +990,29 @@ export function createHistoryPage({
     )
 
     const handoffHit = resumeHandoff?.status === 'hit' ? resumeHandoff : undefined
+    const savedResources = handoffHit?.changedResources
+      ?? recentEpisode?.changedResources
+      ?? []
+    const referenceResources = handoffHit?.referenceResources ?? []
+    const latestVerification = handoffHit?.verifications[0]
+    const verificationKindLabel = latestVerification
+      ? t(latestVerification.kind === 'build'
+          ? 'verificationBuild'
+          : latestVerification.kind === 'test'
+            ? 'verificationTest'
+            : 'verificationOther')
+      : undefined
+    const verificationLabel = latestVerification && verificationKindLabel
+      ? t(latestVerification.result === 'success'
+          ? 'verificationSucceeded'
+          : 'verificationFailed', { kind: verificationKindLabel })
+      : undefined
+    const checkpoint = handoffHit?.checkpoint
+    const gitHeadChanged = Boolean(
+      handoffHit?.git?.head
+      && checkpoint?.gitHead
+      && handoffHit.git.head !== checkpoint.gitHead,
+    )
     const continueSubject = handoffHit?.workspace?.title?.trim()
       ?? (recentEpisode ? continuationSubject(recentEpisode) : undefined)
       ?? (recentEpisode ? episodeSubject(t, recentEpisode) : undefined)
@@ -1001,36 +1038,121 @@ export function createHistoryPage({
         'div', { className: 'ch-resume-card' },
         recentEpisode
           ? React.createElement(
-              'div', { className: 'ch-resume-suggestion' },
-              appIcon(recentEpisode.surfaces[0]?.bundleId, episodeApp(recentEpisode)),
+              'div', { className: 'ch-continuity-card' },
               React.createElement(
-                'span', { className: 'ch-resume-copy' },
-                React.createElement('span', { className: 'ch-resume-title' },
-                  continueSubject ?? resumeSubject(recentEpisode) ?? episodeSubject(t, recentEpisode)),
-                React.createElement('span', { className: 'ch-resume-meta' },
-                  continueMeta ?? t('resumeRecentMeta', {
-                    when: formatRelativeAge(t, recentEpisode.endedAtMs),
-                    app: episodeApp(recentEpisode),
-                  })),
-              ),
-              React.createElement('button', {
-                type: 'button',
-                className: 'ch-button ch-resume-open',
-                disabled: continueDshPending,
-                onClick: () => { void continueInDshWork(recentEpisode) },
-              }, continueDshPending ? t('continuingWork') : t('continueWork')),
-              resumeOpenCapability?.available
-                ? React.createElement('button', {
+                'div', { className: 'ch-continuity-head' },
+                appIcon(recentEpisode.surfaces[0]?.bundleId, episodeApp(recentEpisode)),
+                React.createElement(
+                  'span', { className: 'ch-resume-copy' },
+                  React.createElement('span', { className: 'ch-resume-title' }, continueSubject),
+                  React.createElement('span', { className: 'ch-resume-meta' }, continueMeta),
+                ),
+                React.createElement(
+                  'div', { className: 'ch-continuity-actions' },
+                  React.createElement('button', {
                     type: 'button',
-                    className: 'ch-button',
-                    disabled: resumeOpenPending,
-                    onClick: () => {
-                      void continueRecordedWork(
-                        recentEpisode,
-                        continuationResourceUri(recentEpisode, resumeHandoff),
-                      )
-                    },
-                  }, resumeOpenPending ? t('openingApp') : t('openInApp'))
+                    className: 'ch-button ch-resume-open ch-continue-primary',
+                    disabled: continueDshPending,
+                    onClick: () => { void continueInDshWork(recentEpisode) },
+                  }, continueDshPending ? t('continuingWork') : t('continueWork')),
+                  resumeOpenCapability?.available
+                    ? React.createElement('button', {
+                        type: 'button',
+                        className: 'ch-text-action ch-open-app',
+                        disabled: resumeOpenPending,
+                        onClick: () => {
+                          void continueRecordedWork(
+                            recentEpisode,
+                            continuationResourceUri(recentEpisode, resumeHandoff),
+                          )
+                        },
+                      }, resumeOpenPending ? t('openingApp') : t('openInApp'))
+                    : null,
+                ),
+              ),
+              handoffHit && (
+                savedResources.length > 0
+                || referenceResources.length > 0
+                || verificationLabel !== undefined
+                || handoffHit.git !== undefined
+                || handoffHit.checkpoint !== undefined
+              )
+                ? React.createElement(
+                    'details', { className: 'ch-inspector ch-continuity-inspector' },
+                    React.createElement('summary', null, t('workStateDetails')),
+                    verificationLabel
+                      ? React.createElement('p', { className: 'ch-muted' }, verificationLabel)
+                      : null,
+                    savedResources.length > 0
+                      ? React.createElement(
+                          React.Fragment,
+                          null,
+                          React.createElement('p', { className: 'ch-continuity-detail-label' },
+                            t('recentlySaved')),
+                          React.createElement(
+                            'ul', { className: 'ch-continuity-files ch-continuity-detail-files' },
+                            ...savedResources.slice(0, 5).map(resource => React.createElement(
+                              'li', { key: resource.canonicalUri },
+                              React.createElement('span', { className: 'ch-continuity-file' },
+                                resource.displayLabel ?? resource.canonicalUri),
+                              React.createElement('span', { className: 'ch-continuity-file-meta' },
+                                t('savedTimes', { count: resource.changeCount })),
+                            )),
+                          ),
+                        )
+                      : null,
+                    referenceResources.length > 0
+                      ? React.createElement(
+                          React.Fragment,
+                          null,
+                          React.createElement('p', { className: 'ch-continuity-detail-label' },
+                            t('references')),
+                          React.createElement(
+                            'ul', { className: 'ch-continuity-files ch-continuity-detail-files' },
+                            ...referenceResources.slice(0, 5).map(resource => React.createElement(
+                              'li', { key: resource.canonicalUri },
+                              React.createElement('span', { className: 'ch-continuity-file' },
+                                resource.displayLabel ?? resource.canonicalUri),
+                            )),
+                          ),
+                        )
+                      : null,
+                    handoffHit.git?.branch
+                      ? React.createElement('p', { className: 'ch-muted' },
+                          t('gitBranchMeta', { branch: handoffHit.git.branch }))
+                      : null,
+                    handoffHit.git?.head
+                      ? React.createElement('p', { className: 'ch-muted' },
+                          t('gitHeadMeta', { head: handoffHit.git.head.slice(0, 10) }))
+                      : null,
+                    gitHeadChanged
+                      ? React.createElement('p', { className: 'ch-muted' }, t('gitHeadChanged'))
+                      : null,
+                    handoffHit.git?.dirty && handoffHit.git.changedFiles.length > 0
+                      ? React.createElement(
+                          React.Fragment,
+                          null,
+                          React.createElement('p', { className: 'ch-continuity-detail-label' },
+                            t('currentGitChanges')),
+                          React.createElement(
+                            'ul', { className: 'ch-continuity-files ch-continuity-detail-files' },
+                            ...handoffHit.git.changedFiles.slice(0, 6).map(file => React.createElement(
+                              'li', { key: file.status + ':' + file.path },
+                              React.createElement('span', { className: 'ch-continuity-status-code' },
+                                file.status),
+                              React.createElement('span', { className: 'ch-continuity-file' }, file.path),
+                            )),
+                          ),
+                        )
+                      : null,
+                    handoffHit.checkpoint
+                      ? React.createElement('p', { className: 'ch-muted' },
+                          t('checkpointMeta', {
+                            session: handoffHit.checkpoint.sessionId,
+                            turn: handoffHit.checkpoint.turn,
+                          }))
+                      : null,
+                  )
                 : null,
             )
           : null,
@@ -1045,18 +1167,13 @@ export function createHistoryPage({
           ? React.createElement(
               'div', { className: 'ch-resume-result', role: 'status' },
               React.createElement('p', { className: 'ch-row-body' }, resumeText),
-              hint?.status === 'hit' && resumeOpenCapability?.available
+              hint?.status === 'hit'
                 ? React.createElement('button', {
                     type: 'button',
                     className: 'ch-button',
-                    disabled: resumeOpenPending,
-                    onClick: () => {
-                      void continueRecordedWork(
-                        hint.episode,
-                        hint.resource?.canonicalUri,
-                      )
-                    },
-                  }, resumeOpenPending ? t('openingWork') : t('continueWork'))
+                    disabled: continueDshPending,
+                    onClick: () => { void continueInDshWork(hint.episode) },
+                  }, continueDshPending ? t('continuingWork') : t('continueWork'))
                 : null,
             )
           : null,
@@ -1244,19 +1361,20 @@ export function createHistoryPage({
           failureText(t, controls.error ?? contentError)),
       ),
       React.createElement('button', {
-        type: 'button', className: 'ch-button', onClick: retryLoads,
+        type: 'button', className: 'ch-button ch-continue-primary', onClick: retryLoads,
       }, t('retry')),
     )
 
-    const accessibilityRecovery = !isFirstRun
+    const accessibilityNeedsRecovery = !isFirstRun
       && state !== undefined
       && (state.capture === 'permission-required' || !state.accessibilityTrusted)
+    const accessibilityRecovery = accessibilityNeedsRecovery
       ? React.createElement(
-          'section', { className: 'ch-alert' },
+          'section', { className: 'ch-alert ch-alert-warning' },
           React.createElement('p', null, t('accessibilityRecoveryBody')),
           accessibilitySettingsAvailable
             ? React.createElement('button', {
-                type: 'button', className: 'ch-button', disabled: awaitingAccessibility,
+                type: 'button', className: 'ch-button ch-continue-primary', disabled: awaitingAccessibility,
                 onClick: () => { runAction(openAccessibilitySettings) },
               }, awaitingAccessibility ? t('waitingForPermission') : t('openSystemSettings'))
             : React.createElement('p', { className: 'ch-muted' }, t('accessibilityManualPath')),
@@ -1273,13 +1391,13 @@ export function createHistoryPage({
       && (state.capture === 'stopped' || state.capture === 'degraded')
     const captureRecovery = captureNeedsRecovery
       ? React.createElement(
-          'section', { className: 'ch-alert' },
+          'section', { className: 'ch-alert ch-alert-error' },
           React.createElement('p', null, t('captureRecoveryBody')),
           state?.reason
             ? React.createElement('p', { className: 'ch-muted' }, reasonText(t, state.reason))
             : null,
           React.createElement('button', {
-            type: 'button', className: 'ch-button', disabled: captureRecoveryPending,
+            type: 'button', className: 'ch-button ch-continue-primary', disabled: captureRecoveryPending,
             onClick: () => { runAction(recoverCapture) },
           }, t(captureRecoveryPending ? 'recoveringRecording' : 'retryRecording')),
         )
@@ -1338,7 +1456,13 @@ export function createHistoryPage({
             )
           : semantic === undefined || semantic === null
             ? null
-            : React.createElement('p', { className: 'ch-muted' }, t('noModelScope')),
+            : React.createElement(
+                'p',
+                { className: 'ch-muted' },
+                !semantic.providers.local.available && !semantic.providers.remote.available
+                  ? t('noSummaryProvider')
+                  : t('noModelScope'),
+              ),
         preview
           ? React.createElement(
               'details', { className: 'ch-inspector', open: true },
@@ -1389,7 +1513,7 @@ export function createHistoryPage({
         : null,
       !allContentUnavailable && ((controls.status === 'error' && controls.error) || contentError)
         ? React.createElement(
-            'div', { className: 'ch-alert' },
+            'div', { className: 'ch-alert ch-alert-error' },
             React.createElement('p', { role: 'alert' }, failureText(t, controls.error ?? contentError)),
             React.createElement('div', { className: 'ch-controls' },
               React.createElement('button', {
@@ -1399,15 +1523,16 @@ export function createHistoryPage({
           )
         : null,
       actionError
-        ? React.createElement('div', { className: 'ch-alert', role: 'alert' }, actionError)
+        ? React.createElement('div', { className: 'ch-alert ch-alert-error', role: 'alert' }, actionError)
         : null,
       allContentUnavailable
         ? unavailableSection
         : React.createElement(
             React.Fragment,
             null,
-            isFirstRun ? firstRunSection : timelineSection,
-            !isFirstRun && timeline && timeline.length > 0 ? resumeSection : null,
+            isFirstRun ? firstRunSection : null,
+            !isFirstRun && hasAnyEpisode ? resumeSection : null,
+            !isFirstRun ? timelineSection : null,
             !isFirstRun ? threadSection : null,
             !isFirstRun ? semanticSection : null,
           ),

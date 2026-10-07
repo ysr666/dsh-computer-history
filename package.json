@@ -103,7 +103,8 @@
       "types": "./lib/client.d.ts",
       "default": "./lib/client.js"
     },
-    "./cordis.patch.yml": "./cordis.patch.yml"
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./locale/*.json": "./locale/*.json"
   },
   "bin": {
     "dsh-computer-history-collector": "bin/dsh-computer-history-collector"
@@ -115,6 +116,8 @@
     "native/macos/Package.swift",
     "dist/extension",
     "dsh-computer-history-editor.vsix",
+    "icon.svg",
+    "locale/*.json",
     "README.md",
     "README.zh.md",
     "LICENSE",
@@ -151,6 +154,7 @@
     "@deepseek-ai/dsh-workspace": ">=0.2.0-rc.2 <0.3.0",
     "react": "^18.2.0"
   },
+  "icon": "./icon.svg",
   "dsh": {
     "client": {
       "inject": [

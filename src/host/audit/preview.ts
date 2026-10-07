@@ -76,10 +76,10 @@ function exclusionReason(
     policy,
     { caseInsensitiveAppId: observation.source.provider === 'windows-uia' },
   )) {
-    return 'the policy does not allow this application or resource'
+    return 'policy-disallowed'
   }
   if (isProtectedWorkspace(observation.workspace, policy)) {
-    return 'the workspace root is denied or protected by resource policy'
+    return 'policy-disallowed'
   }
   // The same secure-path screen ingestion applies to a resource, so the preview
   // cannot miss a row that ingestion would have dropped.

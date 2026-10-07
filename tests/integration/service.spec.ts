@@ -27,7 +27,6 @@ import {
   PolicyStore,
   ResourceStore,
 } from '../../src/host/store/index.js'
-import { SemanticOptInStore } from '../../src/host/semantic/opt-in.js'
 import { CompanionTokenStore } from '../../src/host/companion/token-store.js'
 import { RemoteSendStore } from '../../src/host/semantic/send-store.js'
 
