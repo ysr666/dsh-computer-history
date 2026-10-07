@@ -44,7 +44,10 @@ try {
     'tar',
     ['-tzf', tarball],
     { encoding: 'utf8' },
-  ).split('\n')
+  )
+    .split(/\r?\n/)
+    .map(member => member.trim().replaceAll('\\\\', '/'))
+    .filter(Boolean)
 
   for (const file of [...Object.values(expected), manifestPath]) {
     const member = `package/${file}`
