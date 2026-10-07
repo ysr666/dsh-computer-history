@@ -30,13 +30,16 @@ const killTree = pid => {
   try { process.kill(-pid, 'SIGTERM') } catch { try { process.kill(pid, 'SIGTERM') } catch { /* already gone */ } }
 }
 
-// The plugin carries a collector for macOS only. On a machine without one (Windows, or a checkout that has not
-// built it) the Host starts, reports collector-exited and stops at a boundary - honest, but it exercises less than
-// the machine can. Set COLLECTOR_EXECUTABLE to the binary and the runs use it.
+// An explicit executable remains useful for live collector development. Release verification instead sets
+// DSH_E2E_REQUIRE_PACKAGED_COLLECTOR=1 and supplies DSH_RELEASE_TARBALL: then the Host must discover the native
+// collector from the installed package with no collectorExecutable override.
 const collectorLine = process.env.COLLECTOR_EXECUTABLE
   ? `    collectorExecutable: ${process.env.COLLECTOR_EXECUTABLE}\n`
   : ''
-const collectorRequired = Boolean(process.env.COLLECTOR_EXECUTABLE)
+const collectorRequired =
+  Boolean(process.env.COLLECTOR_EXECUTABLE)
+  || process.env.DSH_E2E_REQUIRE_PACKAGED_COLLECTOR === '1'
+const releaseTarball = process.env.DSH_RELEASE_TARBALL?.trim() || undefined
 const diagnosticTimeline = process.env.DSH_E2E_DIAGNOSTIC_TIMELINE === '1'
 const explicitAllowBundles = (process.env.DSH_E2E_ALLOW_BUNDLES ?? '')
   .split(',')
@@ -116,19 +119,27 @@ const companionPort = webPort + 1
 let host
 
 try {
-  // 1. Pack the plugin the way it is released, into a temporary directory. The editor companion is an
-  // intentionally independent pnpm project with its own lockfile and build-script policy; the release workflow
-  // installs it before `pnpm pack`, so this one-command harness must do the same on a clean clone.
-  const editorDeps = run('pnpm', ['install', '--frozen-lockfile'], { cwd: path.join(REPO, 'extension-editor') })
-  record('install editor build deps', editorDeps.status === 0, editorDeps.status === 0 ? 'exit 0' : editorDeps.out.trim().slice(-240))
-  if (editorDeps.status !== 0) throw new Error('editor build dependency install failed')
+  // 1. Use the already-assembled release tarball when supplied. Otherwise keep the one-command development
+  // path that packs this checkout. Release CI must never repack on each verification OS: every platform verifies
+  // the exact same tgz assembled from the three native runner artifacts.
+  let tarball
+  if (releaseTarball) {
+    tarball = path.resolve(releaseTarball)
+    const present = existsSync(tarball)
+    record('release tarball', present, present ? tarball : 'missing')
+    if (!present) throw new Error('DSH_RELEASE_TARBALL does not exist')
+  } else {
+    const editorDeps = run('pnpm', ['install', '--frozen-lockfile'], { cwd: path.join(REPO, 'extension-editor') })
+    record('install editor build deps', editorDeps.status === 0, editorDeps.status === 0 ? 'exit 0' : editorDeps.out.trim().slice(-240))
+    if (editorDeps.status !== 0) throw new Error('editor build dependency install failed')
 
-  rmSync(path.join(REPO, 'e2e-pack'), { recursive: true, force: true })
-  mkdirSync(path.join(REPO, 'e2e-pack'), { recursive: true })
-  const packed = run('pnpm', ['pack', '--pack-destination', path.join(REPO, 'e2e-pack')])
-  const tarball = path.join(REPO, 'e2e-pack', `dsh-computer-history-${JSON.parse(readFileSync('package.json', 'utf8')).version}.tgz`)
-  record('pack', packed.status === 0, packed.status === 0 ? path.relative(REPO, tarball) : packed.out.trim().slice(-160))
-  if (packed.status !== 0) throw new Error('pack failed')
+    rmSync(path.join(REPO, 'e2e-pack'), { recursive: true, force: true })
+    mkdirSync(path.join(REPO, 'e2e-pack'), { recursive: true })
+    const packed = run('pnpm', ['pack', '--pack-destination', path.join(REPO, 'e2e-pack')])
+    tarball = path.join(REPO, 'e2e-pack', `dsh-computer-history-${JSON.parse(readFileSync('package.json', 'utf8')).version}.tgz`)
+    record('pack', packed.status === 0, packed.status === 0 ? path.relative(REPO, tarball) : packed.out.trim().slice(-160))
+    if (packed.status !== 0) throw new Error('pack failed')
+  }
 
   // 2. Install into the throwaway home. The first add stops at the build-script gate, which is answered the same
   // way a person would answer it in the UI; the retry then succeeds.
