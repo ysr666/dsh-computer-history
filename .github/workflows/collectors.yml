@@ -151,6 +151,8 @@ jobs:
       - name: Restore executable modes
         run: chmod +x bin/dsh-computer-history-collector bin/dsh-computer-history-collector-linux
       - name: Pack the exact assembled plugin
+        env:
+          DSH_NATIVE_PREBUILT: '1'
         run: pnpm pack --pack-destination /tmp
       - name: Verify all native collectors and hashes are in the tarball
         run: |
