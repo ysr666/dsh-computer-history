@@ -44,7 +44,14 @@ interface MutableSurface {
 
 interface MutableEpisode {
   readonly id: EpisodeId
+  /** Session of the first observation, retained only for the stable Episode id. */
   readonly collectorSessionId: string
+  /**
+   * Native collector lifecycle is distinct from Browser/Editor companion
+   * sessions. Companion sessions may legitimately interleave inside one work
+   * episode and must never masquerade as a collector restart.
+   */
+  nativeCollectorSessionId: string | undefined
   readonly startReason: EpisodeBoundaryReason
   readonly startedAtMs: number
   readonly workspace: WorkspaceRef | undefined
@@ -78,6 +85,14 @@ function observationKey(
   observation: PersistedActivityObservation,
 ): string {
   return `${observation.collectorSessionId}\u0000${observation.seq}`
+}
+
+function nativeCollectorSessionId(
+  observation: ActivityObservation,
+): string | undefined {
+  return observation.source.provider === 'companion'
+    ? undefined
+    : String(observation.collectorSessionId)
 }
 
 function workspaceMatches(
@@ -134,6 +149,8 @@ function startEpisode(
     id: stableEpisodeId(observation),
     collectorSessionId:
       String(observation.collectorSessionId),
+    nativeCollectorSessionId:
+      nativeCollectorSessionId(observation),
     startReason,
     startedAtMs: observation.observedAtMs,
     workspace,
@@ -162,6 +179,8 @@ function addObservation(
   episode.observationIds.push(observation.id)
   episode.lastIncludedAtMs = observation.observedAtMs
   episode.detourStartedAtMs = undefined
+  episode.nativeCollectorSessionId ??=
+    nativeCollectorSessionId(observation)
 
   if (strong) {
     episode.lastStrongAtMs = observation.observedAtMs
@@ -438,10 +457,14 @@ export class IncrementalEpisodeBuilder {
       emit(this.active, 'timeout', false)
     }
 
+    const incomingNativeCollectorSessionId =
+      nativeCollectorSessionId(observation)
     if (
       this.active
-      && String(observation.collectorSessionId)
-        !== this.active.collectorSessionId
+      && incomingNativeCollectorSessionId !== undefined
+      && this.active.nativeCollectorSessionId !== undefined
+      && incomingNativeCollectorSessionId
+        !== this.active.nativeCollectorSessionId
     ) {
       close('collector-restart')
       startReason = 'collector-restart'
@@ -555,7 +578,10 @@ export class IncrementalEpisodeBuilder {
         return changed
       }
 
-      if (this.active) close('workspace-switch')
+      if (this.active) {
+        close('workspace-switch')
+        startReason = 'workspace-switch'
+      }
       this.active = startEpisode(
         observation,
         startReason,

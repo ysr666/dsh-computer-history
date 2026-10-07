@@ -254,6 +254,24 @@ export class EpisodeStore {
         === Number(observationIds[stored.count - 1])
   }
 
+  private replaceSummaryCitations(
+    id: EpisodeId,
+    citations: readonly ObservationId[],
+  ): void {
+    this.db.prepare(
+      'DELETE FROM episode_summary_citations WHERE episode_id = ?',
+    ).run(id)
+    const cite = this.db.prepare(`
+      INSERT OR IGNORE INTO episode_summary_citations(
+        episode_id,
+        observation_id
+      ) VALUES (?, ?)
+    `)
+    for (const observationId of citations) {
+      cite.run(id, Number(observationId))
+    }
+  }
+
   public replace(
     input: PersistEpisodeInput,
     options: PersistEpisodeOptions = {},
@@ -391,6 +409,11 @@ export class EpisodeStore {
           this.appendIsProven(input.observationIds, stored)
         ) {
           this.applyAppendedAggregates(input.id, appended)
+          this.replaceSummaryCitations(
+            input.id,
+            input.summaryObservationIds
+              ?? input.observationIds,
+          )
           commit()
           return
         }
@@ -435,20 +458,11 @@ export class EpisodeStore {
       // links and aggregates committed and its citations deleted - a summary
       // that had lost its evidence with nothing recording that it had, and no
       // way to roll back. The test forces exactly that failure.
-      this.db.prepare(
-        'DELETE FROM episode_summary_citations WHERE episode_id = ?',
-      ).run(input.id)
-      const cite = this.db.prepare(`
-        INSERT OR IGNORE INTO episode_summary_citations(
-          episode_id,
-          observation_id
-        ) VALUES (?, ?)
-      `)
-      const citations = input.summaryObservationIds
-        ?? input.observationIds
-      for (const observationId of citations) {
-        cite.run(input.id, Number(observationId))
-      }
+      this.replaceSummaryCitations(
+        input.id,
+        input.summaryObservationIds
+          ?? input.observationIds,
+      )
 
       commit()
 

@@ -344,12 +344,14 @@ describe('episode store', () => {
       endedAtMs: first.observedAtMs,
       updatedAtMs: 20_000,
       observationIds: [firstId],
-            })
+      summaryObservationIds: [firstId],
+    })
     episodes.replace({
       ...base,
       endedAtMs: second.observedAtMs,
       updatedAtMs: 30_000,
       observationIds: [firstId, secondId],
+      summaryObservationIds: [firstId, secondId],
     }, {
       provenance: 'append',
       appendObservationIds: [secondId],
@@ -357,7 +359,8 @@ describe('episode store', () => {
 
     expect(episodes.get(id)).toMatchObject({
       observationIds: [firstId, secondId],
-            })
+      summaryObservationIds: [firstId, secondId],
+    })
     history.close()
   })
 
