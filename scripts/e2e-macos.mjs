@@ -108,7 +108,7 @@ if (version.status !== 0) {
   )
   process.exit(1)
 }
-console.log(`dsh e2e (macOS): ${version.out.trim().split('\n')[0]}`)
+console.log(`dsh e2e (${process.platform}): ${version.out.trim().split('\n')[0]}`)
 
 const home = mkdtempSync(path.join(os.tmpdir(), 'dsh-e2e-'))
 const profile = 'e2e'
