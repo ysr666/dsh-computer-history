@@ -117,19 +117,32 @@ const companionPort = webPort + 1
 let host
 
 try {
-  // 1. Pack the plugin the way it is released, into a temporary directory. The editor companion is an
-  // intentionally independent pnpm project with its own lockfile and build-script policy; the release workflow
-  // installs it before `pnpm pack`, so this one-command harness must do the same on a clean clone.
-  const editorDeps = run('pnpm', ['install', '--frozen-lockfile'], { cwd: path.join(REPO, 'extension-editor') })
-  record('install editor build deps', editorDeps.status === 0, editorDeps.status === 0 ? 'exit 0' : editorDeps.out.trim().slice(-240))
-  if (editorDeps.status !== 0) throw new Error('editor build dependency install failed')
+  // 1. Use an already-assembled release tarball when the caller supplies one. Otherwise pack the checkout
+  // exactly as before. The external path is what the three-platform artifact workflow uses: every OS installs
+  // the same bytes, rather than quietly rebuilding a platform-specific package in the acceptance job.
+  let tarball
+  const providedTarball = process.env.DSH_E2E_TARBALL?.trim()
+  if (providedTarball) {
+    tarball = path.resolve(providedTarball)
+    record(
+      'use provided package',
+      existsSync(tarball),
+      existsSync(tarball) ? tarball : 'tarball does not exist',
+    )
+    if (!existsSync(tarball)) throw new Error('provided package does not exist')
+  } else {
+    // The editor companion is an independent pnpm project with its own lockfile and build-script policy.
+    const editorDeps = run('pnpm', ['install', '--frozen-lockfile'], { cwd: path.join(REPO, 'extension-editor') })
+    record('install editor build deps', editorDeps.status === 0, editorDeps.status === 0 ? 'exit 0' : editorDeps.out.trim().slice(-240))
+    if (editorDeps.status !== 0) throw new Error('editor build dependency install failed')
 
-  rmSync(path.join(REPO, 'e2e-pack'), { recursive: true, force: true })
-  mkdirSync(path.join(REPO, 'e2e-pack'), { recursive: true })
-  const packed = run('pnpm', ['pack', '--pack-destination', path.join(REPO, 'e2e-pack')])
-  const tarball = path.join(REPO, 'e2e-pack', `dsh-computer-history-${JSON.parse(readFileSync('package.json', 'utf8')).version}.tgz`)
-  record('pack', packed.status === 0, packed.status === 0 ? path.relative(REPO, tarball) : packed.out.trim().slice(-160))
-  if (packed.status !== 0) throw new Error('pack failed')
+    rmSync(path.join(REPO, 'e2e-pack'), { recursive: true, force: true })
+    mkdirSync(path.join(REPO, 'e2e-pack'), { recursive: true })
+    const packed = run('pnpm', ['pack', '--pack-destination', path.join(REPO, 'e2e-pack')])
+    tarball = path.join(REPO, 'e2e-pack', `dsh-computer-history-${JSON.parse(readFileSync('package.json', 'utf8')).version}.tgz`)
+    record('pack', packed.status === 0, packed.status === 0 ? path.relative(REPO, tarball) : packed.out.trim().slice(-160))
+    if (packed.status !== 0) throw new Error('pack failed')
+  }
 
   // 2. Install into the throwaway home. The first add stops at the build-script gate, which is answered the same
   // way a person would answer it in the UI; the retry then succeeds.
