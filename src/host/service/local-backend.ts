@@ -418,11 +418,21 @@ implements ComputerHistoryServiceContract {
    * model only when a scope is switched on.
    */
   public semanticState(): SemanticSummaryState {
-    return this.withSynchronousOperation(() => ({
-      active: 'deterministic',
-      localProviderConfigured: false,
-      scopes: this.semanticOptIns?.list() ?? [],
-    }))
+    return this.withSynchronousOperation(() => {
+      const providers = this.config.semanticProviders
+      return {
+        active: 'deterministic',
+        providers: {
+          local: providers?.local
+            ? { available: true, model: providers.local.model }
+            : { available: false, reason: 'not-wired' },
+          remote: providers?.remote
+            ? { available: true, model: providers.remote.model }
+            : { available: false, reason: 'not-wired' },
+        },
+        scopes: this.semanticOptIns?.list() ?? [],
+      }
+    })
   }
 
   /** The exact payload a provider would see for this scope (ADR 0004 §4). */
@@ -539,7 +549,13 @@ implements ComputerHistoryServiceContract {
   }): SemanticOptIn {
     return this.withSynchronousOperation(() => {
       if (!this.semanticOptIns) {
-        throw new Error('semantic summaries are unavailable')
+        throw new SummaryProviderError('semantic summaries are unavailable')
+      }
+      const provider = this.config.semanticProviders?.[request.providerKind]
+      if (!provider) {
+        throw new SummaryProviderError(
+          `${request.providerKind} summary provider is not available on this Host`,
+        )
       }
       return this.semanticOptIns.grant(
         parseScopeKey(request.scopeKey),

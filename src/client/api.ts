@@ -20,6 +20,7 @@ import type {
   ResumeOpenRequest,
   ResumeOpenResult,
   ResumeResolution,
+  RedactionPreview,
   RetentionSettings,
   SemanticSummaryState,
   SupportedApplicationInventory,
@@ -102,6 +103,8 @@ export const historyApi = {
     requestJson('/policy'),
   getRetention: (): Promise<RetentionSettings> =>
     requestJson('/retention'),
+  getRedactionPreview: (scopeKey: string): Promise<RedactionPreview> =>
+    requestJson(`/audit/preview?scope=${encodeURIComponent(scopeKey)}`),
   getTimeline: (days = 7): Promise<readonly TimelineDay[]> =>
     requestJson(`/timeline?days=${days}`),
   getRecent: (limit = 1): Promise<readonly EpisodeSummary[]> =>

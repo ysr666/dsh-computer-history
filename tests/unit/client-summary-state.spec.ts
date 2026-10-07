@@ -7,7 +7,10 @@ import type { SemanticSummaryState } from '../../src/shared/index.js'
 
 const deterministic: SemanticSummaryState = {
   active: 'deterministic',
-  localProviderConfigured: false,
+  providers: {
+    local: { available: false, reason: 'not-wired' },
+    remote: { available: false, reason: 'not-wired' },
+  },
   scopes: [],
 }
 

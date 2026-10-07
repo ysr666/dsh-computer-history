@@ -2,6 +2,7 @@ import type {
   PolicySnapshot,
   RedactionPreview,
   RedactionPreviewEntry,
+  RedactionReason,
 } from '../../shared/index.js'
 import {
   PROTECTED_BUNDLES,
@@ -65,9 +66,9 @@ export function buildRedactionPreview(input: {
 function exclusionReason(
   observation: PersistedActivityObservation,
   policy: PolicySnapshot,
-): string | undefined {
+): RedactionReason | undefined {
   if (PROTECTED_BUNDLES.has(observation.app.bundleId)) {
-    return 'the application is protected by a built-in rule'
+    return 'built-in-protected-app'
   }
   if (!policyAllows(
     observation.app.bundleId,
@@ -86,15 +87,15 @@ function exclusionReason(
   if (uri) {
     try {
       if (SECURE_PATH.test(decodeURIComponent(new URL(uri).pathname))) {
-        return 'the path is protected by the secure-path rule'
+        return 'secure-path'
       }
     } catch {
-      return 'the resource could not be read, so it would have been dropped'
+      return 'unreadable-resource'
     }
   }
   const title = observation.surface.title
   if (title && isProtectedText(title, policy)) {
-    return 'the title matches a protected pattern'
+    return 'protected-title'
   }
   if (
     isUnlocatableFileName(
@@ -119,7 +120,7 @@ function exclusionReason(
       policy,
     )
   ) {
-    return 'the window offered a file name the Host cannot place (ADR 0008)'
+    return 'unlocatable-file-name'
   }
   return undefined
 }
