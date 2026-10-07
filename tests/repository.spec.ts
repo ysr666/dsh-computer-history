@@ -375,6 +375,21 @@ describe('repository scaffold', () => {
     expect(routeSource).not.toContain("'/api/computer-history'")
   })
 
+  it('keeps packaged native collectors internal to the Host', () => {
+    const manifest = JSON.parse(readFileSync(
+      new URL('../package.json', import.meta.url),
+      'utf8',
+    )) as { bin?: unknown; files?: string[] }
+
+    expect(manifest.bin).toBeUndefined()
+    expect(manifest.files).toEqual(expect.arrayContaining([
+      'bin/dsh-computer-history-collector',
+      'bin/dsh-computer-history-collector-windows.exe',
+      'bin/dsh-computer-history-collector-linux',
+      'bin/native-artifacts.json',
+    ]))
+  })
+
   it('keeps locale and DSH runtime modules owned by the platform', () => {
     const entry = readFileSync(
       new URL('../src/client/index.ts', import.meta.url),
