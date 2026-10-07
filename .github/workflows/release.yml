@@ -46,7 +46,7 @@ jobs:
         env:
           EXPECTED_NATIVE_BINARY: ${{ matrix.binary }}
         run: node -e "const fs=require('node:fs');const p=process.env.EXPECTED_NATIVE_BINARY;if(!fs.existsSync(p)){throw new Error('missing '+p)};console.log(p,fs.statSync(p).size+' bytes')"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@c2acdedd35a8824a1552c7137f8c18288c3ea469 # v7.0.2
         with:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.binary }}
@@ -73,15 +73,15 @@ jobs:
       - run: pnpm install --frozen-lockfile
         working-directory: extension-editor
 
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@0d2ec9d4cbcefe257d822f108de2a1f15f8da9f6 # v7.0.0
         with:
           name: native-darwin
           path: bin
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@0d2ec9d4cbcefe257d822f108de2a1f15f8da9f6 # v7.0.0
         with:
           name: native-win32
           path: bin
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@0d2ec9d4cbcefe257d822f108de2a1f15f8da9f6 # v7.0.0
         with:
           name: native-linux
           path: bin
