@@ -983,34 +983,17 @@ export function createHistoryPage({
           const displayDuration = hasMergedActivity
             ? t('approxDuration', { duration: durationText })
             : durationText
-          const title = threadDetail.thread.workspaceTitle ?? t('unnamedWorkspace')
           return React.createElement(
             'div', { className: 'ch-project-history' },
             React.createElement(
               'div', { className: 'ch-project-history-head' },
-              React.createElement(
-                'div', null,
-                React.createElement('span', { className: 'ch-project-history-kicker' }, t('projectHistory')),
-                React.createElement('h3', null, title),
-                React.createElement('p', { className: 'ch-muted' },
-                  t('projectHistoryMeta', {
-                    activities: activityCount,
-                    days: threadDetail.timeline.length,
-                    duration: displayDuration,
-                  })),
-              ),
-              React.createElement('button', {
-                type: 'button',
-                className: 'ch-text-action',
-                'aria-label': t('closeProjectHistory'),
-                onClick: () => {
-                  threadRequests.current.invalidate()
-                  setThreadDetail(undefined)
-                  setThreadDetailKey(undefined)
-                  setThreadDetailPendingKey(undefined)
-                  setThreadDetailError(undefined)
-                },
-              }, '×'),
+              React.createElement('span', { className: 'ch-project-history-kicker' }, t('projectHistory')),
+              React.createElement('span', { className: 'ch-muted' },
+                t('projectHistoryMeta', {
+                  activities: activityCount,
+                  days: threadDetail.timeline.length,
+                  duration: displayDuration,
+                })),
             ),
             React.createElement(
               'div', { className: 'ch-project-days' },
@@ -1031,6 +1014,10 @@ export function createHistoryPage({
                         : formatDuration(t, dayDuration(day)),
                       count: day.activityCount,
                     })),
+                  React.createElement('span', {
+                    className: 'ch-project-day-chevron',
+                    'aria-hidden': true,
+                  }, '›'),
                 ),
                 React.createElement(
                   'ul', { className: 'ch-project-activity-list' },
