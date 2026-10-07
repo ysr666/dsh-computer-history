@@ -1,17 +1,7 @@
 # Publishing a release: push a `v*` tag whose name is `v` + the version in package.json.
 #
-# No certificate and no secrets. This is a DSH plugin: the artifact is a tarball that `dsh plugin add` fetches
-# with Node, and Node sets no quarantine flag. Measured 2026-10-05 on an arm64 Mac with the collector this
-# repository ships:
-#
-#   * an unsigned arm64 binary is killed by the kernel ("Killed: 9") - so a signature is required;
-#   * an ad-hoc signature is enough, and that is what `scripts/build-native.mjs` has always produced;
-#   * a copy carrying a Safari quarantine flag still ran normally;
-#   * `spctl -a` reports our ad-hoc binary as "rejected" and it runs anyway - that gate is for app bundles,
-#     not for a CLI a plugin spawns.
-#
-# A Developer ID certificate only becomes necessary if this ever ships a `.app`/`.dmg`/`.pkg`, or asks a user to
-# launch the binary from Finder. See the "Publishing" section of docs/release.md.
+# Native collectors are built on their own operating systems, uploaded as immutable workflow artifacts,
+# then assembled into one plugin tarball without rebuilding them in the packaging job.
 name: Release
 
 on:
@@ -22,11 +12,57 @@ permissions:
   contents: write
 
 jobs:
+  native:
+    name: native collector / ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: darwin
+            os: macos-15
+            artifact: native-darwin
+            binary: bin/dsh-computer-history-collector
+          - platform: win32
+            os: windows-latest
+            artifact: native-win32
+            binary: bin/dsh-computer-history-collector-windows.exe
+          - platform: linux
+            os: ubuntu-latest
+            artifact: native-linux
+            binary: bin/dsh-computer-history-collector-linux
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22.19.0
+      - name: Build collector on native runner
+        run: node scripts/build-native.mjs
+      - name: Verify expected native output
+        env:
+          EXPECTED_NATIVE_BINARY: ${{ matrix.binary }}
+        run: node -e "const fs=require('node:fs');const p=process.env.EXPECTED_NATIVE_BINARY;if(!fs.existsSync(p)){throw new Error('missing '+p)};console.log(p,fs.statSync(p).size+' bytes')"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.binary }}
+          if-no-files-found: error
+
   release:
+    name: assemble and publish three-platform plugin
+    needs: native
     runs-on: macos-14
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 11.7.0
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22.19.0
@@ -34,10 +70,33 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
       - run: pnpm verify
-      - run: pnpm native:build
       - run: pnpm install --frozen-lockfile
         working-directory: extension-editor
-      - run: pnpm pack --pack-destination /tmp
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-darwin
+          path: bin
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-win32
+          path: bin
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-linux
+          path: bin
+      - name: Restore executable modes
+        run: chmod +x bin/dsh-computer-history-collector bin/dsh-computer-history-collector-linux
+
+      - name: Pack exact native artifacts into one plugin
+        env:
+          DSH_NATIVE_PREBUILT: '1'
+        run: pnpm pack --pack-destination /tmp
+
+      - name: Verify native package assembly
+        run: |
+          tarball=$(ls /tmp/dsh-computer-history-*.tgz | head -1)
+          DSH_RELEASE_TARBALL="$tarball" node scripts/verify-native-package.mjs
 
       - name: Scan for release blockers
         env:
@@ -54,9 +113,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # The notes are the changelog section for this version, which the preflight has just proved exists.
           version="${GITHUB_REF_NAME#v}"
           awk -v v="$version" '$0 == "## " v {found=1; next} /^## / {found=0} found' CHANGELOG.md > /tmp/notes.md
           test -s /tmp/notes.md || { echo "no changelog section for $version"; exit 1; }
-          gh release create "$GITHUB_REF_NAME" /tmp/dsh-computer-history-*.tgz \
-            --title "$GITHUB_REF_NAME" --notes-file /tmp/notes.md
+          gh release create "$GITHUB_REF_NAME" /tmp/dsh-computer-history-*.tgz             --title "$GITHUB_REF_NAME" --notes-file /tmp/notes.md
