@@ -260,7 +260,7 @@ export interface ComputerHistoryServiceContract {
     readonly model?: string
   }): SemanticOptIn
 
-  /** "Turn off and purge": revoke the permission and delete model summaries. */
+  /** "Turn off and purge": revoke permission and replace model output with the local deterministic projection. */
   revokeSemanticOptIn(request: {
     readonly scopeKey: string
   }): { readonly revoked: boolean; readonly purged: number; readonly forgotten: number }
