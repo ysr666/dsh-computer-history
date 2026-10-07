@@ -9,6 +9,7 @@ import type {
   RetentionSettings,
 } from './audit.js'
 import type { TimelineDay, WorkThreadDetail } from './audit-view.js'
+import type { BindContinuationSessionRequest } from './continuation-reference.js'
 import type { EpisodeId } from './ids.js'
 import type {
   MinimisedSummaryPayload,
@@ -307,6 +308,15 @@ export interface ComputerHistoryServiceContract {
     readonly workspaceRoot?: string
     readonly atOrBeforeMs: number
   }): DshCheckpoint | undefined
+
+  /** Bind a freshly-created DSH Session to the exact Episode selected by Continue. */
+  bindContinuationSession(request: BindContinuationSessionRequest): void
+
+  /** Resolve an explicit Continue capsule without exposing its Episode id in chat text. */
+  continuationEpisodeForSession(sessionId: string): EpisodeId | undefined
+
+  /** Remove a failed/abandoned Continue binding without deleting the DSH Session itself. */
+  unbindContinuationSession(sessionId: string): boolean
 
   delete(
     request: DeleteHistoryRequest,

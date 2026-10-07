@@ -5,7 +5,7 @@ import { computerHistoryService } from '../host/service/index.js'
 import { detectResumeIntent } from '../host/resume/index.js'
 import { buildAgentResumeHandoff } from './handoff.js'
 import { gitPathForResource } from './workspace-path.js'
-import type { ResumeHandoff } from '../shared/index.js'
+import { hasComputerHistoryMention, type ResumeHandoff } from '../shared/index.js'
 
 const MAX_HINT_CHARS = 2_400
 const MAX_METADATA_LINE_CHARS = 360
@@ -385,6 +385,16 @@ export function registerExperimentalResumeHint(
       if (message.source.kind !== 'user') return
 
       const query = textOf(message)
+      if (hasComputerHistoryMention(query)) {
+        try {
+          const explicitEpisode = computerHistoryService(ctx)
+            .continuationEpisodeForSession(String(agent.session.id))
+          if (explicitEpisode !== undefined) return
+        } catch {
+          // If binding lookup fails, fall through to the existing optional
+          // ambient heuristic rather than breaking the turn.
+        }
+      }
       const intent = detectResumeIntent(query)
       if (!intent.isResume) return
       if (turn > 1 && !intent.externalCue) return

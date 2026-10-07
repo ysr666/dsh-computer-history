@@ -920,6 +920,9 @@ describe('Cordis computer history service', () => {
       },
       recordDshCheckpoint(request) { return request },
       latestDshCheckpoint() { return undefined },
+      bindContinuationSession() {},
+      continuationEpisodeForSession() { return undefined },
+      unbindContinuationSession() { return false },
       async delete() {
         return {
           observationsDeleted: 0,

@@ -1,4 +1,9 @@
 import type { Context } from '@deepseek-ai/cordis'
+import '@deepseek-ai/dsh-api-session-controller'
+import '@deepseek-ai/dsh-api-workspace-controller'
+import '@deepseek-ai/dsh-client-ui-conversation'
+import '@deepseek-ai/dsh-client-ui-input-trigger'
+import '@deepseek-ai/dsh-client-ui-workspace'
 import '@deepseek-ai/dsh-client-locale'
 import '@deepseek-ai/dsh-client-ui-renderer'
 import '@deepseek-ai/dsh-client-ui-sidebar'
@@ -19,6 +24,10 @@ import { createHistoryPage } from './panel.js'
 import { applySettings } from './settings.js'
 import { installHistoryStyles } from './styles.js'
 import { createHistoryControlStore } from './store.js'
+import {
+  continueEpisodeInDsh,
+  registerComputerHistoryReferenceSource,
+} from './continuation-reference.js'
 
 type SidebarPanelIconOwnerProps = _sidebarClientTypes.SidebarPanelIconOwnerProps
 
@@ -74,7 +83,15 @@ function HistoryIcon({ size }: SidebarPanelIconOwnerProps): React.ReactElement {
   )
 }
 
-export const inject = ['slots', 'locale']
+export const inject = [
+  'slots',
+  'locale',
+  'sessions',
+  'workspaces',
+  'conversation',
+  'inputTriggers',
+  'uiWorkspace',
+]
 
 export function apply(ctx: Context): void {
   ctx.effect(
@@ -85,9 +102,14 @@ export function apply(ctx: Context): void {
   const store = createHistoryControlStore()
   const HistoryPage = createHistoryPage({
     getActiveLocale: () => String(ctx.locale.getLocale().active),
+    continueInDsh: episode => continueEpisodeInDsh(ctx, episode),
     store,
   })
 
+  ctx.effect(
+    () => registerComputerHistoryReferenceSource(ctx),
+    'computer-history: composer reference source',
+  )
   ctx.effect(installHistoryStyles, 'computer-history: client styles')
   ctx.slots.inject('main', () => ctx.slots.register({
     name: 'main',

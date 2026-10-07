@@ -1,6 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite'
 import { RETENTION_BOUNDS } from '../../shared/index.js'
 import {
+  ContinuationSessionStore,
   DeletionLogStore,
   DshCheckpointStore,
 } from '../store/index.js'
@@ -49,6 +50,7 @@ export class RetentionService {
       )
 
       new DshCheckpointStore(this.db).deleteExpired(nowMs)
+      new ContinuationSessionStore(this.db).deleteExpired(nowMs)
 
       // Tombstones must outlive every delayed observation the Host
       // could still accept. Retention is user-configurable up to the shared

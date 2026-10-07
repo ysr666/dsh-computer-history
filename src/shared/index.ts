@@ -13,3 +13,5 @@ export * from './semantic.js'
 export * from './audit.js'
 export * from './audit-view.js'
 export * from './diagnostics.js'
+
+export * from './continuation-reference.js'

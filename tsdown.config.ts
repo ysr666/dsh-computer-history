@@ -20,6 +20,11 @@ const CLIENT_EXTERNALS = [
   '@deepseek-ai/dsh-client-ui-sidebar',
   '@deepseek-ai/dsh-client-ui-layout',
   '@deepseek-ai/dsh-client-ui-settings',
+  '@deepseek-ai/dsh-api-session-controller',
+  '@deepseek-ai/dsh-api-workspace-controller',
+  '@deepseek-ai/dsh-client-ui-conversation',
+  '@deepseek-ai/dsh-client-ui-input-trigger',
+  '@deepseek-ai/dsh-client-ui-workspace',
 ]
 
 export default defineConfig([

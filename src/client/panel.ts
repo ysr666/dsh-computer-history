@@ -3,6 +3,7 @@ import type {
   EpisodeDetail,
   EpisodeSummary,
   PolicySnapshot,
+  ResumeHandoff,
   ResumeOpenCapability,
   ResumeResolution,
   SemanticSummaryState,
@@ -15,10 +16,13 @@ import { localDayKey, TIMELINE_ACTIVITY_MERGE_GAP_MS } from '../shared/audit-vie
 import { historyApi } from './api.js'
 import { appIcon } from './app-icon.js'
 import {
+  continuationResourceUri,
+  continuationSubject,
   episodeApp,
   episodeSubject,
   friendlyAppName,
   isHomeDirectoryResource,
+  pickContinuationEpisode,
 } from './episode-subject.js'
 import {
   captureLabel,
@@ -36,6 +40,7 @@ import {
 
 interface PanelFactoryOptions {
   readonly getActiveLocale: () => string
+  readonly continueInDsh: (episode: EpisodeSummary) => Promise<void>
   readonly store: HistoryControlStore
 }
 
@@ -112,10 +117,6 @@ function episodeMeta(
   const subject = episodeSubject(t, episode)
   if (app === 'Terminal' && label === t('homeDirectory')) return label
   return label && label != subject ? `${app} · ${label}` : app
-}
-
-function resumeResourceUri(episode: EpisodeSummary): string | undefined {
-  return (episode.lastStrongResource ?? episode.resources[0])?.canonicalUri
 }
 
 function resumeSubject(episode: EpisodeSummary): string | undefined {
@@ -262,6 +263,7 @@ function formatDayDate(dayKey: string, locale: string): string {
 
 export function createHistoryPage({
   getActiveLocale,
+  continueInDsh,
   store,
 }: PanelFactoryOptions): (props: PanelComponentProps) => React.ReactElement {
   return function HistoryPage({ t }: PanelComponentProps): React.ReactElement {
@@ -272,6 +274,7 @@ export function createHistoryPage({
     )
     const { state, policy } = controls
     const [hasAnyEpisode, setHasAnyEpisode] = React.useState<boolean | null>()
+    const [recentEpisodes, setRecentEpisodes] = React.useState<readonly EpisodeSummary[] | null>()
     const [latestEpisode, setLatestEpisode] = React.useState<EpisodeSummary | null>()
     const [accessibilitySettingsAvailable, setAccessibilitySettingsAvailable] = React.useState(false)
     const [awaitingAccessibility, setAwaitingAccessibility] = React.useState(false)
@@ -283,8 +286,10 @@ export function createHistoryPage({
     const [threadDetailError, setThreadDetailError] = React.useState<string>()
     const [resumeQuery, setResumeQuery] = React.useState('')
     const [hint, setHint] = React.useState<ResumeResolution>()
+    const [resumeHandoff, setResumeHandoff] = React.useState<ResumeHandoff | null>()
     const [resumeOpenCapability, setResumeOpenCapability] = React.useState<ResumeOpenCapability>()
     const [resumeOpenPending, setResumeOpenPending] = React.useState(false)
+    const [continueDshPending, setContinueDshPending] = React.useState(false)
     const [semantic, setSemantic] = React.useState<SemanticSummaryState | null>()
     const [timeline, setTimeline] = React.useState<readonly TimelineDay[] | null>()
     const [timelineDays, setTimelineDays] = React.useState(7)
@@ -309,7 +314,7 @@ export function createHistoryPage({
       const timelineRequest = timelineRequests.current.begin()
       setTimelineMorePending(false)
       const results = await Promise.allSettled([
-        historyApi.getRecent(1),
+        historyApi.getRecent(8),
         historyApi.getThreads(20),
         historyApi.getSemanticState(),
         historyApi.getTimeline(8),
@@ -318,6 +323,9 @@ export function createHistoryPage({
       if (!contentRequests.current.isCurrent(request)) return
       setHasAnyEpisode(recentResult.status === 'fulfilled'
         ? recentResult.value.length > 0
+        : null)
+      setRecentEpisodes(recentResult.status === 'fulfilled'
+        ? recentResult.value
         : null)
       setLatestEpisode(recentResult.status === 'fulfilled'
         ? recentResult.value[0] ?? null
@@ -380,6 +388,7 @@ export function createHistoryPage({
       setThreadDetailPendingKey(undefined)
       setThreadDetailError(undefined)
       setHint(undefined)
+      setResumeHandoff(undefined)
       setPreview(undefined)
       void refreshContent()
     }, [controls.historyRevision, refreshContent])
@@ -440,6 +449,18 @@ export function createHistoryPage({
       const request = hintRequests.current.begin()
       const result = await historyApi.resolveResume(resumeQuery)
       if (hintRequests.current.isCurrent(request)) setHint(result)
+    }
+
+    const continueInDshWork = async (episode: EpisodeSummary): Promise<void> => {
+      setActionError(undefined)
+      setContinueDshPending(true)
+      try {
+        await continueInDsh(episode)
+      } catch (cause) {
+        setActionError(failureText(t, cause))
+      } finally {
+        setContinueDshPending(false)
+      }
     }
 
     const continueRecordedWork = async (
@@ -690,9 +711,34 @@ export function createHistoryPage({
     const todayDurationText = todayDay && todayDay.activities.some(activity => activity.episodeCount > 1)
       ? t('approxDuration', { duration: formatDuration(t, todayDuration) })
       : formatDuration(t, todayDuration)
-    const recentEpisode = timeline && timeline !== null
-      ? timeline.flatMap(day => day.episodes).find(episode => resumeSubject(episode) !== undefined)
+    const recentEpisode = recentEpisodes && recentEpisodes !== null
+      ? pickContinuationEpisode(recentEpisodes)
       : undefined
+    React.useEffect(() => {
+      if (!recentEpisode) {
+        setResumeHandoff(undefined)
+        return
+      }
+      let active = true
+      setResumeHandoff(undefined)
+      void historyApi.getResumeHandoff(String(recentEpisode.id))
+        .then(handoff => { if (active) setResumeHandoff(handoff) })
+        .catch(() => { if (active) setResumeHandoff(null) })
+      return () => { active = false }
+    }, [recentEpisode?.id, recentEpisode?.endedAtMs])
+
+    React.useEffect(() => {
+      const refreshContinuationOnFocus = (): void => {
+        void refreshContent()
+        if (!recentEpisode) return
+        void historyApi.getResumeHandoff(String(recentEpisode.id))
+          .then(setResumeHandoff)
+          .catch(() => { setResumeHandoff(null) })
+      }
+      window.addEventListener('focus', refreshContinuationOnFocus)
+      return () => { window.removeEventListener('focus', refreshContinuationOnFocus) }
+    }, [recentEpisode?.id, refreshContent])
+
     const selectedRawEpisodes = selectedActivity && timeline
       ? (() => {
           const ids = new Set(selectedActivity.episodeIds.map(String))
@@ -929,6 +975,26 @@ export function createHistoryPage({
       }, t('resumeFind')),
     )
 
+    const handoffHit = resumeHandoff?.status === 'hit' ? resumeHandoff : undefined
+    const continueSubject = handoffHit?.workspace?.title?.trim()
+      ?? (recentEpisode ? continuationSubject(recentEpisode) : undefined)
+      ?? (recentEpisode ? episodeSubject(t, recentEpisode) : undefined)
+    const continueResource = handoffHit?.lastActiveResource?.displayLabel
+      ?? recentEpisode?.lastStrongResource?.displayLabel
+      ?? recentEpisode?.resources[0]?.displayLabel
+    const continueMeta = recentEpisode
+      ? continueResource && continueResource !== continueSubject
+        ? t('resumeRecentMetaResource', {
+            when: formatRelativeAge(t, recentEpisode.endedAtMs),
+            app: episodeApp(recentEpisode),
+            resource: continueResource,
+          })
+        : t('resumeRecentMeta', {
+            when: formatRelativeAge(t, recentEpisode.endedAtMs),
+            app: episodeApp(recentEpisode),
+          })
+      : undefined
+
     const resumeSection = section(
       t('resume'),
       React.createElement(
@@ -939,25 +1005,32 @@ export function createHistoryPage({
               appIcon(recentEpisode.surfaces[0]?.bundleId, episodeApp(recentEpisode)),
               React.createElement(
                 'span', { className: 'ch-resume-copy' },
-                React.createElement('span', { className: 'ch-resume-title' }, resumeSubject(recentEpisode) ?? episodeSubject(t, recentEpisode)),
+                React.createElement('span', { className: 'ch-resume-title' },
+                  continueSubject ?? resumeSubject(recentEpisode) ?? episodeSubject(t, recentEpisode)),
                 React.createElement('span', { className: 'ch-resume-meta' },
-                  t('resumeRecentMeta', {
+                  continueMeta ?? t('resumeRecentMeta', {
                     when: formatRelativeAge(t, recentEpisode.endedAtMs),
                     app: episodeApp(recentEpisode),
                   })),
               ),
+              React.createElement('button', {
+                type: 'button',
+                className: 'ch-button ch-resume-open',
+                disabled: continueDshPending,
+                onClick: () => { void continueInDshWork(recentEpisode) },
+              }, continueDshPending ? t('continuingWork') : t('continueWork')),
               resumeOpenCapability?.available
                 ? React.createElement('button', {
                     type: 'button',
-                    className: 'ch-button ch-resume-open ch-resume-open-primary',
+                    className: 'ch-button',
                     disabled: resumeOpenPending,
                     onClick: () => {
                       void continueRecordedWork(
                         recentEpisode,
-                        resumeResourceUri(recentEpisode),
+                        continuationResourceUri(recentEpisode, resumeHandoff),
                       )
                     },
-                  }, resumeOpenPending ? t('openingWork') : t('continueWork'))
+                  }, resumeOpenPending ? t('openingApp') : t('openInApp'))
                 : null,
             )
           : null,

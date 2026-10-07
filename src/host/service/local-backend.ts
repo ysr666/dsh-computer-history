@@ -1,4 +1,5 @@
 import type {
+  BindContinuationSessionRequest,
   CompanionKind,
   PairingRotation,
   PairingState,
@@ -57,6 +58,7 @@ import { DeletionService } from '../retention/index.js'
 import { ObservationStore } from '../store/observation-store.js'
 import { RetentionSettingsStore } from '../store/retention-settings.js'
 import {
+  ContinuationSessionStore,
   DshCheckpointStore,
   EpisodeStore,
   PolicyStore,
@@ -260,6 +262,46 @@ implements ComputerHistoryServiceContract {
     readonly atOrBeforeMs: number
   }): DshCheckpoint | undefined {
     return new DshCheckpointStore(this.requireDb()).latestForWorkspace(request)
+  }
+
+  public bindContinuationSession(
+    request: BindContinuationSessionRequest,
+  ): void {
+    if (
+      request.sessionId.length < 1
+      || request.sessionId.length > 512
+      || String(request.episodeId).length < 1
+      || String(request.episodeId).length > 1_000
+    ) {
+      throw new Error('invalid continuation session binding')
+    }
+    if (!this.episodes.get(request.episodeId)) {
+      throw new Error('continuation episode not found')
+    }
+    const nowMs = this.now()
+    const expiresAtMs = nowMs
+      + this.config.episodeRetentionDays * 86_400_000
+    new ContinuationSessionStore(this.requireDb()).bind(
+      request,
+      nowMs,
+      expiresAtMs,
+    )
+  }
+
+  public continuationEpisodeForSession(
+    sessionId: string,
+  ): EpisodeId | undefined {
+    if (sessionId.length < 1 || sessionId.length > 512) return undefined
+    return new ContinuationSessionStore(this.requireDb())
+      .episodeForSession(sessionId, this.now())
+  }
+
+  public unbindContinuationSession(
+    sessionId: string,
+  ): boolean {
+    if (sessionId.length < 1 || sessionId.length > 512) return false
+    return new ContinuationSessionStore(this.requireDb())
+      .deleteSession(sessionId)
   }
 
   public async delete(

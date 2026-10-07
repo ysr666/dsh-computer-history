@@ -25,6 +25,7 @@ export const EXPORTED_TABLES = [
   'dsh_checkpoints',
   'observations',
   'episodes',
+  'continuation_sessions',
   'episode_observations',
   'episode_resources',
   'episode_surfaces',

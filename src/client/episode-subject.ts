@@ -1,4 +1,4 @@
-import { isGenericContinuationCandidate, type EpisodeSummary, type SurfaceKind, type TimelineActivity } from '../shared/index.js'
+import { isGenericContinuationCandidate, type EpisodeSummary, type ResumeHandoff, type SurfaceKind, type TimelineActivity } from '../shared/index.js'
 import type { HistoryTranslate } from './locale.js'
 
 /**
@@ -69,6 +69,16 @@ export function pickContinuationEpisode(
     isGenericContinuationCandidate(episode)
     && continuationSubject(episode) !== undefined,
   )
+}
+
+export function continuationResourceUri(
+  episode: Pick<EpisodeSummary, 'lastStrongResource' | 'resources'>,
+  handoff?: ResumeHandoff | null,
+): string | undefined {
+  if (handoff?.status === 'hit' && handoff.lastActiveResource?.canonicalUri) {
+    return handoff.lastActiveResource.canonicalUri
+  }
+  return (episode.lastStrongResource ?? episode.resources[0])?.canonicalUri
 }
 
 export function isHomeDirectoryResource(

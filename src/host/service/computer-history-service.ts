@@ -3,6 +3,7 @@ import {
   type Context,
 } from '@deepseek-ai/cordis'
 import type {
+  BindContinuationSessionRequest,
   CompanionKind,
   ComputerHistoryServiceContract,
   ComputerHistoryState,
@@ -95,6 +96,24 @@ export class ComputerHistoryService
     readonly atOrBeforeMs: number
   }): DshCheckpoint | undefined {
     return this.backend.latestDshCheckpoint(request)
+  }
+
+  public bindContinuationSession(
+    request: BindContinuationSessionRequest,
+  ): void {
+    this.backend.bindContinuationSession(request)
+  }
+
+  public continuationEpisodeForSession(
+    sessionId: string,
+  ): EpisodeId | undefined {
+    return this.backend.continuationEpisodeForSession(sessionId)
+  }
+
+  public unbindContinuationSession(
+    sessionId: string,
+  ): boolean {
+    return this.backend.unbindContinuationSession(sessionId)
   }
 
   public delete(

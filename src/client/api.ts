@@ -1,6 +1,7 @@
 import type {
   AccessibilitySettingsCapability,
   AccessibilitySettingsOpenResult,
+  BindContinuationSessionRequest,
   BrowserCompanionSetup,
   ComputerHistoryState,
   DeleteHistoryRequest,
@@ -14,6 +15,7 @@ import type {
   PairingRotation,
   PolicySnapshot,
   PolicyUpdate,
+  ResumeHandoff,
   ResumeOpenCapability,
   ResumeOpenRequest,
   ResumeOpenResult,
@@ -145,6 +147,16 @@ export const historyApi = {
       nowMs: Date.now(),
       turn: 1,
     }),
+  getResumeHandoff: (episodeId: string): Promise<ResumeHandoff> =>
+    requestJson(`/resume/handoff?id=${encodeURIComponent(episodeId)}`),
+  bindContinuationSession: (
+    request: BindContinuationSessionRequest,
+  ): Promise<{ readonly bound: true }> =>
+    postJson('/resume/continue-session', request),
+  unbindContinuationSession: (
+    sessionId: string,
+  ): Promise<{ readonly unbound: boolean }> =>
+    postJson('/resume/continue-session/unbind', { sessionId }),
   getResumeOpenCapability: (): Promise<ResumeOpenCapability> =>
     requestJson('/resume/open'),
   openResume: (request: ResumeOpenRequest): Promise<ResumeOpenResult> =>
