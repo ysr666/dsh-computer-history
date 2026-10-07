@@ -712,16 +712,6 @@ export function createHistoryPage({
     const selectedActivityDetail = selectedActivity && selected
       ? React.createElement(
           'div', { className: 'ch-detail ch-timeline-detail' },
-          selectedActivity.episodeCount > 1
-            ? React.createElement(
-                'details', { className: 'ch-inspector' },
-                React.createElement('summary', null, t('activityGroupingTitle')),
-                React.createElement('p', { className: 'ch-muted' },
-                  t('activityGroupingBody', {
-                    minutes: TIMELINE_ACTIVITY_MERGE_GAP_MS / 60_000,
-                  })),
-              )
-            : null,
           React.createElement('p', { className: 'ch-detail-resource' },
             selectedActivity.resources.length > 0
               ? t('resources', {
@@ -732,6 +722,16 @@ export function createHistoryPage({
               : t('noResourceApps', {
                   apps: selectedActivity.surfaces.map(item => friendlyAppName(item.bundleId)).join(', '),
                 })),
+          selectedActivity.episodeCount > 1
+            ? React.createElement(
+                'details', { className: 'ch-inspector' },
+                React.createElement('summary', null, t('activityGroupingTitle')),
+                React.createElement('p', { className: 'ch-muted' },
+                  t('activityGroupingBody', {
+                    minutes: TIMELINE_ACTIVITY_MERGE_GAP_MS / 60_000,
+                  })),
+              )
+            : null,
           selectedActivity.episodeCount > 1
             ? React.createElement(
                 'details', { className: 'ch-inspector' },
