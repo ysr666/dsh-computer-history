@@ -51,10 +51,10 @@ jobs:
         shell: pwsh
         run: pnpm vitest run tests/integration/application-icon-windows-live.spec.ts
 
-      - name: Build Windows collector and UIA probe
+      - name: Build packaged Windows collector and UIA probe
         shell: pwsh
         run: |
-          cargo build --release --manifest-path native/windows/Cargo.toml
+          pnpm native:build
           cargo build --release --example anchor_probe --manifest-path native/windows/Cargo.toml
 
       - name: Probe the hosted runner's interactive desktop and collect a real Notepad observation
@@ -130,7 +130,7 @@ jobs:
           [void][DchUser32]::SetForegroundWindow($notepad.MainWindowHandle)
           Start-Sleep -Milliseconds 500
 
-          $exe = (Resolve-Path 'native/windows/target/release/dsh-computer-history-collector-windows.exe').Path
+          $exe = (Resolve-Path 'bin/dsh-computer-history-collector-windows.exe').Path
           $configure = '{"v":1,"type":"configure","revision":7,"policy":{"mode":"include-only","allowedBundleIds":["Notepad.exe"],"blockedBundleIds":[],"protectedBundleIds":[],"protectedPathPatterns":[]}}'
           Write-Host '--- collector stdout ---'
           $collector = $configure | & $exe 2>&1
@@ -191,8 +191,9 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Could not install DSH 0.2.0-rc.2 CLI.' }
           $env:Path = (Join-Path $cliRoot 'node_modules\.bin') + ';' + $env:Path
 
-          $collector = (Resolve-Path 'native/windows/target/release/dsh-computer-history-collector-windows.exe').Path
-          $env:COLLECTOR_EXECUTABLE = $collector
+          # Do not pass collectorExecutable: this is the packaged-install contract.
+          # The installed Host must select bin/dsh-computer-history-collector-windows.exe itself.
+          $env:DSH_E2E_REQUIRE_PACKAGED_COLLECTOR = '1'
           $env:DSH_E2E_ALLOW_BUNDLES = 'Notepad.exe'
           $env:DSH_E2E_EXPECT_ACTIVITY = '1'
           $env:DSH_E2E_EXPECT_PROVIDER = 'windows-uia'
