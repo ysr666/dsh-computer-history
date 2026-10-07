@@ -124,6 +124,10 @@ jobs:
           echo "packed $tarball"
           tar -tzf "$tarball" | grep 'package/bin/dsh-computer-history-collector'
           tar -tzf "$tarball" | grep 'package/bin/collector-artifacts.json'
+          rm -rf release-check
+          mkdir -p release-check
+          tar -xzf "$tarball" -C release-check
+          node scripts/collector-artifacts.mjs verify release-check/package "$GITHUB_SHA"
 
       - name: Scan for release blockers
         if: startsWith(github.ref, 'refs/tags/v')
