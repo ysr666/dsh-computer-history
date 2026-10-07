@@ -112,7 +112,7 @@ jobs:
         env:
           EXPECTED_NATIVE_BINARY: ${{ matrix.binary }}
         run: node -e "const fs=require('node:fs');const p=process.env.EXPECTED_NATIVE_BINARY;if(!fs.existsSync(p)){throw new Error('missing '+p)};console.log(p,fs.statSync(p).size+' bytes')"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.binary }}
@@ -136,15 +136,15 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm install --frozen-lockfile
         working-directory: extension-editor
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: native-darwin
           path: bin
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: native-win32
           path: bin
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: native-linux
           path: bin
@@ -158,7 +158,7 @@ jobs:
         run: |
           tarball=$(ls /tmp/dsh-computer-history-*.tgz | head -1)
           DSH_RELEASE_TARBALL="$tarball" node scripts/verify-native-package.mjs
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: assembled-plugin
           path: /tmp/dsh-computer-history-*.tgz
@@ -183,7 +183,7 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22.19.0
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: assembled-plugin
           path: ${{ runner.temp }}/assembled-plugin
