@@ -496,6 +496,20 @@ export function createHistoryPage({
       }
     }
 
+    const toggleThreadDisclosure = (): void => {
+      if (showAllThreads && threads) {
+        const visibleKeys = new Set(threads.slice(0, 6).map(thread => thread.threadKey))
+        const openKey = threadDetail?.thread.threadKey ?? threadDetailPendingKey
+        if (openKey && !visibleKeys.has(openKey)) {
+          threadRequests.current.invalidate()
+          setThreadDetail(undefined)
+          setThreadDetailPendingKey(undefined)
+          setThreadDetailError(undefined)
+        }
+      }
+      setShowAllThreads(current => !current)
+    }
+
     const startRecording = async (): Promise<void> => {
       const preset = state?.firstRunPreset
       if (!preset || !policy) return
@@ -1102,7 +1116,8 @@ export function createHistoryPage({
                         ),
                       ),
                       React.createElement('span', { className: 'ch-thread-meta' },
-                        t('threadActivityMeta', {
+                        t('threadRecentMeta', {
+                          when: formatRelativeAge(t, thread.endedAtMs),
                           activities: thread.activityCount,
                           duration: t('approxDuration', {
                             duration: formatDuration(t, thread.approxActiveDurationMs),
@@ -1119,7 +1134,7 @@ export function createHistoryPage({
             React.createElement('button', {
               type: 'button',
               className: 'ch-text-action',
-              onClick: () => { setShowAllThreads(current => !current) },
+              onClick: toggleThreadDisclosure,
             }, showAllThreads
               ? t('showFewerThreads')
               : t('showMoreThreads', { count: threads.length - 6 })),
