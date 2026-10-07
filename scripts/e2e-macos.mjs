@@ -64,11 +64,14 @@ mkdirSync(artifacts, { recursive: true })
 // single literal replacement attempted only after a failure; measured 2026-08-06 against the current CLI on a
 // fresh profile, both attempts failed because the file only exists after the first attempt. This sets every
 // placeholder to false - a rule, not one literal - and runs before the first attempt and again after a failure.
-const allowBuildsOff = (workspace) => {
+const allowBuildsOff = (workspace, { seedKoffi = false } = {}) => {
   try {
     if (!existsSync(workspace)) return false
     const text = readFileSync(workspace, 'utf8')
-    const fixed = text.replace(/^(\s+[^\s:]+:\s*)set this to true or false\s*$/gm, '$1false')
+    let fixed = text.replace(/^(\s+[^\s:]+:\s*)set this to true or false\s*$/gm, '$1false')
+    if (seedKoffi && !/^allowBuilds:\s*$/m.test(fixed)) {
+      fixed = `${fixed.trimEnd()}\nallowBuilds:\n  koffi: false\n`
+    }
     if (fixed === text) return false
     writeFileSync(workspace, fixed)
     return true
@@ -98,7 +101,13 @@ const run = (command, args, options = {}) => {
   const result = shim
     ? spawnSync(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', [command, ...args].map(quoteForCmd).join(' ')], { encoding: 'utf8', ...options, windowsVerbatimArguments: true })
     : spawnSync(command, args, { encoding: 'utf8', ...options })
-  return { status: result.status ?? 1, out: `${result.stdout ?? ''}${result.stderr ?? ''}` }
+  const errorText = result.error
+    ? `\nspawn error: ${result.error.code ?? result.error.name}: ${result.error.message}`
+    : ''
+  return {
+    status: result.status ?? 1,
+    out: `${result.stdout ?? ''}${result.stderr ?? ''}${errorText}`,
+  }
 }
 
 const version = run(cli, ['--version'])
@@ -146,19 +155,40 @@ try {
     if (packed.status !== 0) throw new Error('pack failed')
   }
 
-  // 2. Install into the throwaway home. The first add stops at the build-script gate, which is answered the same
-  // way a person would answer it in the UI; the retry then succeeds.
+  // 2. Initialize the throwaway profile before the first install, then make the build-script decision explicit.
+  // The old harness relied on the first web-app install failing so the CLI would create pnpm-workspace.yaml, then
+  // patched the generated koffi placeholder and retried. On the 2026-10-07 packaged-alpha run the first add
+  // returned promptly on Windows but never returned on the macOS/Linux runners, so the outer transport guard
+  // killed the whole job after 300 seconds without a useful diagnostic. plugin list creates the empty profile
+  // without changing dependencies; seed the known koffi decision before the first add, retain the placeholder
+  // fixer for future dependencies, and bound each add itself.
   const env = { ...process.env, DSH_HOME: home }
+  const initialized = run(cli, ['plugin', '--profile', profile, 'list'], {
+    env,
+    timeout: 30_000,
+  })
+  record(
+    'initialize profile',
+    initialized.status === 0,
+    initialized.status === 0 ? 'exit 0' : initialized.out.trim().slice(-400),
+  )
+  if (initialized.status !== 0) throw new Error('profile initialization failed')
+
+  const workspace = path.join(home, 'profiles', profile, 'pnpm-workspace.yaml')
+  allowBuildsOff(workspace, { seedKoffi: true })
+
   for (const spec of ['@deepseek-ai/dsh-web-app@0.2.0-rc.2', tarball]) {
-    allowBuildsOff(path.join(home, 'profiles', profile, 'pnpm-workspace.yaml'))
-    let added = run(cli, ['plugin', '--profile', profile, 'add', spec], { env })
+    allowBuildsOff(workspace)
+    let added = run(cli, ['plugin', '--profile', profile, 'add', spec], {
+      env,
+      timeout: 90_000,
+    })
     if (added.status !== 0) {
-      const workspace = path.join(home, 'profiles', profile, 'pnpm-workspace.yaml')
-      try {
-        allowBuildsOff(workspace)
-      } catch { /* the gate file may not be there; the retry reports it */ }
-      allowBuildsOff(path.join(home, 'profiles', profile, 'pnpm-workspace.yaml'))
-      added = run(cli, ['plugin', '--profile', profile, 'add', spec], { env })
+      allowBuildsOff(workspace)
+      added = run(cli, ['plugin', '--profile', profile, 'add', spec], {
+        env,
+        timeout: 90_000,
+      })
     }
     const label = spec === tarball ? 'install plugin' : 'install web app'
     // Show the CLI's own diagnostics path and the tail of its pnpm log, not a 160-character truncation: when the
