@@ -485,9 +485,10 @@ implements ComputerHistoryServiceContract {
   }
 
   /**
-   * "Turn off and purge" (ADR 0004, Consequences): the permission goes, and so
-   * does every derived summary of that scope that a model produced. The
-   * deterministic text is not touched, because it never left the machine.
+   * "Turn off and purge" (ADR 0004, Consequences): the permission goes and
+   * every model-written summary in that scope is replaced by the deterministic
+   * local projection. The Episode itself remains work history: its identity,
+   * thread, workspace, resources, surfaces and provenance are not deleted.
    */
   public revokeSemanticOptIn(request: {
     readonly scopeKey: string
