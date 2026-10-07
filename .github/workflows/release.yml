@@ -22,11 +22,58 @@ permissions:
   contents: write
 
 jobs:
-  release:
-    runs-on: macos-14
+  native:
+    name: build release collector on ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            platform: darwin
+            binary: bin/dsh-computer-history-collector
+            metadata: bin/native-artifact-darwin.json
+          - os: windows-latest
+            platform: win32
+            binary: bin/dsh-computer-history-collector-windows.exe
+            metadata: bin/native-artifact-win32.json
+          - os: ubuntu-latest
+            platform: linux
+            binary: bin/dsh-computer-history-collector-linux
+            metadata: bin/native-artifact-linux.json
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22.19.0
+      - name: Build native collector on its target OS
+        run: node scripts/build-native.mjs
+      - name: Record runner-side SHA-256 provenance
+        run: node scripts/write-native-artifact-metadata.mjs
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: native-${{ matrix.platform }}
+          path: |
+            ${{ matrix.binary }}
+            ${{ matrix.metadata }}
+          if-no-files-found: error
+          retention-days: 7
+
+  assemble:
+    name: assemble release tarball
+    needs: native
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 11.7.0
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22.19.0
@@ -34,19 +81,94 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
       - run: pnpm verify
-      - run: pnpm native:build
       - run: pnpm install --frozen-lockfile
         working-directory: extension-editor
-      - run: pnpm pack --pack-destination /tmp
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: native-darwin
+          path: bin
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: native-win32
+          path: bin
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: native-linux
+          path: bin
+      - name: Verify native runner artifacts and write combined provenance
+        run: node scripts/assemble-native-artifacts.mjs
+      - name: Pack exactly those staged native artifacts
+        run: |
+          mkdir -p package-out
+          DSH_NATIVE_PREBUILT=1 pnpm pack --pack-destination package-out
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-package
+          path: package-out/*.tgz
+          if-no-files-found: error
+          retention-days: 7
+
+  packaged-install:
+    name: clean packaged install on ${{ matrix.os }}
+    needs: assemble
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, windows-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22.19.0
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: release-package
+          path: package-out
+      - name: Install supported DSH CLI
+        run: |
+          node -e "const cp=require('node:child_process'),fs=require('node:fs'),os=require('node:os'),path=require('node:path'); const root=path.join(process.env.RUNNER_TEMP,'dsh-cli'); const npm=process.platform==='win32'?'npm.cmd':'npm'; cp.execFileSync(npm,['install','--prefix',root,'@deepseek-ai/dsh@0.2.0-rc.2'],{stdio:'inherit'}); fs.appendFileSync(process.env.GITHUB_PATH,path.join(root,'node_modules','.bin')+os.EOL)"
+      - name: Locate the exact assembled release package
+        run: |
+          node -e "const fs=require('node:fs'),os=require('node:os'),path=require('node:path'); const dir='package-out'; const name=fs.readdirSync(dir).find(x=>x.endsWith('.tgz')); if(!name) process.exit(2); fs.appendFileSync(process.env.GITHUB_ENV,'DSH_RELEASE_TARBALL='+path.resolve(dir,name)+os.EOL)"
+      - name: Clean install must launch the packaged platform collector
+        env:
+          DSH_E2E_REQUIRE_PACKAGED_COLLECTOR: '1'
+        run: node scripts/e2e-macos.mjs
+
+  publish:
+    name: verify and publish release
+    needs: [assemble, packaged-install]
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22.19.0
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: release-package
+          path: package-out
 
       - name: Scan for release blockers
         env:
           GH_TOKEN: ${{ github.token }}
         run: pnpm verify:release:blockers
 
-      - name: Verify the release
+      - name: Verify the exact release tarball
         run: |
-          tarball=$(ls /tmp/dsh-computer-history-*.tgz | head -1)
+          tarball=$(ls package-out/dsh-computer-history-*.tgz | head -1)
           echo "verifying $tarball"
           DSH_RELEASE_TARBALL="$tarball" pnpm verify:release
 
@@ -54,9 +176,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # The notes are the changelog section for this version, which the preflight has just proved exists.
           version="${GITHUB_REF_NAME#v}"
           awk -v v="$version" '$0 == "## " v {found=1; next} /^## / {found=0} found' CHANGELOG.md > /tmp/notes.md
           test -s /tmp/notes.md || { echo "no changelog section for $version"; exit 1; }
-          gh release create "$GITHUB_REF_NAME" /tmp/dsh-computer-history-*.tgz \
+          gh release create "$GITHUB_REF_NAME" package-out/dsh-computer-history-*.tgz \
             --title "$GITHUB_REF_NAME" --notes-file /tmp/notes.md
