@@ -11,11 +11,13 @@ import {
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
-const tarball = process.env.DSH_RELEASE_TARBALL
+const tarball =
+  process.env.DSH_RELEASE_TARBALL
+  ?? process.env.DSH_E2E_TARBALL
   ?? process.argv[2]
 if (!tarball) {
   console.error(
-    'DSH_RELEASE_TARBALL or a tarball path argument is required',
+    'DSH_RELEASE_TARBALL, DSH_E2E_TARBALL, or a tarball path argument is required',
   )
   process.exit(2)
 }
