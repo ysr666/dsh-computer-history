@@ -11,6 +11,7 @@ import {
 } from 'vitest'
 import {
   name,
+  packagedCollectorFilename,
   resolveHistoryDataDirectory,
 } from '../src/index.js'
 import {
@@ -52,6 +53,13 @@ afterEach(() => {
 describe('repository scaffold', () => {
   it('exports the plugin identity', () => {
     expect(name).toBe('dsh-computer-history')
+  })
+
+  it('selects the packaged native collector by runtime platform', () => {
+    expect(packagedCollectorFilename('darwin')).toBe('dsh-computer-history-collector')
+    expect(packagedCollectorFilename('win32')).toBe('dsh-computer-history-collector-windows.exe')
+    expect(packagedCollectorFilename('linux')).toBe('dsh-computer-history-collector-linux')
+    expect(() => packagedCollectorFilename('freebsd')).toThrow(/no packaged collector/)
   })
 
   it('keeps default history under DSH_HOME', () => {
