@@ -9,6 +9,7 @@ import {
   editorCompanionBootstrapPath,
   rotateAndStageEditorCompanionBootstrap,
   stageEditorCompanionBootstrap,
+  withEditorCompanionPublicationLock,
 } from '../../src/host/companion/editor-bootstrap.js'
 
 const roots: string[] = []
@@ -98,6 +99,70 @@ describe('editor companion bootstrap', () => {
       'SELECT COUNT(*) AS n FROM companion_pairing WHERE kind = ?',
     ).get('editor')).toEqual({ n: 0 })
     history.close()
+  })
+
+  it('serializes successful publishers so the final file token matches shared SQLite', async () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'dsh-editor-bootstrap-race-'))
+    roots.push(root)
+    const home = path.join(root, 'home')
+    const dataDirectory = path.join(root, 'history')
+    const firstDb = openHistoryDatabase({ dataDirectory, nowMs: 1 })
+    const secondDb = openHistoryDatabase({ dataDirectory, nowMs: 1 })
+    const firstTokens = new CompanionTokenStore(firstDb.db)
+    const secondTokens = new CompanionTokenStore(secondDb.db)
+
+    let releaseFirst!: () => void
+    const holdFirst = new Promise<void>(resolve => { releaseFirst = resolve })
+    let firstPublished!: () => void
+    const published = new Promise<void>(resolve => { firstPublished = resolve })
+    let secondEntered = false
+
+    const first = withEditorCompanionPublicationLock(async () => {
+      rotateAndStageEditorCompanionBootstrap({
+        tokens: firstTokens,
+        port: 19388,
+        nowMs: 1_000,
+        homeDirectory: home,
+      })
+      firstPublished()
+      await holdFirst
+    }, home)
+
+    await published
+    const second = withEditorCompanionPublicationLock(() => {
+      secondEntered = true
+      rotateAndStageEditorCompanionBootstrap({
+        tokens: secondTokens,
+        port: 19388,
+        nowMs: 2_000,
+        homeDirectory: home,
+      })
+    }, home)
+
+    // The second Host has started its request, but it cannot rotate SQLite or
+    // publish its file while the first Host still owns the publication lock.
+    await new Promise(resolve => setTimeout(resolve, 10))
+    expect(secondEntered).toBe(false)
+
+    releaseFirst()
+    await first
+    await second
+    expect(secondEntered).toBe(true)
+
+    const bootstrap = JSON.parse(
+      readFileSync(editorCompanionBootstrapPath(home), 'utf8'),
+    ) as { token: string; expiresAtMs: number }
+    expect(bootstrap.expiresAtMs).toBe(
+      2_000 + EDITOR_BOOTSTRAP_TTL_MS,
+    )
+
+    // Both independent Host caches converge on the durable winner, and that
+    // winner is exactly the cleartext token the editor will consume.
+    expect(firstTokens.verify('editor', bootstrap.token)).toBe(true)
+    expect(secondTokens.verify('editor', bootstrap.token)).toBe(true)
+
+    firstDb.close()
+    secondDb.close()
   })
 
   it('refuses invalid ports and implausibly short credentials', () => {
