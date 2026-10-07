@@ -69,7 +69,12 @@ function exclusionReason(
   if (PROTECTED_BUNDLES.has(observation.app.bundleId)) {
     return 'the application is protected by a built-in rule'
   }
-  if (!policyAllows(observation.app.bundleId, observation.resource, policy)) {
+  if (!policyAllows(
+    observation.app.bundleId,
+    observation.resource,
+    policy,
+    { caseInsensitiveAppId: observation.source.provider === 'windows-uia' },
+  )) {
     return 'the policy does not allow this application or resource'
   }
   if (isProtectedWorkspace(observation.workspace, policy)) {
