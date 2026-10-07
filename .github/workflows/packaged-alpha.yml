@@ -1,0 +1,172 @@
+name: Packaged alpha matrix
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/packaged-alpha.yml'
+      - 'native/**'
+      - 'src/host/plugin.ts'
+      - 'scripts/build-native.mjs'
+      - 'scripts/write-native-manifest.mjs'
+      - 'scripts/verify-native-package.mjs'
+      - 'scripts/e2e-collector-transport.mjs'
+      - 'scripts/e2e-macos.mjs'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/packaged-alpha.yml'
+      - 'native/**'
+      - 'src/host/plugin.ts'
+      - 'scripts/build-native.mjs'
+      - 'scripts/write-native-manifest.mjs'
+      - 'scripts/verify-native-package.mjs'
+      - 'scripts/e2e-collector-transport.mjs'
+      - 'scripts/e2e-macos.mjs'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: packaged-alpha-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  native:
+    name: native artifact (${{ matrix.platform }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            platform: darwin
+            binary: bin/dsh-computer-history-collector
+          - os: windows-latest
+            platform: win32
+            binary: bin/dsh-computer-history-collector-windows.exe
+          - os: ubuntu-latest
+            platform: linux
+            binary: bin/dsh-computer-history-collector-linux
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22.19.0
+      - name: Build the native collector on its own platform
+        run: node scripts/build-native.mjs
+      - name: Record the runner source commit
+        env:
+          NATIVE_PLATFORM: ${{ matrix.platform }}
+        run: node -e "const fs=require('node:fs'); fs.writeFileSync('bin/source-'+process.env.NATIVE_PLATFORM+'.txt', process.env.GITHUB_SHA+'\n')"
+      - uses: actions/upload-artifact@2a0ecf19e8d0087dd2e5d1785dcf764811e79fae # v4
+        with:
+          name: native-${{ matrix.platform }}
+          path: |
+            ${{ matrix.binary }}
+            bin/source-${{ matrix.platform }}.txt
+          if-no-files-found: error
+          retention-days: 3
+
+  assemble:
+    name: assemble one three-platform tarball
+    needs: native
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22.19.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile
+        working-directory: extension-editor
+      - uses: actions/download-artifact@7fc4fb55c7d0c7b198b1c7466e1efd7c7d05fb26 # v4
+        with:
+          name: native-darwin
+          path: bin
+      - uses: actions/download-artifact@7fc4fb55c7d0c7b198b1c7466e1efd7c7d05fb26 # v4
+        with:
+          name: native-win32
+          path: bin
+      - uses: actions/download-artifact@7fc4fb55c7d0c7b198b1c7466e1efd7c7d05fb26 # v4
+        with:
+          name: native-linux
+          path: bin
+      - name: Prove all native jobs came from this commit
+        run: |
+          node - <<'NODE'
+          const fs = require('node:fs')
+          for (const platform of ['darwin', 'win32', 'linux']) {
+            const file = 'bin/source-' + platform + '.txt'
+            const actual = fs.readFileSync(file, 'utf8').trim()
+            if (actual !== process.env.GITHUB_SHA) {
+              throw new Error(platform + ' artifact came from ' + actual + ', expected ' + process.env.GITHUB_SHA)
+            }
+            fs.rmSync(file)
+          }
+          fs.chmodSync('bin/dsh-computer-history-collector', 0o755)
+          fs.chmodSync('bin/dsh-computer-history-collector-linux', 0o755)
+          NODE
+      - name: Record native hashes and provenance
+        run: pnpm native:manifest
+      - name: Pack without rebuilding native artifacts
+        env:
+          DSH_NATIVE_PREBUILT: '1'
+        run: |
+          mkdir -p "$RUNNER_TEMP/package"
+          pnpm pack --pack-destination "$RUNNER_TEMP/package"
+      - name: Verify the assembled native package
+        run: |
+          tarball=$(ls "$RUNNER_TEMP"/package/dsh-computer-history-*.tgz | head -1)
+          DSH_RELEASE_TARBALL="$tarball" node scripts/verify-native-package.mjs
+      - uses: actions/upload-artifact@2a0ecf19e8d0087dd2e5d1785dcf764811e79fae # v4
+        with:
+          name: three-platform-plugin
+          path: ${{ runner.temp }}/package/dsh-computer-history-*.tgz
+          if-no-files-found: error
+          retention-days: 3
+
+  install:
+    name: clean install + packaged collector (${{ matrix.os }})
+    needs: assemble
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, windows-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22.19.0
+      - uses: actions/download-artifact@7fc4fb55c7d0c7b198b1c7466e1efd7c7d05fb26 # v4
+        with:
+          name: three-platform-plugin
+          path: ${{ runner.temp }}/package
+      - name: Install the supported DSH CLI in an isolated tool directory
+        run: npm install --prefix "${{ runner.temp }}/dsh-cli" @deepseek-ai/dsh@0.2.0-rc.2
+      - name: Put the isolated DSH CLI on PATH
+        run: node -e "require('node:fs').appendFileSync(process.env.GITHUB_PATH, require('node:path').join(process.env.RUNNER_TEMP,'dsh-cli','node_modules','.bin')+'\n')"
+      - name: Locate the exact assembled tarball
+        run: node -e "const fs=require('node:fs'),p=require('node:path'); const d=p.join(process.env.RUNNER_TEMP,'package'); const f=fs.readdirSync(d).find(x=>x.endsWith('.tgz')); if(!f) throw new Error('tarball missing'); fs.appendFileSync(process.env.GITHUB_ENV,'DSH_E2E_TARBALL='+p.join(d,f)+'\n')"
+      - name: Verify packaged hashes on this platform
+        run: node scripts/verify-native-package.mjs
+      - name: Strict Host -> packaged collector transport, no executable override
+        run: pnpm e2e:collector-transport
