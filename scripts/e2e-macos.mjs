@@ -90,12 +90,31 @@ const spawnCmd = (command, args, options) => process.platform === 'win32'
 // `dsh` and `pnpm` are .cmd shims on Windows and Node refuses to spawn those without a shell; measured
 // 2026-10-06 on the Windows machine: direct spawn -> ENOENT, "<name>.cmd" -> EINVAL, cmd.exe /d /s /c -> exit 0.
 // On POSIX this is the same single spawnSync as before.
+const commandTimeoutMs = Math.max(
+  30_000,
+  Number(process.env.DSH_E2E_COMMAND_TIMEOUT_MS ?? 180_000),
+)
 const run = (command, args, options = {}) => {
   const shim = process.platform === 'win32' && ['dsh', 'pnpm', 'npx'].includes(command)
+  const spawnOptions = {
+    encoding: 'utf8',
+    timeout: commandTimeoutMs,
+    ...options,
+  }
   const result = shim
-    ? spawnSync(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', [command, ...args].map(quoteForCmd).join(' ')], { encoding: 'utf8', ...options, windowsVerbatimArguments: true })
-    : spawnSync(command, args, { encoding: 'utf8', ...options })
-  return { status: result.status ?? 1, out: `${result.stdout ?? ''}${result.stderr ?? ''}` }
+    ? spawnSync(
+        process.env.ComSpec ?? 'cmd.exe',
+        ['/d', '/s', '/c', [command, ...args].map(quoteForCmd).join(' ')],
+        { ...spawnOptions, windowsVerbatimArguments: true },
+      )
+    : spawnSync(command, args, spawnOptions)
+  const failure = result.error
+    ? `\nsubprocess error: ${result.error.message}`
+    : ''
+  return {
+    status: result.status ?? 1,
+    out: `${result.stdout ?? ''}${result.stderr ?? ''}${failure}`,
+  }
 }
 
 const version = run(cli, ['--version'])
@@ -148,6 +167,7 @@ try {
   // way a person would answer it in the UI; the retry then succeeds.
   const env = { ...process.env, DSH_HOME: home }
   for (const spec of ['@deepseek-ai/dsh-web-app@0.2.0-rc.2', tarball]) {
+    console.log(`  … installing ${spec === tarball ? 'plugin tarball' : spec}`)
     allowBuildsOff(path.join(home, 'profiles', profile, 'pnpm-workspace.yaml'))
     let added = run(cli, ['plugin', '--profile', profile, 'add', spec], { env })
     if (added.status !== 0) {
