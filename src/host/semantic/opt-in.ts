@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite'
+import { EpisodeId, type EpisodeId as EpisodeIdType } from '../../shared/index.js'
 import {
   scopeKey as toScopeKey,
   SummaryProviderError,
@@ -69,28 +70,36 @@ export class SemanticOptInStore {
   }
 
   /**
-   * Remove every model-written summary for this scope (ADR 0004, Consequences:
-   * "turn off and purge"). Deterministic text is left alone: it never left the
-   * machine, so there is nothing to purge.
+   * Identify model-written Episode summaries for one scope.
+   *
+   * "Turn off and purge" removes the model output, not the underlying work
+   * history. The backend owns the EpisodeStore and can therefore replace each
+   * model summary with a freshly rendered deterministic summary while keeping
+   * workspace/resource/surface/provenance rows intact.
    */
-  public purge(scope: SummaryScope): number {
-    if (scope.kind === 'workspace') {
-      const result = this.db.prepare(`
-        DELETE FROM episodes
-        WHERE summary_kind <> 'deterministic' AND primary_workspace_id = ?
-      `).run(scope.id)
-      return Number(result.changes)
-    }
-    const result = this.db.prepare(`
-      DELETE FROM episodes
-      WHERE summary_kind <> 'deterministic'
-        AND id IN (
-          SELECT DISTINCT es.episode_id
-          FROM episode_surfaces es
-          WHERE es.bundle_id = ?
-        )
-    `).run(scope.bundleId)
-    return Number(result.changes)
+  public modelEpisodeIds(scope: SummaryScope): readonly EpisodeIdType[] {
+    const rows = scope.kind === 'workspace'
+      ? this.db.prepare(`
+          SELECT id
+          FROM episodes
+          WHERE summary_kind <> 'deterministic'
+            AND primary_workspace_id = ?
+          ORDER BY id
+        `).all(scope.id)
+      : this.db.prepare(`
+          SELECT e.id
+          FROM episodes e
+          WHERE e.summary_kind <> 'deterministic'
+            AND EXISTS (
+              SELECT 1
+              FROM episode_surfaces es
+              WHERE es.episode_id = e.id
+                AND es.bundle_id = ?
+            )
+          ORDER BY e.id
+        `).all(scope.bundleId)
+
+    return (rows as Array<{ id: string }>).map(row => EpisodeId(row.id))
   }
 
   /** "Turn off and purge": the record goes, and the caller deletes derived text. */
