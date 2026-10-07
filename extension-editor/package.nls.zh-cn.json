@@ -1,0 +1,7 @@
+{
+  "displayName": "电脑使用记录 — VS Code 连接器",
+  "description": "让“电脑使用记录”知道你正在使用的工作区和文件，方便 DSH 继续正确的任务。仅记录元数据，不会读取文件正文。",
+  "configurationTitle": "电脑使用记录 · 诊断",
+  "traceFileDescription": "仅用于高级诊断。可选填连接器决策日志的文件路径；留空则使用“电脑使用记录”的默认本机日志。",
+  "untrustedWorkspaceDescription": "只读取工作区根路径和当前文件路径；不会读取文件正文。"
+}

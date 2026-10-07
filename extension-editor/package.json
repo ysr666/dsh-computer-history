@@ -1,7 +1,7 @@
 {
   "name": "dsh-computer-history-editor",
-  "displayName": "DSH Computer History (editor companion)",
-  "description": "Tells the local DeepSeek Harness where work is happening: the workspace root and the active file, nothing else.",
+  "displayName": "%displayName%",
+  "description": "%description%",
   "version": "0.1.0",
   "publisher": "dsh-local",
   "private": true,
@@ -18,12 +18,12 @@
   "main": "./out/extension.js",
   "contributes": {
     "configuration": {
-      "title": "DSH Computer History",
+      "title": "%configurationTitle%",
       "properties": {
         "dshComputerHistory.traceFile": {
           "type": "string",
           "default": "",
-          "description": "Optional file path to append the companion's decisions to, for diagnosing why nothing was sent."
+          "description": "%traceFileDescription%"
         }
       }
     }
@@ -37,7 +37,7 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": true,
-      "description": "Reads the workspace root and the active file path only; it never reads file contents."
+      "description": "%untrustedWorkspaceDescription%"
     }
   }
 }

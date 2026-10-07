@@ -12,9 +12,10 @@
 | `filePath` | `window.activeTextEditor.document.uri.fsPath` |
 | `languageId` | `document.languageId` |
 | `surfaceKind` | 当前视图：editor、diff、terminal |
-| `title` | 文件的基名 |
+| `title` | 文件的基名 |\n| `event` | `save`，或来自 VS Code Tasks 的受限 build/test/other 成功/失败事实 |
+| `event` | 可选的封闭元数据事件；目前只有 `save`，来源于 `onDidSaveTextDocument` |
 
-**不发送，而且"无法表达"**：文档正文、选中内容、诊断信息、界面字符串。**载荷形状里没有它们的字段**；宿主对**未知字段是拒收而不是忽略**；并且有一条守卫测试断言扩展**从不提及** `getText`、`.text` 或 `.selection`。
+**不发送，而且"无法表达"**：文档正文、选中内容、诊断信息、界面字符串、任务名、任务来源、命令行和任务输出。验证信息只保留标准任务分组（`build`、`test` 或 `other`）以及进程成功/失败；被终止且没有退出码的任务不会记录。**载荷形状里没有内容字段**；宿主对**未知字段是拒收而不是忽略**；守卫测试同时禁止正文读取 API 和任务文本/命令访问。
 
 ## 安装与配对
 
@@ -53,6 +54,7 @@ content-type: application/json
   "languageId": "typescript",
   "surfaceKind": "editor",
   "title": "main.ts",
+  "event": "save",
   "editorSession": "any-stable-id",
   "seq": 1,
   "observedAtMs": 1790000000000
@@ -64,6 +66,8 @@ content-type: application/json
 **`app` 是什么意思。** 它是一个**声明**：宿主以 `source.provider = 'companion'` 记录这条观测，所以审计**永远能分辨**"某个编辑器说自己是 Cursor"和"操作系统看到的是 Cursor"。这个声明**会被校验**（`bundleId` 必须像应用 id、`name` 非空、不得有多余字段），而且**它无法解锁任何东西**：用户没有允许的应用**什么都不存**；被内置保护清单覆盖的应用**即使用户允许了也照样被丢弃**。
 
 **客户端绝不允许发送的东西。** 没有字段可以放文档正文、选中内容、诊断信息、界面字符串或文件内容；而且**未知字段是拒收而不是忽略** —— 所以多加一个字段**是协议错误，不是无害的多余项**。**路径是元数据；内容不是。**
+
+**活动事件。** `event` 是可选字段，宿主目前只接受 `save`。它只表示编辑器报告了这个文件的一次文档保存事件；**不表示**宿主读取了文件正文、diff、编辑内容或诊断。宿主把它作为证据保存，并从这些 save 观测动态派生 `changedResources`。原生 Accessibility / UIA / AT-SPI 观测**不能**声明这个事件。
 
 **客户端必须遵守的规则。** `workspaceRoot` 必须是绝对路径；如果你发了 `filePath`，它必须位于该根之下。每次编辑器运行使用**稳定的** `editorSession`，`seq` 必须**递增**；同一对 `(session, seq)` 的重复会被当作重复丢弃。**没有令牌，就什么都不要发。**
 
