@@ -48,6 +48,12 @@ measured: the first Windows collector sent `win32`/`x86_64` and the host stopped
 `seq` increases within a `collectorSession`; repeats of `(collectorSession, seq)` are dropped as
 duplicates. `observedAtMs` is the host's clock domain - a collector must not send times in the future.
 
+Native observation provenance is bound to the opening `hello.platform`: `darwin → macos-ax`,
+`win32 → windows-uia`, and `linux → at-spi`. Older collectors may omit `source.provider`;
+the Host fills it from the hello. A collector that explicitly names a different native provider is a
+protocol error. The collector wire can never claim `companion`, which belongs only to the separately
+authenticated browser/editor intake.
+
 **`workspace` is honoured only from a companion** (`source.provider === 'companion'`, ADR 0009). The
 wire parser never sets `provider`, so an observation decoded from a collector is `macos-ax`, and a
 collector that sends `workspace` does not get it trusted.

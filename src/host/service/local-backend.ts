@@ -253,15 +253,15 @@ implements ComputerHistoryServiceContract {
   }
 
   public pause(): Promise<void> {
-    return this.capture.pause()
+    return this.withOperation(() => this.capture.pause())
   }
 
   public resume(): Promise<void> {
-    return this.capture.resume()
+    return this.withOperation(() => this.capture.resume())
   }
 
   public recover(): Promise<void> {
-    return this.capture.recover()
+    return this.withOperation(() => this.capture.recover())
   }
 
   public getState(): ComputerHistoryState {

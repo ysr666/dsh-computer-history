@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 describe('plugin teardown ordering', () => {
-  it('stops the companion intake through one shared promise before SQLite closes', () => {
+  it('quiesces backend controls before releasing capture ownership and closing SQLite', () => {
     const source = readFileSync(
       new URL('../../src/host/plugin.ts', import.meta.url),
       'utf8',
@@ -17,8 +17,12 @@ describe('plugin teardown ordering', () => {
     const close = source.indexOf('history.close()')
     expect(close).toBeGreaterThan(0)
     const stopBeforeClose = source.lastIndexOf('await stopCompanion()', close)
+    const drainBeforeClose = source.lastIndexOf('await backend.drain()', close)
+    const releaseBeforeClose = source.lastIndexOf('await releaseCaptureOwnership()', close)
     expect(stopBeforeClose).toBeGreaterThan(0)
-    expect(stopBeforeClose).toBeLessThan(close)
+    expect(drainBeforeClose).toBeGreaterThan(stopBeforeClose)
+    expect(releaseBeforeClose).toBeGreaterThan(drainBeforeClose)
+    expect(releaseBeforeClose).toBeLessThan(close)
 
     const waitForStart = source.indexOf('await companionStarted')
     expect(waitForStart).toBeGreaterThan(0)

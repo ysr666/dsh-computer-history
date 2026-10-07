@@ -4,6 +4,128 @@ import type { SubprocessHandle } from '@deepseek-ai/dsh-subprocess'
 import { describe, expect, it } from 'vitest'
 import { CollectorManager } from '../../src/host/collector/index.js'
 
+describe('collector provenance is bound to hello.platform', () => {
+  function protocolManager(
+    delivered: Array<unknown>,
+  ): { manager: CollectorManager; stdout: PassThrough } {
+    const stdin = new PassThrough()
+    const stdout = new PassThrough()
+    const handle: SubprocessHandle = {
+      stdin,
+      stdout,
+      stderr: undefined,
+      control: undefined,
+      collected: {},
+      done: new Promise(() => {}),
+      terminate() {},
+      async waitForExit() { return true },
+    }
+    const ctx = {
+      subprocess: { spawn: () => handle },
+    } as unknown as Context
+    return {
+      stdout,
+      manager: new CollectorManager(ctx, {
+        executable: '/collector',
+        cwd: '/tmp',
+        restartOnCrash: false,
+        onMessage: message => { delivered.push(message) },
+      }),
+    }
+  }
+
+  const observation = (
+    session: string,
+    provider?: 'macos-ax' | 'windows-uia' | 'at-spi',
+  ) => ({
+    v: 1,
+    type: 'observation',
+    collectorSession: session,
+    seq: 1,
+    observedAtMs: 1_000,
+    app: { pid: 1, bundleId: 'com.microsoft.VSCode' },
+    privacy: { secure: false, protected: false },
+    source: {
+      adapter: 'vscode',
+      ...(provider === undefined ? {} : { provider }),
+    },
+  })
+
+  it('fills missing legacy provenance from the collector hello platform', async () => {
+    const cases = [
+      ['darwin', 'macos-ax'],
+      ['win32', 'windows-uia'],
+      ['linux', 'at-spi'],
+    ] as const
+
+    for (const [platform, provider] of cases) {
+      const delivered: Array<unknown> = []
+      const { manager, stdout } = protocolManager(delivered)
+      manager.start()
+      stdout.write(JSON.stringify({
+        v: 1,
+        type: 'hello',
+        collectorSession: `legacy-${platform}`,
+        collectorVersion: '0.1.0',
+        platform,
+        arch: 'arm64',
+        capabilities: [],
+      }) + '\n')
+      stdout.write(JSON.stringify(
+        observation(`legacy-${platform}`),
+      ) + '\n')
+      // oxlint-disable-next-line no-await-in-loop -- each manager has an independent ordered processing chain
+      await new Promise(resolve => setTimeout(resolve, 0))
+
+      const stored = delivered.find(
+        (message): message is {
+          type: 'observation'
+          source: { provider?: string }
+        } => (
+          typeof message === 'object'
+          && message !== null
+          && 'type' in message
+          && message.type === 'observation'
+        ),
+      )
+      expect(stored?.source.provider).toBe(provider)
+      // oxlint-disable-next-line no-await-in-loop -- shut each independent manager down before the next case
+      await manager.stop('plugin-dispose')
+    }
+  })
+
+  it('refuses explicit provenance that contradicts hello.platform', async () => {
+    const delivered: Array<unknown> = []
+    const { manager, stdout } = protocolManager(delivered)
+    manager.start()
+    stdout.write(JSON.stringify({
+      v: 1,
+      type: 'hello',
+      collectorSession: 'win-session',
+      collectorVersion: '0.1.0',
+      platform: 'win32',
+      arch: 'x64',
+      capabilities: [],
+    }) + '\n')
+    stdout.write(JSON.stringify(
+      observation('win-session', 'at-spi'),
+    ) + '\n')
+    await new Promise(resolve => setTimeout(resolve, 0))
+
+    expect(delivered.some(message =>
+      typeof message === 'object'
+      && message !== null
+      && 'type' in message
+      && message.type === 'observation',
+    )).toBe(false)
+    expect(manager.snapshot().state).toMatchObject({
+      state: 'degraded',
+      reason: 'protocol-error',
+    })
+    await manager.stop('plugin-dispose')
+  })
+})
+
 describe('collector manager lifecycle', () => {
   it('owns stdio and escalates shutdown through managed subprocess', async () => {
     const stdin = new PassThrough()

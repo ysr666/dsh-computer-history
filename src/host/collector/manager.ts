@@ -78,6 +78,14 @@ async function withTimeout<T>(
 const DEFAULT_CRASH_WINDOW_MS = 10 * 60 * 1000
 const DEFAULT_MAX_CRASHES_IN_WINDOW = 5
 
+function nativeProviderForPlatform(
+  platform: CollectorHello['platform'],
+): 'macos-ax' | 'windows-uia' | 'at-spi' {
+  if (platform === 'darwin') return 'macos-ax'
+  if (platform === 'win32') return 'windows-uia'
+  return 'at-spi'
+}
+
 export interface CollectorManagerOptions {
   readonly executable: string
   readonly cwd: string
@@ -442,9 +450,22 @@ export class CollectorManager {
       this.hello = message
       this.lastObservationSeq = undefined
     }
+
+    let deliveryMessage = message
     if (message.type === 'observation') {
       if (message.collectorSession !== this.hello?.collectorSession) {
         throw new Error('collector session mismatch')
+      }
+      const hello = this.hello
+      if (!hello) {
+        throw new Error('collector observation arrived without hello')
+      }
+      const expectedProvider = nativeProviderForPlatform(hello.platform)
+      if (
+        message.source.provider !== undefined
+        && message.source.provider !== expectedProvider
+      ) {
+        throw new Error('collector provider does not match hello platform')
       }
       if (
         this.lastObservationSeq !== undefined
@@ -461,6 +482,20 @@ export class CollectorManager {
       }
       this.lastObservationSeq = message.seq
       this.lastObservationFingerprint = fingerprint
+
+      // Older collectors predate source.provider. The hello already proves which
+      // native platform this process represents, so preserve wire compatibility
+      // without lying in the stored provenance. Explicit modern provenance must
+      // agree with hello.platform; only a missing value is synthesized.
+      if (message.source.provider === undefined) {
+        deliveryMessage = {
+          ...message,
+          source: {
+            ...message.source,
+            provider: expectedProvider,
+          },
+        }
+      }
     }
     if (message.type === 'state') {
       this.state = message
@@ -475,7 +510,7 @@ export class CollectorManager {
     }
 
     this.processing = this.processing
-      .then(() => this.options.onMessage(message))
+      .then(() => this.options.onMessage(deliveryMessage))
       .catch(() => {
         if (this.state?.state !== 'degraded') {
           this.markDegraded('host-message-handler-error')
