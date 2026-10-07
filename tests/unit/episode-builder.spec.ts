@@ -80,6 +80,28 @@ function observation(input: {
 }
 
 describe('deterministic episode builder', () => {
+  it('extends duration when liveness confirms the same work state', () => {
+    const episodes = buildEpisodes([
+      observation({
+        id: 1,
+        atMs: 1_000,
+        workspace: 'alpha',
+        resource: 'file:///alpha/src/provider.ts',
+      }),
+      observation({
+        id: 2,
+        atMs: 31_000,
+        workspace: 'alpha',
+        resource: 'file:///alpha/src/provider.ts',
+      }),
+    ])
+
+    expect(episodes).toHaveLength(1)
+    expect(episodes[0]?.startedAtMs).toBe(1_000)
+    expect(episodes[0]?.endedAtMs).toBe(31_000)
+    expect(episodes[0]?.resources[0]?.observationCount).toBe(2)
+  })
+
   it('keeps Code, Terminal, and Preview resources in one workspace episode', () => {
     const episodes = buildEpisodes([
       observation({
