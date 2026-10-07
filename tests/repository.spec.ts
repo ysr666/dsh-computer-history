@@ -12,6 +12,7 @@ import {
 import {
   name,
   resolveHistoryDataDirectory,
+  resolvePackagedCollectorExecutable,
 } from '../src/index.js'
 import {
   PHASE1_ADAPTERS,
@@ -64,6 +65,22 @@ describe('repository scaffold', () => {
     expect(resolveHistoryDataDirectory({
       dataDirectory: '/tmp/explicit-history',
     })).toBe('/tmp/explicit-history')
+  })
+
+  it('resolves the packaged collector for each supported runtime platform', () => {
+    const from = path.join(process.cwd(), 'src', 'host', 'plugin.ts')
+    expect(resolvePackagedCollectorExecutable('darwin', from)).toBe(
+      path.join(process.cwd(), 'bin', 'dsh-computer-history-collector'),
+    )
+    expect(resolvePackagedCollectorExecutable('win32', from)).toBe(
+      path.join(process.cwd(), 'bin', 'dsh-computer-history-collector-windows.exe'),
+    )
+    expect(resolvePackagedCollectorExecutable('linux', from)).toBe(
+      path.join(process.cwd(), 'bin', 'dsh-computer-history-collector-linux'),
+    )
+    expect(() => resolvePackagedCollectorExecutable('freebsd', from)).toThrow(
+      'computer history collector is not packaged for freebsd',
+    )
   })
 
   it('keeps the macOS adapter table identical to the fixture darwin ids', () => {
