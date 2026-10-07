@@ -10,8 +10,11 @@ import { createHash } from 'node:crypto'
 import { execFileSync, spawnSync } from 'node:child_process'
 import path from 'node:path'
 
-if (process.env.DSH_NATIVE_BUILD_SKIP === '1') {
-  console.log('native collector build skipped: DSH_NATIVE_BUILD_SKIP=1')
+if (
+  process.env.DSH_NATIVE_PREBUILT === '1'
+  || process.env.DSH_NATIVE_BUILD_SKIP === '1'
+) {
+  console.log('native collector build skipped: prebuilt native artifacts supplied')
   process.exit(0)
 }
 
