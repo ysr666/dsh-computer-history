@@ -4,6 +4,16 @@ import {
 } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import path from 'node:path'
+import { verifyCollectorArtifacts } from './collector-artifacts.mjs'
+
+if (process.env.DSH_NATIVE_PREBUILT === '1') {
+  verifyCollectorArtifacts(
+    path.resolve(import.meta.dirname, '..'),
+    process.env.GITHUB_SHA?.trim() || undefined,
+  )
+  console.log('native collector build skipped: verified staged three-platform release artifacts')
+  process.exit(0)
+}
 
 if (process.platform !== 'darwin') {
   console.log(
