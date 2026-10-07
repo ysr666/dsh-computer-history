@@ -169,14 +169,14 @@ try {
   for (const spec of ['@deepseek-ai/dsh-web-app@0.2.0-rc.2', tarball]) {
     console.log(`  … installing ${spec === tarball ? 'plugin tarball' : spec}`)
     allowBuildsOff(path.join(home, 'profiles', profile, 'pnpm-workspace.yaml'))
-    let added = run(cli, ['plugin', '--profile', profile, 'add', spec], { env })
+    let added = run(cli, ['plugin', '--profile', profile, 'add', spec, '--yes'], { env })
     if (added.status !== 0) {
       const workspace = path.join(home, 'profiles', profile, 'pnpm-workspace.yaml')
       try {
         allowBuildsOff(workspace)
       } catch { /* the gate file may not be there; the retry reports it */ }
       allowBuildsOff(path.join(home, 'profiles', profile, 'pnpm-workspace.yaml'))
-      added = run(cli, ['plugin', '--profile', profile, 'add', spec], { env })
+      added = run(cli, ['plugin', '--profile', profile, 'add', spec, '--yes'], { env })
     }
     const label = spec === tarball ? 'install plugin' : 'install web app'
     // Show the CLI's own diagnostics path and the tail of its pnpm log, not a 160-character truncation: when the
