@@ -66,8 +66,9 @@ export interface NativeObservation {
     /**
      * Where the observation came from. Native collectors may declare `macos-ax`, `windows-uia`, or `at-spi`;
      * the Host preserves that provenance. `companion` is never accepted from collector wire input - the paired
-     * companion intake sets it only on messages it constructs locally (ADR 0007/0009). Older collectors that
-     * omit the field retain the historical macOS fallback during normalization for wire compatibility.
+     * companion intake sets it only on messages it constructs locally (ADR 0007/0009). Older collectors may
+     * omit the field for wire compatibility; CollectorManager derives the native provider from the already-validated
+     * hello.platform before delivery, and rejects an explicit provider that contradicts that platform.
      */
     readonly provider?: ObservationProvider
   }
