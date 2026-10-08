@@ -84,7 +84,7 @@
     "@deepseek-ai/dsh-system-prompt": "0.2.0-rc.2",
     "@deepseek-ai/dsh-tools": "0.2.0-rc.2",
     "@deepseek-ai/dsh-workspace": "0.2.0-rc.2",
-    "@types/node": "^22.20.0",
+    "@types/node": "^26.6.4",
     "@types/react": "18.3.12",
     "@vitest/coverage-v8": "^4.1.8",
     "fast-check": "^4.8.0",
