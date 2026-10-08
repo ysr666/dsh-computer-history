@@ -160,6 +160,7 @@ Only the npm account owner can bootstrap the name. A minimal placeholder publish
 ```bash
 # Run locally in a NEW EMPTY temporary directory, not in the DCH repository!
 mkdir dch-npm-bootstrap && cd dch-npm-bootstrap
+npm init -y
 npm login
 npm pkg set name=dsh-computer-history version=0.0.0-bootstrap.0 \
   description="Name reservation; install v1.0.0 once released"
