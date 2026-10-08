@@ -160,6 +160,14 @@ Issues and pull requests are welcome while the first public release is prepared.
 > [!CAUTION]
 > Because this project handles sensitive local context, **do not attach real history databases, pairing/session tokens, credentials, private paths, or unredacted capture logs to public issues**. Use the private vulnerability-reporting path described in [SECURITY.md](SECURITY.md) for sensitive findings.
 
+## Acknowledgements
+
+Computer History for DeepSeek Harness was inspired by [OpenAI's Computer History](https://help.openai.com/en/articles/6825453-chatgpt-release-notes), particularly its vision of helping AI assistants understand recent work context and continue where users left off. We thank OpenAI for pioneering this product direction.
+
+We also thank the maintainers of [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) for building the open and extensible foundation that makes this project possible.
+
+Computer History is an independently developed community implementation for DeepSeek Harness. It is not affiliated with or endorsed by OpenAI or DeepSeek.
+
 ## License
 
 [MIT](LICENSE)
