@@ -57,9 +57,7 @@ and are no longer exposed as normal extension settings.
 
 ## Allow or deny a workspace
 
-The workspace root is a `resource`, so the panel's existing per-resource rules
-apply — allow the roots you want, deny the rest. A denied workspace stores
-nothing, and the denial is visible in the audit's redaction preview.
+Use **Settings → Data & privacy → Allowed editor workspaces** to select **Only selected** and enter allowed absolute roots. An empty selected list stops new editor metadata; only a paired companion may vouch for a workspace. App permission remains necessary and explicit deny/protect rules take precedence. Earlier untyped resource allow rules were not a functioning whitelist and are not reinterpreted on upgrade. See [Resource consent](resource-consent.md).
 
 ## The wire format, for another editor
 

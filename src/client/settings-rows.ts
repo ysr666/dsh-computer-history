@@ -5,11 +5,14 @@ import type {
   DeleteHistoryRequest,
   EditorCompanionInstallCapability,
   PolicySnapshot,
+  ConsentKind,
+  ConsentMode,
   RedactionPreview,
   RedactionReason,
 } from '../shared/index.js'
 import { COMPANION_BUNDLE_ID } from '../shared/constants.js'
 import { RETENTION_BOUNDS } from '../shared/audit.js'
+import { canonicalConsentTarget, resourceConsent, withResourceConsent } from '../shared/resource-consent.js'
 import { historyApi } from './api.js'
 import { appIcon } from './app-icon.js'
 import { friendlyAppName } from './episode-subject.js'
@@ -431,6 +434,128 @@ export function ApplicationsRow({
           }, t('allowApp')),
         ),
       ),
+      feedbackNode(feedback),
+    ),
+  )
+}
+
+/**
+ * Strict per-origin and vouched-workspace recording consent. All writes go
+ * through the same versioned policy API as the app allow list. Changing to
+ * 'selected' with no targets stops new observations immediately.
+ */
+export function ResourceConsentRow({
+  t, store, snapshot, kind,
+}: SettingsRowProps & { readonly kind: ConsentKind }): React.ReactElement {
+  const policy = snapshot.policy
+  const consent = policy ? resourceConsent(policy, kind) : { mode: 'all' as const, allowed: [] }
+  const [draft, setDraft] = React.useState('')
+  const [pending, setPending] = React.useState(false)
+  const [feedback, setFeedback] = React.useState<Feedback>()
+  const browser = kind === 'browser-origin'
+  const title = t(browser ? 'siteConsentTitle' : 'workspaceConsentTitle')
+
+  const saveConsent = async (
+    mode: ConsentMode,
+    allowed: readonly string[],
+  ): Promise<void> => {
+    if (!policy) return
+    setPending(true)
+    setFeedback(undefined)
+    try {
+      await store.replacePolicy({
+        mode: 'include-only',
+        rules: withResourceConsent(policy, kind, { mode, allowed }),
+      })
+      setFeedback({ kind: 'success', text: t('consentSaved') })
+    } catch (cause) {
+      setFeedback({ kind: 'error', text: failureText(t, cause) })
+    } finally {
+      setPending(false)
+    }
+  }
+
+  const addTarget = (): void => {
+    const target = canonicalConsentTarget(kind, draft)
+    if (!target) {
+      setFeedback({ kind: 'error', text: t(browser ? 'siteConsentInvalid' : 'workspaceConsentInvalid') })
+      return
+    }
+    void saveConsent('selected', [...consent.allowed, target]).then(() => {
+      // A failed write keeps the draft, so the user can retry.
+      if (store.getSnapshot().policy && resourceConsent(store.getSnapshot().policy!, kind)
+        .allowed.includes(target)) setDraft('')
+    })
+  }
+
+  return disclosure(
+    browser ? 'browser' : 'editor',
+    title,
+    t(browser ? 'siteConsentDescription' : 'workspaceConsentDescription'),
+    value(t(
+      consent.mode === 'all'
+        ? 'consentModeAll'
+        : consent.mode === 'none'
+          ? 'consentModeNone'
+          : 'consentModeSelected',
+    ), { chevron: true }),
+    detail(
+      React.createElement('p', { className: 'ch-row-body' }, t('consentAppGateWarning')),
+      !browser && consent.mode === 'selected'
+        ? React.createElement('p', { className: 'ch-row-body' }, t('consentEditorVouch'))
+        : null,
+      React.createElement('label', { className: 'ch-field-label' },
+        t('consentCaptureRange'),
+        React.createElement('select', {
+          className: 'ch-input',
+          value: consent.mode,
+          disabled: pending || !policy,
+          'aria-label': title,
+          onChange: (event: React.ChangeEvent<HTMLSelectElement>) => {
+            const mode = event.target.value as ConsentMode
+            void saveConsent(mode, mode === 'selected' ? consent.allowed : [])
+          },
+        },
+        ...(['all', 'selected', 'none'] as const).map(mode =>
+          React.createElement('option', { key: mode, value: mode }, t(
+            mode === 'all' ? 'consentModeAll'
+              : mode === 'selected' ? 'consentModeSelected' : 'consentModeNone',
+          )),
+        )),
+      ),
+      consent.mode === 'selected'
+        ? React.createElement(React.Fragment, null,
+            consent.allowed.length === 0
+              ? React.createElement('p', { className: 'ch-row-body' }, t('consentSelectedEmpty'))
+              : React.createElement('ul', { className: 'ch-list' },
+                  ...consent.allowed.map(target => React.createElement(
+                    'li', { key: target },
+                    React.createElement('span', { className: 'ch-app-rule-copy ch-app-rule-title' }, target),
+                    React.createElement('button', {
+                      type: 'button', className: 'ch-button', disabled: pending,
+                      'aria-label': t('consentRemoveTarget', { target }),
+                      onClick: () => { void saveConsent('selected', consent.allowed.filter(item => item !== target)) },
+                    }, t('consentRemove')),
+                  )),
+                ),
+            controls(
+              React.createElement('input', {
+                className: 'ch-input',
+                value: draft,
+                disabled: pending,
+                'aria-label': t(browser ? 'siteConsentInput' : 'workspaceConsentInput'),
+                placeholder: t(browser ? 'siteConsentPlaceholder' : 'workspaceConsentPlaceholder'),
+                onChange: (event: React.ChangeEvent<HTMLInputElement>) => { setDraft(event.target.value) },
+              }),
+              React.createElement('button', {
+                type: 'button', className: 'ch-button',
+                disabled: pending || draft.trim().length === 0,
+                onClick: addTarget,
+              }, t('consentAdd')),
+            ),
+          )
+        : null,
+      React.createElement('p', { className: 'ch-row-body' }, t('consentExistingHistory')),
       feedbackNode(feedback),
     ),
   )

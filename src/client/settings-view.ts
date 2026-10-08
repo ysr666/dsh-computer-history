@@ -14,6 +14,7 @@ import {
   DeleteHistoryRow,
   EditorCompanionRow,
   RecordingRow,
+  ResourceConsentRow,
   RetentionRow,
 } from './settings-rows.js'
 
@@ -118,6 +119,8 @@ export function createSettingsPage({
       React.createElement(CompanionRow, props),
       React.createElement(EditorCompanionRow, props),
       settingsSectionLabel(t('settingsDataPrivacy')),
+      React.createElement(ResourceConsentRow, { ...props, kind: 'browser-origin' }),
+      React.createElement(ResourceConsentRow, { ...props, kind: 'editor-workspace' }),
       React.createElement(DataRow, props),
       settingsSectionLabel(t('settingsAbout')),
       React.createElement(AboutRow, props),
