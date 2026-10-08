@@ -68,6 +68,14 @@ try {
       problems.push(`files promises ${entry} and the tarball does not contain it`)
     }
   }
+  // A folder entry alone would accept an empty or partial locale directory.
+  // Require both published locale files, which are also referenced by exports.
+  for (const locale of ['en.json', 'zh.json']) {
+    const member = `package/locale/${locale}`
+    if (!members.includes(member)) {
+      problems.push(`release tarball is missing required locale ${member}`)
+    }
+  }
 
   try {
     execFileSync(
