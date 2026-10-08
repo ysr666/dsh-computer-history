@@ -15,3 +15,19 @@ export declare function connectCdp(
   ws: CdpSocket
   send(method: string, params?: Record<string, unknown>): Promise<unknown>
 }>
+
+export declare function initializeCdpSession(
+  getTargetUrl: () => Promise<string>,
+  options?: {
+    connectImpl?: (url: string) => Promise<{
+      ws: CdpSocket
+      send(method: string, params?: Record<string, unknown>): Promise<unknown>
+    }>
+    attempts?: number
+    delayMs?: number
+    onRetry?: (attempt: number, error: unknown) => void
+  },
+): Promise<{
+  ws: CdpSocket
+  send(method: string, params?: Record<string, unknown>): Promise<unknown>
+}>

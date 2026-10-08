@@ -91,10 +91,48 @@ export function connectCdp(
       if (!connected) failBeforeOpen(error)
       rejectPending(error)
     })
-    ws.addEventListener('close', () => {
-      const error = new Error('Chrome CDP WebSocket closed')
+    ws.addEventListener('close', event => {
+      const code = Number.isInteger(event.code) ? event.code : 'unknown'
+      const error = new Error('Chrome CDP WebSocket closed (code=' + code + ')')
       if (!connected) failBeforeOpen(error)
       rejectPending(error)
     })
   })
+}
+
+/** Retry only page-target discovery and CDP initialisation. Product assertions are
+ * never retried: a genuine UI failure must still fail the release gate. */
+export async function initializeCdpSession(
+  getTargetUrl,
+  {
+    connectImpl = connectCdp,
+    attempts = 4,
+    delayMs = 750,
+    onRetry = () => {},
+  } = {},
+) {
+  if (!Number.isInteger(attempts) || attempts < 1) {
+    throw new Error('CDP initialisation requires at least one attempt')
+  }
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    let session
+    try {
+      const url = await getTargetUrl()
+      session = await connectImpl(url)
+      await session.send('Page.enable')
+      await session.send('Runtime.enable')
+      return session
+    } catch (error) {
+      try { session?.ws.close() } catch { /* already disconnected */ }
+      if (attempt === attempts) {
+        throw new Error(
+          'Chrome CDP initialisation failed after ' + attempts
+            + ' bounded attempts: ' + (error?.message || error),
+        )
+      }
+      onRetry(attempt, error)
+      await new Promise(resolve => setTimeout(resolve, delayMs))
+    }
+  }
+  throw new Error('Chrome CDP initialisation unexpectedly exhausted')
 }

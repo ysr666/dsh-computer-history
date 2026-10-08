@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { connectCdp } from '../../scripts/product-journey-cdp.mjs'
+import { connectCdp, initializeCdpSession } from '../../scripts/product-journey-cdp.mjs'
 
 class FakeWebSocket extends EventTarget {
   static last: FakeWebSocket
@@ -64,5 +64,52 @@ describe('product journey CDP watchdogs', () => {
     session.ws.close()
     await expect(second).rejects.toThrow('WebSocket closed')
     await expect(session.send('Page.reload')).rejects.toThrow('not open')
+  })
+})
+
+
+describe('CDP release startup recovery', () => {
+  it('retries a page target that closes before Page.enable completes', async () => {
+    let connections = 0
+    const retries: number[] = []
+    const session = await initializeCdpSession(
+      async () => 'ws://chromium-page',
+      {
+        delayMs: 1,
+        connectImpl: async () => {
+          connections += 1
+          const connection = connections
+          const ws = new FakeWebSocket('ws://chromium-page')
+          return {
+            ws,
+            send: async (method: string) => {
+              if (connection === 1) {
+                throw new Error('Chrome CDP WebSocket closed (code=1006)')
+              }
+              return { method }
+            },
+          }
+        },
+        onRetry(attempt: number) { retries.push(attempt) },
+      },
+    )
+    expect(connections).toBe(2)
+    expect(retries).toEqual([1])
+    await expect(session.send('Page.captureScreenshot')).resolves.toEqual({
+      method: 'Page.captureScreenshot',
+    })
+    session.ws.close()
+  })
+
+  it('fails after a fixed number of missing page targets, without an infinite loop', async () => {
+    let attempts = 0
+    await expect(initializeCdpSession(async () => {
+      attempts += 1
+      throw new Error('Chrome has no CDP page target yet')
+    }, {
+      attempts: 3,
+      delayMs: 1,
+    })).rejects.toThrow('failed after 3 bounded attempts')
+    expect(attempts).toBe(3)
   })
 })
