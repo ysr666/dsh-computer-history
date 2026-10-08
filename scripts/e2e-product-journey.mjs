@@ -28,6 +28,7 @@ import { createRequire } from 'node:module'
 import os from 'node:os'
 import path from 'node:path'
 import { initializeCdpSession } from './product-journey-cdp.mjs'
+import { inspectFirstRunPolicy } from './product-journey-first-run.mjs'
 import { DatabaseSync } from 'node:sqlite'
 
 const REPO = path.resolve(import.meta.dirname, '..')
@@ -1040,19 +1041,63 @@ try {
       + ' capture=' + String(stateAfterStart.json?.capture),
   )
   const firstPolicy = apiRequest('GET', '/policy')
-  const allowedApps = new Set(
-    (firstPolicy.json?.rules ?? [])
-      .filter(rule => rule.dimension === 'app' && rule.action === 'allow')
-      .map(rule => rule.pattern),
-  )
+  const inventory = apiRequest('GET', '/system/applications')
+  const firstRunAudit = inspectFirstRunPolicy({
+    preset: stateAfterStart.json?.firstRunPreset,
+    inventory: inventory.json,
+    policy: firstPolicy.json,
+  })
   requireCheck(
-    'first-run policy allows VS Code and Browser Companion',
+    'first-run defaults match installed apps and preserve Browser Companion',
     firstPolicy.status === 200
-      && allowedApps.has('com.microsoft.VSCode')
-      && allowedApps.has('companion.browser'),
+      && inventory.status === 200
+      && firstRunAudit.ok,
     'revision=' + String(firstPolicy.json?.revision)
-      + ' rules=' + String(firstPolicy.json?.rules?.length ?? 0),
+      + ' rules=' + String(firstPolicy.json?.rules?.length ?? 0)
+      + ' inventory=' + String(firstRunAudit.inventoryAvailable)
+      + ' expected=' + String(firstRunAudit.expectedCount ?? '?')
+      + ' actual=' + String(firstRunAudit.actualCount ?? '?')
+      + ' missing=' + JSON.stringify(firstRunAudit.missing ?? [])
+      + ' unexpected=' + JSON.stringify(firstRunAudit.unexpected ?? []),
   )
+
+  // The rest of the product journey sends synthetic Editor Companion activity
+  // carrying the VS Code bundle ID. A hosted runner need not have VS Code
+  // installed: after verifying the truthful first-run defaults, opt in this
+  // fixture explicitly through the same authenticated Policy API a user uses.
+  // Never change the shipped first-run preset or skip the privacy assertion.
+  let journeyPolicy = firstPolicy
+  const allowedApps = new Set(firstPolicy.json.rules
+    .filter(rule => rule.dimension === 'app' && rule.action === 'allow')
+    .map(rule => rule.pattern))
+  if (!allowedApps.has('com.microsoft.VSCode')) {
+    const now = Date.now()
+    journeyPolicy = apiRequest('POST', '/policy', {
+      mode: 'include-only',
+      rules: [
+        ...firstPolicy.json.rules.filter(rule => !rule.builtIn),
+        {
+          id: 'e2e:allow-vscode-fixture',
+          dimension: 'app',
+          action: 'allow',
+          matcher: 'exact',
+          pattern: 'com.microsoft.VSCode',
+          builtIn: false,
+          createdAtMs: now,
+          updatedAtMs: now,
+        },
+      ],
+    })
+    requireCheck(
+      'explicitly opt in synthetic VS Code fixture on runner without VS Code',
+      journeyPolicy.status === 200
+        && journeyPolicy.json?.rules?.some(rule =>
+          rule.dimension === 'app'
+          && rule.action === 'allow'
+          && rule.pattern === 'com.microsoft.VSCode'),
+      'HTTP ' + journeyPolicy.status,
+    )
+  }
   await uiSession.shot('02-recording.png')
 
   const browserPairing = apiRequest('POST', '/pairing/rotate')
@@ -1184,8 +1229,8 @@ try {
     'POST',
     '/policy',
     {
-      mode: firstPolicy.json.mode,
-      rules: firstPolicy.json.rules,
+      mode: journeyPolicy.json.mode,
+      rules: journeyPolicy.json.rules,
     },
   )
   requireCheck(
