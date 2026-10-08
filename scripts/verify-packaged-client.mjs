@@ -86,7 +86,7 @@ function browserExecutable() {
   throw new Error('no supported Chromium browser was found on this runner')
 }
 
-function connect(target, onRequest) {
+function connect(target, onRequest, onResponse) {
   const socket = new WebSocket(target.webSocketDebuggerUrl)
   let id = 0
   const pending = new Map()
@@ -95,6 +95,12 @@ function connect(target, onRequest) {
     if (message.method === 'Network.requestWillBeSent') {
       const url = message.params?.request?.url
       if (typeof url === 'string') onRequest(url)
+    }
+    if (message.method === 'Network.responseReceived') {
+      const response = message.params?.response
+      if (typeof response?.url === 'string' && Number(response.status) === 200) {
+        onResponse(response.url)
+      }
     }
     if (!message.id || !pending.has(message.id)) return
     const { resolve, reject } = pending.get(message.id)
@@ -181,7 +187,12 @@ async function main() {
     if (!page) throw new Error('headless browser did not expose a page target')
 
     const requests = new Set()
-    const devtools = await connect(page, requestUrl => { requests.add(requestUrl) })
+    const successfulResponses = new Set()
+    const devtools = await connect(
+      page,
+      requestUrl => { requests.add(requestUrl) },
+      responseUrl => { successfulResponses.add(responseUrl) },
+    )
     socket = devtools.socket
     const { send } = devtools
     await send('Page.enable')
@@ -316,7 +327,7 @@ async function main() {
 
     await waitFor(
       'a History API request from the installed panel',
-      async () => [...requests].some(requestUrl =>
+      async () => [...successfulResponses].some(requestUrl =>
         /\/api\/computer-history\/(?:recent|timeline|threads)(?:[/?]|$)/.test(requestUrl),
       ),
     )
@@ -334,7 +345,7 @@ async function main() {
     await waitFor(
       'Privacy requests from the installed Settings surface',
       async () => {
-        const seen = [...requests]
+        const seen = [...successfulResponses]
         const policy = seen.some(requestUrl => /\/api\/computer-history\/policy(?:[/?]|$)/.test(requestUrl))
         const retention = seen.some(requestUrl => /\/api\/computer-history\/retention(?:[/?]|$)/.test(requestUrl))
         return policy && retention
@@ -352,7 +363,7 @@ async function main() {
       writeFileSync(path.resolve(cookieOut), netscapeCookieJar(cookies), { mode: 0o600 })
     }
 
-    const observed = [...requests]
+    const observed = [...successfulResponses]
       .map(requestUrl => {
         try {
           const parsed = new URL(requestUrl)
@@ -372,6 +383,7 @@ async function main() {
       settingsRows,
       historyRequest: observed.find(value => /\/(?:recent|timeline|threads)(?:[/?]|$)/.test(value)),
       privacyRequests: observed.filter(value => /\/(?:policy|retention)(?:[/?]|$)/.test(value)),
+      successfulApiResponses: observed.length,
     }
     writeFileSync(path.join(outDir, 'evidence.json'), `${JSON.stringify(evidence, null, 2)}\n`)
     console.log(
