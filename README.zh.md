@@ -85,9 +85,9 @@ Computer History 补的是这层“工作连续性”。它希望回答：
 
 | 平台 | Collector 路径 | 当前状态 |
 | --- | --- | --- |
-| **macOS** | Accessibility | 已验证打包安装 + 默认 collector 握手；原生构建、隐私与 E2E gate 持续通过 |
-| **Windows** | UI Automation | 已验证打包安装 + 默认 collector 握手；真实 Notepad → UIA → Host 验收也持续通过 |
-| **Linux** | AT-SPI | 已验证打包安装 + collector 握手；真实桌面使用仍需要 X/AT-SPI 总线与相应权限 |
+| **macOS** | Accessibility | 已验证打包 collector + 安装后 Main/首次使用/Settings；原生构建、隐私与 E2E gate 持续通过 |
+| **Windows** | UI Automation | 已验证打包 collector + 安装后 Main/首次使用/Settings；真实 Notepad → UIA → Host 验收也持续通过 |
+| **Linux** | AT-SPI | 已验证打包 collector + 安装后 Main/首次使用/Settings；真实桌面使用仍需要 X/AT-SPI 总线与相应权限 |
 
 共享 collector contract 会在 GitHub Actions 上持续跨 macOS、Windows、Linux 检查。实机证据和已知限制记录在 [docs/validation-three-platforms.md](docs/validation-three-platforms.md)。
 
@@ -95,8 +95,9 @@ Computer History 补的是这层“工作连续性”。它希望回答：
 > 第一版公开 Alpha 的目标是**同一个三平台插件包**，不是 macOS-only。Release 流水线会在三个原生
 > runner 上分别构建 collector，记录来源 commit 与 SHA-256，把三份原生二进制合进同一个 tarball，
 > 再让 macOS、Windows、Linux 分别 clean install 这一模一样的 tarball；验证时不设置
-> `collectorExecutable`，因此证明的是安装包自己的平台选择。这个打包路径已经测量通过，但公开
-> Alpha tag 还没有发布；发布前仍要关闭 installed client/panel 的产品面验收。
+> `collectorExecutable`，因此证明的是安装包自己的平台选择。现在三端的**完整产品路径**也已测量
+> 通过，包括安装后的 client panel、首次使用流程与 History/Privacy Settings。公开 Alpha tag 尚未发布；
+> 剩余工作是正式 release cut（版本号、changelog、preflight 与 tag）。
 
 ## 开发快速开始
 
