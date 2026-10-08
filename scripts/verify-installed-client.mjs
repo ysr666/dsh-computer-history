@@ -362,10 +362,24 @@ try {
     300,
   )
   let settingsShown = false
+  const settingsNavigation = []
   for (let attempt = 0; attempt < 5; attempt += 1) {
     for (const label of panelLabels) {
-      await clickText([label], "document.querySelector('[role=\"dialog\"],dialog') ?? document")
-      await sleep(700)
+      const selected = String(await evaluate(`(() => {
+        const wanted = ${JSON.stringify(label)}
+        const scope = document.querySelector('[role="dialog"],dialog') ?? document
+        const nodes = [...scope.querySelectorAll('button,a,li,[role],[data-slot]')]
+          .filter(node => node.getClientRects().length > 0)
+          .filter(node => (node.textContent || '').trim() === wanted)
+        if (nodes.length === 0) return 'missing'
+        const target = nodes.at(-1)
+        target.click()
+        const clickable = target.closest('button,[role="tab"],[role="menuitem"],li,a,[data-slot]')
+        if (clickable && clickable !== target) clickable.click()
+        return `clicked ${nodes.length}`
+      })()`))
+      settingsNavigation.push({ label, selected })
+      await sleep(1_200)
       if (await visible('.ch-settings-list')) {
         settingsShown = true
         break
@@ -383,6 +397,7 @@ try {
     shown: settingsShown,
     ready: settingsReady,
     rows: settingsRows,
+    navigation: settingsNavigation,
   }
   await screenshot('settings')
   if (!settingsShown || !settingsReady || settingsRows < 1) {
