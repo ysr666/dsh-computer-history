@@ -95,8 +95,9 @@ Computer History 补的是这层“工作连续性”。它希望回答：
 > 第一版公开 Alpha 的目标是**同一个三平台插件包**，不是 macOS-only。Release 流水线会在三个原生
 > runner 上分别构建 collector，记录来源 commit 与 SHA-256，把三份原生二进制合进同一个 tarball，
 > 再让 macOS、Windows、Linux 分别 clean install 这一模一样的 tarball；验证时不设置
-> `collectorExecutable`，因此证明的是安装包自己的平台选择。这个打包路径已经测量通过，但公开
-> Alpha tag 还没有发布；发布前仍要关闭 installed client/panel 的产品面验收。
+> `collectorExecutable`，因此证明的是安装包自己的平台选择。三端的安装包还通过了真实浏览器中的
+> panel、首次使用、Settings 以及 History/Privacy HTTP 200 验收（见 [发布证据](docs/release.md)）。
+> 公开 Alpha tag 尚未发布，仍须完成正式版本号、更新日志和发布前检查。
 
 ## 开发快速开始
 
