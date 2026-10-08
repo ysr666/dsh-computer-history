@@ -1,10 +1,9 @@
 {
   "name": "dsh-computer-history",
-  "version": "0.1.0-alpha.1",
+  "version": "1.0.0",
   "description": "Privacy-first work continuity for DeepSeek Harness: metadata-only computer history, deterministic work episodes, and selective resume context.",
   "icon": "./assets/brand/app-icon.svg",
   "license": "MIT",
-  "private": true,
   "type": "module",
   "engines": {
     "node": "^22.19.0 || >=24.0.0"
@@ -183,5 +182,32 @@
     "bundle": {
       "patch": "./cordis.patch.yml"
     }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ysr666/dsh-computer-history.git"
+  },
+  "homepage": "https://github.com/ysr666/dsh-computer-history#readme",
+  "bugs": {
+    "url": "https://github.com/ysr666/dsh-computer-history/issues"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "computer-history",
+    "work-continuity",
+    "activity-history",
+    "privacy",
+    "local-first",
+    "timeline",
+    "resume",
+    "windows",
+    "macos",
+    "linux",
+    "plugin"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   }
 }
