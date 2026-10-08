@@ -295,7 +295,7 @@ describe('audit export and import', () => {
       ...good,
       tables: { ...good.tables, episodes: [{ id: 'x', summary_text: { nested: true } }] },
     })).toThrow(/not a primitive value/)
-    expect(() => importHistory(db, { schema: 'dsh-computer-history/v1' }))
+    expect(() => importHistory(db, { schema: 'dsh-computer-history/v1', schemaVersion: 1 }))
       .toThrow(/no tables/)
   })
 })
