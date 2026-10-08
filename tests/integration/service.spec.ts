@@ -915,6 +915,54 @@ describe('local computer history backend', () => {
     history.close()
   })
 
+  it('sweeps already-expired imported evidence before import completes', async () => {
+    const source = openTempDatabase()
+    const sourceEpisodeId = seedEpisode(source)
+    source.db.prepare(
+      'UPDATE observations SET expires_at_ms = 5_000',
+    ).run()
+    source.db.prepare(
+      'UPDATE episodes SET expires_at_ms = 5_000 WHERE id = ?',
+    ).run(sourceEpisodeId)
+    const document = exportHistory(source.db, 6_000)
+
+    const target = openTempDatabase()
+    const policies = new PolicyStore(target.db)
+    policies.ensureInitial(1)
+    let refreshed = false
+    const backend = new LocalComputerHistoryBackend(
+      new EpisodeStore(target.db),
+      policies,
+      new DeletionService(target.db),
+      new FakeCapture(),
+      {
+        observationRetentionHours: 24,
+        episodeRetentionDays: 30,
+        autoResume: false,
+        now: () => 10_000,
+        onHistoryChanged: () => {
+          refreshed = true
+        },
+      },
+      undefined,
+      undefined,
+      target.db,
+    )
+
+    await backend.importAll(document)
+
+    expect(refreshed).toBe(true)
+    expect(new ObservationStore(target.db).count()).toBe(0)
+    expect(await backend.recent()).toEqual([])
+    expect(target.db.prepare(
+      'SELECT COUNT(*) AS count FROM resources',
+    ).get()).toEqual({ count: 0 })
+
+    target.close()
+    source.close()
+  })
+
+
   it('does not report import complete until the ingestion refresh has settled', async () => {
     const history = openTempDatabase()
     const episodes = new EpisodeStore(history.db)
