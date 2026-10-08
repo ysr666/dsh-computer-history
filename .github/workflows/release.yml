@@ -370,7 +370,7 @@ jobs:
         shell: bash
         env:
           NPM_CONFIG_IGNORE_SCRIPTS: 'true'
-        run: npm publish "$PACKAGE_TARBALL" --access public --provenance --ignore-scripts
+        run: npm publish "$PACKAGE_TARBALL" --registry=https://registry.npmjs.org/ --access public --provenance --ignore-scripts
       - name: Wait for npm registry and verify exact package identity
         run: node scripts/release-registry-identity.mjs wait "$RELEASE_VERSION" "$PACKAGE_SHA1"
       - name: Save identity for final GitHub release job
