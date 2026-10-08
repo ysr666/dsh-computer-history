@@ -4,7 +4,7 @@ This document states what has been **measured**. Where a step has not been
 verified, it says so rather than describing the intention.
 
 > [!IMPORTANT]
-> **First public pre-release target: `v0.1.0-alpha.1` — not published yet, and intentionally one three-platform artifact.**
+> **First public release target: `v1.0.0` — a three-platform release candidate, not yet published.**
 >
 > The packaged collector path is now measured end-to-end on macOS, Windows and Linux. Each native collector is
 > built on its own runner from the same commit, all three exact binaries are assembled into one plugin tarball
@@ -15,10 +15,10 @@ verified, it says so rather than describing the intention.
 > Continue, disable/re-enable and uninstall). A separate release browser gate now covers **Windows, macOS and
 > Linux** using the same assembled tarball, verifying the first-run panel, Settings and successful History/Privacy
 > responses without checkout wiring. Issue #44 was closed by the macOS product-path PR #125; the added three-OS
-> browser gate qualifies the wider three-platform Alpha claim. The public tag is **not published** and still
+> browser gate qualifies the wider three-platform Alpha claim. The v1.0.0 tag is **not published** and still
 > requires a non-dev version, changelog and release-cut preflight.
 
-## v0.1.0-alpha.1 readiness
+## v1.0.0 readiness
 
 | Gate | Status |
 |---|---|
@@ -33,7 +33,9 @@ verified, it says so rather than describing the intention.
 | Installed client/Settings full product journey | ✅ macOS 52/52 from PR #125 |
 | Same installed client renders first-run and Settings, returns History/Privacy HTTP 200 | ✅ Windows / macOS / Linux packaged browser matrix |
 | `pnpm verify:release:blockers` at release cut | ⬜ run at release cut |
-| Non-`-dev` package version + matching changelog section | ⏳ staged by release preparation PR; validate on merged main before tagging |
+| `1.0.0` metadata, release notes, main SHA and npm publishing workflow | ⏳ staged on preparation branch; validate on final main |
+| npm bootstrap package + GitHub Actions Trusted Publishing | ⬜ npm account owner action required before release |
+| Exact npm/GitHub tarball identity | ⬜ verified only when public publishing runs |
 
 
 ## What ships
@@ -57,7 +59,7 @@ ln -sfn "$PWD" ~/.dsh/profiles/<profile>/node_modules/dsh-computer-history
 Verified: the entry reaches `[active]`. Every phase's runtime evidence was
 produced on this path.
 
-## Installing from the tarball: three-platform Host/collector path verified; installed client path verified on macOS
+## Installing from the tarball: three-platform Host/collector and installed browser product paths verified
 
 ```bash
 npm pack                                        # dsh-computer-history-<version>.tgz
@@ -138,24 +140,74 @@ Host logs and session credentials. Windows/macOS packaged collectors reached `ru
 headless runner reported `permission-required` with no X display, rather than claiming it observed
 a desktop. Actual Linux desktop/AT-SPI GUI acceptance remains distinct.
 
-The tag-publishing workflow preserves the macOS complete installed-product journey from PR #125
-**and** now runs the three-OS browser product gate. The gates will rerun from the tagged release
-commit; the public Alpha has not yet been published.
+The manual release workflow preserves the macOS complete installed-product journey from PR #125
+**and** now runs the three-OS browser product gate. The gates will rerun from the exact manually selected release
+commit; the public v1.0.0 has not yet been published.
 
-## Publishing
+## Publishing v1.0.0 — manual, verified, one exact artifact
 
-Do not publish `v0.1.0-alpha.1` until the release-cut preflight is green on the **final
-main commit**, the release package version and changelog match, and any required safety fixes are
-merged and verified. Issue #44 is already closed; do not treat open Dependabot maintenance PRs as
-automatic release blockers. The release preparation PR stages the version and notes but **must not
-create or push a tag**.
+**Do not create a tag, npm release or GitHub Release while this branch is only a candidate.**
+The release workflow is `workflow_dispatch` (not push-tag triggered), adapted from
+DVR's immutable release pipeline and extended with DCH's three-platform native artifact jobs.
 
-Push a tag named `v` + the version in `package.json` (`.github/workflows/release.yml`). The workflow builds
-the macOS, Windows and Linux collectors on their native runners, refuses mixed-source artifacts, assembles one
-tarball, records native hashes, and then runs the macOS **product journey against that exact assembled tarball**.
-After `pnpm verify:release`, the same tarball clean-installs on all three platforms. GitHub Release publication
-happens only after the installed client journey and all three packaged collector handshakes pass. **It needs no
-certificate and no repository secret.**
+### One-time npm package bootstrap (npm owner must perform)
+
+The name `dsh-computer-history` was not present in the public npm Registry during the audit.
+npm currently requires a package to exist before a Trusted Publisher can be registered.
+Only the npm account owner can bootstrap the name. A minimal placeholder published with a
+**non-default** dist-tag is preferred so it cannot be mistaken for this functional release:
+
+```bash
+# Run locally in a NEW EMPTY temporary directory, not in the DCH repository!
+mkdir dch-npm-bootstrap && cd dch-npm-bootstrap
+npm login
+npm pkg set name=dsh-computer-history version=0.0.0-bootstrap.0 \
+  description="Name reservation; install v1.0.0 once released"
+npm publish --access public --tag bootstrap
+```
+
+This publishes an intentionally **nonfunctional** placeholder; it does **not** publish v1.0.0.
+Keep the bootstrap source minimal and avoid including secrets, local paths or real DCH history.
+
+After npm shows the new package, go to **npmjs.com → dsh-computer-history → Settings →
+Trusted publishing → GitHub Actions** and set:
+
+- GitHub owner: `ysr666`
+- Repository: `dsh-computer-history`
+- Workflow file: `release.yml` (file name only)
+- Environment name: leave blank (unless the workflow is explicitly configured to use one)
+- Allowed action: **npm publish** (not only `npm stage publish`)
+
+Trusted Publisher setup must be followed by the first successful OIDC publish within **2 days**;
+if it expires, delete and recreate it. Do not provide a long-lived `NPM_TOKEN` to Actions.
+This step requires npm account access; the repository cannot grant npm ownership.
+
+### Immutable manual release flow
+
+When the bootstrap and Trusted Publisher are ready, merge the **approved** release PR and check
+that the final `main` SHA is fully green. In GitHub Actions → **Release** → Run workflow,
+select **main** and fill:
+
+- `tag` = `v1.0.0`
+- `target_sha` = the **exact current main SHA**, not a branch name
+
+The workflow refuses mismatched/obsolete SHAs, an existing tag, a non-public package manifest
+or mismatched release notes. It then:
+
+1. Builds native macOS/Windows/Linux collectors from the exact commit and assembles **one** tarball.
+2. Runs the macOS installed Continue/product lifecycle journey, release preflight and the
+   Windows/macOS/Linux clean-installed browser/Privacy + packaged collector matrix.
+3. Rechecks that `main` has not moved, creates the immutable `v1.0.0` tag at the verified SHA.
+4. Downloads the **already assembled** tarball in an Ubuntu npm OIDC job with
+   `id-token: write`, Node 24 and SHA-256-pinned npm CLI; publishes it **without rebuilding**.
+5. Confirms the immutable `dsh-computer-history@1.0.0` Registry SHA-1 matches that tarball.
+6. Checks the public npm tarball SHA-1 **and SHA-256** against the candidate, creates a draft
+   GitHub Release, attaches that exact file, re-downloads and checks it, then publishes the Release.
+
+If npm publishing or any later step fails, **do not delete, force-move or reuse a tag** and
+do not manually publish a different artifact under the same version. Diagnose before retrying.
+Publishing cannot be validated end-to-end on the preparation branch without actual npm
+account configuration; a successful PR CI proves only the non-publishing build/acceptance gates.
 
 ### Product-journey release gate
 
@@ -216,9 +268,9 @@ declared safe. It must be rerun at the final release cut.
 the three artifacts produced on their native runners, so a single-machine `pnpm pack` is not a valid substitute
 for the release assembly anymore.
 
-The reproducible pre-tag gate is the **Packaged alpha matrix** workflow, which now runs
+The reproducible pre-release gate is the **Packaged alpha matrix** workflow, which now runs
 `pnpm verify:release` against the assembled artifact when the candidate has a non-`-dev`
-version. The release-tag workflow additionally verifies the native macOS signature from
+version. The manual release workflow additionally verifies the native macOS signature from
 macOS and runs the complete installed product journey before publication.
 
 After all three native artifacts have
