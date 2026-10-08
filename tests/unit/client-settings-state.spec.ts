@@ -6,6 +6,7 @@ import {
   editorCompanionAwaitingFirstContact,
   editorCompanionConnected,
   deleteHistoryRequest,
+  historyFeedbackIsCurrent,
 } from '../../src/client/settings-rows.js'
 import { settingsViewMode } from '../../src/client/settings-view.js'
 
@@ -96,3 +97,11 @@ describe('client history deletion presets', () => {
   })
 })
 
+
+describe('client history feedback lifetime', () => {
+  it('hides stale history mutation success messages after the revision changes', () => {
+    expect(historyFeedbackIsCurrent(undefined, 3)).toBe(true)
+    expect(historyFeedbackIsCurrent(3, 3)).toBe(true)
+    expect(historyFeedbackIsCurrent(3, 4)).toBe(false)
+  })
+})

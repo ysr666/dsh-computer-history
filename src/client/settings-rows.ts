@@ -713,6 +713,13 @@ export function deleteHistoryRequest(
   }
 }
 
+export function historyFeedbackIsCurrent(
+  feedbackRevision: number | undefined,
+  currentRevision: number,
+): boolean {
+  return feedbackRevision === undefined || feedbackRevision === currentRevision
+}
+
 export function DataRow({ t, store, snapshot }: SettingsRowProps): React.ReactElement {
   const inputRef = React.useRef<HTMLInputElement>(null)
   const [exportPending, setExportPending] = React.useState(false)
@@ -726,6 +733,7 @@ export function DataRow({ t, store, snapshot }: SettingsRowProps): React.ReactEl
   const [privacyPreview, setPrivacyPreview] = React.useState<RedactionPreview>()
   const [privacyPending, setPrivacyPending] = React.useState(false)
   const [feedback, setFeedback] = React.useState<Feedback>()
+  const [feedbackRevision, setFeedbackRevision] = React.useState<number>()
 
   React.useEffect(() => {
     let disposed = false
@@ -757,6 +765,7 @@ export function DataRow({ t, store, snapshot }: SettingsRowProps): React.ReactEl
     if (!privacyBundleId) return
     setPrivacyPending(true)
     setFeedback(undefined)
+    setFeedbackRevision(undefined)
     try {
       setPrivacyPreview(await historyApi.getRedactionPreview(`app:${privacyBundleId}`))
     } catch (cause) {
@@ -770,6 +779,7 @@ export function DataRow({ t, store, snapshot }: SettingsRowProps): React.ReactEl
   const exportHistory = async (): Promise<void> => {
     setExportPending(true)
     setFeedback(undefined)
+    setFeedbackRevision(undefined)
     try {
       await downloadHistoryRoute('/export')
       setFeedback({ kind: 'success', text: t('exportReady') })
@@ -785,6 +795,7 @@ export function DataRow({ t, store, snapshot }: SettingsRowProps): React.ReactEl
     event.currentTarget.value = ''
     if (!file) return
     setFeedback(undefined)
+    setFeedbackRevision(undefined)
     try {
       setSelectedImport({
         name: file.name,
@@ -800,9 +811,11 @@ export function DataRow({ t, store, snapshot }: SettingsRowProps): React.ReactEl
     if (!selectedImport) return
     setImportPending(true)
     setFeedback(undefined)
+    setFeedbackRevision(undefined)
     try {
       await store.importHistory(selectedImport.document)
       setSelectedImport(undefined)
+      setFeedbackRevision(store.getSnapshot().historyRevision)
       setFeedback({ kind: 'success', text: t('importComplete') })
     } catch {
       setFeedback({ kind: 'error', text: t('importFailed') })
@@ -923,17 +936,21 @@ export function DataRow({ t, store, snapshot }: SettingsRowProps): React.ReactEl
             : null,
         ),
       ),
-      feedbackNode(feedback),
+      feedbackNode(historyFeedbackIsCurrent(
+        feedbackRevision,
+        snapshot.historyRevision,
+      ) ? feedback : undefined),
     ),
   )
 }
 
 export function DeleteHistoryRow({
-  t, store,
+  t, store, snapshot,
 }: SettingsRowProps): React.ReactElement {
   const [confirming, setConfirming] = React.useState<DeleteHistoryPreset>()
   const [pending, setPending] = React.useState(false)
   const [feedback, setFeedback] = React.useState<Feedback>()
+  const [feedbackRevision, setFeedbackRevision] = React.useState<number>()
 
   const labels: Record<DeleteHistoryPreset, string> = {
     'ten-minutes': t('clearLastTenMinutes'),
@@ -945,9 +962,11 @@ export function DeleteHistoryRow({
   const remove = async (preset: DeleteHistoryPreset): Promise<void> => {
     setPending(true)
     setFeedback(undefined)
+    setFeedbackRevision(undefined)
     try {
       await store.deleteHistory(deleteHistoryRequest(preset, Date.now()))
       setConfirming(undefined)
+      setFeedbackRevision(store.getSnapshot().historyRevision)
       setFeedback({ kind: 'success', text: t('historyDeleted') })
     } catch (cause) {
       setFeedback({ kind: 'error', text: failureText(t, cause) })
@@ -990,7 +1009,10 @@ export function DeleteHistoryRow({
             }, t('cancel')),
           )
         : null,
-      feedbackNode(feedback),
+      feedbackNode(historyFeedbackIsCurrent(
+        feedbackRevision,
+        snapshot.historyRevision,
+      ) ? feedback : undefined),
     ),
     true,
   )
