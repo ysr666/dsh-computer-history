@@ -101,6 +101,15 @@ jobs:
     name: assemble + verify release tarball
     needs: native
     runs-on: macos-14
+    # release-blockers.mjs reads workflow runs, PRs/issues and Dependabot alerts.
+    # The workflow's top-level permissions: {} otherwise strips these scopes.
+    permissions:
+      actions: read
+      contents: read
+      issues: read
+      pull-requests: read
+      security-events: read
+      vulnerability-alerts: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
