@@ -492,7 +492,8 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
       if (!ownsCapture) {
         companionState = {
           listening: false,
-          ...currentPairingFlags(),
+          paired: companionState.paired,
+          editorPaired: companionState.editorPaired ?? false,
           reason: 'companion intake follows capture ownership',
         }
         return
@@ -519,9 +520,13 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
   stopCompanionForOwner = (): Promise<void> =>
     enqueueCompanionLifecycle(async () => {
       await companionIntake.stop()
+      // Teardown effects can request stop more than once, including after
+      // the database-owning effect has closed SQLite. Preserve the last
+      // published pairing flags instead of querying a closed token store.
       companionState = {
         listening: false,
-        ...currentPairingFlags(),
+        paired: companionState.paired,
+        editorPaired: companionState.editorPaired ?? false,
         reason: ownsCapture
           ? 'companion intake stopped'
           : 'companion intake follows capture ownership',
