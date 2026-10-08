@@ -42,6 +42,7 @@ const providedTarball = process.env.DSH_E2E_TARBALL
   ? path.resolve(process.env.DSH_E2E_TARBALL)
   : undefined
 const diagnosticTimeline = process.env.DSH_E2E_DIAGNOSTIC_TIMELINE === '1'
+const verifyInstalledClient = process.env.DSH_E2E_VERIFY_CLIENT === '1'
 const explicitAllowBundles = (process.env.DSH_E2E_ALLOW_BUNDLES ?? '')
   .split(',')
   .map(value => value.trim())
@@ -341,6 +342,31 @@ ${collectorLine}    collectorRestart: false
 
   if (collectorRequired && !collectorHealthy) {
     throw new Error(`collector did not settle within 12s: ${collectorDetail}`)
+  }
+
+  if (verifyInstalledClient) {
+    const clientCheck = run(
+      process.execPath,
+      [path.join(REPO, 'scripts', 'verify-installed-client.mjs')],
+      {
+        env: {
+          ...process.env,
+          PANEL_URL: `http://127.0.0.1:${webPort}/`,
+          PANEL_COOKIE_JAR: jar,
+          PANEL_OUT: path.join(artifacts, 'installed-client'),
+        },
+        timeout: 180_000,
+      },
+    )
+    const clientDetail = clientCheck.out.trim().split('\n').slice(-4).join(' | ')
+    record(
+      'installed client product path',
+      clientCheck.status === 0,
+      clientCheck.status === 0 ? clientDetail : clientDetail.slice(-600),
+    )
+    if (clientCheck.status !== 0) {
+      throw new Error('installed client product-path verification failed')
+    }
   }
 
   const db = path.join(home, 'computer-history', 'history.sqlite')
