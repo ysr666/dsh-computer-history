@@ -139,6 +139,16 @@ jobs:
         run: |
           tarball=$(ls "$RUNNER_TEMP"/package/dsh-computer-history-*.tgz | head -1)
           DSH_RELEASE_TARBALL="$tarball" node scripts/verify-native-package.mjs
+
+      - name: Dry-run release manifest and changelog on a non-dev candidate
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if [[ "$version" != *-dev* ]]; then
+            tarball=$(ls "$RUNNER_TEMP"/package/dsh-computer-history-*.tgz | head -1)
+            DSH_RELEASE_TARBALL="$tarball" pnpm verify:release
+          else
+            echo "Development version: release-cut preflight deferred until a non-dev candidate"
+          fi
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: three-platform-plugin

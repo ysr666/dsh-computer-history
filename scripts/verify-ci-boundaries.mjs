@@ -87,6 +87,12 @@ if (!/pnpm e2e:product-journey/.test(releaseWorkflowSource)) {
 if (!/DSH_PRODUCT_TARBALL=/.test(releaseWorkflowSource)) {
   problems.push(`${RELEASE_WORKFLOW}: product journey no longer reuses the assembled release tarball`)
 }
+if (!releaseWorkflowSource.includes('echo \'{"private":true}\' > "$root/package.json"')) {
+  problems.push(`${RELEASE_WORKFLOW}: DSH CLI bootstrap no longer writes a valid package.json`)
+}
+if (!/chrome=\$\(find [^\n]+ -path [^\n]+ -print -quit\)/.test(releaseWorkflowSource)) {
+  problems.push(`${RELEASE_WORKFLOW}: Chrome lookup shell command is missing or has a broken continuation`)
+}
 if (!/DSH_CLI=/.test(releaseWorkflowSource)) {
   problems.push(`${RELEASE_WORKFLOW}: product journey no longer provisions DSH_CLI`)
 }

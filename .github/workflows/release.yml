@@ -77,7 +77,7 @@ jobs:
           root=/tmp/dsh-product-journey-cli
           rm -rf "$root"
           mkdir -p "$root"
-          printf '{"private":true}\\n' > "$root/package.json"
+          echo '{"private":true}' > "$root/package.json"
           pnpm --dir "$root" add --ignore-scripts @deepseek-ai/dsh@0.2.0-rc.2
           "$root/node_modules/.bin/dsh" --version
           echo "DSH_CLI=$root/node_modules/.bin/dsh" >> "$GITHUB_ENV"
@@ -121,9 +121,7 @@ jobs:
               f"({platform_name}) from {match['url']}"
           )
           PYCODE
-          chrome=$(find /tmp/chrome-for-testing -type f \\
-            -path '*/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing' \\
-            -print -quit)
+          chrome=$(find /tmp/chrome-for-testing -type f -path '*/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing' -print -quit)
           test -n "$chrome"
           chmod +x "$chrome"
           xattr -dr com.apple.quarantine /tmp/chrome-for-testing 2>/dev/null || true

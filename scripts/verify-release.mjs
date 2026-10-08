@@ -29,7 +29,11 @@ if (typeof version !== 'string' || version.length === 0) {
 
 // The classic release bug: the tag says one thing and the package says another, and the artifact is named after
 // whichever one was read last.
-const tag = process.env.GITHUB_REF_NAME
+// GitHub also sets GITHUB_REF_NAME for branches and PRs (for example,
+// "main" or "128/merge"). Only tag-triggered releases must match v<version>.
+const tag = process.env.GITHUB_REF_TYPE === 'tag'
+  ? process.env.GITHUB_REF_NAME
+  : undefined
 if (tag !== undefined && tag !== `v${version}`) {
   problems.push(`the tag is ${tag} and package.json says ${version}: they have to agree (v${version})`)
 }
