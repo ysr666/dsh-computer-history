@@ -169,7 +169,9 @@ npm whoami --registry=https://registry.npmjs.org/
 npm publish --registry=https://registry.npmjs.org/ --access public --tag bootstrap
 ```
 
-The explicit `--registry=https://registry.npmjs.org/` flags are required even if `npm config get registry` shows a third-party mirror (such as `registry.npmmirror.com`). Do **not** change the user's global npm configuration to bootstrap this package. If the login page or terminal says `cnpm`/`npmmirror`, stop and verify the exact command and hostname.\n\nThis publishes an intentionally **nonfunctional** placeholder; it does **not** publish v1.0.0.
+The explicit `--registry=https://registry.npmjs.org/` flags are required even if `npm config get registry` shows a third-party mirror (such as `registry.npmmirror.com`). Do **not** change the user's global npm configuration to bootstrap this package. If the login page or terminal says `cnpm`/`npmmirror`, stop and verify the exact command and hostname.
+
+This publishes an intentionally **nonfunctional** placeholder; it does **not** publish v1.0.0.
 Keep the bootstrap source minimal and avoid including secrets, local paths or real DCH history.
 
 After npm shows the new package, go to **npmjs.com → dsh-computer-history → Settings →
