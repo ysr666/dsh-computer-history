@@ -53,6 +53,8 @@ jobs:
             echo "::error::$RELEASE_TAG already exists; do not reuse immutable tags"; exit 1
           fi
           echo "release preflight accepted $RELEASE_TAG ($RELEASE_SHA)"
+      - name: Require first npm namespace reservation before creating any release tag
+        run: node scripts/release-registry-identity.mjs inspect 0.0.0-bootstrap.0
 
   native:
     needs: preflight
