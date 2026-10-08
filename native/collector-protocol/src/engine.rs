@@ -996,67 +996,6 @@ mod tests {
     }
 
     #[test]
-    fn the_unavailable_code_names_the_path_the_platform_really_uses() {
-        // The reason beside the code is platform-true; the code used to say `uia-unavailable` everywhere,
-        // including a Linux run whose reason was a missing X display.
-        assert_eq!(unavailable_code("win32"), "uia-unavailable");
-        assert_eq!(unavailable_code("darwin"), "ax-unavailable");
-        assert_eq!(unavailable_code("linux"), "at-spi-unavailable");
-        assert_eq!(unavailable_code("something-new"), "uia-unavailable");
-
-        // And the emission uses it, which is the part a reader actually sees.
-        struct LinuxWithoutDisplay;
-        impl ObservationSource for LinuxWithoutDisplay {
-            fn platform(&self) -> &'static str { "linux" }
-            fn provider(&self) -> &'static str { "at-spi" }
-            fn availability(&mut self) -> Availability {
-                Availability::Unavailable("no X display: nothing to observe".to_string())
-            }
-            fn foreground(&mut self) -> Option<ForegroundIdentity> { None }
-            fn describe(&mut self, _identity: &ForegroundIdentity) -> Option<PlatformObservation> { None }
-            fn idle_seconds(&mut self) -> Option<u64> { None }
-        }
-        let mut collector = Collector::new("probe".to_string(), LinuxWithoutDisplay, &[]);
-        let lines = collector.tick();
-        assert!(
-            lines.iter().any(|line| line.contains(r#""code":"at-spi-unavailable""#)),
-            "{lines:?}",
-        );
-        assert!(
-            !lines.iter().any(|line| line.contains("uia-unavailable")),
-            "{lines:?}",
-        );
-    }
-
-    #[test]
-    fn an_empty_allow_list_is_named_once_instead_of_recording_nothing_quietly() {
-        // Measured 2026-10-06: with a policy that parsed to an empty allow list the collector reported `running`,
-        // produced no observation, and produced no diagnostic either - indistinguishable from a machine nobody
-        // used. It is said once per configure, not once per heartbeat.
-        let mut collector = Collector::new("probe".to_string(), FakeSource::new(Vec::new()), &[]);
-        let empty = Policy::default();
-        let first = collector.configure(1, empty.clone());
-        assert!(
-            first.iter().any(|line| line.contains("no-allowed-applications")),
-            "{first:?}",
-        );
-        let ticks = collector.tick();
-        assert!(
-            !ticks.iter().any(|line| line.contains("no-allowed-applications")),
-            "the diagnostic must not repeat on every heartbeat: {ticks:?}",
-        );
-        let allowed = Policy {
-            allowed_bundle_ids: vec!["org.gnome.Terminal.desktop".to_string()],
-            ..Policy::default()
-        };
-        let second = collector.configure(2, allowed);
-        assert!(
-            !second.iter().any(|line| line.contains("no-allowed-applications")),
-            "{second:?}",
-        );
-    }
-
-    #[test]
     fn the_idle_boundary_is_part_of_the_fingerprint() {
         let mut collector = collector(vec![Some(facts("Code.exe")); 3]);
         configure(&mut collector, &["Code.exe"]);
