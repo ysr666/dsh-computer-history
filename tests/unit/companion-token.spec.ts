@@ -117,6 +117,41 @@ describe('companion pairing tokens', () => {
     second.close()
   })
 
+  it('retries a pairing snapshot if another Host rotates between row read and data-version read', () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'dsh-ch-pairing-snapshot-race-'))
+    roots.push(root)
+    const dataDirectory = path.join(root, 'history')
+    const first = openHistoryDatabase({ dataDirectory, nowMs: 1 })
+    const second = openHistoryDatabase({ dataDirectory, nowMs: 1 })
+    const hostB = new CompanionTokenStore(second.db)
+    const oldToken = hostB.rotate('browser', 1_000)
+    const hostA = new CompanionTokenStore(first.db)
+    expect(hostA.verify('browser', oldToken)).toBe(true)
+
+    // Force B's write precisely between A's SELECT and its second
+    // data_version read. Old code would cache the old token and the new
+    // version, falsely continuing to accept a revoked credential.
+    const internal = hostA as unknown as {
+      dataVersion: () => number
+      reloadCredentials: () => void
+    }
+    const actualVersion = internal.dataVersion.bind(hostA)
+    let reads = 0
+    let replacement = ''
+    internal.dataVersion = () => {
+      if (++reads === 2) replacement = hostB.rotate('browser', 2_000)
+      return actualVersion()
+    }
+    internal.reloadCredentials()
+    expect(reads).toBeGreaterThanOrEqual(4)
+    expect(hostA.verify('browser', oldToken)).toBe(false)
+    expect(hostA.verify('browser', replacement)).toBe(true)
+    expect(hostA.state('browser').createdAtMs).toBe(2_000)
+
+    first.close()
+    second.close()
+  })
+
   it('survives a reopen of the store', () => {
     const root = mkdtempSync(path.join(os.tmpdir(), 'dsh-ch-pairing-reopen-'))
     roots.push(root)

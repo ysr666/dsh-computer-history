@@ -48,7 +48,6 @@ export class CompanionTokenStore {
 
   public constructor(private readonly db: DatabaseSync) {
     this.reloadCredentials()
-    this.observedDataVersion = this.dataVersion()
   }
 
   private dataVersion(): number {
@@ -59,29 +58,41 @@ export class CompanionTokenStore {
   }
 
   private reloadCredentials(): void {
-    const rows = this.db.prepare(`
-      SELECT kind, token_hash, created_at_ms
-      FROM companion_pairing
-    `).all() as Array<{
-      kind: CompanionKind
-      token_hash: string
-      created_at_ms: number
-    }>
-    this.credentials.clear()
-    for (const row of rows) {
-      if (row.kind !== 'browser' && row.kind !== 'editor') continue
-      this.credentials.set(row.kind, {
-        tokenHash: row.token_hash,
-        createdAtMs: Number(row.created_at_ms),
-      })
+    // If a second Host rotates between the SELECT and PRAGMA data_version,
+    // caching the earlier rows with the newer version would keep a revoked
+    // credential valid indefinitely. Apply only one stable committed snapshot.
+    // Repeated contention fails closed rather than spinning during auth checks.
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const before = this.dataVersion()
+      const rows = this.db.prepare(`
+        SELECT kind, token_hash, created_at_ms
+        FROM companion_pairing
+      `).all() as Array<{
+        kind: CompanionKind
+        token_hash: string
+        created_at_ms: number
+      }>
+      const after = this.dataVersion()
+      if (before !== after) continue
+
+      this.credentials.clear()
+      for (const row of rows) {
+        if (row.kind !== 'browser' && row.kind !== 'editor') continue
+        this.credentials.set(row.kind, {
+          tokenHash: row.token_hash,
+          createdAtMs: Number(row.created_at_ms),
+        })
+      }
+      this.observedDataVersion = after
+      return
     }
+    throw new Error('companion pairing changed during every snapshot read')
   }
 
   private refreshExternalChanges(): void {
     const version = this.dataVersion()
     if (version === this.observedDataVersion) return
     this.reloadCredentials()
-    this.observedDataVersion = version
   }
 
   /**
@@ -136,7 +147,6 @@ export class CompanionTokenStore {
     // A different writer replaced our token after rotate(). Reflect that
     // durable winner locally instead of restoring a stale checkpoint.
     this.reloadCredentials()
-    this.observedDataVersion = this.dataVersion()
     return false
   }
 
