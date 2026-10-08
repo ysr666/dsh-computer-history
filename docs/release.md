@@ -161,13 +161,15 @@ Only the npm account owner can bootstrap the name. A minimal placeholder publish
 # Run locally in a NEW EMPTY temporary directory, not in the DCH repository!
 mkdir dch-npm-bootstrap && cd dch-npm-bootstrap
 npm init -y
-npm login
 npm pkg set name=dsh-computer-history version=0.0.0-bootstrap.0 \
   description="Name reservation; install v1.0.0 once released"
-npm publish --access public --tag bootstrap
+# Force the official npm Registry; a user's default may be npmmirror/cnpm.
+npm login --registry=https://registry.npmjs.org/
+npm whoami --registry=https://registry.npmjs.org/
+npm publish --registry=https://registry.npmjs.org/ --access public --tag bootstrap
 ```
 
-This publishes an intentionally **nonfunctional** placeholder; it does **not** publish v1.0.0.
+The explicit `--registry=https://registry.npmjs.org/` flags are required even if `npm config get registry` shows a third-party mirror (such as `registry.npmmirror.com`). Do **not** change the user's global npm configuration to bootstrap this package. If the login page or terminal says `cnpm`/`npmmirror`, stop and verify the exact command and hostname.\n\nThis publishes an intentionally **nonfunctional** placeholder; it does **not** publish v1.0.0.
 Keep the bootstrap source minimal and avoid including secrets, local paths or real DCH history.
 
 After npm shows the new package, go to **npmjs.com → dsh-computer-history → Settings →
