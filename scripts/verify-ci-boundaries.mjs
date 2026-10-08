@@ -110,7 +110,7 @@ for (const [claim, expression] of [
   ['npm publish after verified tag', /publish-npm:\s*\n[\s\S]*?needs: tag/],
   ['npm bootstrap must precede any release tag', /release-registry-identity\.mjs inspect 0\.0\.0-bootstrap\.0/],
   ['OIDC publish permission', /id-token: write/],
-  ['npm publication without rebuild', /npm publish "\$PACKAGE_TARBALL" --access public --provenance --ignore-scripts/],
+  ['npm publication without rebuild, pinned to official registry', /npm publish "\$PACKAGE_TARBALL" --registry=https:\/\/registry\.npmjs\.org\/ --access public --provenance --ignore-scripts/],
   ['npm registry byte identity', /release-registry-identity\.mjs wait/],
   ['GitHub release after npm validation', /publish:\s*\n[\s\S]*?needs: publish-npm/],
 ]) {
