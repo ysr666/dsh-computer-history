@@ -29,7 +29,10 @@ if (!collector && !packaged) {
 const target = fileURLToPath(new URL('./e2e-macos.mjs', import.meta.url))
 const transportTimeoutMs = Math.max(
   60_000,
-  Number(process.env.DSH_E2E_TRANSPORT_TIMEOUT_MS ?? 300_000),
+  Number(
+    process.env.DSH_E2E_TRANSPORT_TIMEOUT_MS
+      ?? (process.env.DSH_E2E_VERIFY_PANEL === '1' ? 720_000 : 300_000),
+  ),
 )
 const result = spawnSync(process.execPath, [target], {
   env: {
