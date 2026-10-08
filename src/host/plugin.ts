@@ -70,6 +70,27 @@ export function resolveHistoryDataDirectory(
     ?? dshHomePath('computer-history')
 }
 
+export function packagedCollectorExecutable(
+  platform: NodeJS.Platform,
+): string {
+  const fileName = platform === 'darwin'
+    ? 'dsh-computer-history-collector'
+    : platform === 'win32'
+      ? 'dsh-computer-history-collector-windows.exe'
+      : platform === 'linux'
+        ? 'dsh-computer-history-collector-linux'
+        : undefined
+  if (!fileName) {
+    throw new Error(
+      `computer history collector is unsupported on ${platform}`,
+    )
+  }
+  return fileURLToPath(
+    new URL(`../bin/${fileName}`, import.meta.url),
+  )
+}
+
+
 export class ManagedCapture implements CaptureController {
   public constructor(
     private readonly manager: () => CollectorManager | undefined,
@@ -243,11 +264,10 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
 
   const collectorExecutable =
     config.collectorExecutable
-    ?? fileURLToPath(
-      new URL(
-        '../bin/dsh-computer-history-collector',
-        import.meta.url,
-      ),
+    ?? (
+      enabled
+        ? packagedCollectorExecutable(process.platform)
+        : ''
     )
 
   /** `true` once in-flight ingestion settles, `false` if it does not. */

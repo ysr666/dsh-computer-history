@@ -30,13 +30,17 @@ const killTree = pid => {
   try { process.kill(-pid, 'SIGTERM') } catch { try { process.kill(pid, 'SIGTERM') } catch { /* already gone */ } }
 }
 
-// The plugin carries a collector for macOS only. On a machine without one (Windows, or a checkout that has not
-// built it) the Host starts, reports collector-exited and stops at a boundary - honest, but it exercises less than
-// the machine can. Set COLLECTOR_EXECUTABLE to the binary and the runs use it.
+// A caller can still override the collector for focused development probes. Packaged-install verification instead
+// sets DSH_E2E_REQUIRE_COLLECTOR=1 without an override: that proves the installed package selected its own binary.
 const collectorLine = process.env.COLLECTOR_EXECUTABLE
   ? `    collectorExecutable: ${process.env.COLLECTOR_EXECUTABLE}\n`
   : ''
-const collectorRequired = Boolean(process.env.COLLECTOR_EXECUTABLE)
+const collectorRequired =
+  Boolean(process.env.COLLECTOR_EXECUTABLE)
+  || process.env.DSH_E2E_REQUIRE_COLLECTOR === '1'
+const providedTarball = process.env.DSH_E2E_TARBALL
+  ? path.resolve(process.env.DSH_E2E_TARBALL)
+  : undefined
 const diagnosticTimeline = process.env.DSH_E2E_DIAGNOSTIC_TIMELINE === '1'
 const explicitAllowBundles = (process.env.DSH_E2E_ALLOW_BUNDLES ?? '')
   .split(',')
@@ -60,11 +64,14 @@ mkdirSync(artifacts, { recursive: true })
 // single literal replacement attempted only after a failure; measured 2026-08-06 against the current CLI on a
 // fresh profile, both attempts failed because the file only exists after the first attempt. This sets every
 // placeholder to false - a rule, not one literal - and runs before the first attempt and again after a failure.
-const allowBuildsOff = (workspace) => {
+const allowBuildsOff = (workspace, { seedKoffi = false } = {}) => {
   try {
     if (!existsSync(workspace)) return false
     const text = readFileSync(workspace, 'utf8')
-    const fixed = text.replace(/^(\s+[^\s:]+:\s*)set this to true or false\s*$/gm, '$1false')
+    let fixed = text.replace(/^(\s+[^\s:]+:\s*)set this to true or false\s*$/gm, '$1false')
+    if (seedKoffi && !/^allowBuilds:\s*$/m.test(fixed)) {
+      fixed = `${fixed.trimEnd()}\nallowBuilds:\n  koffi: false\n`
+    }
     if (fixed === text) return false
     writeFileSync(workspace, fixed)
     return true
@@ -94,7 +101,13 @@ const run = (command, args, options = {}) => {
   const result = shim
     ? spawnSync(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', [command, ...args].map(quoteForCmd).join(' ')], { encoding: 'utf8', ...options, windowsVerbatimArguments: true })
     : spawnSync(command, args, { encoding: 'utf8', ...options })
-  return { status: result.status ?? 1, out: `${result.stdout ?? ''}${result.stderr ?? ''}` }
+  const errorText = result.error
+    ? `\nspawn error: ${result.error.code ?? result.error.name}: ${result.error.message}`
+    : ''
+  return {
+    status: result.status ?? 1,
+    out: `${result.stdout ?? ''}${result.stderr ?? ''}${errorText}`,
+  }
 }
 
 const version = run(cli, ['--version'])
@@ -116,33 +129,66 @@ const companionPort = webPort + 1
 let host
 
 try {
-  // 1. Pack the plugin the way it is released, into a temporary directory. The editor companion is an
-  // intentionally independent pnpm project with its own lockfile and build-script policy; the release workflow
-  // installs it before `pnpm pack`, so this one-command harness must do the same on a clean clone.
-  const editorDeps = run('pnpm', ['install', '--frozen-lockfile'], { cwd: path.join(REPO, 'extension-editor') })
-  record('install editor build deps', editorDeps.status === 0, editorDeps.status === 0 ? 'exit 0' : editorDeps.out.trim().slice(-240))
-  if (editorDeps.status !== 0) throw new Error('editor build dependency install failed')
+  // 1. Either consume the exact assembled release artifact or build a local package for the ordinary developer
+  // harness. Packaged-install CI always supplies DSH_E2E_TARBALL so no native binary is rebuilt here.
+  let tarball
+  if (providedTarball) {
+    record(
+      'use packaged artifact',
+      existsSync(providedTarball),
+      providedTarball,
+    )
+    if (!existsSync(providedTarball)) {
+      throw new Error('provided packaged artifact does not exist')
+    }
+    tarball = providedTarball
+  } else {
+    const editorDeps = run('pnpm', ['install', '--frozen-lockfile'], { cwd: path.join(REPO, 'extension-editor') })
+    record('install editor build deps', editorDeps.status === 0, editorDeps.status === 0 ? 'exit 0' : editorDeps.out.trim().slice(-240))
+    if (editorDeps.status !== 0) throw new Error('editor build dependency install failed')
 
-  rmSync(path.join(REPO, 'e2e-pack'), { recursive: true, force: true })
-  mkdirSync(path.join(REPO, 'e2e-pack'), { recursive: true })
-  const packed = run('pnpm', ['pack', '--pack-destination', path.join(REPO, 'e2e-pack')])
-  const tarball = path.join(REPO, 'e2e-pack', `dsh-computer-history-${JSON.parse(readFileSync('package.json', 'utf8')).version}.tgz`)
-  record('pack', packed.status === 0, packed.status === 0 ? path.relative(REPO, tarball) : packed.out.trim().slice(-160))
-  if (packed.status !== 0) throw new Error('pack failed')
+    rmSync(path.join(REPO, 'e2e-pack'), { recursive: true, force: true })
+    mkdirSync(path.join(REPO, 'e2e-pack'), { recursive: true })
+    const packed = run('pnpm', ['pack', '--pack-destination', path.join(REPO, 'e2e-pack')])
+    tarball = path.join(REPO, 'e2e-pack', `dsh-computer-history-${JSON.parse(readFileSync('package.json', 'utf8')).version}.tgz`)
+    record('pack', packed.status === 0, packed.status === 0 ? path.relative(REPO, tarball) : packed.out.trim().slice(-160))
+    if (packed.status !== 0) throw new Error('pack failed')
+  }
 
-  // 2. Install into the throwaway home. The first add stops at the build-script gate, which is answered the same
-  // way a person would answer it in the UI; the retry then succeeds.
+  // 2. Initialize the throwaway profile before the first install, then make the build-script decision explicit.
+  // The old harness relied on the first web-app install failing so the CLI would create pnpm-workspace.yaml, then
+  // patched the generated koffi placeholder and retried. On the 2026-10-07 packaged-alpha run the first add
+  // returned promptly on Windows but never returned on the macOS/Linux runners, so the outer transport guard
+  // killed the whole job after 300 seconds without a useful diagnostic. plugin list creates the empty profile
+  // without changing dependencies; seed the known koffi decision before the first add, retain the placeholder
+  // fixer for future dependencies, and bound each add itself.
   const env = { ...process.env, DSH_HOME: home }
+  const initialized = run(cli, ['plugin', '--profile', profile, 'list'], {
+    env,
+    timeout: 30_000,
+  })
+  record(
+    'initialize profile',
+    initialized.status === 0,
+    initialized.status === 0 ? 'exit 0' : initialized.out.trim().slice(-400),
+  )
+  if (initialized.status !== 0) throw new Error('profile initialization failed')
+
+  const workspace = path.join(home, 'profiles', profile, 'pnpm-workspace.yaml')
+  allowBuildsOff(workspace, { seedKoffi: true })
+
   for (const spec of ['@deepseek-ai/dsh-web-app@0.2.0-rc.2', tarball]) {
-    allowBuildsOff(path.join(home, 'profiles', profile, 'pnpm-workspace.yaml'))
-    let added = run(cli, ['plugin', '--profile', profile, 'add', spec], { env })
+    allowBuildsOff(workspace)
+    let added = run(cli, ['plugin', '--profile', profile, 'add', spec], {
+      env,
+      timeout: 90_000,
+    })
     if (added.status !== 0) {
-      const workspace = path.join(home, 'profiles', profile, 'pnpm-workspace.yaml')
-      try {
-        allowBuildsOff(workspace)
-      } catch { /* the gate file may not be there; the retry reports it */ }
-      allowBuildsOff(path.join(home, 'profiles', profile, 'pnpm-workspace.yaml'))
-      added = run(cli, ['plugin', '--profile', profile, 'add', spec], { env })
+      allowBuildsOff(workspace)
+      added = run(cli, ['plugin', '--profile', profile, 'add', spec], {
+        env,
+        timeout: 90_000,
+      })
     }
     const label = spec === tarball ? 'install plugin' : 'install web app'
     // Show the CLI's own diagnostics path and the tail of its pnpm log, not a 160-character truncation: when the

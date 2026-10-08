@@ -1,16 +1,39 @@
-# Publishing a release: push a `v*` tag whose name is `v` + the version in package.json.
-#
-# Computer History is one three-platform plugin artifact. Each native collector is built on its own runner,
-# those exact bytes are assembled into one tarball, and that same tarball must clean-install and handshake on
-# macOS, Windows and Linux before GitHub Release publication is allowed.
-name: Release
+name: Packaged alpha matrix
 
 on:
+  pull_request:
+    paths:
+      - '.github/workflows/packaged-alpha.yml'
+      - 'native/**'
+      - 'src/host/plugin.ts'
+      - 'scripts/build-native.mjs'
+      - 'scripts/write-native-manifest.mjs'
+      - 'scripts/verify-native-package.mjs'
+      - 'scripts/e2e-collector-transport.mjs'
+      - 'scripts/e2e-macos.mjs'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
   push:
-    tags: ['v*']
+    branches: [main]
+    paths:
+      - '.github/workflows/packaged-alpha.yml'
+      - 'native/**'
+      - 'src/host/plugin.ts'
+      - 'scripts/build-native.mjs'
+      - 'scripts/write-native-manifest.mjs'
+      - 'scripts/verify-native-package.mjs'
+      - 'scripts/e2e-collector-transport.mjs'
+      - 'scripts/e2e-macos.mjs'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: packaged-alpha-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   native:
@@ -44,7 +67,7 @@ jobs:
         run: node -e "const fs=require('node:fs'); fs.writeFileSync('bin/source-'+process.env.NATIVE_PLATFORM+'.txt', process.env.GITHUB_SHA+'\n')"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: release-native-${{ matrix.platform }}
+          name: native-${{ matrix.platform }}
           path: |
             ${{ matrix.binary }}
             bin/source-${{ matrix.platform }}.txt
@@ -52,9 +75,9 @@ jobs:
           retention-days: 3
 
   assemble:
-    name: assemble + verify release tarball
+    name: assemble one three-platform tarball
     needs: native
-    runs-on: macos-14
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -67,23 +90,21 @@ jobs:
           node-version: 22.19.0
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm build
-      - run: pnpm verify
       - run: pnpm install --frozen-lockfile
         working-directory: extension-editor
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: release-native-darwin
+          name: native-darwin
           path: bin
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: release-native-win32
+          name: native-win32
           path: bin
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: release-native-linux
+          name: native-linux
           path: bin
-      - name: Prove all native jobs came from this release commit
+      - name: Prove all native jobs came from this commit
         run: |
           node - <<'NODE'
           const fs = require('node:fs')
@@ -106,27 +127,19 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/package"
           pnpm pack --pack-destination "$RUNNER_TEMP/package"
-
-      - name: Scan for release blockers
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: pnpm verify:release:blockers
-
-      - name: Verify the release
+      - name: Verify the assembled native package
         run: |
           tarball=$(ls "$RUNNER_TEMP"/package/dsh-computer-history-*.tgz | head -1)
-          echo "verifying $tarball"
-          DSH_RELEASE_TARBALL="$tarball" pnpm verify:release
-
+          DSH_RELEASE_TARBALL="$tarball" node scripts/verify-native-package.mjs
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: release-plugin
+          name: three-platform-plugin
           path: ${{ runner.temp }}/package/dsh-computer-history-*.tgz
           if-no-files-found: error
           retention-days: 3
 
   install:
-    name: release clean install (${{ matrix.os }})
+    name: clean install + packaged collector (${{ matrix.os }})
     needs: assemble
     runs-on: ${{ matrix.os }}
     strategy:
@@ -145,37 +158,15 @@ jobs:
           node-version: 22.19.0
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: release-plugin
+          name: three-platform-plugin
           path: ${{ runner.temp }}/package
       - name: Install the supported DSH CLI in an isolated tool directory
         run: npm install --prefix "${{ runner.temp }}/dsh-cli" @deepseek-ai/dsh@0.2.0-rc.2
       - name: Put the isolated DSH CLI on PATH
         run: node -e "require('node:fs').appendFileSync(process.env.GITHUB_PATH, require('node:path').join(process.env.RUNNER_TEMP,'dsh-cli','node_modules','.bin')+'\n')"
-      - name: Locate the exact release tarball
+      - name: Locate the exact assembled tarball
         run: node -e "const fs=require('node:fs'),p=require('node:path'); const d=p.join(process.env.RUNNER_TEMP,'package'); const f=fs.readdirSync(d).find(x=>x.endsWith('.tgz')); if(!f) throw new Error('tarball missing'); fs.appendFileSync(process.env.GITHUB_ENV,'DSH_E2E_TARBALL='+p.join(d,f)+'\n')"
       - name: Verify packaged hashes on this platform
         run: node scripts/verify-native-package.mjs
       - name: Strict Host -> packaged collector transport, no executable override
         run: pnpm e2e:collector-transport
-
-  publish:
-    name: publish GitHub Release
-    needs: install
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: release-plugin
-          path: ${{ runner.temp }}/package
-      - name: Create the release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          version="${GITHUB_REF_NAME#v}"
-          awk -v v="$version" '$0 == "## " v {found=1; next} /^## / {found=0} found' CHANGELOG.md > /tmp/notes.md
-          test -s /tmp/notes.md || { echo "no changelog section for $version"; exit 1; }
-          gh release create "$GITHUB_REF_NAME" "$RUNNER_TEMP"/package/dsh-computer-history-*.tgz \
-            --title "$GITHUB_REF_NAME" --notes-file /tmp/notes.md
