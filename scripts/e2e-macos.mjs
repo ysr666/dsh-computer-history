@@ -14,7 +14,7 @@
 // collector under test, so the Host must finish its handshake and expose a live collector within the startup bound.
 import { spawn, spawnSync } from 'node:child_process'
 import { DatabaseSync } from 'node:sqlite'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
@@ -38,6 +38,7 @@ const collectorLine = process.env.COLLECTOR_EXECUTABLE
 const collectorRequired =
   Boolean(process.env.COLLECTOR_EXECUTABLE)
   || process.env.DSH_E2E_REQUIRE_COLLECTOR === '1'
+const verifyInstalledClient = process.env.DSH_E2E_VERIFY_CLIENT === '1'
 const providedTarball = process.env.DSH_E2E_TARBALL
   ? path.resolve(process.env.DSH_E2E_TARBALL)
   : undefined
@@ -215,6 +216,28 @@ try {
     manifest.dsh = { ...manifest.dsh, profile: { ...manifest.dsh?.profile, bundles } }
     writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
     record('profile layers', bundles.includes('@deepseek-ai/dsh-web-app'), bundles.join(', '))
+
+    const installedClient = path.join(
+      home,
+      'profiles',
+      profile,
+      'node_modules',
+      'dsh-computer-history',
+      'lib',
+      'client.js',
+    )
+    let installedClientReal = ''
+    try { installedClientReal = realpathSync(installedClient) } catch { /* recorded below */ }
+    const installedFromThrowawayProfile = installedClientReal !== ''
+      && installedClientReal.startsWith(realpathSync(home) + path.sep)
+    record(
+      'installed client bundle',
+      existsSync(installedClient) && installedFromThrowawayProfile,
+      installedClientReal || 'client.js is missing from the clean-installed profile',
+    )
+    if (!existsSync(installedClient) || !installedFromThrowawayProfile) {
+      throw new Error('the installed client bundle is missing or resolves outside the throwaway profile')
+    }
   }
 
   // 3. Own ports and own data directory: the companion's default is fixed (19388), which collides with a user's
@@ -250,8 +273,30 @@ ${collectorLine}    collectorRestart: false
   // silent-capture problem invisible.
   const jar = path.join(artifacts, 'cookies.txt')
   const api = `http://127.0.0.1:${webPort}/api/computer-history`
-  // -o into the artifacts, not /dev/null: that path does not exist on Windows, and this keeps the response.
-  run('curl', ['-s', '-c', jar, '-o', path.join(artifacts, 'bootstrap.html'), `http://127.0.0.1:${webPort}/?token=${token}`])
+  if (verifyInstalledClient) {
+    const clientCheck = run(process.execPath, [path.join(REPO, 'scripts', 'verify-packaged-client.mjs')], {
+      env: {
+        ...process.env,
+        PANEL_URL: `http://127.0.0.1:${webPort}/?token=${token}`,
+        PANEL_OUT: path.join(artifacts, 'packaged-client'),
+        PANEL_COOKIE_OUT: jar,
+        PANEL_CDP_PORT: String(webPort + 1_000),
+      },
+      cwd: REPO,
+    })
+    record(
+      'installed client/panel product path',
+      clientCheck.status === 0,
+      clientCheck.status === 0
+        ? clientCheck.out.trim().split('\n').at(-1) ?? 'browser verification passed'
+        : clientCheck.out.trim().slice(-600),
+    )
+    if (clientCheck.status !== 0) throw new Error('installed client/panel verification failed')
+    if (!existsSync(jar)) throw new Error('browser verification did not preserve the Host session cookie')
+  } else {
+    // -o into the artifacts, not /dev/null: that path does not exist on Windows, and this keeps the response.
+    run('curl', ['-s', '-c', jar, '-o', path.join(artifacts, 'bootstrap.html'), `http://127.0.0.1:${webPort}/?token=${token}`])
+  }
   // Optional: write the product preset as an allow rule - exactly what the panel's own button does. An isolated
   // Host allows nothing (its policy is include-only with no allow rule, because the first-run consent only runs in
   // a real installation), so a run that generates real desktop activity still records zero rows: measured on
