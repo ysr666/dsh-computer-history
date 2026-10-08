@@ -60,7 +60,7 @@ const record = (name, ok, detail) => {
 }
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
-const quoteForCmd = value => (/[\s"]/.test(String(value)) ? \`"\${value}"\` : String(value))
+const quoteForCmd = value => (/[\s"]/.test(String(value)) ? `"${value}"` : String(value))
 const run = (command, args, options = {}) => {
   const shim = process.platform === 'win32' && ['dsh', 'pnpm', 'npx'].includes(command)
   const result = shim
@@ -71,11 +71,11 @@ const run = (command, args, options = {}) => {
       )
     : spawnSync(command, args, { encoding: 'utf8', ...options })
   const errorText = result.error
-    ? \`\nspawn error: \${result.error.code ?? result.error.name}: \${result.error.message}\`
+    ? `\nspawn error: ${result.error.code ?? result.error.name}: ${result.error.message}`
     : ''
   return {
     status: result.status ?? 1,
-    out: \`\${result.stdout ?? ''}\${result.stderr ?? ''}\${errorText}\`,
+    out: `${result.stdout ?? ''}${result.stderr ?? ''}${errorText}`,
   }
 }
 const spawnCommand = (command, args, options) => {
