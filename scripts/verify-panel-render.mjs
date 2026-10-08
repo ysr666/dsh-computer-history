@@ -108,6 +108,10 @@ const chromePath = resolveChromePath()
 // Chinese interface - which is how the first run of this script reported two product failures that were it
 // looking at an unopened panel. Try the override first, then both names.
 const panelLabels = [process.env.PANEL_ENTRY, '电脑使用记录', 'Computer History'].filter(Boolean)
+const settingsLabels = [process.env.PANEL_SETTINGS_ENTRY, '设置', 'Settings'].filter(Boolean)
+const generalSettingsLabels = ['通用设置', 'General'].filter(Boolean)
+const darkThemeLabels = ['深色', 'Dark']
+const lightThemeLabels = ['浅色', 'Light']
 
 // Strings the interface must never show a reader: a browser error, a Host reason code, or a Host-generated
 // English sentence. Each one is a real regression that shipped once.
@@ -309,10 +313,12 @@ async function main() {
 
   const openSettingsDialog = async () => {
     for (let attempt = 0; attempt < 4; attempt += 1) {
-      await clickText('设置', { last: true })
-      await sleep(1600)
-      if (await dismissDeferredConfiguration()) continue
-      if ((await dialogCount()) > 0) return true
+      for (const label of settingsLabels) {
+        if (await clickText(label, { last: true }) !== 'clicked') continue
+        await sleep(1600)
+        if (await dismissDeferredConfiguration()) break
+        if ((await dialogCount()) > 0) return true
+      }
     }
     return false
   }
@@ -341,13 +347,21 @@ async function main() {
       if (await tryPlugin()) return
     }
   }
-  const setTheme = async label => {
-    await clickText('设置', { last: true })
-    await sleep(2200)
-    await clickText('通用设置')
-    await sleep(1200)
-    await clickText(label)
-    await sleep(1400)
+  const setTheme = async labels => {
+    if (!await openSettingsDialog()) return false
+    for (const label of generalSettingsLabels) {
+      if (await clickText(label) === 'clicked') {
+        await sleep(1200)
+        break
+      }
+    }
+    for (const label of labels) {
+      if (await clickText(label) === 'clicked') {
+        await sleep(1400)
+        return true
+      }
+    }
+    return false
   }
 
   const record = async (state, note) => {
@@ -540,11 +554,11 @@ async function main() {
   })
 
   // 7. the other theme, since tokens are the whole reason both are supported
-  await setTheme('深色')
+  await setTheme(darkThemeLabels)
   await clickText(panelLabels.at(-1), { last: true })
   await sleep(3000)
   await record('ready-dark', 'same panel in dark')
-  await setTheme('浅色')
+  await setTheme(lightThemeLabels)
 
   const failures = results.filter(result => !result.ok)
   console.log(`\nrendered-state checks: ${results.length - failures.length}/${results.length} passed; screenshots in ${outDir}`)
