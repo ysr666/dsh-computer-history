@@ -160,6 +160,14 @@ Pull Request 会运行 Node 22 + 24 核心验证、相关的三平台 collector 
 > [!CAUTION]
 > 本项目处理敏感的本地上下文。**不要在公开 Issue 中上传真实历史数据库、配对/Session Token、凭据、私密路径或未脱敏采集日志。** 涉及安全问题时，请按 [SECURITY.zh.md](SECURITY.zh.md) 中的私密漏洞上报方式处理。
 
+## 致谢
+
+Computer History for DeepSeek Harness 的产品理念受到 [OpenAI Computer History](https://help.openai.com/en/articles/6825453-chatgpt-release-notes) 的启发，尤其是让 AI 助手理解近期工作上下文、帮助用户从上次中断的地方继续工作的构想。感谢 OpenAI 对这一产品方向的探索与开创。
+
+同时，感谢 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的开发与维护者，为本项目提供了开放、可扩展的技术基础。
+
+Computer History 是面向 DeepSeek Harness 独立开发的社区项目，不隶属于 OpenAI 或 DeepSeek，也不代表任何一方的官方立场。
+
 ## License
 
 [MIT](LICENSE)
