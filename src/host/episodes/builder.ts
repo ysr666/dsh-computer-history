@@ -370,10 +370,6 @@ function sortedUnique(
 
 export class IncrementalEpisodeBuilder {
   private active: MutableEpisode | undefined
-  private readonly seen = new Map<
-    string,
-    PersistedActivityObservation
-  >()
   private lastObservedAtMs: number | undefined
 
   public constructor(
@@ -398,18 +394,11 @@ export class IncrementalEpisodeBuilder {
         | 'none'
     } = {},
   ): readonly EpisodeDetail[] {
-    const key = observationKey(observation)
-    const existing = this.seen.get(key)
-
-    if (existing) {
-      if (!isDeepStrictEqual(existing, observation)) {
-        throw new Error(
-          `conflicting duplicate observation for ${observation.collectorSessionId}:${observation.seq}`,
-        )
-      }
-      return []
-    }
-
+    // Identity de-duplication lives at the input boundaries, not in the
+    // long-lived builder. Batch replay goes through sortedUnique(), while live
+    // ingestion checks SQLite's UNIQUE(collector_session, collector_seq)
+    // before calling push(). Keeping every full observation here duplicated the
+    // entire configurable raw-retention window in RAM for no additional safety.
     if (
       this.lastObservedAtMs !== undefined
       && observation.observedAtMs
@@ -420,7 +409,6 @@ export class IncrementalEpisodeBuilder {
       )
     }
 
-    this.seen.set(key, observation)
     this.lastObservedAtMs = observation.observedAtMs
 
     if (!isEligible(observation)) return []
