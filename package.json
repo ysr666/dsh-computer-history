@@ -1,6 +1,6 @@
 {
   "name": "dsh-computer-history",
-  "version": "0.1.0-dev.0",
+  "version": "0.1.0-alpha.1",
   "description": "Privacy-first work continuity for DeepSeek Harness: metadata-only computer history, deterministic work episodes, and selective resume context.",
   "icon": "./assets/brand/app-icon.svg",
   "license": "MIT",
