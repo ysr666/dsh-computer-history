@@ -11,6 +11,9 @@ on:
       - 'scripts/verify-native-package.mjs'
       - 'scripts/e2e-collector-transport.mjs'
       - 'scripts/e2e-macos.mjs'
+      - 'scripts/e2e-packaged-client.mjs'
+      - 'src/client/**'
+      - 'cordis.patch.yml'
       - 'package.json'
       - 'pnpm-lock.yaml'
   push:
@@ -24,6 +27,9 @@ on:
       - 'scripts/verify-native-package.mjs'
       - 'scripts/e2e-collector-transport.mjs'
       - 'scripts/e2e-macos.mjs'
+      - 'scripts/e2e-packaged-client.mjs'
+      - 'src/client/**'
+      - 'cordis.patch.yml'
       - 'package.json'
       - 'pnpm-lock.yaml'
   workflow_dispatch:
@@ -170,3 +176,13 @@ jobs:
         run: node scripts/verify-native-package.mjs
       - name: Strict Host -> packaged collector transport, no executable override
         run: pnpm e2e:collector-transport
+      - name: Installed client -> first-run + History/Privacy surfaces
+        run: pnpm e2e:packaged-client
+      - name: Upload installed-client evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: packaged-client-${{ matrix.os }}
+          path: .debug/e2e-packaged-client/**
+          if-no-files-found: warn
+          retention-days: 3
