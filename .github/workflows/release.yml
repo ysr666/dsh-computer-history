@@ -107,6 +107,9 @@ jobs:
     name: assemble + verify release tarball
     needs: native
     runs-on: macos-14
+    # Covers setup, packaging and the full product journey. A wedged browser
+    # must fail before a Git tag or npm publication, not consume a runner for hours.
+    timeout-minutes: 20
     # release-blockers.mjs reads workflow runs, PRs/issues and Dependabot alerts.
     # The workflow's top-level permissions: {} otherwise strips these scopes.
     permissions:
