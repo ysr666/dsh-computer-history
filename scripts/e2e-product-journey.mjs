@@ -192,13 +192,17 @@ writeFileSync(
   'export function answer(): number {\n  return 42\n}\n',
 )
 
+const packagedEditorVersion = JSON.parse(
+  readFileSync(path.join(REPO, 'extension-editor', 'package.json'), 'utf8'),
+).version
+
 const fakeCode = [
   '#!/bin/sh',
   'set -eu',
   'MARKER=' + JSON.stringify(fakeCodeMarker),
   'if [ "${1:-}" = "--list-extensions" ]; then',
   '  if [ -f "$MARKER" ]; then',
-  "    printf '%s\\n' 'dsh-local.dsh-computer-history-editor@0.1.0'",
+  "    printf '%s\\n' 'dsh-local.dsh-computer-history-editor@" + packagedEditorVersion + "'",
   '  fi',
   '  exit 0',
   'fi',
