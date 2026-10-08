@@ -124,7 +124,7 @@ describe('EditorCompanionInstaller', () => {
 
   it('detects the installed extension through the fixed VS Code CLI query', async () => {
     const child = runtime({
-      listed: `${EDITOR_COMPANION_EXTENSION_ID}@0.1.0\nother.extension@1.0.0\n`,
+      listed: `${EDITOR_COMPANION_EXTENSION_ID}@${EDITOR_COMPANION_VERSION}\nother.extension@1.0.0\n`,
     })
     const installer = new EditorCompanionInstaller({
       subprocess: child as never,
@@ -137,7 +137,7 @@ describe('EditorCompanionInstaller', () => {
     await expect(installer.capability()).resolves.toEqual({
       available: true,
       installed: true,
-      installedVersion: '0.1.0',
+      installedVersion: EDITOR_COMPANION_VERSION,
       bundledVersion: EDITOR_COMPANION_VERSION,
       updateAvailable: false,
     })

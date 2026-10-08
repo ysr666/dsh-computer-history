@@ -11,7 +11,7 @@
 <p align="center">
   <a href="https://github.com/ysr666/dsh-computer-history/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/ysr666/dsh-computer-history/ci.yml?branch=main&style=flat-square&label=CI" alt="CI" /></a>
   <a href="https://github.com/ysr666/dsh-computer-history/actions/workflows/collectors.yml"><img src="https://img.shields.io/github/actions/workflow/status/ysr666/dsh-computer-history/collectors.yml?branch=main&style=flat-square&label=collectors" alt="Collectors" /></a>
-  <img src="https://img.shields.io/badge/status-early%20alpha-8A2BE2?style=flat-square" alt="状态：early alpha" />
+  <img src="https://img.shields.io/badge/status-v1.0.0%20candidate-5B4CF0?style=flat-square" alt="状态：v1.0.0 发布候选" />
   <img src="https://img.shields.io/badge/privacy-metadata--only-2EA44F?style=flat-square" alt="隐私：仅元数据" />
   <img src="https://img.shields.io/badge/storage-local%20SQLite-4D8CCB?style=flat-square" alt="存储：本地 SQLite" />
 </p>
@@ -27,8 +27,13 @@
 <p align="center"><a href="README.md">English</a> · 简体中文</p>
 
 > [!NOTE]
-> **Early alpha。** 三个平台采集目标的核心链路已经实现并经过仓库内验证，但目前还没有稳定的打包 Release；安装和兼容性细节仍可能变化。
+> **v1.0.0 发布候选，尚未正式发布。** 单一三端安装包的 clean-install 与浏览器验收已通过，但 npm 包、tag 和 GitHub Release 尚未对外发布；兼容性与隐私边界仍以文档为准。
 
+> [!WARNING]
+> 📌 **公告：v1.0.0 发布候选（npm 暂不可安装）**
+>
+> Computer History 首个公开版本计划使用**同一份三端安装包**支持 Windows / macOS / Linux，提供基于证据的时间线、原生 DSH Continue、本地隐私控制及浏览器/编辑器 Companion。三端打包 UI 验收和 macOS 完整产品流程已通过，**但目前不是已经发布的稳定版**。Linux 真正采集仍需桌面 X/AT-SPI 环境。详情见 [v1.0.0 发布说明](docs/releases/v1.0.0.md)与[发布状态](docs/release.md)。
+>
 <p align="center">
   <img src="docs/assets/panel-timeline-duration.png" width="48%" alt="DSH 中的 Computer History 时间线" />
   <img src="docs/assets/panel-firstrun-clean-store.png" width="48%" alt="DSH 中的 Computer History 首次使用隐私流程" />
@@ -92,16 +97,22 @@ Computer History 补的是这层“工作连续性”。它希望回答：
 共享 collector contract 会在 GitHub Actions 上持续跨 macOS、Windows、Linux 检查。实机证据和已知限制记录在 [docs/validation-three-platforms.md](docs/validation-three-platforms.md)。
 
 > [!IMPORTANT]
-> 第一版公开 Alpha 的目标是**同一个三平台插件包**，不是 macOS-only。Release 流水线会在三个原生
+> 首个正式版本 **v1.0.0** 的目标是**同一个三平台插件包**，不是 macOS-only。Release 流水线会在三个原生
 > runner 上分别构建 collector，记录来源 commit 与 SHA-256，把三份原生二进制合进同一个 tarball，
 > 再让 macOS、Windows、Linux 分别 clean install 这一模一样的 tarball；验证时不设置
 > `collectorExecutable`，因此证明的是安装包自己的平台选择。同一安装包的客户端还通过了三端真实浏览器
 > 首次使用、Settings 和 History/Privacy HTTP 200 验收（见[发布证据](docs/release.md)）；macOS 另有 52/52
-> 完整生命周期验证。公开 Alpha tag 尚未发布，仍需完成正式版本号、更新日志与发布前检查。
+> 完整生命周期验证。正式发布还需 npm 包名初始化、Trusted Publishing 配置及最终发布前检查。
 
-## 开发快速开始
+## 安装与开发
 
-目前还没有稳定的打包 Release，因此当前支持的入口是源码检出。
+**正式发布之后**，可以在 DSH 的目标 profile 中从 npm 安装：
+
+```bash
+dsh plugin --profile <profile> add dsh-computer-history
+```
+
+在 [v1.0.0 GitHub Release](https://github.com/ysr666/dsh-computer-history/releases/tag/v1.0.0) 和 [npm 页面](https://www.npmjs.com/package/dsh-computer-history)真正上线之前，请仍使用下方源码方式。插件默认关闭采集，首次使用需要授权及平台权限，浏览器和 VS Code Companion 可能需要单独配对。
 
 ```bash
 git clone https://github.com/ysr666/dsh-computer-history.git
@@ -144,7 +155,7 @@ Pull Request 会运行 Node 22 + 24 核心验证、相关的三平台 collector 
 
 ## 参与贡献
 
-项目仍处于 Alpha，欢迎 Issue 和 Pull Request。开始前请阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。
+项目正在准备首个公开正式版，欢迎 Issue 和 Pull Request。开始前请阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 > [!CAUTION]
 > 本项目处理敏感的本地上下文。**不要在公开 Issue 中上传真实历史数据库、配对/Session Token、凭据、私密路径或未脱敏采集日志。** 涉及安全问题时，请按 [SECURITY.zh.md](SECURITY.zh.md) 中的私密漏洞上报方式处理。

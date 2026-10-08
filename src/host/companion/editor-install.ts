@@ -9,7 +9,7 @@ import type {
 } from '../../shared/index.js'
 
 export const EDITOR_COMPANION_EXTENSION_ID = 'dsh-local.dsh-computer-history-editor'
-export const EDITOR_COMPANION_VERSION = '0.1.0'
+export const EDITOR_COMPANION_VERSION = '1.0.0'
 
 export function bundledEditorCompanionVsix(moduleUrl = import.meta.url): string {
   const moduleDirectory = path.dirname(fileURLToPath(moduleUrl))

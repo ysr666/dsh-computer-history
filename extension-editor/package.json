@@ -2,7 +2,7 @@
   "name": "dsh-computer-history-editor",
   "displayName": "%displayName%",
   "description": "%description%",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "publisher": "dsh-local",
   "private": true,
   "type": "commonjs",

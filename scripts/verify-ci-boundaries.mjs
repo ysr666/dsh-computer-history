@@ -99,6 +99,29 @@ if (!/DSH_CLI=/.test(releaseWorkflowSource)) {
 if (!/PANEL_CHROME=/.test(releaseWorkflowSource)) {
   problems.push(`${RELEASE_WORKFLOW}: product journey no longer provisions PANEL_CHROME`)
 }
+// The first public npm release must use DVR-style explicit SHA publication and
+// preserve the three-platform package gate. A git tag push must never bypass
+// installed-browser acceptance or produce a different npm/GitHub artifact.
+for (const [claim, expression] of [
+  ['manual release trigger', /workflow_dispatch:/],
+  ['immutable release SHA input', /target_sha:/],
+  ['three-platform packaged product gate', /DSH_E2E_VERIFY_CLIENT: '1'/],
+  ['tag created after clean-install tests', /tag:\s*\n\s*name: Materialize verified tag\s*\n\s*needs: install/],
+  ['npm publish after verified tag', /publish-npm:\s*\n[\s\S]*?needs: tag/],
+  ['npm bootstrap must precede any release tag', /release-registry-identity\.mjs inspect 0\.0\.0-bootstrap\.0/],
+  ['OIDC publish permission', /id-token: write/],
+  ['npm publication without rebuild', /npm publish "\$PACKAGE_TARBALL" --access public --provenance --ignore-scripts/],
+  ['npm registry byte identity', /release-registry-identity\.mjs wait/],
+  ['GitHub release after npm validation', /publish:\s*\n[\s\S]*?needs: publish-npm/],
+]) {
+  if (!expression.test(releaseWorkflowSource)) {
+    problems.push(`${RELEASE_WORKFLOW}: missing ${claim}`)
+  }
+}
+if (/^\s+tags:\s*\['v\*'\]/m.test(releaseWorkflowSource)) {
+  problems.push(`${RELEASE_WORKFLOW}: automatic tag-push publication is forbidden`)
+}
+
 if (!releaseDocSource.includes('pnpm e2e:product-journey')) {
   problems.push(`${RELEASE_DOC}: product-journey release command is undocumented`)
 }
