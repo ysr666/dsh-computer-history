@@ -170,21 +170,30 @@ async function main() {
 
   let socket
   try {
-    let targets
+    let page
+    let lastTargetCount = 0
     for (let attempt = 0; attempt < 60; attempt += 1) {
       try {
         const response = await fetch(`http://127.0.0.1:${cdpPort}/json/list`)
         if (response.ok) {
-          targets = await response.json()
-          break
+          const targets = await response.json()
+          if (Array.isArray(targets)) {
+            lastTargetCount = targets.length
+            // HTTP 200 means DevTools is listening, not that about:blank is
+            // registered yet. Chrome can briefly return [] during startup.
+            page = targets.find(target => target.type === 'page' && target.webSocketDebuggerUrl)
+            if (page) break
+          }
         }
       } catch {
         // Browser is still starting.
       }
+      if (browser.exitCode !== null) break
       await sleep(500)
     }
-    const page = targets?.find(target => target.type === 'page')
-    if (!page) throw new Error('headless browser did not expose a page target')
+    if (!page) throw new Error(
+      `headless browser did not expose a page target (targets=${lastTargetCount}, exit=${browser.exitCode ?? 'running'})`,
+    )
 
     const requests = new Set()
     const successfulResponses = new Set()
