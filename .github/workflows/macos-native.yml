@@ -1,4 +1,4 @@
-name: macOS native + package
+name: macOS native
 
 on:
   pull_request:
@@ -58,17 +58,11 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm native:build
       - run: pnpm native:test
-      - run: pnpm install --frozen-lockfile
-        working-directory: extension-editor
-      - run: pnpm pack --pack-destination /tmp
-      - name: Verify every package.json files entry is present
+      - name: Verify the macOS collector is universal and signed
         run: |
-          tarball=$(ls /tmp/dsh-computer-history-*.tgz)
-          missing=0
-          while IFS= read -r entry; do
-            if ! tar -tzf "$tarball" | grep -qE "^package/${entry}(/|$)"; then
-              echo "files promises ${entry} and the tarball does not contain it"
-              missing=1
-            fi
-          done < <(node -p "require('./package.json').files.join('\n')")
-          exit "$missing"
+          file bin/dsh-computer-history-collector
+          archs=$(lipo -archs bin/dsh-computer-history-collector)
+          echo "architectures: $archs"
+          [[ "$archs" == *arm64* ]]
+          [[ "$archs" == *x86_64* ]]
+          codesign --verify --strict --verbose=2 bin/dsh-computer-history-collector

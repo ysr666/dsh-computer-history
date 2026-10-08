@@ -30,7 +30,6 @@
     "e2e:gecko": "node scripts/e2e-gecko.mjs",
     "e2e:chromium": "node scripts/e2e-chromium.mjs",
     "e2e:editor": "node scripts/e2e-editor.mjs",
-    "e2e:product-journey": "node scripts/e2e-product-journey.mjs",
     "measure:baseline": "node scripts/measure-baseline.mjs",
     "verify:p1": "pnpm verify && pnpm build && pnpm benchmark:ingestion && pnpm native:build && pnpm native:test",
     "pack:plugin": "pnpm pack",
@@ -52,6 +51,8 @@
     "verify:ci-boundaries": "node scripts/verify-ci-boundaries.mjs",
     "check:app-path": "node scripts/check-app-path.mjs",
     "e2e:collector-transport": "node scripts/e2e-collector-transport.mjs",
+    "native:manifest": "node scripts/write-native-manifest.mjs",
+    "e2e:product-journey": "node scripts/e2e-product-journey.mjs",
     "verify:continuation-capsule": "node scripts/verify-continuation-capsule.mjs",
     "verify:continuation-send": "vitest run tests/integration/continuation-send-loop.spec.ts"
   },
@@ -106,21 +107,23 @@
       "types": "./lib/client.d.ts",
       "default": "./lib/client.js"
     },
-    "./cordis.patch.yml": "./cordis.patch.yml",
-    "./locale/*.json": "./locale/*.json"
+    "./cordis.patch.yml": "./cordis.patch.yml"
   },
   "bin": {
-    "dsh-computer-history-collector": "bin/dsh-computer-history-collector"
+    "dsh-computer-history-collector": "bin/dsh-computer-history-collector",
+    "dsh-computer-history-collector-windows": "bin/dsh-computer-history-collector-windows.exe",
+    "dsh-computer-history-collector-linux": "bin/dsh-computer-history-collector-linux"
   },
   "files": [
     "lib",
     "bin/dsh-computer-history-collector",
+    "bin/dsh-computer-history-collector-windows.exe",
+    "bin/dsh-computer-history-collector-linux",
+    "bin/native-artifacts.json",
     "native/macos/Sources",
     "native/macos/Package.swift",
     "dist/extension",
     "dsh-computer-history-editor.vsix",
-    "icon.svg",
-    "locale/*.json",
     "README.md",
     "README.zh.md",
     "LICENSE",
@@ -130,7 +133,8 @@
     "presets",
     "cordis.patch.yml",
     "assets/brand/app-icon.svg",
-    "locale"
+    "locale",
+    "locale/*.json"
   ],
   "peerDependencies": {
     "@deepseek-ai/cordis": "~4.0.4",
@@ -158,7 +162,6 @@
     "@deepseek-ai/dsh-workspace": ">=0.2.0-rc.2 <0.3.0",
     "react": "^18.2.0"
   },
-  "icon": "./icon.svg",
   "dsh": {
     "client": {
       "inject": [

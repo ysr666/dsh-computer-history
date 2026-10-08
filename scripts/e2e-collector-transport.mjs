@@ -16,24 +16,36 @@ import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
 const collector = process.env.COLLECTOR_EXECUTABLE
-if (!collector) {
+const packaged = process.env.DSH_E2E_TARBALL
+if (!collector && !packaged) {
   console.error(
-    'COLLECTOR_EXECUTABLE is required. Point it at the collector binary built for this machine.\n'
-    + 'Example on Windows PowerShell:\n'
-    + '  $env:COLLECTOR_EXECUTABLE = (Resolve-Path native\\windows\\target\\release\\dsh-computer-history-collector-windows.exe)\n'
-    + '  pnpm e2e:collector-transport',
+    'COLLECTOR_EXECUTABLE or DSH_E2E_TARBALL is required.\n'
+    + 'Use COLLECTOR_EXECUTABLE for a focused development probe, or point DSH_E2E_TARBALL at the assembled '
+    + 'plugin package to prove its default collector path.',
   )
   process.exit(2)
 }
 
 const target = fileURLToPath(new URL('./e2e-macos.mjs', import.meta.url))
+const transportTimeoutMs = Math.max(
+  60_000,
+  Number(process.env.DSH_E2E_TRANSPORT_TIMEOUT_MS ?? 300_000),
+)
 const result = spawnSync(process.execPath, [target], {
-  env: process.env,
+  env: {
+    ...process.env,
+    ...(packaged ? { DSH_E2E_REQUIRE_COLLECTOR: '1' } : {}),
+  },
   stdio: 'inherit',
+  timeout: transportTimeoutMs,
 })
 
 if (result.error) {
-  console.error(result.error)
+  console.error(
+    result.error.code === 'ETIMEDOUT'
+      ? `collector transport timed out after ${transportTimeoutMs}ms`
+      : result.error,
+  )
   process.exit(1)
 }
 process.exit(result.status ?? 1)

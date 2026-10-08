@@ -72,11 +72,20 @@ const releaseDocSource = readFileSync(RELEASE_DOC, 'utf8')
 if (!/^\s*runs-on:\s*macos(?:-[^\s#]+)?\s*$/m.test(releaseWorkflowSource)) {
   problems.push(`${RELEASE_WORKFLOW}: release job is no longer a macOS job`)
 }
-if (!/\brun:\s*pnpm --dir extension-editor install --frozen-lockfile\s*$/m.test(releaseWorkflowSource)) {
+const editorInstallIsExplicit = /\brun:\s*pnpm --dir extension-editor install --frozen-lockfile\s*$/m
+  .test(releaseWorkflowSource)
+  || (
+    /\brun:\s*pnpm install --frozen-lockfile\s*$/m.test(releaseWorkflowSource)
+    && /working-directory:\s*extension-editor\s*$/m.test(releaseWorkflowSource)
+  )
+if (!editorInstallIsExplicit) {
   problems.push(`${RELEASE_WORKFLOW}: Editor Companion dependencies are not installed on a clean release runner`)
 }
-if (!/\brun:\s*pnpm e2e:product-journey\s*$/m.test(releaseWorkflowSource)) {
+if (!/pnpm e2e:product-journey/.test(releaseWorkflowSource)) {
   problems.push(`${RELEASE_WORKFLOW}: product-journey release gate is missing`)
+}
+if (!/DSH_PRODUCT_TARBALL=/.test(releaseWorkflowSource)) {
+  problems.push(`${RELEASE_WORKFLOW}: product journey no longer reuses the assembled release tarball`)
 }
 if (!/DSH_CLI=/.test(releaseWorkflowSource)) {
   problems.push(`${RELEASE_WORKFLOW}: product journey no longer provisions DSH_CLI`)
@@ -99,7 +108,7 @@ if (problems.length > 0) {
 console.log(
   `ci boundary holds: unverified platforms [${fromFixture.join(', ') || 'none'}] agree in the workflow, `
   + `the conformance fixture and the validation file; matrix runs on [${matrixOs.join(', ')}]; `
-  + 'release keeps the macOS product-journey gate',
+  + 'release keeps the macOS product-journey gate on the assembled tarball',
 )
 
 // Unused import guard: keeps the path import meaningful if the file list above ever moves.

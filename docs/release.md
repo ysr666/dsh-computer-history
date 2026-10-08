@@ -4,17 +4,18 @@ This document states what has been **measured**. Where a step has not been
 verified, it says so rather than describing the intention.
 
 > [!IMPORTANT]
-> **First public pre-release target: `v0.1.0-alpha.1` — not published yet, and packaged for macOS only.**
+> **First public pre-release target: `v0.1.0-alpha.1` — not published yet, and intentionally one three-platform artifact.**
 >
-> Windows and Linux collectors have source/live evidence, but the current release workflow does not build or
-> merge their native binaries into the plugin tarball. A three-platform packaged release therefore remains a
-> separate distribution task; alpha.1 must not claim it.
+> The packaged collector path is now measured end-to-end on macOS, Windows and Linux. Each native collector is
+> built on its own runner from the same commit, all three exact binaries are assembled into one plugin tarball
+> with SHA-256 provenance, and that same tarball clean-installs on all three runners without a
+> `collectorExecutable` override.
 >
-> The packaged Host path has been measured successfully, the public repository and brand
-> surface are in place, and the release workflow is ready to build a tagged artifact.
-> The remaining product blocker is the **client half of an installed bundle**: the Host API
-> starts, but the installed bundle's panel has not yet been observed in the interface.
-> Do not create the tag until that path is verified and the release preflight is green.
+> The packaged Host/collector path is proven on all three platforms, and the installed **client half** is now
+> measured on the macOS release product path as well. The product journey installs the assembled tarball into a
+> clean throwaway DSH 0.2 profile, renders Computer History from the installed package, exercises first-run and
+> History/Privacy surfaces, and verifies Continue plus plugin lifecycle. Issue #44 remains open until this branch
+> and its CI evidence land; the public tag is still blocked on the release-cut preflight and non-dev version/changelog.
 
 ## v0.1.0-alpha.1 readiness
 
@@ -24,11 +25,11 @@ verified, it says so rather than describing the intention.
 | Timeline Orbit brand assets and social-preview asset | ✅ |
 | Package icon and localized plugin metadata included in the tarball | ✅ |
 | Host plugin install from a packed tarball | ✅ |
-| macOS native/package build gate | ✅ |
+| Native collector built on its own macOS / Windows / Linux runner | ✅ |
 | Shared collector protocol checks on macOS / Windows / Linux | ✅ |
-| macOS collector included in the packaged artifact | ✅ |
-| Windows/Linux collectors included in the packaged artifact | ➖ not in alpha.1; separate distribution task |
-| Installed bundle's **client panel** appears and works | ⬜ blocker |
+| One tarball contains all three native collectors + SHA-256 provenance | ✅ |
+| Same tarball clean-installs and reaches packaged collector handshake on macOS / Windows / Linux | ✅ |
+| Installed bundle's **client panel** appears and works on the release product path | ✅ measured locally on macOS; release workflow repeats against the assembled tarball |
 | `pnpm verify:release:blockers` at release cut | ⬜ run at release cut |
 | Non-`-dev` package version + matching changelog section | ⬜ set only when cutting the release |
 
@@ -37,7 +38,7 @@ verified, it says so rather than describing the intention.
 
 | artifact | command | status |
 |---|---|---|
-| plugin tarball | `pnpm pack:plugin` → `dsh-computer-history-<version>.tgz` | builds; contents verified byte-identical to the working tree |
+| plugin tarball | release assembly → `dsh-computer-history-<version>.tgz` | one artifact containing macOS, Windows and Linux collectors; native source commit, SHA-256 and size recorded in `bin/native-artifacts.json` |
 | editor extension | `pnpm build:editor-extension` → `dsh-computer-history-editor.vsix` | installed and started on VS Code 1.140.0 (`docs/editor-companion.md`) |
 | browser extension | `pnpm build:extension` → unpacked MV3 directory | installed and exercised on Chrome 154 (`docs/companion.md`) |
 
@@ -54,7 +55,7 @@ ln -sfn "$PWD" ~/.dsh/profiles/<profile>/node_modules/dsh-computer-history
 Verified: the entry reaches `[active]`. Every phase's runtime evidence was
 produced on this path.
 
-## Installing from the tarball: verified
+## Installing from the tarball: three-platform Host/collector path verified; installed client path verified on macOS
 
 ```bash
 npm pack                                        # dsh-computer-history-<version>.tgz
@@ -66,15 +67,31 @@ dsh plugin --profile <profile> add ./dsh-computer-history-<version>.tgz
 #   (docs/development.md has the measurement)
 ```
 
-Verified on this machine, with the result that came back:
+The original local measurement proved that a packed plugin could become an active Host bundle. PR #118 then
+measured the stronger three-platform distribution claim in GitHub Actions run `37623433497` from commit
+`78ee8aae9957e24c1115dc795451080a26bbc8d4`. The matrix downloaded the **same assembled tarball** on every
+platform and did not set `collectorExecutable`:
 
 ```text
-install        Packages: +1, done in 705ms (pnpm, through the plugin entry)
-profile        dependencies: { "dsh-computer-history": "file:.../dsh-computer-history-0.1.0-dev.0.tgz" }
-               bundles: [ "dsh-computer-history" ]
-after restart  GET /api/computer-history/state → { "enabled": true, ... }
-               firstRunPreset present: true
+Windows  install plugin: exit 0
+         collector settles: state=running reason=no-apps-allowed collector=yes
+         store opens: episodes/observations = 0|0
+
+macOS    install plugin: exit 0
+         collector settles: state=running reason=no-apps-allowed collector=yes
+         store opens: episodes/observations = 0|0
+
+Linux    install plugin: exit 0
+         collector settles: state=permission-required
+         reason=no X display: ... DISPLAY is not set ...
+         collector=yes
+         store opens: episodes/observations = 0|0
 ```
+
+The Linux result is the expected honest state for a headless hosted runner: the packaged AT-SPI collector launched
+and completed its protocol handshake, then reported that no desktop display existed to observe. A real Linux
+desktop still needs its X/AT-SPI bus and permissions; the package no longer needs a locally built collector or a
+manual executable override.
 
 What made it work is a field this package did not have: **`dsh.bundle.patch`** pointing at its
 own `cordis.patch.yml`, which declares the plugin's entry. Without it the package could be
@@ -91,59 +108,48 @@ Three approaches recorded as measured failures, so nobody repeats them:
 - **a profile copied into a temporary `DSH_HOME`**: its bundles and `file:` dependencies do not
   resolve there at all.
 
-**Client half verified 2026-10-06.** A second clean throwaway profile was created only through
-`dsh plugin add`, then booted with the Desktop Host/runtime actually shipped by the QA application
-(`DSH_CLIENT_VERSION=0.2.0-rc.2`). The boot manifest contained the installed
-`dsh-computer-history/client.js`; a brand-new browser profile then rendered the Computer History sidebar
-entry, the plugin first-run page, and the native Settings page. `/state`, `/timeline`, and the privacy
-redaction preview all returned 200 from that same installed profile. No checkout junction, symlink, or manual
-client injection was used. The exact measured path and the reason the machine's older global `dsh 0.1.2-rc.1`
-was not used as the runtime are recorded in `docs/validation-installed-bundle-2026-10-06.md`.
+**Installed client path measured on macOS.** The release product journey uses `dsh plugin add` in a clean
+throwaway DSH 0.2 profile, starts the installed bundle, renders the Computer History sidebar and Settings surface,
+completes first-run consent, exercises History/Privacy requests, creates a native `@ Computer History` Continue
+capsule, and verifies disable/re-enable/uninstall while preserving history. The detailed installed-bundle evidence
+is recorded in `docs/validation-installed-bundle-2026-10-06.md`.
+
+This satisfies issue #44's acceptance criteria locally without checkout-only wiring or manual junctions. The issue
+remains open until this branch and the release-workflow evidence are merged. The Windows/Linux release jobs still
+prove packaged Host/collector transport rather than separately rendering the web client UI on those runners.
 
 ## Publishing
 
-Do not publish `v0.1.0-alpha.1` until the readiness table above has no product blocker.
-The version/changelog/tag changes are intentionally deferred until that point so a public
-branch cannot accidentally look release-ready before the installed client path is proven.
+Do not publish `v0.1.0-alpha.1` until the release-cut preflight is green and the non-dev version/changelog
+entry are set. Issue #44 remains open until the installed-client evidence and enforced product-journey gate land
+on the release branch; the version/changelog/tag changes stay deferred until that point.
 
-Push a tag named `v` + the version in `package.json` (`.github/workflows/release.yml`). The workflow installs
-both the root project and the separate `extension-editor` pnpm project, builds the plugin, runs the same portable
-gate as `main`, then runs the macOS **product journey** before it creates the release artifact. The second install
-is required on a clean runner because root `pnpm install` does not populate `extension-editor/node_modules`,
-while `prepack` builds the VS Code extension through its local `@vscode/vsce` dependency.
-
-That journey installs public `@deepseek-ai/dsh@0.2.0-rc.2` into a throwaway directory, downloads the current
-Stable Chrome for Testing from Google's `last-known-good-versions-with-downloads.json`, and exercises a
-release-shaped Computer History tarball end to end. Only after that passes does the workflow build the collector,
-pack, run `pnpm verify:release`, and create the GitHub release with the tarball attached and the changelog section
-as the notes. **It needs no certificate and no secrets.**
+Push a tag named `v` + the version in `package.json` (`.github/workflows/release.yml`). The workflow builds
+the macOS, Windows and Linux collectors on their native runners, refuses mixed-source artifacts, assembles one
+tarball, records native hashes, and then runs the macOS **product journey against that exact assembled tarball**.
+After `pnpm verify:release`, the same tarball clean-installs on all three platforms. GitHub Release publication
+happens only after the installed client journey and all three packaged collector handshakes pass. **It needs no
+certificate and no repository secret.**
 
 ### Product-journey release gate
 
-`pnpm e2e:product-journey` is intentionally not part of ordinary `pnpm verify`: PR CI is portable Linux/Node,
-while this gate qualifies the actual macOS product surface. It creates a throwaway DSH profile and checks the
-user path that unit tests cannot prove as one system:
+`pnpm e2e:product-journey` is intentionally **not part of ordinary `pnpm verify`**: PR CI stays portable and fast,
+while release qualification needs a real macOS DSH/Chrome product surface. When `DSH_PRODUCT_TARBALL` is set, the
+journey skips its development-time pack step and installs that supplied tarball directly. The release workflow
+points it at the just-assembled three-platform artifact, so the UI gate and packaged transport gates qualify the
+same plugin bytes.
 
-- install the packed plugin and complete first-run consent;
-- install/pair the Editor Companion and load the real Browser Companion in Chrome with CDP `Extensions.loadUnpacked`;
-- run the Browser privacy matrix, including canonical URL query/fragment stripping, denied resources, incognito,
-  extension off, and rotated-token rejection;
-- produce `Editor → short Browser detour → Editor save/test success` and prove it remains one workspace Episode
-  with four evidence links and four summary citations;
-- Continue into a new DSH Session and prove the native `@ Computer History` capsule binds to that exact Episode
-  without sending a model request;
-- disable/re-enable without losing history, then deselect/unload and remove the package while preserving the
-  history database and continuation binding.
+The journey verifies the user path that unit tests cannot prove as one system:
 
-The fixture collector at `scripts/fixtures/e2e-fake-collector.mjs` is protocol-only: it reports a healthy
-collector lifecycle so the release gate does not need macOS Accessibility permission, and it never reads the
-desktop. Native Accessibility capture is still covered by the native collector validation. Browser behavior is
-not mocked: the gate loads the built extension into a real Chrome process.
+- clean `dsh plugin add` install and first-run consent;
+- Editor Companion install/pairing and the real Browser Companion loaded into Chrome;
+- the Browser privacy matrix, including canonical URL stripping and rotated-token rejection;
+- `Editor → short Browser detour → Editor save/test` as one evidence-backed Episode;
+- Continue into a new DSH Session with the native `@ Computer History` capsule bound to that Episode;
+- disable/re-enable and package removal while preserving history and continuation binding.
 
-A plain web-profile Host and the Desktop shell have different package-manager lifecycle ownership. The journey
-therefore accepts both correct forms: Desktop/HMR may unload immediately; a web Host may apply bundle
-deselection on restart. Package removal itself is then verified through `dsh plugin --profile ... remove`, the
-same DSH CLI package-manager path used to manage the throwaway profile.
+The protocol-only collector fixture makes the journey independent of macOS Accessibility permission and never
+reads the desktop. Native accessibility capture remains covered by the native collector validation.
 
 ### Why no certificate: a plugin install is not an app install
 
@@ -176,30 +182,27 @@ the last twenty, and an open **high or critical** dependabot alert. Open pull re
 branches have a commit from the last month, and whether the alerts could be read at all are reported but not
 enforced - whether they block *this* release is a judgement, and a script that pretends otherwise gets ignored.
 
-### Running it locally
+### Running the release package gate
 
-The portable artifact preflight is still:
+`pnpm native:build` intentionally builds **only the collector for the current OS**. A release tarball requires
+the three artifacts produced on their native runners, so a single-machine `pnpm pack` is not a valid substitute
+for the release assembly anymore.
+
+The reproducible pre-tag gate is the **Packaged alpha matrix** workflow. After all three native artifacts have
+been downloaded into `bin/`, the assembly steps are:
 
 ```bash
-pnpm native:build                    # ad-hoc; the log says which signature it made
-pnpm pack --pack-destination /tmp
+pnpm native:manifest
+DSH_NATIVE_PREBUILT=1 pnpm pack --pack-destination /tmp
+
+DSH_CLI=/path/to/dsh-0.2 \
+PANEL_CHROME='/path/to/Google Chrome for Testing' \
+DSH_PRODUCT_TARBALL=/tmp/dsh-computer-history-<version>.tgz \
+pnpm e2e:product-journey
+
 DSH_RELEASE_TARBALL=/tmp/dsh-computer-history-<version>.tgz pnpm verify:release
 ```
 
-For the full installed-product gate, install the independent Editor Companion project as a clean runner would,
-then provide any DSH 0.2.x CLI and Chrome/Chrome for Testing binary:
-
-```bash
-pnpm --dir extension-editor install --frozen-lockfile
-DSH_CLI=/path/to/dsh \
-PANEL_CHROME='/path/to/Google Chrome for Testing' \
-pnpm e2e:product-journey
-```
-
-If `PANEL_CHROME` is omitted on macOS the script uses the normal Google Chrome application path. The release
-workflow does not depend on a runner's preinstalled browser: it resolves the current Stable Chrome for Testing
-from Google's official JSON endpoint and passes that binary explicitly.
-
-Measured 2026-10-05 with the version still at `0.1.0-dev.0`: `pnpm verify:release` exits 1 and names what is
-actually missing - the `-dev` version and the absent changelog section - while the signature check passes.
-The release workflow itself has not run yet: it needs a tag, which is the owner's call.
+The `DSH_NATIVE_PREBUILT=1` guard is deliberate: it prevents the assembly machine from silently rebuilding one
+platform's collector and replacing the bytes that came from that platform's runner. The public release workflow
+uses the same assembly and three clean-install gates; it has not published a tag yet.

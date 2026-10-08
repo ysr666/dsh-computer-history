@@ -2163,3 +2163,32 @@ missing at this earlier checkpoint; it is no longer an open acceptance item.
 
 One note kept for whoever reads the logs next: that Windows is a Chinese installation and PowerShell's errors come
 back in GBK, so command output there has to be forced to UTF-8 or the diagnostics are unreadable.
+
+## Packaged alpha matrix — 2026-10-07
+
+The distribution boundary is now measured separately from source/live collector validation. PR #118 workflow run
+`37623433497` at commit `78ee8aae9957e24c1115dc795451080a26bbc8d4` built the three native collectors
+on their own hosted runners, assembled those exact bytes into **one** plugin tarball, and then downloaded that same
+tarball into three clean-install jobs.
+
+The assembly refuses provenance drift before packing: each native job uploads a `source-<platform>.txt` containing
+the workflow commit, all three must equal `GITHUB_SHA`, and `bin/native-artifacts.json` records each packaged
+binary's path, byte size and SHA-256. `DSH_NATIVE_PREBUILT=1` then prevents the assembly runner from rebuilding a
+collector and replacing one of those native-runner artifacts.
+
+Measured packaged-install results, with **no `collectorExecutable` override**:
+
+| Runner | Packaged native verification | `dsh plugin add` | Collector handshake | Store |
+|---|---|---|---|---|
+| Windows | all three packaged hashes match provenance | exit 0 | `state=running reason=no-apps-allowed collector=yes` | `0|0` |
+| macOS | all three packaged hashes match provenance; packaged macOS signature verifies | exit 0 | `state=running reason=no-apps-allowed collector=yes` | `0|0` |
+| Linux | all three packaged hashes match provenance | exit 0 | `state=permission-required ... no X display ... collector=yes` | `0|0` |
+
+The Linux result is intentionally not relabelled as `running`: the GitHub-hosted job is headless, so the packaged
+AT-SPI collector starts, handshakes and reports the absence of `DISPLAY`. That proves the install and transport
+boundary while preserving the real runtime requirement that a Linux desktop provide its X/AT-SPI bus and
+permissions.
+
+This closes the old distinction between "the Windows/Linux collector works from source" and "the released plugin
+contains a runnable Windows/Linux collector". The same tarball now proves the latter on all three platforms.
+The separate remaining release question is the installed **client/panel** product path, tracked by issue #44.

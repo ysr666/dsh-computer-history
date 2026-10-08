@@ -4,6 +4,7 @@
  * One real product journey against a throwaway DSH 0.2 Host.
  *
  *   DSH_CLI=/path/to/dsh pnpm e2e:product-journey
+ *   DSH_PRODUCT_TARBALL=/path/to/assembled.tgz DSH_CLI=/path/to/dsh pnpm e2e:product-journey
  *
  * The only synthetic component is the protocol-only collector. It never reads
  * the desktop; it makes capture writable without OS Accessibility permission.
@@ -32,6 +33,9 @@ const REPO = path.resolve(import.meta.dirname, '..')
 process.chdir(REPO)
 
 const cli = process.env.DSH_CLI ?? 'dsh'
+const suppliedProductTarball = process.env.DSH_PRODUCT_TARBALL
+  ? path.resolve(process.env.DSH_PRODUCT_TARBALL)
+  : undefined
 const chromePath = process.env.PANEL_CHROME
   ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
 const stamp = new Date().toISOString().replaceAll(/[:.]/g, '-')
@@ -559,27 +563,42 @@ try {
     path.relative(REPO, collector),
   )
 
-  const packed = run(
-    'pnpm',
-    ['pack', '--pack-destination', home],
-  )
-  requireCheck(
-    'pack release-shaped plugin',
-    packed.status === 0,
-    packed.status === 0 ? 'exit 0' : packed.out.trim().slice(-180),
-  )
-  const packageVersion = JSON.parse(
-    readFileSync(path.join(REPO, 'package.json'), 'utf8'),
-  ).version
-  const tarball = path.join(
-    home,
-    'dsh-computer-history-' + packageVersion + '.tgz',
-  )
-  requireCheck(
-    'tarball exists',
-    existsSync(tarball),
-    path.basename(tarball),
-  )
+  let tarball
+  if (suppliedProductTarball) {
+    tarball = suppliedProductTarball
+    requireCheck(
+      'pack release-shaped plugin',
+      true,
+      'reuse assembled release tarball',
+    )
+    requireCheck(
+      'tarball exists',
+      existsSync(tarball),
+      path.basename(tarball),
+    )
+  } else {
+    const packed = run(
+      'pnpm',
+      ['pack', '--pack-destination', home],
+    )
+    requireCheck(
+      'pack release-shaped plugin',
+      packed.status === 0,
+      packed.status === 0 ? 'exit 0' : packed.out.trim().slice(-180),
+    )
+    const packageVersion = JSON.parse(
+      readFileSync(path.join(REPO, 'package.json'), 'utf8'),
+    ).version
+    tarball = path.join(
+      home,
+      'dsh-computer-history-' + packageVersion + '.tgz',
+    )
+    requireCheck(
+      'tarball exists',
+      existsSync(tarball),
+      path.basename(tarball),
+    )
+  }
 
   const webApp = addBundle('@deepseek-ai/dsh-web-app@0.2.0-rc.2')
   requireCheck(
