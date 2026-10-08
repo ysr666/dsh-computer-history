@@ -155,8 +155,25 @@ jobs:
         run: node -e "const fs=require('node:fs'),p=require('node:path'); const d=p.join(process.env.RUNNER_TEMP,'package'); const f=fs.readdirSync(d).find(x=>x.endsWith('.tgz')); if(!f) throw new Error('tarball missing'); fs.appendFileSync(process.env.GITHUB_ENV,'DSH_E2E_TARBALL='+p.join(d,f)+'\n')"
       - name: Verify packaged hashes on this platform
         run: node scripts/verify-native-package.mjs
-      - name: Strict Host -> packaged collector transport, no executable override
+      - name: Strict packaged product path, no executable override or checkout wiring
+        env:
+          DSH_E2E_VERIFY_CLIENT: '1'
+          DSH_E2E_TRANSPORT_TIMEOUT_MS: '480000'
         run: pnpm e2e:collector-transport
+      - name: Upload release candidate product evidence (no session credentials)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-product-${{ matrix.os }}
+          path: |
+            .debug/e2e-macos/**/checks.json
+            .debug/e2e-macos/**/packaged-client/evidence.json
+            .debug/e2e-macos/**/packaged-client/first-run.png
+            .debug/e2e-macos/**/packaged-client/settings.png
+            .debug/e2e-macos/**/packaged-client/first-run.txt
+            .debug/e2e-macos/**/packaged-client/settings.txt
+          if-no-files-found: error
+          retention-days: 7
 
   publish:
     name: publish GitHub Release
