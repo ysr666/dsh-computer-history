@@ -184,6 +184,12 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: packaged-product-${{ matrix.os }}
-          path: .debug/e2e-macos/**
-          if-no-files-found: warn
+          path: |
+            .debug/e2e-macos/**/checks.json
+            .debug/e2e-macos/**/packaged-client/evidence.json
+            .debug/e2e-macos/**/packaged-client/first-run.png
+            .debug/e2e-macos/**/packaged-client/settings.png
+            .debug/e2e-macos/**/packaged-client/first-run.txt
+            .debug/e2e-macos/**/packaged-client/settings.txt
+          if-no-files-found: error
           retention-days: 7
