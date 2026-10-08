@@ -268,11 +268,12 @@ describe('repository scaffold', () => {
 
   it('keeps selected Timeline detail inline and avoids repeating the row header', () => {
     const panel = readFileSync(new URL('../src/client/panel.ts', import.meta.url), 'utf8')
+    const detailView = readFileSync(new URL('../src/client/episode-detail-view.ts', import.meta.url), 'utf8')
+    const timelineView = readFileSync(new URL('../src/client/timeline-view.ts', import.meta.url), 'utf8')
     const detailStart = panel.indexOf('const selectedActivityDetail')
-    const timelineStart = panel.indexOf('const timelineSection')
-    const detailSource = panel.slice(detailStart, timelineStart)
-    const row = panel.indexOf("'li', { key: activity.activityKey, className: 'ch-timeline-item' }")
-    const inlineDetail = panel.indexOf('isSelected ? selectedActivityDetail : null')
+    const detailSource = detailView
+    const row = timelineView.indexOf("'li', { key: activity.activityKey, className: 'ch-timeline-item' }")
+    const inlineDetail = timelineView.indexOf('isSelected ? selectedActivityDetail : null')
     const resume = panel.indexOf('const resumeText = hint')
     expect(detailStart).toBeGreaterThan(-1)
     expect(detailSource).not.toContain('ch-detail-head')
@@ -282,7 +283,7 @@ describe('repository scaffold', () => {
       .toBeLessThan(detailSource.indexOf("t('activityGroupingTitle')"))
     expect(row).toBeGreaterThan(-1)
     expect(inlineDetail).toBeGreaterThan(row)
-    expect(inlineDetail).toBeLessThan(resume)
+    expect(panel.indexOf('renderSelectedActivityDetail({')).toBeLessThan(resume)
     expect(panel.slice(resume)).not.toContain('selectedActivityDetail')
   })
 
@@ -295,7 +296,8 @@ describe('repository scaffold', () => {
 
   it('keeps Resume guidance localized and its search disclosure explicit', () => {
     const panel = readFileSync(new URL('../src/client/panel.ts', import.meta.url), 'utf8')
-    const styles = readFileSync(new URL('../src/client/styles.ts', import.meta.url), 'utf8')
+    const styles = readFileSync(new URL('../src/client/styles/continuity.ts', import.meta.url), 'utf8')
+      + readFileSync(new URL('../src/client/styles/responsive.ts', import.meta.url), 'utf8')
     const locale = readFileSync(new URL('../src/client/locale.ts', import.meta.url), 'utf8')
     expect(panel).toContain('resumeResolutionMessage(t, hint)')
     expect(panel).not.toContain("t('resumeAmbiguous', { reason: hint.reason })")
@@ -332,7 +334,8 @@ describe('repository scaffold', () => {
     // no resource on any row, the subject was the bare application name, so the timeline could not tell two
     // Notepad windows apart even though the title was stored.
     const panel = readFileSync(new URL('../src/client/panel.ts', import.meta.url), 'utf8')
-    expect(panel).toContain('episodeSubject(t, activity)')
+    const timelineView = readFileSync(new URL('../src/client/timeline-view.ts', import.meta.url), 'utf8')
+    expect(timelineView).toContain('episodeSubject(t, activity)')
     expect(panel).not.toContain('function episodeSubject(')
     expect(panel).not.toContain('function friendlyAppName(')
     expect(panel).not.toContain('function isHomeDirectoryResource(')
