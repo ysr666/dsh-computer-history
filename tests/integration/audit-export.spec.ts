@@ -277,6 +277,14 @@ describe('audit export and import', () => {
       .toThrow(HistoryImportError)
     expect(() => importHistory(db, {
       ...good,
+      schemaVersion: undefined,
+    })).toThrow(/unsupported schema version/)
+    expect(() => importHistory(db, {
+      ...good,
+      schemaVersion: good.schemaVersion + 1,
+    })).toThrow(/unsupported schema version/)
+    expect(() => importHistory(db, {
+      ...good,
       tables: { ...good.tables, surprise_table: [] },
     })).toThrow(/unknown table: surprise_table/)
     expect(() => importHistory(db, {
@@ -287,7 +295,7 @@ describe('audit export and import', () => {
       ...good,
       tables: { ...good.tables, episodes: [{ id: 'x', summary_text: { nested: true } }] },
     })).toThrow(/not a primitive value/)
-    expect(() => importHistory(db, { schema: 'dsh-computer-history/v1' }))
+    expect(() => importHistory(db, { schema: 'dsh-computer-history/v1', schemaVersion: 1 }))
       .toThrow(/no tables/)
   })
 })
