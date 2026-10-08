@@ -33,4 +33,23 @@ export const RESPONSIVE_STYLES = `
   .ch-settings-detail{min-width:0;overflow-wrap:anywhere}
 }
 
+/* In compact DSH Settings the plugin gets a narrow column. Stack the
+   error icon, explanation and Retry control instead of forcing 3 columns. */
+@media(max-width:480px){
+  .ch-settings-state{
+    display:flex;flex-direction:column;align-items:flex-start;
+    gap:8px;min-width:0;max-width:100%;box-sizing:border-box;
+    padding:12px 10px;
+  }
+  .ch-settings-state .ch-state-copy{
+    min-width:0;width:100%;overflow-wrap:anywhere;
+  }
+  .ch-settings-state h2,.ch-settings-state p{
+    overflow-wrap:anywhere;
+  }
+  .ch-settings-state>.ch-button{
+    min-width:0;max-width:100%;width:auto;
+  }
+}
+
 `

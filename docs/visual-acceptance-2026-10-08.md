@@ -80,7 +80,42 @@ remains unchanged. The current run also verified the 52-check packaged
 product workflow in Chinese; both Settings locale matrices reached the
 real plugin rows and produced 8 snapshots each.
 
-## Remaining Issue #140 scope
+## Settings read-error: real Host failure state
+
+The isolated product journey can optionally block only the
+api/computer-history endpoints using Chromium DevTools network
+interception, reload the throwaway Host's client and open DCH Settings.
+While blocked, the plugin renders an accessible alert with a **Retry**
+button instead of a blank page or a raw browser error. The network
+block is removed in a finally clause before subsequent checks.
+
+Before a compact error-card fix, the English Settings alert overflowed
+its own 420px content box by **25px**, even though Retry remained
+clickable. The DCH-only responsive change stacks the icon, description
+and button in a single column at <=480px. Measured overflow is now
+**0px** at 420px for both color schemes, with text and Retry visible.
+
+The optional visual-error matrix covers light/dark at 1500, 640 and
+420px (**6 combinations per language**), checking an actual DCH error
+alert, Retry affordance, no content/page overflow, computed theme
+foreground switch and no button-label clipping. Release CI without the
+opt-in flag is unaffected.
+
+    DCH_SETTINGS_ERROR=1 DSH_CLI=/path/to/dsh-0.2-cli pnpm e2e:product-journey
+    DCH_SETTINGS_ERROR=1 DCH_VISUAL_LANG=en-US DSH_CLI=/path/to/dsh-0.2-cli pnpm e2e:product-journey
+
+Private test screenshots and metrics remain under the gitignored .debug
+directory, not in public README image assets.
+
+## Completion notes for UI productization (#140)
+
+The original issue was marked closed on GitHub while additional
+Settings error-state QA was still in progress. These regression checks
+close the remaining measured error-card overflow but do not assert the
+DSH Host-owned narrow Settings sidebar is ideal at 420px. This
+isolated fixture collector does not prove live OS Accessibility capture;
+the platform validation documents record that evidence separately.
+
 
 A separate fail-to-read **Settings error state** rendered-state run can
 supplement this visual evidence. Existing repository tests cover the
