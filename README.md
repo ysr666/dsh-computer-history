@@ -11,7 +11,7 @@
 <p align="center">
   <a href="https://github.com/ysr666/dsh-computer-history/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/ysr666/dsh-computer-history/ci.yml?branch=main&style=flat-square&label=CI" alt="CI" /></a>
   <a href="https://github.com/ysr666/dsh-computer-history/actions/workflows/collectors.yml"><img src="https://img.shields.io/github/actions/workflow/status/ysr666/dsh-computer-history/collectors.yml?branch=main&style=flat-square&label=collectors" alt="Collectors" /></a>
-  <img src="https://img.shields.io/badge/status-early%20alpha-8A2BE2?style=flat-square" alt="Status: early alpha" />
+  <img src="https://img.shields.io/badge/status-v1.0.0%20candidate-5B4CF0?style=flat-square" alt="Status: v1.0.0 release candidate" />
   <img src="https://img.shields.io/badge/privacy-metadata--only-2EA44F?style=flat-square" alt="Privacy: metadata only" />
   <img src="https://img.shields.io/badge/storage-local%20SQLite-4D8CCB?style=flat-square" alt="Storage: local SQLite" />
 </p>
@@ -27,8 +27,13 @@
 <p align="center">English · <a href="README.zh.md">简体中文</a></p>
 
 > [!NOTE]
-> **Early alpha.** The core path is implemented and tested across the repository's three collector targets, but there is no stable packaged release yet. Installation and compatibility details may still change.
+> **v1.0.0 release candidate — not published yet.** One three-platform package has passed clean-install/browser verification, but the public npm package, tag and GitHub Release do not exist yet. Use the documented compatibility and privacy constraints.
 
+> [!WARNING]
+> 📌 **Announcement — v1.0.0 release candidate (not yet available on npm).**
+>
+> The first public Computer History release is planned as one installable package for Windows, macOS and Linux. It includes the native collectors, evidence-based Timeline, Continue into a DSH session, local privacy controls and browser/editor companions. Three-platform packaged-client verification and the macOS end-to-end product journey have passed; **this is not a claim of a published or fully supported product**. See [v1.0.0 notes](docs/releases/v1.0.0.md) and [release status](docs/release.md). Linux still needs a real desktop X/AT-SPI session for actual capture.
+>
 <p align="center">
   <img src="docs/assets/panel-timeline-duration.png" width="48%" alt="Computer History timeline in DSH" />
   <img src="docs/assets/panel-firstrun-clean-store.png" width="48%" alt="Computer History first-run privacy flow in DSH" />
@@ -92,16 +97,22 @@ Capture starts **off**, application access is **include-only**, protected surfac
 The shared collector contract is continuously checked on GitHub Actions across macOS, Windows and Linux. Live evidence and known limits are recorded in [docs/validation-three-platforms.md](docs/validation-three-platforms.md).
 
 > [!IMPORTANT]
-> The first public alpha is a **three-platform artifact**, not a macOS-only package. The release pipeline builds each
+> The planned **v1.0.0 is a single three-platform artifact**, not a macOS-only package. The release pipeline builds each
 > native collector on its own OS, records its source commit and SHA-256, assembles all three into one plugin tarball,
 > then clean-installs that same tarball on macOS, Windows and Linux without a `collectorExecutable` override.
 > The installed client now also passes real first-run, Settings and successful History/Privacy browser checks on
 > **all three platforms** ([measured evidence](docs/release.md)); macOS additionally passes a 52/52 full lifecycle
-> journey. No public Alpha tag has been published yet; version, changelog and release preflight remain pending.
+> journey. Publishing still requires the approved npm namespace, Trusted Publishing and the final release preflight.
 
-## Development quick start
+## Install and development
 
-There is no stable packaged release yet, so the supported entry point today is a source checkout.
+**After publication**, install directly from npm in your chosen DSH profile:
+
+```bash
+dsh plugin --profile <profile> add dsh-computer-history
+```
+
+Until the [v1.0.0 Release](https://github.com/ysr666/dsh-computer-history/releases/tag/v1.0.0) and [npm package](https://www.npmjs.com/package/dsh-computer-history) actually exist, use the development checkout below instead. The plugin starts with capture off; first-run consent and platform permissions are required. The Browser and VS Code companions may need separate pairing/setup.
 
 ```bash
 git clone https://github.com/ysr666/dsh-computer-history.git
@@ -144,7 +155,7 @@ Pull requests run Node 22 + 24 core verification, relevant cross-platform collec
 
 ## Contributing
 
-Issues and pull requests are welcome while the project is in alpha. Start with [CONTRIBUTING.md](CONTRIBUTING.md).
+Issues and pull requests are welcome while the first public release is prepared. Start with [CONTRIBUTING.md](CONTRIBUTING.md).
 
 > [!CAUTION]
 > Because this project handles sensitive local context, **do not attach real history databases, pairing/session tokens, credentials, private paths, or unredacted capture logs to public issues**. Use the private vulnerability-reporting path described in [SECURITY.md](SECURITY.md) for sensitive findings.
