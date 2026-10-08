@@ -108,6 +108,7 @@ for (const [claim, expression] of [
   ['three-platform packaged product gate', /DSH_E2E_VERIFY_CLIENT: '1'/],
   ['tag created after clean-install tests', /tag:\s*\n\s*name: Materialize verified tag\s*\n\s*needs: install/],
   ['npm publish after verified tag', /publish-npm:\s*\n[\s\S]*?needs: tag/],
+  ['npm bootstrap must precede any release tag', /release-registry-identity\.mjs inspect 0\.0\.0-bootstrap\.0/],
   ['OIDC publish permission', /id-token: write/],
   ['npm publication without rebuild', /npm publish "\$PACKAGE_TARBALL" --access public --provenance --ignore-scripts/],
   ['npm registry byte identity', /release-registry-identity\.mjs wait/],
