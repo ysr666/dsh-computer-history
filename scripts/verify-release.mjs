@@ -29,7 +29,11 @@ if (typeof version !== 'string' || version.length === 0) {
 
 // The classic release bug: the tag says one thing and the package says another, and the artifact is named after
 // whichever one was read last.
-const tag = process.env.GITHUB_REF_NAME
+// GitHub also sets GITHUB_REF_NAME for branches and PRs (for example,
+// "main" or "128/merge"). Only tag-triggered releases must match v<version>.
+const tag = process.env.GITHUB_REF_TYPE === 'tag'
+  ? process.env.GITHUB_REF_NAME
+  : undefined
 if (tag !== undefined && tag !== `v${version}`) {
   problems.push(`the tag is ${tag} and package.json says ${version}: they have to agree (v${version})`)
 }
@@ -62,6 +66,14 @@ try {
     const wanted = `package/${entry}`
     if (!members.some(member => member === wanted || member.startsWith(`${wanted}/`))) {
       problems.push(`files promises ${entry} and the tarball does not contain it`)
+    }
+  }
+  // A folder entry alone would accept an empty or partial locale directory.
+  // Require both published locale files, which are also referenced by exports.
+  for (const locale of ['en.json', 'zh.json']) {
+    const member = `package/locale/${locale}`
+    if (!members.includes(member)) {
+      problems.push(`release tarball is missing required locale ${member}`)
     }
   }
 

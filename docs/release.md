@@ -33,7 +33,7 @@ verified, it says so rather than describing the intention.
 | Installed client/Settings full product journey | ✅ macOS 52/52 from PR #125 |
 | Same installed client renders first-run and Settings, returns History/Privacy HTTP 200 | ✅ Windows / macOS / Linux packaged browser matrix |
 | `pnpm verify:release:blockers` at release cut | ⬜ run at release cut |
-| Non-`-dev` package version + matching changelog section | ⬜ set only when cutting the release |
+| Non-`-dev` package version + matching changelog section | ⏳ staged by release preparation PR; validate on merged main before tagging |
 
 
 ## What ships
@@ -116,9 +116,10 @@ completes first-run consent, exercises History/Privacy requests, creates a nativ
 capsule, and verifies disable/re-enable/uninstall while preserving history. The detailed installed-bundle evidence
 is recorded in `docs/validation-installed-bundle-2026-10-06.md`.
 
-This satisfies issue #44's acceptance criteria locally without checkout-only wiring or manual junctions. The issue
-remains open until this branch and the release-workflow evidence are merged. The Windows/Linux release jobs still
-prove packaged Host/collector transport rather than separately rendering the web client UI on those runners.
+Issue #44's installed-client acceptance criteria have been verified and the issue is closed. The later
+three-platform packaged-client matrix now also checks first-run, Settings and History/Privacy on
+macOS, Windows and Linux without checkout wiring. These hosted-runner browser checks do not claim
+a full Linux desktop accessibility session or the complete 52-check lifecycle on every OS.
 
 ## Three-platform installed browser proof
 
@@ -130,7 +131,7 @@ The matrix assembled **one** native-provenance tarball, then used DSH
 
 A real Chromium-family browser verified the client `lib/client.js` resolves **inside the installed
 profile**, mounted `.ch-main`, first-run `.ch-first-run` with an enabled action, the Computer History
-Settings surface with **8 rows**, and **HTTP 200 responses** for History (`recent`, `timeline` or
+Settings surface with **8 rows in that historical run** (expanded by later changes), and **HTTP 200 responses** for History (`recent`, `timeline` or
 `threads`) and both Privacy endpoints (`policy`, `retention`). The run's separate platform jobs
 all passed, with screenshots, rendered text and structured results. Uploads deliberately exclude
 Host logs and session credentials. Windows/macOS packaged collectors reached `running`; the Linux
@@ -143,9 +144,11 @@ commit; the public Alpha has not yet been published.
 
 ## Publishing
 
-Do not publish `v0.1.0-alpha.1` until the release-cut preflight is green and the non-dev version/changelog
-entry are set. Issue #44 remains open until the installed-client evidence and enforced product-journey gate land
-on the release branch; the version/changelog/tag changes stay deferred until that point.
+Do not publish `v0.1.0-alpha.1` until the release-cut preflight is green on the **final
+main commit**, the release package version and changelog match, and any required safety fixes are
+merged and verified. Issue #44 is already closed; do not treat open Dependabot maintenance PRs as
+automatic release blockers. The release preparation PR stages the version and notes but **must not
+create or push a tag**.
 
 Push a tag named `v` + the version in `package.json` (`.github/workflows/release.yml`). The workflow builds
 the macOS, Windows and Linux collectors on their native runners, refuses mixed-source artifacts, assembles one
@@ -200,10 +203,12 @@ a bundle, not a bare binary) `xcrun stapler staple`. None of that is needed for 
 
 ### The scan that runs before it
 
-`pnpm verify:release:blockers` (its own step in the workflow) fails on two things only: a failed run on `main` in
-the last twenty, and an open **high or critical** dependabot alert. Open pull requests and issues, how many
-branches have a commit from the last month, and whether the alerts could be read at all are reported but not
-enforced - whether they block *this* release is a judgement, and a script that pretends otherwise gets ignored.
+`pnpm verify:release:blockers` (its own step in the workflow) checks the **current main
+commit's push-triggered workflow results**, not unrelated failures on old SHAs. It fails if
+current main is missing successful CI or has an incomplete/failed workflow, and if an open
+**high or critical** Dependabot security alert exists. Other open PRs/issues and
+inaccessible alert data are explicitly reported for manual review rather than silently
+declared safe. It must be rerun at the final release cut.
 
 ### Running the release package gate
 
@@ -211,7 +216,12 @@ enforced - whether they block *this* release is a judgement, and a script that p
 the three artifacts produced on their native runners, so a single-machine `pnpm pack` is not a valid substitute
 for the release assembly anymore.
 
-The reproducible pre-tag gate is the **Packaged alpha matrix** workflow. After all three native artifacts have
+The reproducible pre-tag gate is the **Packaged alpha matrix** workflow, which now runs
+`pnpm verify:release` against the assembled artifact when the candidate has a non-`-dev`
+version. The release-tag workflow additionally verifies the native macOS signature from
+macOS and runs the complete installed product journey before publication.
+
+After all three native artifacts have
 been downloaded into `bin/`, the assembly steps are:
 
 ```bash
