@@ -3,10 +3,12 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
+  COMPANION_BUNDLE_ID,
   PolicyRuleId,
   type PolicySnapshot,
   type NativeObservation,
 } from '../../src/shared/index.js'
+import { companionObservation } from '../../src/host/companion/observation.js'
 import { IngestionService } from '../../src/host/ingestion/index.js'
 import { buildRedactionPreview } from '../../src/host/audit/preview.js'
 import { ObservationStore, openHistoryDatabase } from '../../src/host/store/index.js'
@@ -218,6 +220,72 @@ describe('a vouched workspace (ADR 0009)', () => {
     })
     expect(preview.excluded).toHaveLength(1)
     expect(preview.excluded[0]?.reason).toBe('policy-disallowed')
+    history.close()
+  })
+
+  it('keeps a short Browser Companion detour inside the editor workspace episode', async () => {
+    const { root, file } = workspaceOnDisk()
+    const { history, ingestion, now } = service(root, {
+      extraRules: [{
+        id: PolicyRuleId('allow-browser-companion'),
+        dimension: 'app',
+        action: 'allow',
+        matcher: 'exact',
+        pattern: COMPANION_BUNDLE_ID,
+        builtIn: false,
+        createdAtMs: 1,
+        updatedAtMs: 1,
+      }],
+    })
+
+    const editor = (seq: number, observedAtMs: number) => companionObservation({
+      source: 'editor',
+      app: {
+        bundleId: 'com.microsoft.VSCode',
+        name: 'Visual Studio Code',
+      },
+      workspaceRoot: root,
+      filePath: file,
+      surfaceKind: 'editor',
+      title: 'main.ts',
+      editorSession: 'editor-short-detour',
+      seq,
+      observedAtMs,
+    })
+    const browser = companionObservation({
+      source: 'browser',
+      origin: 'https://docs.example',
+      path: '/guide',
+      title: 'Guide',
+      browserSession: 'browser-short-detour',
+      incognito: false,
+      seq: 1,
+      observedAtMs: now + 10_000,
+    })
+
+    expect(await ingestion.ingest(editor(1, now))).toBe(true)
+    expect(await ingestion.ingest(browser)).toBe(true)
+    expect(await ingestion.ingest(editor(2, now + 20_000))).toBe(true)
+
+    const episodes = new EpisodeStore(history.db)
+      .listRecent({ limit: 10 })
+      .toReversed()
+    expect(episodes).toHaveLength(1)
+    expect(episodes[0]?.workspace?.root).toBe(root)
+    expect(episodes[0]?.resources).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: 'file',
+        canonicalUri: expect.stringContaining('/main.ts'),
+      }),
+      expect.objectContaining({
+        kind: 'url',
+        canonicalUri: 'https://docs.example/guide',
+        displayLabel: 'Guide',
+      }),
+    ]))
+    expect(episodes[0]?.surfaces.map(surface => surface.surfaceKind))
+      .toEqual(expect.arrayContaining(['editor', 'browser']))
+
     history.close()
   })
 
