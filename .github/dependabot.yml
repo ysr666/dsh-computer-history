@@ -1,15 +1,13 @@
 version: 2
 updates:
+  # Follow the DVR policy: only security updates are opened for npm.
+  # The supported DSH Host contract, not the newest npm version, controls
+  # React, Node types, TypeScript, and toolchain migrations.
   - package-ecosystem: npm
     directory: /
     schedule:
       interval: weekly
-    open-pull-requests-limit: 2
-    groups:
-      weekly-npm:
-        applies-to: version-updates
-        patterns:
-          - '*'
+    open-pull-requests-limit: 0
 
   - package-ecosystem: github-actions
     directory: /
