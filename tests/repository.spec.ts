@@ -78,6 +78,22 @@ describe('repository scaffold', () => {
     })).toBe('/tmp/explicit-history')
   })
 
+  it('keeps installed-client acceptance in both package and release gates', () => {
+    const packaged = readFileSync(
+      new URL('../.github/workflows/packaged-alpha.yml', import.meta.url),
+      'utf8',
+    )
+    const release = readFileSync(
+      new URL('../.github/workflows/release.yml', import.meta.url),
+      'utf8',
+    )
+    expect(packaged).toContain('run: pnpm e2e:packaged-client')
+    expect(release).toContain('run: pnpm e2e:packaged-client')
+    expect(release).toContain(
+      '  publish:\n    name: publish GitHub Release\n    needs: install',
+    )
+  })
+
   it('keeps the macOS adapter table identical to the fixture darwin ids', () => {
     const fixture = fixtureAdapters()
     const platformIds = (platform: string): readonly string[] =>
