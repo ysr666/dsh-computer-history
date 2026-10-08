@@ -85,9 +85,9 @@ Capture starts **off**, application access is **include-only**, protected surfac
 
 | Platform | Collector path | Current status |
 | --- | --- | --- |
-| **macOS** | Accessibility | Packaged install + default collector handshake validated; native build/privacy/E2E gates remain green |
-| **Windows** | UI Automation | Packaged install + default collector handshake validated; live Notepad → UIA → Host acceptance also green |
-| **Linux** | AT-SPI | Packaged install + collector handshake validated; a real desktop session still needs its X/AT-SPI bus and permissions |
+| **macOS** | Accessibility | Packaged collector + installed Main/first-run/Settings path validated; native build/privacy/E2E gates remain green |
+| **Windows** | UI Automation | Packaged collector + installed Main/first-run/Settings path validated; live Notepad → UIA → Host acceptance also green |
+| **Linux** | AT-SPI | Packaged collector + installed Main/first-run/Settings path validated; a real desktop session still needs its X/AT-SPI bus and permissions |
 
 The shared collector contract is continuously checked on GitHub Actions across macOS, Windows and Linux. Live evidence and known limits are recorded in [docs/validation-three-platforms.md](docs/validation-three-platforms.md).
 
@@ -95,8 +95,9 @@ The shared collector contract is continuously checked on GitHub Actions across m
 > The first public alpha is a **three-platform artifact**, not a macOS-only package. The release pipeline builds each
 > native collector on its own OS, records its source commit and SHA-256, assembles all three into one plugin tarball,
 > then clean-installs that same tarball on macOS, Windows and Linux without a `collectorExecutable` override.
-> This packaged path is validated, but no public alpha tag has been published yet; the installed client/panel release
-> gate is still being closed before the first public pre-release.
+> The packaged **product** path is now validated end to end on all three platforms, including the installed
+> client panel, first-run and History/Privacy Settings. No public alpha tag has been published yet; the remaining
+> work is the deliberate release cut (version, changelog, preflight and tag).
 
 ## Development quick start
 
