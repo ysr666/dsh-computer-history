@@ -437,6 +437,96 @@ async function openUiSession() {
   return session
 }
 
+// Opt-in visual evidence from the exact packaged Host/client, never from a
+// mocked React tree. Media emulation is recorded separately from the Host's
+// actual resolved colors: it is not proof of a theme switch by itself.
+async function captureVisualMatrix(session, prefix) {
+  if (process.env.DCH_VISUAL_MATRIX !== '1') return
+  const measurements = []
+  try {
+    for (const colorScheme of ['light', 'dark']) {
+      await session.send('Emulation.setEmulatedMedia', {
+        features: [{ name: 'prefers-color-scheme', value: colorScheme }],
+      })
+      for (const width of [1500, 960, 640, 420]) {
+        await session.send('Emulation.setDeviceMetricsOverride', {
+          width, height: 940, deviceScaleFactor: 1, mobile: false,
+        })
+        await sleep(450)
+        const metrics = await session.evaluate(
+          `(() => {
+            const main=document.querySelector('.ch-main');
+            if (!main) return { error: 'history panel not visible' };
+            const box=main.getBoundingClientRect();
+            const action=main.querySelector('.ch-first-run-action .ch-button');
+            const actionBox=action?.getBoundingClientRect();
+            const primary=main.querySelector('.ch-continue-primary');
+            const button=primary?.getBoundingClientRect();
+            const style=getComputedStyle(main);
+            const token=getComputedStyle(document.documentElement).getPropertyValue('--dsw-alias-bg-base').trim();
+            return {
+              viewport:innerWidth, mainWidth:Math.round(box.width),
+              mainLeft:Math.round(box.left), mainRight:Math.round(box.right),
+              documentOverflow:document.documentElement.scrollWidth-innerWidth,
+              mainOverflow:main.scrollWidth-main.clientWidth,
+              firstRunButtonOverflow:action?Number(action.scrollWidth>action.clientWidth+1):null,
+              firstRunButtonWrapped:action?Number(action.scrollHeight>action.clientHeight+1):null,
+              firstRunButtonWidth:actionBox?Math.round(actionBox.width):null,
+              primaryButtonVisible:button?Boolean(button.width>40 && button.height>20):null,
+              resolvedBackground:style.backgroundColor, resolvedForeground:style.color,
+              hostBgToken:token,
+              mediaDark:matchMedia('(prefers-color-scheme: dark)').matches,
+              documentLang:document.documentElement.lang,
+              hostTheme:document.documentElement.getAttribute('data-theme'),
+              hostClass:document.documentElement.className,
+            };
+          })()`,
+        )
+        measurements.push({ colorScheme, width, ...metrics })
+        await session.shot(`${prefix}-${colorScheme}-${width}.png`)
+      }
+    }
+  } finally {
+    // Restore the ordinary DSH viewport and browser color environment for all
+    // existing behavioral checks that follow these optional captures.
+    await session.send('Emulation.clearDeviceMetricsOverride')
+    await session.send('Emulation.setEmulatedMedia', { features: [] })
+  }
+  writeFileSync(
+    path.join(artifacts, `${prefix}-matrix.json`),
+    JSON.stringify(measurements, null, 2) + '\n',
+  )
+  const unacceptable = measurements.filter(item =>
+    item.error
+      || item.documentOverflow > 1
+      || item.mainOverflow > 1
+      || item.firstRunButtonOverflow === 1
+      || item.firstRunButtonWrapped === 1
+      || item.primaryButtonVisible === false,
+  )
+  if (unacceptable.length > 0) {
+    throw new Error('visual matrix layout failed: '
+      + JSON.stringify(unacceptable.map(item => ({
+        colorScheme: item.colorScheme,
+        width: item.width,
+        documentOverflow: item.documentOverflow,
+        mainOverflow: item.mainOverflow,
+        buttonOverflow: item.firstRunButtonOverflow,
+      }))))
+  }
+  const light = measurements.find(item => item.colorScheme === 'light' && item.width === 420)
+  const dark = measurements.find(item => item.colorScheme === 'dark' && item.width === 420)
+  if (!light || !dark || light.resolvedForeground === dark.resolvedForeground) {
+    throw new Error('visual matrix did not observe a real foreground color change')
+  }
+  if (process.env.DCH_VISUAL_LANG === 'en-US'
+    && measurements.some(item => !item.documentLang?.startsWith('en'))) {
+    throw new Error('requested English locale did not reach the real Host page')
+  }
+  console.log('  – visual matrix verified:', prefix,
+    measurements.length, 'viewport/theme combinations (no clipping or overflow)')
+}
+
 async function dismissDialogs(session) {
   for (let attempt = 0; attempt < 8; attempt += 1) {
     const dismissed = await session.evaluate(
@@ -693,6 +783,7 @@ try {
       '--no-first-run',
       '--no-default-browser-check',
       '--window-size=1500,1100',
+      ...(process.env.DCH_VISUAL_LANG === 'en-US' ? ['--lang=en-US'] : []),
       'about:blank',
     ],
     {
@@ -702,6 +793,13 @@ try {
   )
   await waitForDebugger(cdpPort)
   uiSession = await openUiSession()
+  if (process.env.DCH_VISUAL_LANG === 'en-US') {
+    await uiSession.send('Emulation.setLocaleOverride', { locale: 'en-US' })
+    await uiSession.send('Emulation.setUserAgentOverride', {
+      userAgent: await uiSession.evaluate('navigator.userAgent'),
+      acceptLanguage: 'en-US,en;q=0.9',
+    })
+  }
   await uiSession.send('Page.navigate', { url: hostUrl })
   await sleep(7_000)
   await dismissDialogs(uiSession)
@@ -725,6 +823,7 @@ try {
     + "})()",
   )
   await uiSession.shot('01-first-run.png')
+  await captureVisualMatrix(uiSession, 'first-run')
   requireCheck(
     'first-run surface is shown',
     firstRun?.present === true && firstRun?.button === true,
@@ -1031,6 +1130,7 @@ try {
     + "})()",
   )
   await uiSession.shot('03-main-after-work.png')
+  await captureVisualMatrix(uiSession, 'recent-work')
   requireCheck(
     'Continue points at the project and app.ts',
     mainAfterWork?.button === true
@@ -1209,6 +1309,13 @@ try {
   )
 
   uiSession = await openUiSession()
+  if (process.env.DCH_VISUAL_LANG === 'en-US') {
+    await uiSession.send('Emulation.setLocaleOverride', { locale: 'en-US' })
+    await uiSession.send('Emulation.setUserAgentOverride', {
+      userAgent: await uiSession.evaluate('navigator.userAgent'),
+      acceptLanguage: 'en-US,en;q=0.9',
+    })
+  }
   await uiSession.send('Page.navigate', { url: hostUrl })
   await sleep(7_000)
   await dismissDialogs(uiSession)

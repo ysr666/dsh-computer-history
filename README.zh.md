@@ -35,11 +35,11 @@
 > Computer History 首个公开版本计划使用**同一份三端安装包**支持 Windows / macOS / Linux，提供基于证据的时间线、原生 DSH Continue、本地隐私控制及浏览器/编辑器 Companion。三端打包 UI 验收和 macOS 完整产品流程已通过，**但目前不是已经发布的稳定版**。Linux 真正采集仍需桌面 X/AT-SPI 环境。详情见 [v1.0.0 发布说明](docs/releases/v1.0.0.md)与[发布状态](docs/release.md)。
 >
 <p align="center">
-  <img src="docs/assets/panel-timeline-duration.png" width="48%" alt="DSH 中的 Computer History 时间线" />
-  <img src="docs/assets/panel-firstrun-clean-store.png" width="48%" alt="DSH 中的 Computer History 首次使用隐私流程" />
+  <img src="docs/assets/panel-v1-recent-work-zh.png" width="48%" alt="DSH 中的 Computer History 时间线" />
+  <img src="docs/assets/panel-v1-first-run-zh.png" width="48%" alt="DSH 中的 Computer History 首次使用隐私流程" />
 </p>
 
-<p align="center"><sub>左：最近的 Work Episodes；右：首次使用时的隐私与开始记录流程。</sub></p>
+<p align="center"><sub>截图来自 DSH 0.2.0-rc.2 真正安装后的客户端，使用隔离环境中的模拟工作记录。左：继续工作、时间线和工作线索（示例 URL 已遮盖）；右：首次使用的隐私说明和开始记录授权。</sub></p>
 
 ## 为什么做这个
 

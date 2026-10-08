@@ -35,11 +35,11 @@
 > The first public Computer History release is planned as one installable package for Windows, macOS and Linux. It includes the native collectors, evidence-based Timeline, Continue into a DSH session, local privacy controls and browser/editor companions. Three-platform packaged-client verification and the macOS end-to-end product journey have passed; **this is not a claim of a published or fully supported product**. See [v1.0.0 notes](docs/releases/v1.0.0.md) and [release status](docs/release.md). Linux still needs a real desktop X/AT-SPI session for actual capture.
 >
 <p align="center">
-  <img src="docs/assets/panel-timeline-duration.png" width="48%" alt="Computer History timeline in DSH" />
-  <img src="docs/assets/panel-firstrun-clean-store.png" width="48%" alt="Computer History first-run privacy flow in DSH" />
+  <img src="docs/assets/panel-v1-recent-work-en.png" width="48%" alt="Computer History timeline in DSH" />
+  <img src="docs/assets/panel-v1-first-run-en.png" width="48%" alt="Computer History first-run privacy flow in DSH" />
 </p>
 
-<p align="center"><sub>Recent Work Episodes on the left; the first-run privacy flow on the right.</sub></p>
+<p align="center"><sub>Packaged DSH 0.2.0-rc.2 client with synthetic work-session data. Left: Continue, Timeline, and Work threads (example URL redacted); right: first-run privacy and recording consent.</sub></p>
 
 ## Why this exists
 
