@@ -261,6 +261,10 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
   let ownsCapture = false
   let manager: CollectorManager | undefined
   let recovery: Promise<void> | undefined
+  let startCompanionForOwner: () => Promise<void> =
+    () => Promise.resolve()
+  let stopCompanionForOwner: () => Promise<void> =
+    () => Promise.resolve()
 
   const collectorExecutable =
     config.collectorExecutable
@@ -288,6 +292,10 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
 
   const releaseCurrentCaptureLock = async (): Promise<void> => {
     ownsCapture = false
+    // The loopback listener is part of capture ownership. Close it before the
+    // lock becomes available so a successor can bind the same port immediately
+    // and the old Host cannot keep receiving companion traffic after handoff.
+    await stopCompanionForOwner()
     const lock = captureLock
     captureLock = undefined
     if (!lock) return
@@ -362,11 +370,13 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
         || state === 'paused'
         || state === 'permission-required'
       ) {
+        await startCompanionForOwner()
         return
       }
 
       try {
         await activeManager.recover()
+        await startCompanionForOwner()
       } catch (error) {
         const message = error instanceof Error ? error.message : ''
         // A concurrently-running helper still needs this Host's lock. Every
@@ -448,47 +458,91 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
       return { stored: await ingestion.ingest(companionObservation(payload)) }
     },
   })
-  const browserPaired = companionTokens.state('browser').paired
-  const editorPaired = companionTokens.state('editor').paired
+  const currentPairingFlags = (): {
+    readonly paired: boolean
+    readonly editorPaired: boolean
+  } => ({
+    paired: companionTokens.state('browser').paired,
+    editorPaired: companionTokens.state('editor').paired,
+  })
   let companionState: NonNullable<
     ComputerHistoryState['companion']
   > = {
     listening: false,
-    paired: browserPaired,
-    editorPaired,
-    reason: 'companion intake not started',
+    ...currentPairingFlags(),
+    reason: ownsCapture
+      ? 'companion intake not started'
+      : 'companion intake follows capture ownership',
   }
-  const companionStarted = companionIntake.start()
-    .then((port) => {
-      companionState = { listening: true, port, paired: browserPaired, editorPaired }
-    })
-    .catch((error: unknown) => {
-      companionState = {
-        listening: false,
-        paired: browserPaired,
-        editorPaired,
-        reason: error instanceof Error
-          ? error.message
-          : 'companion intake failed',
+
+  // start/stop can be requested by collector failure, manual recovery and
+  // teardown. Serialize them so a slow bind cannot finish after a later stop
+  // and resurrect a listener that ownership has already handed away.
+  let companionLifecycle: Promise<void> = Promise.resolve()
+  const enqueueCompanionLifecycle = (
+    operation: () => Promise<void>,
+  ): Promise<void> => {
+    const next = companionLifecycle.then(operation, operation)
+    companionLifecycle = next.catch(() => {})
+    return next
+  }
+
+  startCompanionForOwner = (): Promise<void> =>
+    enqueueCompanionLifecycle(async () => {
+      if (!ownsCapture) {
+        companionState = {
+          listening: false,
+          paired: companionState.paired,
+          editorPaired: companionState.editorPaired ?? false,
+          reason: 'companion intake follows capture ownership',
+        }
+        return
+      }
+      if (companionIntake.port !== undefined) return
+      try {
+        const port = await companionIntake.start()
+        companionState = {
+          listening: true,
+          port,
+          ...currentPairingFlags(),
+        }
+      } catch (error) {
+        companionState = {
+          listening: false,
+          ...currentPairingFlags(),
+          reason: error instanceof Error
+            ? error.message
+            : 'companion intake failed',
+        }
       }
     })
-  let companionStopPromise: Promise<void> | undefined
-  const stopCompanion = (): Promise<void> => {
-    companionStopPromise ??= (async () => {
-      // start() is deliberately non-fatal, but teardown must not race a listener
-      // that is still binding: wait for either listen or the recorded bind error
-      // before asking it to stop.
-      await companionStarted
+
+  stopCompanionForOwner = (): Promise<void> =>
+    enqueueCompanionLifecycle(async () => {
       await companionIntake.stop()
-    })()
-    return companionStopPromise
+      // Teardown effects can request stop more than once, including after
+      // the database-owning effect has closed SQLite. Preserve the last
+      // published pairing flags instead of querying a closed token store.
+      companionState = {
+        listening: false,
+        paired: companionState.paired,
+        editorPaired: companionState.editorPaired ?? false,
+        reason: ownsCapture
+          ? 'companion intake stopped'
+          : 'companion intake follows capture ownership',
+      }
+    })
+
+  if (ownsCapture) {
+    void startCompanionForOwner()
   }
+
   // Registered early so a later setup failure still closes the loopback listener.
-  // The database-owning teardown below awaits the same idempotent promise before
-  // it can close SQLite, so Cordis may dispose effects concurrently without
-  // letting an in-flight companion request outlive the database.
+  // The database-owning teardown below queues the same serialized stop before
+  // SQLite can close, so concurrent Cordis disposal cannot let an intake bind or
+  // request outlive the database.
   ctx.effect(() => async () => {
-    await stopCompanion()
+    await stopCompanionForOwner()
   })
 
   const backend = new LocalComputerHistoryBackend(
@@ -601,7 +655,7 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
     // Stop accepting companion work first, and wait for the listener's active
     // requests to be torn down before SQLite can close. The separate early
     // effect above calls the same promise, so concurrent Cordis disposal is safe.
-    await stopCompanion()
+    await stopCompanionForOwner()
 
     // Close the API/control gate before releasing capture ownership.
     // Otherwise a late recover() can reacquire the lock and spawn a helper
