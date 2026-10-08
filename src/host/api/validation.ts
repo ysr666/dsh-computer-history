@@ -1,6 +1,7 @@
 import {
   EpisodeId,
   PolicyRuleId,
+  validateConsentRule,
   type DeleteHistoryRequest,
   type PolicyRule,
   type PolicyUpdate,
@@ -221,8 +222,9 @@ export function parsePolicyUpdate(
     )
   }
 
-  return {
-    mode,
-    rules: body.rules.map(parseRule),
+  const rules = body.rules.map(parseRule)
+  if (!rules.every(validateConsentRule)) {
+    throw new Error('resource consent rules must have canonical exact patterns')
   }
+  return { mode, rules }
 }

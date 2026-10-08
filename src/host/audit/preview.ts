@@ -4,6 +4,7 @@ import type {
   RedactionPreviewEntry,
   RedactionReason,
 } from '../../shared/index.js'
+import { resourceConsentAllows } from '../../shared/resource-consent.js'
 import {
   PROTECTED_BUNDLES,
   SECURE_PATH,
@@ -63,6 +64,16 @@ export function buildRedactionPreview(input: {
   }
 }
 
+function safeOrigin(uri: string | undefined): string | undefined {
+  if (!uri) return undefined
+  try {
+    const url = new URL(uri)
+    return url.protocol === 'https:' || url.protocol === 'http:'
+      ? url.origin
+      : undefined
+  } catch { return undefined }
+}
+
 function exclusionReason(
   observation: PersistedActivityObservation,
   policy: PolicySnapshot,
@@ -81,6 +92,24 @@ function exclusionReason(
   if (isProtectedWorkspace(observation.workspace, policy)) {
     return 'policy-disallowed'
   }
+  // Reuse the same opt-in gate for retroactive redaction previews, not a
+  // looser interpretation of the per-origin/per-workspace consent rules.
+  if (observation.source.adapter === 'browser' && !resourceConsentAllows(
+    policy,
+    'browser-origin',
+    observation.source.provider === 'companion'
+      && observation.resource?.kind === 'url'
+      ? safeOrigin(observation.resource.canonicalUri)
+      : undefined,
+  )) return 'policy-disallowed'
+  if (observation.surface.kind === 'editor' && !resourceConsentAllows(
+    policy,
+    'editor-workspace',
+    observation.source.provider === 'companion'
+      && observation.workspace.source === 'companion'
+      ? observation.workspace.root
+      : undefined,
+  )) return 'policy-disallowed'
   // The same secure-path screen ingestion applies to a resource, so the preview
   // cannot miss a row that ingestion would have dropped.
   const uri = observation.resource?.canonicalUri

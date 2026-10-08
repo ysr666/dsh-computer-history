@@ -6,6 +6,7 @@ import {
   PHASE1_ADAPTERS,
   phase1AdapterDefinition,
   policyRuleMatches,
+  resourceConsentAllows,
   type ActivityObservation,
   type NativeObservation,
   type ObservationAdapter,
@@ -147,6 +148,16 @@ function isProtectedMetadata(
     message.window?.title
     && isProtectedTitle(message.window.title, policy),
   )
+}
+
+function safeBrowserOrigin(uri: string | undefined): string | undefined {
+  if (!uri) return undefined
+  try {
+    const url = new URL(uri)
+    return url.protocol === 'https:' || url.protocol === 'http:'
+      ? url.origin
+      : undefined
+  } catch { return undefined }
 }
 
 function resourceOf(
@@ -364,6 +375,25 @@ export function normalizeObservation(
     resource,
     policy,
     { caseInsensitiveAppId: provider === 'windows-uia' },
+  )) return refuse('policy')
+
+  // Issue #96: app permission is necessary but not sufficient for a
+  // companion origin/workspace. In a selected/none mode, unknown or
+  // unvouched roots fail closed; native AX editor metadata cannot bypass
+  // a workspace allowlist by supplying a guessed root.
+  if (safeAdapter === 'browser' && !resourceConsentAllows(
+    policy,
+    'browser-origin',
+    provider === 'companion' && resource?.kind === 'url'
+      ? safeBrowserOrigin(resource.canonicalUri)
+      : undefined,
+  )) return refuse('policy')
+  if (adapter.surfaceKind === 'editor' && !resourceConsentAllows(
+    policy,
+    'editor-workspace',
+    provider === 'companion' && workspace.source === 'companion'
+      ? workspace.root
+      : undefined,
   )) return refuse('policy')
 
   // A collector on another machine keeps its own clock, so "in the future" has to mean "beyond what skew
