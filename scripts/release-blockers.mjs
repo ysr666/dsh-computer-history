@@ -47,9 +47,9 @@ if (mainBranch.unavailable !== undefined) {
   const ciRuns = runs.filter(run => run.headSha === mainSha
     && (run.workflowName === 'CI' || run.name === 'CI')
     && ['push', 'workflow_dispatch'].includes(run.event))
-  // Prefer a successful exact-SHA run. A previously failed same-SHA attempt
-  // should not poison a deliberate successful rerun of that same CI.
-  const ci = ciRuns.find(run => run.conclusion === 'success') ?? ciRuns[0]
+  // 'gh run list' is newest-first. The most recent exact-SHA CI attempt must
+  // pass; an older success must not mask a subsequent failed or queued run.
+  const ci = ciRuns[0]
   const incomplete = current.filter(run => !['success', 'skipped'].includes(run.conclusion ?? ''))
 
   if (current.length === 0) {
