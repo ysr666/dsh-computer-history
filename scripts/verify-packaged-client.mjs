@@ -143,7 +143,7 @@ function netscapeCookieJar(cookies) {
 async function main() {
   mkdirSync(outDir, { recursive: true })
   const executable = browserExecutable()
-  const profile = path.join(outDir, 'browser-profile')
+  const profile = path.join(outDir, '.browser-profile')
   rmSync(profile, { recursive: true, force: true })
 
   const args = [
@@ -305,7 +305,7 @@ async function main() {
 
     await waitFor(
       'Computer History first-run state',
-      async () => Boolean(await evaluate("document.querySelector('.ch-first-run')")),
+      async () => Boolean(await evaluate("!!document.querySelector('.ch-first-run')")),
     )
     const firstRunAction = await evaluate(`(() => {
       const button = document.querySelector('.ch-first-run-action button')
@@ -381,6 +381,8 @@ async function main() {
   } finally {
     try { socket?.close() } catch { /* browser is already closing */ }
     try { browser.kill() } catch { /* ephemeral CI runner will reap it */ }
+    await sleep(500)
+    try { rmSync(profile, { recursive: true, force: true }) } catch { /* evidence must survive browser cleanup */ }
   }
 }
 
