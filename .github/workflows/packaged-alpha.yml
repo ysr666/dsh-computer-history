@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - '.github/workflows/packaged-alpha.yml'
+      - '.github/workflows/release.yml'
       - 'native/**'
       - 'src/host/plugin.ts'
       - 'src/client/**'
@@ -20,6 +21,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/packaged-alpha.yml'
+      - '.github/workflows/release.yml'
       - 'native/**'
       - 'src/host/plugin.ts'
       - 'src/client/**'
