@@ -177,6 +177,7 @@ jobs:
       - name: Strict packaged product path, no executable override or checkout wiring
         env:
           DSH_E2E_VERIFY_CLIENT: '1'
+          DSH_E2E_TRANSPORT_TIMEOUT_MS: '480000'
         run: pnpm e2e:collector-transport
       - name: Upload packaged-install product evidence
         if: always()
