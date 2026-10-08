@@ -281,7 +281,7 @@ async function main() {
       await evaluate(`(() => {
         const scope = document.querySelector('[role="dialog"],dialog') ?? document
         const buttons = [...scope.querySelectorAll('button')].filter(node => node.getClientRects().length > 0)
-        const dismiss = buttons.find(node => /^(稍后|继续|知道了|关闭|Later|Continue|Got it|Close|×)$/.test((node.textContent || '').trim()))
+        const dismiss = buttons.find(node => /^(稍后配置|稍后|继续|知道了|关闭|Later|Continue|Got it|Close|Not now|Skip|×)$/.test((node.textContent || '').trim()))
         const button = dismiss ?? buttons.at(-1)
         if (button) button.click()
       })()`)
@@ -289,14 +289,27 @@ async function main() {
     }
   }
   const openPanel = async () => {
-    // The shell opens on its workspace picker, where the main-panel area does not exist yet and clicking the
-    // sidebar entry silently does nothing. Open a session first; then the panel has somewhere to render.
-    for (let attempt = 0; attempt < 3; attempt += 1) {
+    // A clean DSH profile can open on the workspace/session picker. Try the plugin first so an already-open
+    // session is never replaced; only if that cannot mount the panel do we create/open a shell session and retry.
+    const tryPlugin = async () => {
       for (const label of panelLabels) {
         await clickText(label)
         await sleep(1200)
-        if (await evaluate("!!document.querySelector('.ch-main')")) return
+        if (await evaluate("!!document.querySelector('.ch-main')")) return true
       }
+      return false
+    }
+
+    if (await tryPlugin()) return
+    for (const label of ['新会话', 'New session', 'New chat']) {
+      if (await clickText(label) === 'clicked') {
+        await sleep(1600)
+        await dismissIntro()
+        break
+      }
+    }
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      if (await tryPlugin()) return
     }
   }
   const setTheme = async label => {
