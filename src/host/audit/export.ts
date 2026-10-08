@@ -34,8 +34,10 @@ export const EXPORTED_TABLES = [
 
 const IMPORTED_HISTORY_TABLES = new Set<ExportedTable>([
   'resources',
+  'dsh_checkpoints',
   'observations',
   'episodes',
+  'continuation_sessions',
   'episode_observations',
   'episode_resources',
   'episode_surfaces',
@@ -345,6 +347,15 @@ export function importHistory(
 
   db.exec('BEGIN IMMEDIATE')
   try {
+    for (const row of rows.get('dsh_checkpoints') ?? []) {
+      const inserted = insertRow(db, 'dsh_checkpoints', row, {
+        omit: new Set(['id']),
+        orIgnore: true,
+      })
+      imported.dsh_checkpoints =
+        (imported.dsh_checkpoints ?? 0) + inserted.changes
+    }
+
     for (const row of rows.get('resources') ?? []) {
       const sourceId = requiredInteger(row, 'resources', 'id')
       const kind = requiredString(row, 'resources', 'kind')
@@ -442,6 +453,27 @@ export function importHistory(
         newEpisodes.add(id)
         imported.episodes = (imported.episodes ?? 0) + 1
       }
+    }
+
+    for (const row of rows.get('continuation_sessions') ?? []) {
+      const episodeId = requiredString(
+        row,
+        'continuation_sessions',
+        'episode_id',
+      )
+      const episodeExists = db.prepare(
+        'SELECT 1 AS present FROM episodes WHERE id = ?',
+      ).get(episodeId)
+      if (!episodeExists) {
+        throw new HistoryImportError(
+          `continuation_sessions.episode_id references missing episode ${episodeId}`,
+        )
+      }
+      const inserted = insertRow(db, 'continuation_sessions', row, {
+        orIgnore: true,
+      })
+      imported.continuation_sessions =
+        (imported.continuation_sessions ?? 0) + inserted.changes
     }
 
     for (const row of rows.get('episode_observations') ?? []) {
