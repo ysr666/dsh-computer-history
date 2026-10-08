@@ -11,6 +11,7 @@ on:
       - 'scripts/verify-native-package.mjs'
       - 'scripts/e2e-collector-transport.mjs'
       - 'scripts/e2e-macos.mjs'
+      - 'scripts/verify-installed-client.mjs'
       - 'package.json'
       - 'pnpm-lock.yaml'
   push:
@@ -24,6 +25,7 @@ on:
       - 'scripts/verify-native-package.mjs'
       - 'scripts/e2e-collector-transport.mjs'
       - 'scripts/e2e-macos.mjs'
+      - 'scripts/verify-installed-client.mjs'
       - 'package.json'
       - 'pnpm-lock.yaml'
   workflow_dispatch:
@@ -168,5 +170,18 @@ jobs:
         run: node -e "const fs=require('node:fs'),p=require('node:path'); const d=p.join(process.env.RUNNER_TEMP,'package'); const f=fs.readdirSync(d).find(x=>x.endsWith('.tgz')); if(!f) throw new Error('tarball missing'); fs.appendFileSync(process.env.GITHUB_ENV,'DSH_E2E_TARBALL='+p.join(d,f)+'\n')"
       - name: Verify packaged hashes on this platform
         run: node scripts/verify-native-package.mjs
-      - name: Strict Host -> packaged collector transport, no executable override
+      - name: Strict Host -> packaged collector + installed client product path
+        env:
+          DSH_E2E_VERIFY_CLIENT: '1'
         run: pnpm e2e:collector-transport
+      - name: Upload installed-client evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: installed-client-${{ matrix.os }}
+          path: |
+            .debug/e2e-macos/**/installed-client/
+            .debug/e2e-macos/**/checks.json
+            .debug/e2e-macos/**/host.log
+          if-no-files-found: warn
+          retention-days: 3
