@@ -105,17 +105,48 @@ Computer History 补的是这层“工作连续性”。它希望回答：
 > 首次使用、Settings 和 History/Privacy HTTP 200 验收（见[发布证据](docs/release.md)）；macOS 另有 52/52
 > 完整生命周期验证。正式发布还需 npm 包名初始化、Trusted Publishing 配置及最终发布前检查。
 
-## 安装与开发
+## 快速开始
 
-**正式发布之后**，可以在 DSH 的目标 profile 中从 npm 安装：
+**以下 npm 命令仅在 [v1.0.0 正式发布](https://github.com/ysr666/dsh-computer-history/releases/tag/v1.0.0)之后可用。** 发布前请参阅下方[源码开发](#源码开发)。
 
-```bash
-dsh plugin --profile <profile> add dsh-computer-history
+### 1. 安装到已有的 DSH profile
+
+以经过验证的 **DSH 0.2.0-rc.2 Host** 和已能使用 Web UI 的 `web` profile 为例：
+
+```sh
+npx @deepseek-ai/dsh@0.2.0-rc.2 plugin --profile web add dsh-computer-history@1.0.0
 ```
 
-在 [v1.0.0 GitHub Release](https://github.com/ysr666/dsh-computer-history/releases/tag/v1.0.0) 和 [npm 页面](https://www.npmjs.com/package/dsh-computer-history)真正上线之前，请仍使用下方源码方式。插件默认关闭采集，首次使用需要授权及平台权限，浏览器和 VS Code Companion 可能需要单独配对。
+请指定 Host **实际加载的 profile**：`web` 仅是例子，不是全局安装。只含 DSH 基础组件的新 profile 可能无法启动 Web UI。不要与旧式手动插入 `cordis.patch.yml` 插件的方式混用。首次安装后重新加载或重启对应 Host。
 
-```bash
+### 2. 主动授权记录范围
+
+在 DSH 中打开 **Computer History**，选择**开始记录**，然后到 **设置 → Computer History** 选择明确允许记录的应用，并完成系统要求的辅助功能授权。采集**默认关闭**，应用采用**明确允许名单**；不在名单内的应用不会进入时间线。macOS 使用 Accessibility 权限，Windows 使用 UI Automation，Linux 真正采集需要桌面 X/AT-SPI 会话及权限。
+
+### 3. 查看时间线并继续工作
+
+使用被允许的应用一段时间，再回到 **Computer History → 时间线**。选择 Work Episode 查看证据，点击 **Continue（继续）** 将有限、可核实的上下文带到新的 DSH Session。Continue **不会**替你打开应用或文件。
+
+浏览器与 VS Code Companion 都是**可选组件**，需要分别设置与授权。详见[浏览器设置](docs/companion.zh.md)、[编辑器设置](docs/editor-companion.zh.md)和[隐私说明](SECURITY.zh.md)。
+
+### 更新或卸载
+
+使用安装时**同一个 profile**，并明确指定已发布版本：
+
+```sh
+# 安装指定版本；以后升级可替换版本号
+npx @deepseek-ai/dsh@0.2.0-rc.2 plugin --profile web add dsh-computer-history@1.0.0
+# 从该 profile 卸载
+npx @deepseek-ai/dsh@0.2.0-rc.2 plugin --profile web remove dsh-computer-history
+```
+
+首发只验证过 DSH `0.2.0-rc.2`，不应据此声称兼容所有 Host。参见[发布证据](docs/release.md)。
+
+## 源码开发
+
+正式发布前可使用源码 checkout 进行开发验证：
+
+```sh
 git clone https://github.com/ysr666/dsh-computer-history.git
 cd dsh-computer-history
 corepack enable
@@ -124,14 +155,7 @@ pnpm build
 pnpm verify
 ```
 
-**环境要求**
-
-- Node.js `^22.19.0` 或 `>=24`
-- pnpm `11.7.0`
-- Windows/Linux collector 开发需要 Rust
-- macOS 原生 collector 开发需要 Swift toolchain
-
-DSH 集成、临时 Host 测试以及各平台验证方式见 [docs/development.md](docs/development.md)。
+**环境要求：** Node.js `^22.19.0` 或 `>=24.0.0`，源码开发使用 pnpm `11.7.0`，原生采集器构建还需要 Swift（macOS）或 Rust（Windows/Linux）。详见[开发指南](docs/development.md)。
 
 ## 验证
 

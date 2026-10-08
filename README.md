@@ -105,17 +105,48 @@ The shared collector contract is continuously checked on GitHub Actions across m
 > **all three platforms** ([measured evidence](docs/release.md)); macOS additionally passes a 52/52 full lifecycle
 > journey. Publishing still requires the approved npm namespace, Trusted Publishing and the final release preflight.
 
-## Install and development
+## Quick start
 
-**After publication**, install directly from npm in your chosen DSH profile:
+**Available only after [v1.0.0 is published](https://github.com/ysr666/dsh-computer-history/releases/tag/v1.0.0)** on npm. Until then use the [development checkout](#development-from-source).
 
-```bash
-dsh plugin --profile <profile> add dsh-computer-history
+### 1. Install in an existing DSH profile
+
+For the **verified DSH 0.2.0-rc.2 Host** and an existing Web profile:
+
+```sh
+npx @deepseek-ai/dsh@0.2.0-rc.2 plugin --profile web add dsh-computer-history@1.0.0
 ```
 
-Until the [v1.0.0 Release](https://github.com/ysr666/dsh-computer-history/releases/tag/v1.0.0) and [npm package](https://www.npmjs.com/package/dsh-computer-history) actually exist, use the development checkout below instead. The plugin starts with capture off; first-run consent and platform permissions are required. The Browser and VS Code companions may need separate pairing/setup.
+Use the profile that your Host actually loads. `web` is an example, **not** a global install. A new profile containing only the DSH base bundle might not serve a Web UI. Do not mix bundle-managed installation with manually inserted legacy `cordis.patch.yml` plugin entries. Reload/restart the Host after the initial installation.
 
-```bash
+### 2. Allow recording deliberately
+
+Open **Computer History**, choose **Start recording**, then open **Settings → Computer History** to allow the specific applications you want to record. Complete any OS accessibility permissions. Recording is **off by default**, the app list is **include-only**, and disallowed apps do not appear in the Timeline. macOS needs Accessibility access, Windows uses UI Automation, and Linux needs a real desktop X/AT-SPI session and permissions.
+
+### 3. Review the Timeline and Continue
+
+Use an allowed app, then return to **Computer History → Timeline**. Select a Work Episode to inspect its evidence. Choose **Continue** to bring bounded, evidence-backed context into a new DSH session — it does **not** reopen apps or files.
+
+Browser and VS Code Companions are **optional** and require their own setup and consent. See [browser setup](docs/companion.md), [editor setup](docs/editor-companion.md), and [privacy policy](SECURITY.md).
+
+### Update or uninstall
+
+Use the same profile. Specify an actual published package version:
+
+```sh
+# Install a specific version (change the version for future upgrades)
+npx @deepseek-ai/dsh@0.2.0-rc.2 plugin --profile web add dsh-computer-history@1.0.0
+# Remove from that profile
+npx @deepseek-ai/dsh@0.2.0-rc.2 plugin --profile web remove dsh-computer-history
+```
+
+Only DSH `0.2.0-rc.2` has been verified as the Host; other versions are not implicitly supported. See [release evidence](docs/release.md).
+
+## Development from source
+
+Until the public release, use the source checkout:
+
+```sh
 git clone https://github.com/ysr666/dsh-computer-history.git
 cd dsh-computer-history
 corepack enable
@@ -124,14 +155,7 @@ pnpm build
 pnpm verify
 ```
 
-**Requirements**
-
-- Node.js `^22.19.0` or `>=24`
-- pnpm `11.7.0`
-- Rust for Windows/Linux collector work
-- Swift toolchain for native macOS work
-
-For DSH integration, throwaway-host testing and platform-specific validation, see [docs/development.md](docs/development.md).
+**Requirements:** Node.js `^22.19.0` or `>=24.0.0`. Source development uses pnpm `11.7.0`; native collector builds also need Swift (macOS) or Rust (Windows/Linux). See [development](docs/development.md).
 
 ## Verification
 
