@@ -112,6 +112,9 @@ for (const [claim, expression] of [
   ['OIDC publish permission', /id-token: write/],
   ['npm publication without rebuild, pinned to official registry', /npm publish "\$PACKAGE_TARBALL" --registry=https:\/\/registry\.npmjs\.org\/ --access public --provenance --ignore-scripts/],
   ['npm registry byte identity', /release-registry-identity\.mjs wait/],
+  ['safe retry requires exact tag identity', /test "\$EXISTING_TAG_SHA" = "\$RELEASE_SHA"/],
+  ['safe retry does not overwrite attached GitHub assets', /gh release view "\$RELEASE_TAG" --json assets[\s\S]*?grep -Fxq "\$TARBALL"/],
+  ['existing published release requires exact downloaded bytes', /gh release download[\s\S]*?existing GitHub release asset differs/],
   ['GitHub release after npm validation', /publish:\s*\n[\s\S]*?needs: publish-npm/],
 ]) {
   if (!expression.test(releaseWorkflowSource)) {

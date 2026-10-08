@@ -196,8 +196,11 @@ select **main** and fill:
 - `tag` = `v1.0.0`
 - `target_sha` = the **exact current main SHA**, not a branch name
 
-The workflow refuses mismatched/obsolete SHAs, an existing tag, a non-public package manifest
-or mismatched release notes. It then:
+The workflow refuses mismatched SHAs, an existing tag pointing to a different commit,
+a non-public package manifest or mismatched release notes. The first tag creation
+also requires that `main` still points to the approved SHA. A safe recovery from
+a partially failed run may reuse **only an identical existing tag SHA**, even if
+`main` has since moved. It then:
 
 1. Builds native macOS/Windows/Linux collectors from the exact commit and assembles **one** tarball.
 2. Runs the macOS installed Continue/product lifecycle journey, release preflight and the
@@ -209,10 +212,26 @@ or mismatched release notes. It then:
 6. Checks the public npm tarball SHA-1 **and SHA-256** against the candidate, creates a draft
    GitHub Release, attaches that exact file, re-downloads and checks it, then publishes the Release.
 
-If npm publishing or any later step fails, **do not delete, force-move or reuse a tag** and
-do not manually publish a different artifact under the same version. Diagnose before retrying.
-Publishing cannot be validated end-to-end on the preparation branch without actual npm
-account configuration; a successful PR CI proves only the non-publishing build/acceptance gates.
+### Recovery after a partial release
+
+If npm publishing or a later job fails, **never delete or force-move the tag**, and
+never manually publish different bytes under the same npm version.
+
+1. Inspect the failed job and use **Re-run failed jobs** on the original Actions run
+   while its native/package artifacts are retained. This preserves the validated
+   artifact and avoids rebuilding a potentially byte-different tarball.
+2. The workflow allows an already-existing tag **only when it targets the exact
+   originally approved commit SHA**. A different tag target always fails closed.
+3. The npm step probes the Registry. A version with the **exact same tarball SHA-1**
+   is accepted without republishing; a mismatch is an error.
+4. The GitHub Release step can resume an existing draft. A matching attached
+   tarball is reused, a missing tarball may be attached to a **draft only**, and
+   a different existing tarball always fails before public publication.
+5. If a fresh full workflow produces different bytes after npm already published,
+   **stop and investigate**. It must not overwrite immutable Registry contents.
+
+Publishing cannot be validated end-to-end on a preparation PR without performing
+a real npm OIDC publish. Passing CI proves only the non-publishing gates.
 
 ### Product-journey release gate
 

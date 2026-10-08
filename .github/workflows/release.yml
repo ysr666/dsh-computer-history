@@ -30,7 +30,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Verify SHA, version, announcements and unused tag
+      - name: Verify SHA, version, announcements and immutable tag identity
         shell: bash
         env:
           RELEASE_TAG: ${{ inputs.tag }}
@@ -40,7 +40,7 @@ jobs:
           test "$RELEASE_SHA" = "$GITHUB_SHA"
           test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
           git fetch --no-tags origin main:refs/remotes/origin/main
-          test "$(git rev-parse origin/main)" = "$RELEASE_SHA" || { echo '::error::main moved'; exit 1; }
+          MAIN_SHA="$(git rev-parse origin/main)"
           VERSION="$(node -p "require('./package.json').version")"
           test "$VERSION" = '1.0.0'
           test "$RELEASE_TAG" = "v$VERSION"
@@ -49,8 +49,14 @@ jobs:
           for file in README.md README.zh.md; do
             grep -q "$RELEASE_TAG" "$file" || { echo "::error::$file has no release announcement"; exit 1; }
           done
-          if git ls-remote --tags origin "refs/tags/$RELEASE_TAG" | grep -q .; then
-            echo "::error::$RELEASE_TAG already exists; do not reuse immutable tags"; exit 1
+          EXISTING_TAG_SHA="$(git ls-remote --tags origin "refs/tags/$RELEASE_TAG" | cut -f1)"
+          if [ -n "$EXISTING_TAG_SHA" ]; then
+            # A release can be retried after a partial npm/GitHub publication.
+            # The existing immutable tag must still point at exactly the verified commit.
+            test "$EXISTING_TAG_SHA" = "$RELEASE_SHA" || { echo "::error::existing $RELEASE_TAG points to a different SHA"; exit 1; }
+            echo "::notice::recovering $RELEASE_TAG at the exact existing SHA"
+          else
+            test "$MAIN_SHA" = "$RELEASE_SHA" || { echo '::error::main moved before first tag'; exit 1; }
           fi
           echo "release preflight accepted $RELEASE_TAG ($RELEASE_SHA)"
       - name: Require first npm namespace reservation before creating any release tag
@@ -301,7 +307,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Create exact SHA tag only after all packaged tests
+      - name: Create or verify immutable SHA tag after packaged tests
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -309,13 +315,16 @@ jobs:
           RELEASE_SHA: ${{ inputs.target_sha }}
         run: |
           set -euo pipefail
-          MAIN_SHA="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')"
-          test "$MAIN_SHA" = "$RELEASE_SHA" || { echo '::error::main moved before tag creation'; exit 1; }
-          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" >/dev/null 2>&1; then
-            echo '::error::tag already exists; do not overwrite'; exit 1
+          EXISTING_TAG_SHA="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" --jq '.object.sha' 2>/dev/null || true)"
+          if [ -n "$EXISTING_TAG_SHA" ]; then
+            test "$EXISTING_TAG_SHA" = "$RELEASE_SHA" || { echo '::error::immutable tag points elsewhere'; exit 1; }
+            echo "::notice::$RELEASE_TAG already points at the verified SHA; keeping it"
+          else
+            MAIN_SHA="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')"
+            test "$MAIN_SHA" = "$RELEASE_SHA" || { echo '::error::main moved before first tag creation'; exit 1; }
+            gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
+              -f ref="refs/tags/$RELEASE_TAG" -f sha="$RELEASE_SHA"
           fi
-          gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
-            -f ref="refs/tags/$RELEASE_TAG" -f sha="$RELEASE_SHA"
           test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" --jq '.object.sha')" = "$RELEASE_SHA"
 
   publish-npm:
@@ -434,14 +443,26 @@ jobs:
           cp "$TARBALL" "$RUNNER_TEMP/$TARBALL"
           cd "$GITHUB_WORKSPACE"
           cp "docs/releases/$RELEASE_TAG.md" "$RUNNER_TEMP/release-notes.md"
+          # A previous run may have created a draft and then failed before attaching
+          # or publishing. Reuse only the same tag, and never overwrite a release asset.
+          test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" --jq '.object.sha')" = "$GITHUB_SHA"
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            echo '::error::release already exists; do not overwrite'; exit 1
+            echo "::notice::checking existing GitHub Release for $RELEASE_TAG"
+          else
+            gh release create "$RELEASE_TAG" --verify-tag --draft \
+              --title "$RELEASE_TAG" --notes-file "$RUNNER_TEMP/release-notes.md"
           fi
-          gh release create "$RELEASE_TAG" --verify-tag --draft \
-            --title "$RELEASE_TAG" --notes-file "$RUNNER_TEMP/release-notes.md"
-          gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/$TARBALL"
+          IS_DRAFT="$(gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft')"
+          if ! gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name' | grep -Fxq "$TARBALL"; then
+            test "$IS_DRAFT" = "true" || { echo '::error::published GitHub Release is missing its immutable tarball'; exit 1; }
+            gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/$TARBALL"
+          fi
           mkdir -p "$RUNNER_TEMP/release-check"
           gh release download "$RELEASE_TAG" --pattern "$TARBALL" --dir "$RUNNER_TEMP/release-check"
-          test "$(sha256sum "$RUNNER_TEMP/release-check/$TARBALL" | cut -d' ' -f1)" = "$(sha256sum "$RUNNER_TEMP/$TARBALL" | cut -d' ' -f1)"
-          gh release edit "$RELEASE_TAG" --draft=false --latest
-          echo "Published immutable $RELEASE_TAG with npm/GitHub byte-identical tarball"
+          test "$(sha256sum "$RUNNER_TEMP/release-check/$TARBALL" | cut -d' ' -f1)" = "$(sha256sum "$RUNNER_TEMP/$TARBALL" | cut -d' ' -f1)" || { echo '::error::existing GitHub release asset differs'; exit 1; }
+          if [ "$IS_DRAFT" = "true" ]; then
+            gh release edit "$RELEASE_TAG" --draft=false --latest
+          else
+            echo "::notice::identical published GitHub Release already exists"
+          fi
+          echo "Verified immutable $RELEASE_TAG with npm/GitHub byte-identical tarball"
