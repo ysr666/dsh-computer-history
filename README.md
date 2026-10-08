@@ -9,6 +9,7 @@
 <p align="center">Computer History turns app, resource, workspace and timing metadata into deterministic <strong>Work Episodes</strong>, so a DSH agent can understand recent work without reading the contents of your screen.</p>
 
 <p align="center">
+  <a href="https://github.com/ysr666/dsh-computer-history/stargazers"><img src="https://img.shields.io/github/stars/ysr666/dsh-computer-history?style=flat-square&logo=github&label=Stars" alt="GitHub Stars" /></a>
   <a href="https://github.com/ysr666/dsh-computer-history/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/ysr666/dsh-computer-history/ci.yml?branch=main&style=flat-square&label=CI" alt="CI" /></a>
   <a href="https://github.com/ysr666/dsh-computer-history/actions/workflows/collectors.yml"><img src="https://img.shields.io/github/actions/workflow/status/ysr666/dsh-computer-history/collectors.yml?branch=main&style=flat-square&label=collectors" alt="Collectors" /></a>
   <img src="https://img.shields.io/badge/status-v1.0.0%20candidate-5B4CF0?style=flat-square" alt="Status: v1.0.0 release candidate" />
@@ -171,3 +172,16 @@ Computer History is an independently developed community implementation for Deep
 ## License
 
 [MIT](LICENSE)
+
+<!-- star-history-chart -->
+## Star History
+
+<p align="center">
+  <a href="https://www.star-history.com/?repos=ysr666%2Fdsh-computer-history&type=date&legend=top-left">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=ysr666/dsh-computer-history&type=date&theme=dark&legend=top-left" />
+      <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=ysr666/dsh-computer-history&type=date&legend=top-left" />
+      <img alt="Star History Chart for dsh-computer-history" src="https://api.star-history.com/chart?repos=ysr666/dsh-computer-history&type=date&legend=top-left" width="100%" />
+    </picture>
+  </a>
+</p>

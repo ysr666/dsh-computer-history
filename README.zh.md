@@ -9,6 +9,7 @@
 <p align="center">Computer History 把应用、资源、工作区和时间等元数据整理成确定性的 <strong>Work Episodes（工作片段）</strong>，让 DSH Agent 理解最近的工作，而不读取你的屏幕内容。</p>
 
 <p align="center">
+  <a href="https://github.com/ysr666/dsh-computer-history/stargazers"><img src="https://img.shields.io/github/stars/ysr666/dsh-computer-history?style=flat-square&logo=github&label=Stars" alt="GitHub Stars" /></a>
   <a href="https://github.com/ysr666/dsh-computer-history/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/ysr666/dsh-computer-history/ci.yml?branch=main&style=flat-square&label=CI" alt="CI" /></a>
   <a href="https://github.com/ysr666/dsh-computer-history/actions/workflows/collectors.yml"><img src="https://img.shields.io/github/actions/workflow/status/ysr666/dsh-computer-history/collectors.yml?branch=main&style=flat-square&label=collectors" alt="Collectors" /></a>
   <img src="https://img.shields.io/badge/status-v1.0.0%20candidate-5B4CF0?style=flat-square" alt="状态：v1.0.0 发布候选" />
@@ -171,3 +172,16 @@ Computer History 是面向 DeepSeek Harness 独立开发的社区项目，不隶
 ## License
 
 [MIT](LICENSE)
+
+<!-- star-history-chart -->
+## Star 趋势
+
+<p align="center">
+  <a href="https://www.star-history.com/?repos=ysr666%2Fdsh-computer-history&type=date&legend=top-left">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=ysr666/dsh-computer-history&type=date&theme=dark&legend=top-left" />
+      <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=ysr666/dsh-computer-history&type=date&legend=top-left" />
+      <img alt="dsh-computer-history Star 历史趋势图" src="https://api.star-history.com/chart?repos=ysr666/dsh-computer-history&type=date&legend=top-left" width="100%" />
+    </picture>
+  </a>
+</p>
