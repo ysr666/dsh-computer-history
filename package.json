@@ -86,11 +86,11 @@
     "@deepseek-ai/dsh-tools": "0.2.0-rc.2",
     "@deepseek-ai/dsh-workspace": "0.2.0-rc.2",
     "@types/node": "^22.20.0",
-    "@types/react": "18.3.12",
+    "@types/react": "19.3.0",
     "@vitest/coverage-v8": "^4.1.8",
     "fast-check": "^4.8.0",
     "oxlint": "1.86.0",
-    "react": "18.3.1",
+    "react": "19.3.0",
     "tsdown": "^0.22.2",
     "typescript": "^6.0.3",
     "vitest": "^4.1.8"
