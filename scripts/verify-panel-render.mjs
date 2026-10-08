@@ -12,8 +12,8 @@
 //
 // The Host is not started or configured here: pointing at a Host someone else runs keeps this script from
 // owning a profile, a store or a port, and makes the evidence reproducible by whoever has a Host.
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
-import { spawn } from 'node:child_process'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { spawn, spawnSync } from 'node:child_process'
 import path from 'node:path'
 
 const url = process.env.PANEL_URL
@@ -23,8 +23,87 @@ if (!url) {
 }
 const outDir = process.env.PANEL_OUT ?? '.debug/panel-render'
 const cdpPort = Number(process.env.PANEL_CDP_PORT ?? 19233)
-const chromePath = process.env.PANEL_CHROME
-  ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+const cookieFile = process.env.PANEL_COOKIE_FILE
+const expectFirstRun = process.env.PANEL_EXPECT_FIRST_RUN === '1'
+
+function executableOnPath(names) {
+  const locator = process.platform === 'win32' ? 'where.exe' : 'which'
+  for (const name of names) {
+    const found = spawnSync(locator, [name], {
+      encoding: 'utf8',
+      windowsHide: true,
+    })
+    if (found.status !== 0) continue
+    const candidate = String(found.stdout ?? '')
+      .split(/\r?\n/)
+      .map(value => value.trim())
+      .find(Boolean)
+    if (candidate && existsSync(candidate)) return candidate
+  }
+  return undefined
+}
+
+function resolveChromePath() {
+  if (process.env.PANEL_CHROME) return process.env.PANEL_CHROME
+
+  const candidates = process.platform === 'darwin'
+    ? ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome']
+    : process.platform === 'win32'
+      ? [
+          process.env.PROGRAMFILES && path.join(process.env.PROGRAMFILES, 'Google', 'Chrome', 'Application', 'chrome.exe'),
+          process.env['PROGRAMFILES(X86)'] && path.join(process.env['PROGRAMFILES(X86)'], 'Google', 'Chrome', 'Application', 'chrome.exe'),
+          process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, 'Google', 'Chrome', 'Application', 'chrome.exe'),
+        ].filter(Boolean)
+      : [
+          '/usr/bin/google-chrome',
+          '/usr/bin/google-chrome-stable',
+          '/usr/bin/chromium',
+          '/usr/bin/chromium-browser',
+        ]
+
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate
+  }
+
+  const onPath = executableOnPath(
+    process.platform === 'win32'
+      ? ['chrome.exe', 'chrome']
+      : ['google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser'],
+  )
+  if (onPath) return onPath
+
+  throw new Error(
+    'Chrome/Chromium was not found. Set PANEL_CHROME to the browser executable.',
+  )
+}
+
+function panelCookies(file) {
+  if (!file) return []
+  const contents = readFileSync(file, 'utf8')
+  return contents
+    .split(/\r?\n/)
+    .filter(line => line && (!line.startsWith('#') || line.startsWith('#HttpOnly_')))
+    .map(line => {
+      const fields = line.split('\t')
+      if (fields.length < 7) return undefined
+      const rawDomain = fields[0]
+      const cookiePath = fields[2]
+      const secure = fields[3]
+      const name = fields[5]
+      const value = fields[6]
+      if (!rawDomain || !cookiePath || !name || value === undefined) return undefined
+      return {
+        domain: rawDomain.replace(/^#HttpOnly_/, ''),
+        path: cookiePath,
+        secure: secure === 'TRUE',
+        name,
+        value,
+      }
+    })
+    .filter(Boolean)
+}
+
+const chromePath = resolveChromePath()
 // The sidebar entry carries the interface's own language, so the English name alone clicks nothing in a
 // Chinese interface - which is how the first run of this script reported two product failures that were it
 // looking at an unopened panel. Try the override first, then both names.
@@ -146,6 +225,26 @@ async function main() {
   await send('Network.enable')
   await send('Network.setCacheDisabled', { cacheDisabled: true })
 
+  if (cookieFile) {
+    const target = new URL(url)
+    const cookies = panelCookies(cookieFile)
+      .filter(cookie => cookie.domain === target.hostname || cookie.domain === `.${target.hostname}`)
+    if (cookies.length === 0) {
+      labelledFailure('the packaged Host session cookie', new Error('no matching cookie in PANEL_COOKIE_FILE'))
+    }
+    for (const cookie of cookies) {
+      const result = await send('Network.setCookie', {
+        name: cookie.name,
+        value: cookie.value,
+        url: `${target.origin}${cookie.path}`,
+        secure: cookie.secure,
+      })
+      if (result.success !== true) {
+        labelledFailure('the packaged Host session cookie', new Error('Chromium rejected the session cookie'))
+      }
+    }
+  }
+
   const evaluate = async expression =>
     (await send('Runtime.evaluate', { returnByValue: true, expression })).result?.value
   const text = async () => String(await evaluate("document.body.innerText || ''"))
@@ -250,7 +349,14 @@ async function main() {
   await dismissIntro()
   await openPanel()
   await sleep(4000)
-  await record('ready-light', 'panel with data')
+  await record('ready-light', 'panel after its reads settle')
+  if (expectFirstRun) {
+    results.push({
+      state: 'ready-light',
+      label: 'fresh packaged install renders the Computer History first-run surface',
+      ok: (await evaluate("!!document.querySelector('.ch-first-run')")) === true,
+    })
+  }
 
   // 3. one read failing: the timeline only, which must not erase the other sections
   await send('Network.setBlockedURLs', { urls: ['*api/computer-history/timeline*'] })
@@ -337,11 +443,19 @@ async function main() {
         break
       }
     }
-    return { dialogOpen, sectionShown }
+    const sectionReady = sectionShown && Boolean(await evaluate(
+      "!!document.querySelector('.ch-settings-list:not(.ch-settings-loading)') && !document.querySelector('.ch-settings-state')",
+    ))
+    return { dialogOpen, sectionShown, sectionReady }
   }
   const own = await openOwnSettings()
   results.push({ state: 'focus-by-keyboard', label: 'the settings dialog opens in this step', ok: own.dialogOpen })
   results.push({ state: 'focus-by-keyboard', label: "the plugin's settings rows are shown", ok: own.sectionShown })
+  results.push({
+    state: 'focus-by-keyboard',
+    label: 'the installed History / Privacy settings surface completes a healthy read',
+    ok: own.sectionReady,
+  })
   const LIST = ".ch-settings-item"
   const surfaceRows = Number(await evaluate("document.querySelectorAll('" + LIST + "').length"))
   results.push({ state: 'focus-by-keyboard', label: 'the settings surface is showing our rows', ok: surfaceRows > 0 })
