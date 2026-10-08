@@ -27,4 +27,11 @@ describe('product surface polish', () => {
     expect(RESPONSIVE_STYLES).toContain('overflow-wrap:anywhere')
   })
 
+  it('keeps the Settings read-error card inside a narrow Host slot', () => {
+    expect(RESPONSIVE_STYLES).toContain('.ch-settings-state{')
+    expect(RESPONSIVE_STYLES).toContain('display:flex;flex-direction:column;align-items:flex-start')
+    expect(RESPONSIVE_STYLES).toContain('.ch-settings-state .ch-state-copy{')
+    expect(RESPONSIVE_STYLES).toContain('.ch-settings-state>.ch-button{')
+  })
+
 })

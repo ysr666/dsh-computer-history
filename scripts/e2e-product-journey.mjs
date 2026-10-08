@@ -621,6 +621,89 @@ async function captureSettingsMatrix(session) {
     'cases; keyboardFocusWithinDCH',focusStops.length>0)
 
 }
+async function probeSettingsReadError(session) {
+  if (process.env.DCH_SETTINGS_ERROR !== '1') return
+  await session.send('Network.enable')
+  try {
+    await session.send('Network.setBlockedURLs', { urls: ['*api/computer-history*'] })
+    await session.send('Page.reload', { ignoreCache: true })
+    await sleep(5000)
+    await dismissDialogs(session)
+    const opened=await openComputerHistory(session)
+    await sleep(1000)
+    const clicked=await session.evaluate(
+      "(() => {const a=[...document.querySelectorAll('button,a,[role=\"button\"]')].filter(x=>x.getClientRects().length && /^(Settings|设置)$/.test((x.textContent||'').trim()));const n=a.at(-1);if(!n)return false;n.click();return true})()",
+    )
+    await sleep(1600)
+    for(const label of ['Computer History','电脑使用记录']){
+      const q='(() => {const label='+JSON.stringify(label)+';'
+      const code='const root=document.querySelector(\'[role="dialog"]\')||document;const matches=[...root.querySelectorAll("*")].filter(x=>x.getClientRects().length&&(x.textContent||"").trim()===label);const last=matches.at(-1);if(!last)return false;const parent=last.closest(\'button,[role="tab"],[role="menuitem"],li,a,[data-slot]\');if(parent&&parent!==last)parent.click();else last.click();return true;})()'
+      await session.evaluate(q+code)
+      await sleep(1500)
+      if(await session.evaluate("Boolean(document.querySelector('.ch-settings-state'))"))break
+    }
+    const result=await session.evaluate(
+      "(() => ({errorPanel:Boolean(document.querySelector('.ch-settings-state[role=\"alert\"]')),retryButton:Boolean(document.querySelector('.ch-settings-state button')),settingsRows:document.querySelectorAll('.ch-settings-item').length,dialogCount:document.querySelectorAll('[role=\"dialog\"],dialog').length,language:document.documentElement.lang}))()",
+    )
+    await session.shot('settings-read-error.png')
+    const errorMatrix=[]
+    try {
+      for(const scheme of ['light','dark']){
+        await session.send('Emulation.setEmulatedMedia',{
+          features:[{name:'prefers-color-scheme',value:scheme}],
+        })
+        for(const width of [1500,640,420]){
+          await session.send('Emulation.setDeviceMetricsOverride',{
+            width,height:940,deviceScaleFactor:1,mobile:false,
+          })
+          await sleep(350)
+          const metrics=await session.evaluate(
+            "(() => {const p=document.querySelector('.ch-settings-state[role=\"alert\"]');const b=p?.querySelector('button');if(!p||!b)return {error:'missing error panel or retry button'};const r=p.getBoundingClientRect();const z=b.getBoundingClientRect();return {lang:document.documentElement.lang,documentOverflow:document.documentElement.scrollWidth-innerWidth,panelOverflow:p.scrollWidth-p.clientWidth,panelLeft:r.left,panelRight:r.right,buttonWidth:z.width,buttonClipped:b.scrollWidth>b.clientWidth+1,foreground:getComputedStyle(p).color}})()",
+          )
+          errorMatrix.push({scheme,width,...metrics})
+          await session.shot('settings-error-'+scheme+'-'+width+'.png')
+        }
+      }
+    } finally {
+      await session.send('Emulation.clearDeviceMetricsOverride')
+      await session.send('Emulation.setEmulatedMedia',{features:[]})
+    }
+    writeFileSync(path.join(artifacts,'settings-error-matrix.json'),
+      JSON.stringify(errorMatrix,null,2)+'\n')
+    const errorFailures = errorMatrix.filter(item =>
+      item.error
+      || item.documentOverflow > 1
+      || item.panelOverflow > 1
+      || item.buttonWidth < 40
+      || item.buttonClipped,
+    )
+    if (errorFailures.length > 0) {
+      throw new Error('Settings read-error layout failed: '
+        + JSON.stringify(errorFailures.map(item => ({
+          scheme: item.scheme, width: item.width,
+          panelOverflow: item.panelOverflow,
+          documentOverflow: item.documentOverflow,
+          error: item.error,
+        }))))
+    }
+    const light = errorMatrix.find(item => item.scheme === 'light' && item.width === 420)
+    const dark = errorMatrix.find(item => item.scheme === 'dark' && item.width === 420)
+    if (!light || !dark || light.foreground === dark.foreground) {
+      throw new Error('Settings error state did not verify dark/light foreground')
+    }
+    if (process.env.DCH_VISUAL_LANG === 'en-US'
+      && errorMatrix.some(item => !item.lang?.startsWith('en'))) {
+      throw new Error('Settings error view was not in English')
+    }
+    console.log('  – settings error matrix collected',errorMatrix.length)
+
+    console.log('  – settings read-error probe',JSON.stringify({opened,clicked,result}))
+    if(!result.errorPanel || !result.retryButton)throw new Error('Settings read-error view not shown')
+  } finally {
+    await session.send('Network.setBlockedURLs', { urls: [] })
+    await session.send('Network.disable')
+  }
+}
 async function dismissDialogs(session) {
   for (let attempt = 0; attempt < 8; attempt += 1) {
     const dismissed = await session.evaluate(
@@ -1226,6 +1309,7 @@ try {
   await uiSession.shot('03-main-after-work.png')
   await captureVisualMatrix(uiSession, 'recent-work')
   await captureSettingsMatrix(uiSession)
+  await probeSettingsReadError(uiSession)
   requireCheck(
     'Continue points at the project and app.ts',
     mainAfterWork?.button === true
