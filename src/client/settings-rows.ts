@@ -1217,7 +1217,7 @@ export function EditorCompanionRow({
     setPending(true)
     setFeedback(undefined)
     try {
-      const result = await historyApi.installEditorCompanion()
+      const result = await store.installEditorCompanion()
       if (
         (result.status === 'installed' || result.status === 'already-installed')
         && result.configured === true

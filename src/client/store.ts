@@ -2,6 +2,7 @@ import type {
   ComputerHistoryState,
   DeleteHistoryRequest,
   DeleteHistoryResult,
+  EditorCompanionInstallResult,
   PairingRotation,
   PolicySnapshot,
   PolicyUpdate,
@@ -32,6 +33,7 @@ type ControlApi = Pick<typeof historyApi,
   | 'deleteHistory'
   | 'importHistory'
   | 'rotatePairing'
+  | 'installEditorCompanion'
 >
 export interface HistoryControlStore {
   getSnapshot(): HistoryControlSnapshot
@@ -50,6 +52,7 @@ export interface HistoryControlStore {
   deleteHistory(request: DeleteHistoryRequest): Promise<DeleteHistoryResult>
   importHistory(document: unknown): Promise<{ readonly imported: Record<string, number> }>
   rotatePairing(): Promise<PairingRotation>
+  installEditorCompanion(): Promise<EditorCompanionInstallResult>
 }
 
 export function createHistoryControlStore(
@@ -241,6 +244,16 @@ export function createHistoryControlStore(
         publish({ ...snapshot, status: 'ready', error: undefined })
       }
       return rotation
+    },
+    async installEditorCompanion() {
+      const result = await api.installEditorCompanion()
+      // Installation/configuration can rotate editor pairing and therefore
+      // changes /state even though the route returns an install result rather
+      // than ComputerHistoryState. Invalidate every older read before the UI
+      // reloads, otherwise a pre-install poll can arrive last and restore
+      // editorPaired=false.
+      mutationEpoch += 1
+      return result
     },
   }
 }
