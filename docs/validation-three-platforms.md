@@ -2166,5 +2166,24 @@ permissions.
 
 This closes the old distinction between "the Windows/Linux collector works from source" and "the released plugin
 contains a runnable Windows/Linux collector". The same tarball now proves the latter on all three platforms.
-The separate remaining release question is the installed **client/panel** product path, tracked by issue #44.
+
+### Installed client matrix — 2026-10-08
+
+PR #123 extended the same packaged-alpha gate to the client half. Workflow run `37714440513` at commit
+`9dabd9e93be871d1e3f3a754c3abebc3bdb29c9e` used DSH `0.2.0-rc.2`, a fresh throwaway profile
+`packaged-client`, and the **same assembled tarball** on each runner. No checkout symlink/junction and no
+`collectorExecutable` override were used.
+
+| Runner | Boot discovers installed client | Actual client fetch | Main + first-run | History/Privacy reads | Settings |
+|---|---|---|---|---|---|
+| Windows | `dsh-computer-history` | HTTP 200 | `.ch-main` + `.ch-first-run` | `/state=200 /policy=200 /retention=200` | 8 rows |
+| macOS | `dsh-computer-history` | HTTP 200 | `.ch-main` + `.ch-first-run` | `/state=200 /policy=200 /retention=200` | 8 rows |
+| Linux | `dsh-computer-history` | HTTP 200 | `.ch-main` + `.ch-first-run` | `/state=200 /policy=200 /retention=200` | 8 rows |
+
+The browser gate captures the actual Network response that contains `dsh-computer-history/client.js`, so this
+is the measurement the earlier installed-bundle investigation asked for rather than a URL reconstructed from the
+boot manifest. The harness asserts that `dsh plugin add` registered Computer History as a profile bundle before
+it does any shell setup. A bare CLI-created test profile on macOS/Linux needed only the
+`@deepseek-ai/dsh-web-app` Host shell layer added; the Computer History bundle entry itself is never repaired.
+This resolves the installed-client product-path question tracked by issue #44.
 
