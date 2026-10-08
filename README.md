@@ -95,8 +95,9 @@ The shared collector contract is continuously checked on GitHub Actions across m
 > The first public alpha is a **three-platform artifact**, not a macOS-only package. The release pipeline builds each
 > native collector on its own OS, records its source commit and SHA-256, assembles all three into one plugin tarball,
 > then clean-installs that same tarball on macOS, Windows and Linux without a `collectorExecutable` override.
-> This packaged path is validated, but no public alpha tag has been published yet; the installed client/panel release
-> gate is still being closed before the first public pre-release.
+> The same installed artifact now also passes real browser verification of the panel, first-run, Settings and
+> successful History/Privacy responses on all three platforms ([release evidence](docs/release.md)).
+> No public alpha tag has been published yet; version, changelog and release-preflight gates still apply.
 
 ## Development quick start
 
