@@ -11,10 +11,11 @@ verified, it says so rather than describing the intention.
 > with SHA-256 provenance, and that same tarball clean-installs on all three runners without a
 > `collectorExecutable` override.
 >
-> The remaining product blocker is the **client half of an installed bundle**: the Host/collector side is now
-> proven on all three platforms, but the installed bundle's panel still needs the release-grade product-path
-> verification tracked by issue #44. Do not create the tag until that path is verified and the release preflight
-> is green.
+> The installed **client/panel product path is now measured on all three platforms** as well: one identical
+> assembled tarball is clean-installed into each throwaway profile, a real Chromium-family browser opens the
+> first-run and Settings surfaces from the installed bundle, and History/Privacy APIs return HTTP 200.
+> The publication preflight, a non-dev version and matching changelog are still required before tagging.
+> This is a verified release-candidate path, **not** a claim that the public alpha has already shipped.
 
 ## v0.1.0-alpha.1 readiness
 
@@ -28,7 +29,7 @@ verified, it says so rather than describing the intention.
 | Shared collector protocol checks on macOS / Windows / Linux | ✅ |
 | One tarball contains all three native collectors + SHA-256 provenance | ✅ |
 | Same tarball clean-installs and reaches packaged collector handshake on macOS / Windows / Linux | ✅ |
-| Installed bundle's **client panel** appears and works on the release product path | ⬜ blocker |
+| Installed bundle's **client panel**, first-run and Settings render from the clean install on all three OSes | ✅ |
 | `pnpm verify:release:blockers` at release cut | ⬜ run at release cut |
 | Non-`-dev` package version + matching changelog section | ⬜ set only when cutting the release |
 
@@ -54,7 +55,7 @@ ln -sfn "$PWD" ~/.dsh/profiles/<profile>/node_modules/dsh-computer-history
 Verified: the entry reaches `[active]`. Every phase's runtime evidence was
 produced on this path.
 
-## Installing from the tarball: three-platform Host/collector path verified; client panel still open
+## Installing from the tarball: three-platform Host, collector and browser UI path verified
 
 ```bash
 npm pack                                        # dsh-computer-history-<version>.tgz
@@ -107,10 +108,29 @@ Three approaches recorded as measured failures, so nobody repeats them:
 - **a profile copied into a temporary `DSH_HOME`**: its bundles and `file:` dependencies do not
   resolve there at all.
 
-**Still open, and stated as such:** the installed bundle's **client half** still needs the release-grade
-product-path measurement in issue #44. The native package/Host boundary is now proven on all three platforms;
-that does not by itself prove that the installed panel and Settings surface are visible and usable everywhere.
-Until #44 is closed, this document does not call the public Alpha release-ready.
+**Installed client product-path evidence — issue #44:** PR #124, packaged-alpha workflow run
+[`37718046372`](https://github.com/ysr666/dsh-computer-history/actions/runs/37718046372),
+from source commit `f201bf199da9c035579d49f8bcbdead58effd4df`, completed successfully on
+`macos-14`, `windows-latest` and `ubuntu-latest` (2026-10-08 UTC). The installed DSH CLI was
+`@deepseek-ai/dsh@0.2.0-rc.2`, with an isolated `DSH_HOME` and fresh profile `e2e` on each OS.
+
+The same three-platform tarball was installed using `dsh plugin --profile e2e add`, without a
+`collectorExecutable` override or checkout symlink. A Chromium-family browser confirmed that:
+
+- `lib/client.js` realpaths into the throwaway profile's installed `node_modules/dsh-computer-history`;
+- Computer History mounts a real `.ch-main` panel from the installed client;
+- the clean store shows a `.ch-first-run` view with an enabled onboarding action;
+- the browser receives an HTTP **200** History response (`recent`, `timeline` or `threads`);
+- the plugin's Settings section mounts **8** rows and receives HTTP **200** responses to both
+  `/api/computer-history/policy` and `/api/computer-history/retention`.
+
+The workflow retains separate first-run and Settings screenshots, rendered text and structured results
+for each platform, without uploading Host login tokens or session cookies. Packaged collector handshakes
+still pass on all three: Windows and macOS report `running`; the headless Linux runner correctly reports
+`permission-required` without an X display. This does **not** substitute for Linux live GUI/AT-SPI
+acceptance inside a real desktop session.
+
+The tag remains unpublished until the release preflight and version/changelog gates pass.
 
 ## Publishing
 
@@ -121,7 +141,8 @@ branch cannot accidentally look release-ready before the installed client path i
 Push a tag named `v` + the version in `package.json` (`.github/workflows/release.yml`). The workflow builds
 the macOS, Windows and Linux collectors on their native runners, refuses mixed-source artifacts, assembles one
 tarball, records native hashes, runs `pnpm verify:release`, then clean-installs that exact tarball on all three
-platforms. GitHub Release publication happens only after all three packaged collector handshakes pass. **It needs
+platforms. GitHub Release publication happens only after all three packaged collector handshakes **and**
+browser client/first-run/Settings + History/Privacy checks pass. **It needs
 no certificate and no repository secret.**
 
 ### Why no certificate: a plugin install is not an app install
