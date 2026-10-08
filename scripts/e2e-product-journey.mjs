@@ -527,6 +527,100 @@ async function captureVisualMatrix(session, prefix) {
     measurements.length, 'viewport/theme combinations (no clipping or overflow)')
 }
 
+// Run only against the throwaway E2E Host, never an actual user profile.
+async function captureSettingsMatrix(session) {
+  if (process.env.DCH_SETTINGS_MATRIX !== '1') return
+  const clickSettings = await session.evaluate(
+    "(() => { const items=[...document.querySelectorAll('button,a,[role=\"button\"]')].filter(x=>x.getClientRects().length && /^(Settings|设置)$/.test((x.textContent||'').trim())); const target=items.at(-1); if(!target)return {found:false};target.click();return {found:true,tag:target.tagName};})()",
+  )
+  await sleep(2200)
+  const openedDialog = await session.evaluate(
+    "(() => ({dialogCount:document.querySelectorAll('[role=\"dialog\"],dialog').length,matchingButtons:[...document.querySelectorAll('[role=\"dialog\"] button,[role=\"dialog\"] a')].filter(x=>/Computer History|电脑使用记录/.test((x.textContent||'').trim())).map(x=>(x.textContent||'').trim()).slice(0,6)}))()",
+  )
+  let settingsSeen=false
+  for(const label of ['Computer History','电脑使用记录']){
+    const prefix='(() => { const label='+JSON.stringify(label)+';'
+    const rest='const root=document.querySelector(\'[role="dialog"]\')||document; const matches=[...root.querySelectorAll("*")].filter(x=>x.getClientRects().length&&(x.textContent||"").trim()===label);const last=matches.at(-1);if(!last)return false;const parent=last.closest(\'button,[role="tab"],[role="menuitem"],li,a,[data-slot]\');if(parent&&parent!==last)parent.click();else last.click();return true;})()'
+    await session.evaluate(prefix+rest)
+    await sleep(1400)
+    settingsSeen=Number(await session.evaluate("document.querySelectorAll('.ch-settings-item').length"))>0
+    if(settingsSeen)break
+  }
+  const state=await session.evaluate(
+    "(() => ({rowCount:document.querySelectorAll('.ch-settings-item').length,modalCount:document.querySelectorAll('[role=\"dialog\"],dialog').length,rootPresent:Boolean(document.querySelector('.ch-settings-list')),width:innerWidth,overflow:document.documentElement.scrollWidth-innerWidth}))()",
+  )
+  console.log('  – settings visual probe', JSON.stringify({clickSettings,openedDialog,state}))
+  await session.shot('settings-probe.png')
+  if (!state.rootPresent || state.rowCount < 6) {
+    throw new Error('cannot verify plugin settings: expected DCH rows are absent')
+  }
+  const matrix=[]
+  try {
+    for(const scheme of ['light','dark']){
+      await session.send('Emulation.setEmulatedMedia', {
+        features: [{name:'prefers-color-scheme',value:scheme}],
+      })
+      for(const width of [1500,960,640,420]){
+        await session.send('Emulation.setDeviceMetricsOverride',{
+          width,height:940,deviceScaleFactor:1,mobile:false,
+        })
+        await sleep(450)
+        const m=await session.evaluate(
+          "(() => {const list=document.querySelector('.ch-settings-list');const modal=document.querySelector('[role=\"dialog\"],dialog');if(!list||!modal)return {error:'settings not visible'};const r=list.getBoundingClientRect();const d=modal.getBoundingClientRect();return {lang:document.documentElement.lang,viewport:innerWidth,rows:list.querySelectorAll('.ch-settings-item').length,listWidth:Math.round(r.width),listOverflow:list.scrollWidth-list.clientWidth,documentOverflow:document.documentElement.scrollWidth-innerWidth,dialogOffscreen:Math.max(0,Math.round(-d.left),Math.round(d.right-innerWidth)),foreground:getComputedStyle(list).color,mediaDark:matchMedia('(prefers-color-scheme: dark)').matches}})()",
+        )
+        matrix.push({scheme,width,...m})
+        await session.shot('settings-'+scheme+'-'+width+'.png')
+      }
+    }
+  } finally {
+    await session.send('Emulation.clearDeviceMetricsOverride')
+    await session.send('Emulation.setEmulatedMedia',{features:[]})
+  }
+  writeFileSync(path.join(artifacts,'settings-matrix.json'),
+    JSON.stringify(matrix,null,2)+'\n')
+  // Input events, not manual DOM mutation: prove keyboard Tab reaches an
+  // actionable element in the plugin's Settings section.
+  const focusStops=[]
+  for(let i=0;i<50;i++){
+    await session.send('Input.dispatchKeyEvent',{type:'keyDown',key:'Tab',code:'Tab',windowsVirtualKeyCode:9,nativeVirtualKeyCode:9})
+    await session.send('Input.dispatchKeyEvent',{type:'keyUp',key:'Tab',code:'Tab',windowsVirtualKeyCode:9,nativeVirtualKeyCode:9})
+    const focus=await session.evaluate(
+      "(() => {const el=document.activeElement;return {inside:Boolean(el?.closest('.ch-settings-item')),tag:el?.tagName??null,disabled:el?.disabled===true}})()",
+    )
+    if(focus.inside){focusStops.push({step:i+1,...focus});break}
+  }
+  writeFileSync(path.join(artifacts,'settings-focus.json'),
+    JSON.stringify(focusStops,null,2)+'\n')
+  const layoutFailures = matrix.filter(item =>
+    item.error
+      || item.rows < 6
+      || item.documentOverflow > 1
+      || item.listOverflow > 1
+      || item.dialogOffscreen > 1,
+  )
+  if(layoutFailures.length>0){
+    throw new Error('Settings matrix overflow/clipping: '
+      + JSON.stringify(layoutFailures.map(item=>({
+        scheme:item.scheme,width:item.width,listOverflow:item.listOverflow,
+        documentOverflow:item.documentOverflow,dialogOffscreen:item.dialogOffscreen,
+      }))))
+  }
+  const light = matrix.find(item => item.scheme === 'light' && item.width === 420)
+  const dark = matrix.find(item => item.scheme === 'dark' && item.width === 420)
+  if (!light || !dark || light.foreground === dark.foreground) {
+    throw new Error('Settings matrix did not verify light/dark color resolution')
+  }
+  if (process.env.DCH_VISUAL_LANG === 'en-US'
+    && matrix.some(item => !item.lang?.startsWith('en'))) {
+    throw new Error('English Settings matrix was not rendered in English')
+  }
+  if (focusStops.length === 0) {
+    throw new Error('Tab navigation did not reach any DCH Settings control')
+  }
+  console.log('  – settings matrix collected',matrix.length,
+    'cases; keyboardFocusWithinDCH',focusStops.length>0)
+
+}
 async function dismissDialogs(session) {
   for (let attempt = 0; attempt < 8; attempt += 1) {
     const dismissed = await session.evaluate(
@@ -1131,6 +1225,7 @@ try {
   )
   await uiSession.shot('03-main-after-work.png')
   await captureVisualMatrix(uiSession, 'recent-work')
+  await captureSettingsMatrix(uiSession)
   requireCheck(
     'Continue points at the project and app.ts',
     mainAfterWork?.button === true
