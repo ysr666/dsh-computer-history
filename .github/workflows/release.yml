@@ -412,7 +412,8 @@ jobs:
           test "$RELEASE_TAG" = "v$VERSION"
           cd "$RUNNER_TEMP/package"
           test -s "$TARBALL"
-          (cd "$RUNNER_TEMP/hash" && sha256sum --check --strict npm-release-sha256.txt)
+          EXPECTED_SHA256="$(cut -d' ' -f1 "$RUNNER_TEMP/hash/npm-release-sha256.txt")"
+          test "$(sha256sum "$TARBALL" | cut -d' ' -f1)" = "$EXPECTED_SHA256"
           LOCAL_SHA1="$(sha1sum "$TARBALL" | cut -d' ' -f1)"
           curl --fail --silent --show-error --location \
             "https://registry.npmjs.org/dsh-computer-history/-/$TARBALL" \
