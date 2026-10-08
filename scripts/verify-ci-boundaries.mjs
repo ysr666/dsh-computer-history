@@ -17,6 +17,7 @@ const WORKFLOW = '.github/workflows/collectors.yml'
 const VALIDATION = 'docs/validation-three-platforms.md'
 const FIXTURE = 'tests/conformance/fixtures/adapters.json'
 const RELEASE_WORKFLOW = '.github/workflows/release.yml'
+const PACKAGED_WORKFLOW = '.github/workflows/packaged-alpha.yml'
 const RELEASE_DOC = 'docs/release.md'
 
 // The list may now be empty - for the first time all three platforms have a live row - so the markers accept
@@ -63,10 +64,20 @@ for (const runner of ['macos-latest', 'windows-latest', 'ubuntu-latest']) {
   if (!matrixOs.includes(runner)) problems.push(`${WORKFLOW}: matrix no longer runs on ${runner}`)
 }
 
-// The product journey is intentionally too platform-specific and expensive for
-// the portable PR gate, but it is a release invariant. Freeze that split here:
-// a workflow refactor must not quietly publish a tag without exercising the
-// installed DSH/Chrome/Continue/plugin-lifecycle path.
+// The complete installed product journey is macOS-specific, so both the
+// packaged-client PR matrix and the release workflow must run it against the
+// assembled tarball. Never discover Runner-only browser/consent failures only
+// after a human authorizes a release.
+const packagedWorkflowSource = readFileSync(PACKAGED_WORKFLOW, 'utf8')
+if (!packagedWorkflowSource.includes('Full installed-product journey on macOS release candidate')
+  || !packagedWorkflowSource.includes('DSH_PRODUCT_TARBALL="$tarball"')
+  || !packagedWorkflowSource.includes('pnpm e2e:product-journey')) {
+  problems.push(`${PACKAGED_WORKFLOW}: full macOS installed-product PR gate is missing`)
+}
+if (!packagedWorkflowSource.includes("'scripts/e2e-product-journey.mjs'")
+  || !packagedWorkflowSource.includes("'scripts/product-journey-*.mjs'")) {
+  problems.push(`${PACKAGED_WORKFLOW}: product journey edits no longer trigger PR validation`)
+}
 const releaseWorkflowSource = readFileSync(RELEASE_WORKFLOW, 'utf8')
 const releaseDocSource = readFileSync(RELEASE_DOC, 'utf8')
 if (!/^\s*runs-on:\s*macos(?:-[^\s#]+)?\s*$/m.test(releaseWorkflowSource)) {
