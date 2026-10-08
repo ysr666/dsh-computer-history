@@ -146,52 +146,19 @@ jobs:
           "$root/node_modules/.bin/dsh" --version
           echo "DSH_CLI=$root/node_modules/.bin/dsh" >> "$GITHUB_ENV"
 
-      - name: Install stable Chrome for Testing
+      - name: Use macOS Chrome already verified by the packaged browser matrix
+        shell: bash
         run: |
-          python3 <<'PYCODE'
-          import json
-          import subprocess
-          import urllib.request
-          import zipfile
-          from pathlib import Path
-
-          endpoint = (
-              'https://googlechromelabs.github.io/chrome-for-testing/'
-              'last-known-good-versions-with-downloads.json'
-          )
-          native_machine = subprocess.check_output(
-              ['uname', '-m'],
-              text=True,
-          ).strip()
-          platform_name = 'mac-arm64' if native_machine == 'arm64' else 'mac-x64'
-          with urllib.request.urlopen(endpoint, timeout=30) as response:
-              data = json.load(response)
-          stable = data['channels']['Stable']
-          match = next(
-              item for item in stable['downloads']['chrome']
-              if item['platform'] == platform_name
-          )
-          archive = Path('/tmp/chrome-for-testing.zip')
-          destination = Path('/tmp/chrome-for-testing')
-          if destination.exists():
-              import shutil
-              shutil.rmtree(destination)
-          urllib.request.urlretrieve(match['url'], archive)
-          destination.mkdir(parents=True)
-          with zipfile.ZipFile(archive) as bundle:
-              bundle.extractall(destination)
-          print(
-              f"Chrome for Testing {stable['version']} "
-              f"({platform_name}) from {match['url']}"
-          )
-          PYCODE
-          chrome=$(find /tmp/chrome-for-testing -type f -path '*/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing' -print -quit)
-          test -n "$chrome"
-          chmod +x "$chrome"
-          xattr -dr com.apple.quarantine /tmp/chrome-for-testing 2>/dev/null || true
-          app=$(dirname "$(dirname "$(dirname "$chrome")")")
-          version=$(plutil -extract CFBundleShortVersionString raw -o - "$app/Contents/Info.plist")
-          echo "Chrome for Testing $version"
+          set -euo pipefail
+          # The three-platform packaged-client gate uses this installed browser
+          # on macos-14 and passed on the exact release commit. Chrome-for-Testing
+          # closed or hung CDP on the same runner, even when pinned to v154.
+          chrome='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+          test -x "$chrome" || { echo '::error::verified macOS Chrome missing'; exit 1; }
+          if [ "$(uname -m)" = arm64 ] && ! file "$chrome" | grep -q arm64; then
+            echo '::error::Chrome has no native arm64 slice'; exit 1
+          fi
+          "$chrome" --version
           echo "PANEL_CHROME=$chrome" >> "$GITHUB_ENV"
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:

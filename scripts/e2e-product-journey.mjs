@@ -27,7 +27,7 @@ import {
 import { createRequire } from 'node:module'
 import os from 'node:os'
 import path from 'node:path'
-import { connectCdp } from './product-journey-cdp.mjs'
+import { initializeCdpSession } from './product-journey-cdp.mjs'
 import { DatabaseSync } from 'node:sqlite'
 
 const REPO = path.resolve(import.meta.dirname, '..')
@@ -374,26 +374,45 @@ async function waitForDebugger(port) {
         'http://127.0.0.1:' + port + '/json/list',
         { signal: AbortSignal.timeout(3_000) },
       )
-      if (response.ok) return await response.json()
+      if (response.ok) {
+        const targets = await response.json()
+        // A listening debugger can return an empty/temporary target list.
+        // Require a registered page with a WebSocket URL before continuing.
+        if (Array.isArray(targets) && targets.some(
+          item => item.type === 'page' && item.webSocketDebuggerUrl,
+        )) return targets
+      }
     } catch {
       // browser not ready
     }
+    if (chrome?.exitCode !== null && chrome?.exitCode !== undefined) {
+      throw new Error('Chrome exited before exposing a page target (exit='
+        + chrome.exitCode + ', signal=' + chrome.signalCode + ')')
+    }
     await sleep(250)
   }
-  throw new Error('Chrome DevTools endpoint never came up')
+  throw new Error('Chrome DevTools page target never came up')
 }
 
 async function openUiSession() {
-  const targets = await (
-    await fetch('http://127.0.0.1:' + cdpPort + '/json/list', {
-      signal: AbortSignal.timeout(5_000),
-    })
-  ).json()
-  const target = targets.find(item => item.type === 'page')
-  if (!target) throw new Error('no DSH page target')
-  const session = await connectCdp(target.webSocketDebuggerUrl)
-  await session.send('Page.enable')
-  await session.send('Runtime.enable')
+  // Retry only the initial Chrome page target and CDP connection. In
+  // particular, Page.navigate and all subsequent UI assertions stay strict.
+  const session = await initializeCdpSession(async () => {
+    const targets = await (
+      await fetch('http://127.0.0.1:' + cdpPort + '/json/list', {
+        signal: AbortSignal.timeout(5_000),
+      })
+    ).json()
+    const target = targets.find(item =>
+      item.type === 'page' && item.webSocketDebuggerUrl)
+    if (!target) throw new Error('Chrome has no CDP page target yet')
+    return target.webSocketDebuggerUrl
+  }, {
+    onRetry(attempt, error) {
+      console.log('  … Chrome CDP initialisation retry ' + attempt
+        + '/4: ' + String(error?.message || error).slice(0, 180))
+    },
+  })
   session.evaluate = async expression => {
     const result = await session.send('Runtime.evaluate', {
       expression,
@@ -933,6 +952,7 @@ try {
     chromePath,
     [
       '--headless=new',
+      '--disable-gpu',
       '--remote-debugging-port=' + cdpPort,
       '--user-data-dir=' + uiChromeProfile,
       '--no-first-run',
@@ -946,6 +966,10 @@ try {
       stdio: 'ignore',
     },
   )
+  chrome.on('exit', (code, signal) => {
+    console.log('  … Chrome child exited (code=' + code
+      + ', signal=' + signal + ')')
+  })
   await waitForDebugger(cdpPort)
   record('Chrome DevTools endpoint responds', true, 'port ' + cdpPort)
   uiSession = await openUiSession()
@@ -957,7 +981,9 @@ try {
       acceptLanguage: 'en-US,en;q=0.9',
     })
   }
+  console.log('  … Chrome navigating to authenticated DSH Host')
   await uiSession.send('Page.navigate', { url: hostUrl })
+  record('Chrome navigates to the DSH Host', true, 'port ' + webPort)
   await sleep(7_000)
   await dismissDialogs(uiSession)
 

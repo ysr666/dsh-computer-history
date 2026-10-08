@@ -90,8 +90,14 @@ if (!/DSH_PRODUCT_TARBALL=/.test(releaseWorkflowSource)) {
 if (!releaseWorkflowSource.includes('echo \'{"private":true}\' > "$root/package.json"')) {
   problems.push(`${RELEASE_WORKFLOW}: DSH CLI bootstrap no longer writes a valid package.json`)
 }
-if (!/chrome=\$\(find [^\n]+ -path [^\n]+ -print -quit\)/.test(releaseWorkflowSource)) {
-  problems.push(`${RELEASE_WORKFLOW}: Chrome lookup shell command is missing or has a broken continuation`)
+// The release product journey must select the same real macOS Chrome binary
+// that already passed the packaged-client matrix, not a floating Chrome-for-
+// Testing download with different CDP behaviour.
+if (!/chrome='\/Applications\/Google Chrome\.app\/Contents\/MacOS\/Google Chrome'/.test(releaseWorkflowSource)) {
+  problems.push(`${RELEASE_WORKFLOW}: verified macOS Chrome selection is missing`)
+}
+if (/last-known-good-versions-with-downloads\.json/.test(releaseWorkflowSource)) {
+  problems.push(`${RELEASE_WORKFLOW}: release Chrome cannot float to a new major version`)
 }
 if (!/DSH_CLI=/.test(releaseWorkflowSource)) {
   problems.push(`${RELEASE_WORKFLOW}: product journey no longer provisions DSH_CLI`)
