@@ -27,6 +27,7 @@ import {
 import { createRequire } from 'node:module'
 import os from 'node:os'
 import path from 'node:path'
+import { connectCdp } from './product-journey-cdp.mjs'
 import { DatabaseSync } from 'node:sqlite'
 
 const REPO = path.resolve(import.meta.dirname, '..')
@@ -58,13 +59,17 @@ function requireCheck(name, ok, detail) {
   if (!ok) throw new Error(name + ': ' + detail)
 }
 function run(command, args, options = {}) {
+  // Never let a stalled installer, curl, or lifecycle command hold the release
+  // runner indefinitely. An individual install is allowed extra time.
   const result = spawnSync(command, args, {
     encoding: 'utf8',
+    timeout: 120_000,
     ...options,
   })
   return {
     status: result.status ?? 1,
-    out: String(result.stdout ?? '') + String(result.stderr ?? ''),
+    out: String(result.stdout ?? '') + String(result.stderr ?? '')
+      + (result.error ? '\n' + result.error.message : ''),
   }
 }
 
@@ -225,7 +230,7 @@ function addBundle(spec) {
   let result = run(
     cli,
     ['plugin', '--profile', profile, 'add', spec],
-    { env: installEnv },
+    { env: installEnv, timeout: 180_000 },
   )
   if (result.status !== 0) {
     const workspace = path.join(
@@ -244,7 +249,7 @@ function addBundle(spec) {
     result = run(
       cli,
       ['plugin', '--profile', profile, 'add', spec],
-      { env: installEnv },
+      { env: installEnv, timeout: 180_000 },
     )
   }
   return result
@@ -367,6 +372,7 @@ async function waitForDebugger(port) {
     try {
       const response = await fetch(
         'http://127.0.0.1:' + port + '/json/list',
+        { signal: AbortSignal.timeout(3_000) },
       )
       if (response.ok) return await response.json()
     } catch {
@@ -377,44 +383,15 @@ async function waitForDebugger(port) {
   throw new Error('Chrome DevTools endpoint never came up')
 }
 
-function connect(target) {
-  return new Promise((resolve, reject) => {
-    const ws = new WebSocket(target.webSocketDebuggerUrl)
-    let id = 0
-    const pending = new Map()
-    ws.addEventListener('message', event => {
-      const message = JSON.parse(String(event.data))
-      const waiter = pending.get(message.id)
-      if (!waiter) return
-      pending.delete(message.id)
-      if (message.error) {
-        waiter.reject(new Error(JSON.stringify(message.error)))
-      } else {
-        waiter.resolve(message.result)
-      }
-    })
-    ws.addEventListener('open', () => {
-      const send = (method, params = {}) => new Promise((res, rej) => {
-        const callId = ++id
-        pending.set(callId, { resolve: res, reject: rej })
-        ws.send(JSON.stringify({ id: callId, method, params }))
-      })
-      resolve({ ws, send })
-    })
-    ws.addEventListener(
-      'error',
-      () => reject(new Error('CDP websocket failed')),
-    )
-  })
-}
-
 async function openUiSession() {
   const targets = await (
-    await fetch('http://127.0.0.1:' + cdpPort + '/json/list')
+    await fetch('http://127.0.0.1:' + cdpPort + '/json/list', {
+      signal: AbortSignal.timeout(5_000),
+    })
   ).json()
   const target = targets.find(item => item.type === 'page')
   if (!target) throw new Error('no DSH page target')
-  const session = await connect(target)
+  const session = await connectCdp(target.webSocketDebuggerUrl)
   await session.send('Page.enable')
   await session.send('Runtime.enable')
   session.evaluate = async expression => {
@@ -951,6 +928,7 @@ try {
     auth.status === 0 ? 'cookie jar created' : auth.out.trim().slice(-160),
   )
 
+  console.log('  … launching Chrome for Test (CDP port ' + cdpPort + ')')
   chrome = spawn(
     chromePath,
     [
@@ -969,7 +947,9 @@ try {
     },
   )
   await waitForDebugger(cdpPort)
+  record('Chrome DevTools endpoint responds', true, 'port ' + cdpPort)
   uiSession = await openUiSession()
+  record('Chrome CDP session initialized', true, 'Page and Runtime enabled')
   if (process.env.DCH_VISUAL_LANG === 'en-US') {
     await uiSession.send('Emulation.setLocaleOverride', { locale: 'en-US' })
     await uiSession.send('Emulation.setUserAgentOverride', {
