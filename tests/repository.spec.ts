@@ -66,6 +66,29 @@ describe('repository scaffold', () => {
       .toThrow('computer history collector is unsupported on freebsd')
   })
 
+  it('gates the packaged alpha on the installed client product path', () => {
+    const workflow = readFileSync(
+      new URL('../.github/workflows/packaged-alpha.yml', import.meta.url),
+      'utf8',
+    )
+    const e2e = readFileSync(
+      new URL('../scripts/e2e-macos.mjs', import.meta.url),
+      'utf8',
+    )
+    const verifier = readFileSync(
+      new URL('../scripts/verify-installed-client.mjs', import.meta.url),
+      'utf8',
+    )
+    expect(workflow).toContain("DSH_E2E_VERIFY_CLIENT: '1'")
+    expect(workflow).toContain('installed-client-${{ matrix.os }}')
+    expect(e2e).toContain("process.env.DSH_E2E_VERIFY_CLIENT === '1'")
+    expect(e2e).toContain("'verify-installed-client.mjs'")
+    expect(verifier).toContain("entry?.id==='dsh-computer-history'")
+    expect(verifier).toContain("visible('.ch-first-run')")
+    expect(verifier).toContain("visible('.ch-settings-list')")
+    expect(verifier).toContain("apiStatus('policy')")
+  })
+
   it('keeps default history under DSH_HOME', () => {
     process.env.DSH_HOME = '/tmp/dsh-history-test-home'
     expect(resolveHistoryDataDirectory()).toBe(
