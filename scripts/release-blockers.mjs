@@ -30,7 +30,9 @@ const notes = []
 
 // 1. The commit we are about to release must be green. Historical failures on other commits — especially
 // Dependabot's dynamic update checks — do not say anything about the release candidate and must not poison the
-// gate forever. Read the current main head, then inspect only push-triggered workflows attached to that SHA.
+// gate forever. Read the current main head; allow an explicitly dispatched CI run for that
+// exact SHA as well. Docs-only commits intentionally skip push CI, but manual CI must
+// still run on the same commit and succeed before the Release gate can pass.
 const mainBranch = json(['api', 'repos/{owner}/{repo}/branches/main'])
 const mainSha = mainBranch?.commit?.sha
 const runs = json(['run', 'list', '--branch', 'main', '--limit', '100', '--json', 'conclusion,event,headSha,name,status,workflowName'])
@@ -42,19 +44,24 @@ if (mainBranch.unavailable !== undefined) {
   problems.push(`could not read the runs on main: ${runs.unavailable}`)
 } else {
   const current = runs.filter(run => run.headSha === mainSha && run.event === 'push')
-  const ci = current.find(run => run.workflowName === 'CI' || run.name === 'CI')
+  const ciRuns = runs.filter(run => run.headSha === mainSha
+    && (run.workflowName === 'CI' || run.name === 'CI')
+    && ['push', 'workflow_dispatch'].includes(run.event))
+  // Prefer a successful exact-SHA run. A previously failed same-SHA attempt
+  // should not poison a deliberate successful rerun of that same CI.
+  const ci = ciRuns.find(run => run.conclusion === 'success') ?? ciRuns[0]
   const incomplete = current.filter(run => !['success', 'skipped'].includes(run.conclusion ?? ''))
 
   if (current.length === 0) {
     problems.push(`current main ${mainSha.slice(0, 7)} has no push workflow result yet`)
   } else if (ci === undefined) {
-    problems.push(`current main ${mainSha.slice(0, 7)} has no CI run`)
+    problems.push(`current main ${mainSha.slice(0, 7)} has no CI result: run CI manually on main after a docs-only commit`)
   } else if (ci.conclusion !== 'success') {
     problems.push(`current main ${mainSha.slice(0, 7)} CI is ${ci.status ?? ci.conclusion ?? 'not complete'}`)
   } else if (incomplete.length > 0) {
     problems.push(`current main ${mainSha.slice(0, 7)} is not fully green (${incomplete.map(run => `${run.workflowName ?? run.name}:${run.status ?? run.conclusion ?? 'pending'}`).join(', ')})`)
   } else {
-    notes.push(`current main ${mainSha.slice(0, 7)} is green: ${current.length} push workflow(s) succeeded or skipped`)
+    notes.push(`current main ${mainSha.slice(0, 7)} is green: ${current.length} push workflow(s) succeeded or skipped; exact-SHA CI passed via ${ci.event}`)
   }
 }
 
