@@ -281,13 +281,42 @@ async function main() {
       await evaluate(`(() => {
         const scope = document.querySelector('[role="dialog"],dialog') ?? document
         const buttons = [...scope.querySelectorAll('button')].filter(node => node.getClientRects().length > 0)
-        const dismiss = buttons.find(node => /^(稍后配置|稍后|继续|知道了|关闭|Later|Continue|Got it|Close|Not now|Skip|×)$/.test((node.textContent || '').trim()))
+        const dismiss = buttons.find(node => /^(稍后配置|稍后|继续|知道了|关闭|Configure later|Later|Continue|Got it|Close|Not now|Skip|×)$/.test((node.textContent || '').trim()))
         const button = dismiss ?? buttons.at(-1)
         if (button) button.click()
       })()`)
       await sleep(900)
     }
   }
+  const dismissDeferredConfiguration = async () => {
+    const dismissed = await evaluate(`(() => {
+      const dialogs = [...document.querySelectorAll('[role="dialog"],dialog')]
+        .filter(node => node.getClientRects().length > 0)
+      for (const dialog of dialogs) {
+        const button = [...dialog.querySelectorAll('button')]
+          .filter(node => node.getClientRects().length > 0)
+          .find(node => /^(稍后配置|Configure later|Not now|Skip)$/.test((node.textContent || '').trim()))
+        if (button) {
+          button.click()
+          return true
+        }
+      }
+      return false
+    })()`)
+    if (dismissed) await sleep(900)
+    return Boolean(dismissed)
+  }
+
+  const openSettingsDialog = async () => {
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      await clickText('设置', { last: true })
+      await sleep(1600)
+      if (await dismissDeferredConfiguration()) continue
+      if ((await dialogCount()) > 0) return true
+    }
+    return false
+  }
+
   const openPanel = async () => {
     // A clean DSH profile can open on the workspace/session picker. Try the plugin first so an already-open
     // session is never replaced; only if that cannot mount the panel do we create/open a shell session and retry.
@@ -399,8 +428,7 @@ async function main() {
   })
 
   // 5. the settings page after a failed load: the write controls must not stay available
-  await clickText('设置', { last: true })
-  await sleep(2500)
+  await openSettingsDialog()
   await clickText(panelLabels.at(-1), { last: true })
   // Select the plugin's own section and verify it, instead of clicking the English label in a Chinese
   // interface and photographing whatever section the dialog happened to be showing - which is why this step's
@@ -440,12 +468,7 @@ async function main() {
     await dismissIntro()
     await openPanel()
     await sleep(3500)
-    for (let attempt = 0; attempt < 4; attempt += 1) {
-      await clickText('设置', { last: true })
-      await sleep(2200)
-      if ((await dialogCount()) > 0) break
-    }
-    const dialogOpen = (await dialogCount()) > 0
+    const dialogOpen = await openSettingsDialog()
     let sectionShown = false
     for (const label of panelLabels) {
       await evaluate("window.__chWanted = " + JSON.stringify(label) + "; 'set'")
