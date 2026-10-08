@@ -51,6 +51,7 @@
     "verify:ci-boundaries": "node scripts/verify-ci-boundaries.mjs",
     "check:app-path": "node scripts/check-app-path.mjs",
     "e2e:collector-transport": "node scripts/e2e-collector-transport.mjs",
+    "e2e:packaged-client": "node scripts/verify-packaged-client.mjs",
     "native:manifest": "node scripts/write-native-manifest.mjs",
     "e2e:product-journey": "node scripts/e2e-product-journey.mjs",
     "verify:continuation-capsule": "node scripts/verify-continuation-capsule.mjs",

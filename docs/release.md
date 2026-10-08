@@ -11,11 +11,12 @@ verified, it says so rather than describing the intention.
 > with SHA-256 provenance, and that same tarball clean-installs on all three runners without a
 > `collectorExecutable` override.
 >
-> The packaged Host/collector path is proven on all three platforms, and the installed **client half** is now
-> measured on the macOS release product path as well. The product journey installs the assembled tarball into a
-> clean throwaway DSH 0.2 profile, renders Computer History from the installed package, exercises first-run and
-> History/Privacy surfaces, and verifies Continue plus plugin lifecycle. Issue #44 remains open until this branch
-> and its CI evidence land; the public tag is still blocked on the release-cut preflight and non-dev version/changelog.
+> The installed **client half** is verified on the macOS full product journey (52/52 checks including
+> Continue, disable/re-enable and uninstall). A separate release browser gate now covers **Windows, macOS and
+> Linux** using the same assembled tarball, verifying the first-run panel, Settings and successful History/Privacy
+> responses without checkout wiring. Issue #44 was closed by the macOS product-path PR #125; the added three-OS
+> browser gate qualifies the wider three-platform Alpha claim. The public tag is **not published** and still
+> requires a non-dev version, changelog and release-cut preflight.
 
 ## v0.1.0-alpha.1 readiness
 
@@ -29,7 +30,8 @@ verified, it says so rather than describing the intention.
 | Shared collector protocol checks on macOS / Windows / Linux | ✅ |
 | One tarball contains all three native collectors + SHA-256 provenance | ✅ |
 | Same tarball clean-installs and reaches packaged collector handshake on macOS / Windows / Linux | ✅ |
-| Installed bundle's **client panel** appears and works on the release product path | ✅ measured locally on macOS; release workflow repeats against the assembled tarball |
+| Installed client/Settings full product journey | ✅ macOS 52/52 from PR #125 |
+| Same installed client renders first-run and Settings, returns History/Privacy HTTP 200 | ✅ Windows / macOS / Linux packaged browser matrix |
 | `pnpm verify:release:blockers` at release cut | ⬜ run at release cut |
 | Non-`-dev` package version + matching changelog section | ⬜ set only when cutting the release |
 
@@ -117,6 +119,27 @@ is recorded in `docs/validation-installed-bundle-2026-10-06.md`.
 This satisfies issue #44's acceptance criteria locally without checkout-only wiring or manual junctions. The issue
 remains open until this branch and the release-workflow evidence are merged. The Windows/Linux release jobs still
 prove packaged Host/collector transport rather than separately rendering the web client UI on those runners.
+
+## Three-platform installed browser proof
+
+The expanded browser product-path gate was verified in GitHub Actions run
+[`37718627060`](https://github.com/ysr666/dsh-computer-history/actions/runs/37718627060)
+for source commit `fc5aee2c08b60b744d947a47b6e3702a83aa0a10` (2026-10-08 UTC).
+The matrix assembled **one** native-provenance tarball, then used DSH
+`@deepseek-ai/dsh@0.2.0-rc.2` and a fresh isolated `e2e` profile on all three operating systems.
+
+A real Chromium-family browser verified the client `lib/client.js` resolves **inside the installed
+profile**, mounted `.ch-main`, first-run `.ch-first-run` with an enabled action, the Computer History
+Settings surface with **8 rows**, and **HTTP 200 responses** for History (`recent`, `timeline` or
+`threads`) and both Privacy endpoints (`policy`, `retention`). The run's separate platform jobs
+all passed, with screenshots, rendered text and structured results. Uploads deliberately exclude
+Host logs and session credentials. Windows/macOS packaged collectors reached `running`; the Linux
+headless runner reported `permission-required` with no X display, rather than claiming it observed
+a desktop. Actual Linux desktop/AT-SPI GUI acceptance remains distinct.
+
+The tag-publishing workflow preserves the macOS complete installed-product journey from PR #125
+**and** now runs the three-OS browser product gate. The gates will rerun from the tagged release
+commit; the public Alpha has not yet been published.
 
 ## Publishing
 
