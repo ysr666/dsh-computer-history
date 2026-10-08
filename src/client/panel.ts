@@ -202,6 +202,7 @@ function dayDuration(day: TimelineDay): number {
 export type SummaryDisplayStatus =
   | 'loading'
   | 'unavailable'
+  | 'provider-unavailable'
   | 'deterministic'
   | 'local'
   | 'remote'
@@ -211,8 +212,13 @@ export function summaryDisplayStatus(
 ): SummaryDisplayStatus {
   if (semantic === undefined) return 'loading'
   if (semantic === null) return 'unavailable'
-  if (semantic.scopes.some(scope => scope.providerKind === 'remote')) return 'remote'
-  if (semantic.scopes.some(scope => scope.providerKind === 'local')) return 'local'
+  if (semantic.scopes.some(scope =>
+    scope.providerKind === 'remote' && semantic.providers.remote.available
+  )) return 'remote'
+  if (semantic.scopes.some(scope =>
+    scope.providerKind === 'local' && semantic.providers.local.available
+  )) return 'local'
+  if (semantic.scopes.length > 0) return 'provider-unavailable'
   return 'deterministic'
 }
 
@@ -1355,6 +1361,7 @@ export function createHistoryPage({
       const status = summaryDisplayStatus(semantic)
       if (status === 'loading') return t('summaryLoading')
       if (status === 'unavailable') return t('summaryUnavailable')
+      if (status === 'provider-unavailable') return t('summaryProviderUnavailableShort')
       if (status === 'remote') return t('summaryRemoteShort')
       if (status === 'local') return t('summaryLocalShort')
       return t('summaryDeterministicShort')
@@ -1438,9 +1445,13 @@ export function createHistoryPage({
                   : undefined
                 const title = matchingThread?.workspaceTitle
                   ?? (appBundleId ? friendlyAppName(appBundleId) : t('summaryScope'))
-                const provider = scope.providerKind === 'remote'
+                const readiness = semantic.providers[scope.providerKind]
+                const providerName = scope.providerKind === 'remote'
                   ? t('summaryRemoteProvider')
                   : t('summaryLocalProvider')
+                const provider = readiness.available
+                  ? providerName
+                  : `${providerName} · ${t('summaryProviderUnavailable')}`
                 return React.createElement(
                   'li', { key: scope.scopeKey, className: 'ch-summary-item' },
                   React.createElement('div', { className: 'ch-summary-item-title' }, title),
