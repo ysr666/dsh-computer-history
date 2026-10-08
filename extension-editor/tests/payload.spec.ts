@@ -88,7 +88,8 @@ describe('editor companion payload (ADR 0009)', () => {
 describe('editor runtime routing', () => {
   it('uses the active document workspace and treats HTTP rejection as a failed send', () => {
     const source = readFileSync(path.join(SOURCE_DIR, 'extension.ts'), 'utf8')
-    expect(source).toContain('getWorkspaceFolder(editor.document.uri)')
+    expect(source).toContain('savedDocument ?? editor?.document')
+    expect(source).toContain('getWorkspaceFolder(document.uri)')
     expect(source).toContain('randomUUID()')
     expect(source).toContain('response.status === 202')
     expect(source).toContain('send not stored:')

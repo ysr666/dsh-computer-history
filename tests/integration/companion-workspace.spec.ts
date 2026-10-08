@@ -217,7 +217,7 @@ describe('a vouched workspace (ADR 0009)', () => {
       observations: new ObservationStore(history.db).listAll(),
     })
     expect(preview.excluded).toHaveLength(1)
-    expect(preview.excluded[0]?.reason).toContain('workspace root')
+    expect(preview.excluded[0]?.reason).toBe('policy-disallowed')
     history.close()
   })
 
