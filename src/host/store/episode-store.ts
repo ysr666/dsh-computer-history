@@ -409,11 +409,48 @@ export class EpisodeStore {
           this.appendIsProven(input.observationIds, stored)
         ) {
           this.applyAppendedAggregates(input.id, appended)
-          this.replaceSummaryCitations(
-            input.id,
-            input.summaryObservationIds
-              ?? input.observationIds,
-          )
+
+          const citations = input.summaryObservationIds
+            ?? input.observationIds
+          // A deterministic summary of the entire Episode is extended
+          // by the newly linked observations. Replacing every citation
+          // on every append would perform O(n²) writes over a long
+          // session. Verify that the existing citation set still has
+          // the expected prefix boundary before taking the delta path.
+          // Explicitly selected/subset citations still get an atomic
+          // full replacement, because their membership may have changed.
+          const previousCitations = this.db.prepare(`
+            SELECT
+              COUNT(*) AS count,
+              MIN(observation_id) AS oldest,
+              MAX(observation_id) AS newest
+            FROM episode_summary_citations
+            WHERE episode_id = ?
+          `).get(input.id) as {
+            count: number
+            oldest: number | null
+            newest: number | null
+          }
+          const canAppendCitations =
+            input.summaryKind === 'deterministic'
+            && citations.length === input.observationIds.length
+            && citations === input.observationIds
+            && Number(previousCitations.count) === stored.count
+            && previousCitations.oldest === stored.oldest
+            && previousCitations.newest === stored.newest
+
+          if (canAppendCitations) {
+            const insertCitation = this.db.prepare(`
+              INSERT OR IGNORE INTO episode_summary_citations(
+                episode_id, observation_id
+              ) VALUES (?, ?)
+            `)
+            for (const observationId of appended) {
+              insertCitation.run(input.id, Number(observationId))
+            }
+          } else {
+            this.replaceSummaryCitations(input.id, citations)
+          }
           commit()
           return
         }
