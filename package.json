@@ -51,7 +51,8 @@
     "verify:ci-boundaries": "node scripts/verify-ci-boundaries.mjs",
     "check:app-path": "node scripts/check-app-path.mjs",
     "e2e:collector-transport": "node scripts/e2e-collector-transport.mjs",
-    "native:manifest": "node scripts/write-native-manifest.mjs"
+    "native:manifest": "node scripts/write-native-manifest.mjs",
+    "e2e:packaged-client": "node scripts/e2e-packaged-client.mjs"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "4.0.4",
