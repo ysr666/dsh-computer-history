@@ -19,6 +19,7 @@ import {
   type CaptureController,
 } from '../../src/host/service/index.js'
 import { DeletionService } from '../../src/host/retention/index.js'
+import { SemanticOptInStore } from '../../src/host/semantic/opt-in.js'
 import {
   EpisodeStore,
   ObservationStore,
@@ -26,7 +27,6 @@ import {
   PolicyStore,
   ResourceStore,
 } from '../../src/host/store/index.js'
-import { SemanticOptInStore } from '../../src/host/semantic/opt-in.js'
 import { CompanionTokenStore } from '../../src/host/companion/token-store.js'
 import { RemoteSendStore } from '../../src/host/semantic/send-store.js'
 
@@ -145,6 +145,69 @@ class FakeCapture implements CaptureController {
 }
 
 describe('local computer history backend', () => {
+  it('reports semantic provider readiness and refuses opt-in to an unavailable provider', () => {
+    const history = openTempDatabase()
+    const policies = new PolicyStore(history.db)
+    policies.ensureInitial(100)
+    const base = {
+      observationRetentionHours: 24,
+      episodeRetentionDays: 30,
+      autoResume: false,
+      now: () => 10_000,
+    }
+    const unavailable = new LocalComputerHistoryBackend(
+      new EpisodeStore(history.db),
+      policies,
+      new DeletionService(history.db),
+      new FakeCapture(),
+      base,
+      undefined,
+      new SemanticOptInStore(history.db),
+      history.db,
+    )
+
+    expect(unavailable.semanticState()).toMatchObject({
+      active: 'deterministic',
+      providers: {
+        local: { available: false, reason: 'not-wired' },
+        remote: { available: false, reason: 'not-wired' },
+      },
+      scopes: [],
+    })
+    expect(() => unavailable.grantSemanticOptIn({
+      scopeKey: 'app:com.microsoft.VSCode',
+      providerKind: 'local',
+    })).toThrow(/local summary provider is not available/)
+
+    const ready = new LocalComputerHistoryBackend(
+      new EpisodeStore(history.db),
+      policies,
+      new DeletionService(history.db),
+      new FakeCapture(),
+      {
+        ...base,
+        semanticProviders: {
+          local: { model: 'local-model' },
+          remote: { model: 'remote-model' },
+        },
+      },
+      undefined,
+      new SemanticOptInStore(history.db),
+      history.db,
+    )
+    expect(ready.semanticState().providers).toEqual({
+      local: { available: true, model: 'local-model' },
+      remote: { available: true, model: 'remote-model' },
+    })
+    expect(ready.grantSemanticOptIn({
+      scopeKey: 'app:com.microsoft.VSCode',
+      providerKind: 'local',
+    })).toMatchObject({
+      scopeKey: 'app:com.microsoft.VSCode',
+      providerKind: 'local',
+    })
+  })
+
   it('composes store, resume, policy, capture, and deletion behavior', async () => {
     const history = openTempDatabase()
     const episodeId = seedEpisode(history)
@@ -641,6 +704,7 @@ describe('local computer history backend', () => {
         observationRetentionHours: 24,
         episodeRetentionDays: 30,
         autoResume: false,
+        semanticProviders: { remote: { model: 'm' } },
         now: () => 5_000,
       },
       undefined,
@@ -710,6 +774,7 @@ describe('local computer history backend', () => {
         observationRetentionHours: 24,
         episodeRetentionDays: 30,
         autoResume: false,
+        semanticProviders: { remote: { model: 'm' } },
         now: () => 5_000,
       },
       undefined,
@@ -790,6 +855,7 @@ describe('local computer history backend', () => {
         observationRetentionHours: 24,
         episodeRetentionDays: 30,
         autoResume: false,
+        semanticProviders: { remote: { model: 'm' } },
         now: () => 5_000,
       },
       undefined,
@@ -918,6 +984,11 @@ describe('Cordis computer history service', () => {
       async resolveResume() {
         return { status: 'none', reason: 'fixture' }
       },
+      recordDshCheckpoint(request) { return request },
+      latestDshCheckpoint() { return undefined },
+      bindContinuationSession() {},
+      continuationEpisodeForSession() { return undefined },
+      unbindContinuationSession() { return false },
       async delete() {
         return {
           observationsDeleted: 0,
@@ -952,7 +1023,7 @@ describe('Cordis computer history service', () => {
       },
       async importAll() { return { imported: {} } },
       semanticState() {
-        return { active: 'deterministic', localProviderConfigured: false, scopes: [] }
+        return { active: 'deterministic', providers: { local: { available: false, reason: 'not-wired' }, remote: { available: false, reason: 'not-wired' } }, scopes: [] }
       },
       semanticPreview() { return undefined },
       grantSemanticOptIn(request) {

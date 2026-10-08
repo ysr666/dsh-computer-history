@@ -1,6 +1,7 @@
 import type {
   AccessibilitySettingsCapability,
   AccessibilitySettingsOpenResult,
+  BindContinuationSessionRequest,
   BrowserCompanionSetup,
   ComputerHistoryState,
   DeleteHistoryRequest,
@@ -14,10 +15,12 @@ import type {
   PairingRotation,
   PolicySnapshot,
   PolicyUpdate,
+  ResumeHandoff,
   ResumeOpenCapability,
   ResumeOpenRequest,
   ResumeOpenResult,
   ResumeResolution,
+  RedactionPreview,
   RetentionSettings,
   SemanticSummaryState,
   SupportedApplicationInventory,
@@ -100,6 +103,8 @@ export const historyApi = {
     requestJson('/policy'),
   getRetention: (): Promise<RetentionSettings> =>
     requestJson('/retention'),
+  getRedactionPreview: (scopeKey: string): Promise<RedactionPreview> =>
+    requestJson(`/audit/preview?scope=${encodeURIComponent(scopeKey)}`),
   getTimeline: (days = 7): Promise<readonly TimelineDay[]> =>
     requestJson(`/timeline?days=${days}`),
   getRecent: (limit = 1): Promise<readonly EpisodeSummary[]> =>
@@ -145,6 +150,16 @@ export const historyApi = {
       nowMs: Date.now(),
       turn: 1,
     }),
+  getResumeHandoff: (episodeId: string): Promise<ResumeHandoff> =>
+    requestJson(`/resume/handoff?id=${encodeURIComponent(episodeId)}`),
+  bindContinuationSession: (
+    request: BindContinuationSessionRequest,
+  ): Promise<{ readonly bound: true }> =>
+    postJson('/resume/continue-session', request),
+  unbindContinuationSession: (
+    sessionId: string,
+  ): Promise<{ readonly unbound: boolean }> =>
+    postJson('/resume/continue-session/unbind', { sessionId }),
   getResumeOpenCapability: (): Promise<ResumeOpenCapability> =>
     requestJson('/resume/open'),
   openResume: (request: ResumeOpenRequest): Promise<ResumeOpenResult> =>

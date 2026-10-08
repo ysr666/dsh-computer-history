@@ -22,6 +22,11 @@ import {
 } from '../resume/opener.js'
 import { AccessibilitySettingsOpener } from '../system/accessibility-settings.js'
 import { SupportedApplicationInventoryReader } from '../system/application-inventory.js'
+import {
+  attachDshCheckpoint,
+  buildResumeHandoffFromEpisode,
+  enrichResumeHandoff,
+} from '../resume/index.js'
 
 export const HISTORY_API_PREFIX = '/api/computer-history'
 
@@ -456,6 +461,104 @@ export function registerHistoryApi(
       } catch {
         return textResponse('Request failed.', 500)
       }
+    },
+  }))
+
+  ctx.effect(() => ctx.connection.fetch.register({
+    path: HISTORY_API_PREFIX + '/resume/handoff',
+    methods: ['GET'],
+    requestBody: 'buffered',
+    fetch: async (request: Request) => {
+      try {
+        const id = requiredQueryText(new URL(request.url), 'id', 1_000)
+        const episode = await history.getEpisode(EpisodeId(id), request.signal)
+        if (!episode) return textResponse('Not found.', 404)
+
+        const withGit = await enrichResumeHandoff(
+          ctx,
+          buildResumeHandoffFromEpisode(episode),
+        )
+        if (withGit.status !== 'hit') return json(withGit)
+
+        const checkpoint = history.latestDshCheckpoint({
+          ...(withGit.workspace?.id ? { workspaceId: withGit.workspace.id } : {}),
+          ...(withGit.workspace?.root ? { workspaceRoot: withGit.workspace.root } : {}),
+          atOrBeforeMs: withGit.startedAtMs,
+        })
+        return json(attachDshCheckpoint(withGit, checkpoint))
+      } catch (error) {
+        return requestFailure(error)
+      }
+    },
+  }))
+
+  ctx.effect(() => ctx.connection.fetch.register({
+    path: HISTORY_API_PREFIX + '/resume/continue-session',
+    methods: ['POST'],
+    requestBody: 'buffered',
+    fetch: async (request: Request) => {
+      let body: unknown
+      try {
+        body = await request.json()
+      } catch {
+        return textResponse('Invalid JSON.', 400)
+      }
+      const record = body as Partial<{
+        sessionId: unknown
+        episodeId: unknown
+      }>
+      if (
+        typeof record.sessionId !== 'string'
+        || record.sessionId.length < 1
+        || record.sessionId.length > 512
+      ) {
+        return textResponse('sessionId is required.', 400)
+      }
+      if (
+        typeof record.episodeId !== 'string'
+        || record.episodeId.length < 1
+        || record.episodeId.length > 1_000
+      ) {
+        return textResponse('episodeId is required.', 400)
+      }
+      try {
+        history.bindContinuationSession({
+          sessionId: record.sessionId,
+          episodeId: EpisodeId(record.episodeId),
+        })
+        return json({ bound: true })
+      } catch (error) {
+        const message = error instanceof Error ? error.message : ''
+        if (message === 'continuation episode not found') {
+          return textResponse('Not found.', 404)
+        }
+        return requestFailure(error)
+      }
+    },
+  }))
+
+  ctx.effect(() => ctx.connection.fetch.register({
+    path: HISTORY_API_PREFIX + '/resume/continue-session/unbind',
+    methods: ['POST'],
+    requestBody: 'buffered',
+    fetch: async (request: Request) => {
+      let body: unknown
+      try {
+        body = await request.json()
+      } catch {
+        return textResponse('Invalid JSON.', 400)
+      }
+      const sessionId = (body as { sessionId?: unknown }).sessionId
+      if (
+        typeof sessionId !== 'string'
+        || sessionId.length < 1
+        || sessionId.length > 512
+      ) {
+        return textResponse('sessionId is required.', 400)
+      }
+      return json({
+        unbound: history.unbindContinuationSession(sessionId),
+      })
     },
   }))
 

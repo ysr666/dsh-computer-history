@@ -52,6 +52,7 @@ final class Collector {
     private var heartbeatTimer: Timer?
     private var lastAccessibilityTrusted: Bool?
     private var lastObservationFingerprint: ObservationFingerprint?
+    private var lastObservationAt: TimeInterval?
 
     func start(initialAccessibilityTrusted: Bool) {
         lastAccessibilityTrusted = initialAccessibilityTrusted
@@ -508,18 +509,23 @@ final class Collector {
             protected: false,
             idleBoundary: idle >= idleBoundarySeconds
         )
-        guard fingerprint != lastObservationFingerprint else {
+        let observedAt = Date().timeIntervalSince1970
+        guard shouldEmitObservation(
+            fingerprintUnchanged: fingerprint == lastObservationFingerprint,
+            lastObservedAt: lastObservationAt,
+            now: observedAt,
+            livenessInterval: livenessHeartbeatInterval
+        ) else {
             return
         }
         lastObservationFingerprint = fingerprint
+        lastObservationAt = observedAt
 
         seq += 1
         emit(Observation(
             collectorSession: session,
             seq: seq,
-            observedAtMs: Int64(
-                Date().timeIntervalSince1970 * 1000
-            ),
+            observedAtMs: Int64(observedAt * 1000),
             app: AppInfo(
                 pid: app.processIdentifier,
                 bundleId: bundle,

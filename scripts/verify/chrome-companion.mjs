@@ -368,7 +368,7 @@ try {
   }
   const urls = storedUrls().filter(uri => uri.startsWith(siteOrigin))
   record(
-    'query string and fragment never stored',
+    'canonical URL query string and fragment never stored',
     true,
     urls.length > 0 && urls.every(uri => !uri.includes('?') && !uri.includes('#')),
     urls.join(' '),

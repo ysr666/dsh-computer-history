@@ -1,0 +1,120 @@
+{
+  "extensionName": {
+    "message": "Computer History — Browser Companion"
+  },
+  "extensionDescription": {
+    "message": "Adds the active tab's origin and path to local Computer History so DSH can resume the right work. Metadata only: no page content is ever read."
+  },
+  "pageTitle": {
+    "message": "Computer History · Browser Companion"
+  },
+  "productName": {
+    "message": "Computer History"
+  },
+  "companionTitle": {
+    "message": "Browser Companion"
+  },
+  "intro": {
+    "message": "Adds the active tab's origin and path to your local work history so DSH can continue the right project later."
+  },
+  "metadataOnly": {
+    "message": "Metadata only"
+  },
+  "noPageContent": {
+    "message": "No page content"
+  },
+  "disabledPrivate": {
+    "message": "Disabled in private windows"
+  },
+  "pairingTitle": {
+    "message": "Pair with Computer History"
+  },
+  "pairingBody": {
+    "message": "Paste the one-time token shown in Computer History → Browser companion."
+  },
+  "notChecked": {
+    "message": "Not checked"
+  },
+  "tokenLabel": {
+    "message": "Pairing token"
+  },
+  "tokenPlaceholder": {
+    "message": "Paste the token shown once in DSH"
+  },
+  "testPairing": {
+    "message": "Test pairing"
+  },
+  "saveSettings": {
+    "message": "Save settings"
+  },
+  "advanced": {
+    "message": "Advanced"
+  },
+  "portLabel": {
+    "message": "Local intake port"
+  },
+  "portHelp": {
+    "message": "Keep the default unless Computer History reports a different port. The companion only connects to 127.0.0.1."
+  },
+  "footnote": {
+    "message": "The pairing token is stored by the browser extension. Computer History stores only its digest and never exposes the token again."
+  },
+  "portInvalid": {
+    "message": "Port must be a number between 1 and 65535."
+  },
+  "pairingSaved": {
+    "message": "Pairing saved"
+  },
+  "storedToken": {
+    "message": "A pairing token is stored. Test the connection, or paste a new token to replace it."
+  },
+  "notPaired": {
+    "message": "Not paired"
+  },
+  "settingsSaved": {
+    "message": "Settings saved"
+  },
+  "savedLocal": {
+    "message": "Saved locally. Browser metadata will be sent to 127.0.0.1:$PORT$.",
+    "placeholders": {
+      "port": {
+        "content": "$1"
+      }
+    }
+  },
+  "tokenNeeded": {
+    "message": "Token needed"
+  },
+  "tokenNeededBody": {
+    "message": "Paste the pairing token shown once in Computer History first."
+  },
+  "checking": {
+    "message": "Checking…"
+  },
+  "checkingBody": {
+    "message": "Checking the local Computer History intake…"
+  },
+  "connected": {
+    "message": "Connected"
+  },
+  "connectedBody": {
+    "message": "Connected. Computer History accepted this browser companion."
+  },
+  "pairingRejected": {
+    "message": "Pairing rejected"
+  },
+  "pairingRejectedBody": {
+    "message": "Computer History is reachable, but the token was not accepted. Create a new token in DSH and try again."
+  },
+  "offline": {
+    "message": "Computer History offline"
+  },
+  "offlineBody": {
+    "message": "No Computer History intake is listening on 127.0.0.1:$PORT$. Open DSH and make sure Computer History is running.",
+    "placeholders": {
+      "port": {
+        "content": "$1"
+      }
+    }
+  }
+}

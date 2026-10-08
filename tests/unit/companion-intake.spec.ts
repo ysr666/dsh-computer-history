@@ -395,6 +395,25 @@ describe('editor payloads (ADR 0009)', () => {
     await intake.stop()
   })
 
+  it('accepts the closed activity vocabulary and refuses invented semantics', async () => {
+    const { intake, port, delivered } = await harness()
+    const saved = await post(port, JSON.stringify(editorPayload({ event: 'save' })))
+    expect(saved.status).toBe(201)
+    const verified = await post(port, JSON.stringify(editorPayload({
+      event: 'verify-test-success', seq: 2,
+    })))
+    expect(verified.status).toBe(201)
+    expect(delivered.map(item => 'event' in item ? item.event : undefined))
+      .toEqual(['save', 'verify-test-success'])
+
+    const invented = await post(port, JSON.stringify(editorPayload({
+      event: 'edited', seq: 3,
+    })))
+    expect(invented.status).toBe(400)
+    expect(String(invented.json.error)).toContain('supported editor activity event')
+    await intake.stop()
+  })
+
   it('refuses a body it has no field for, rather than ignoring it', async () => {
     const { intake, port, delivered } = await harness()
     // The point of the boundary: document text cannot travel, because the shape

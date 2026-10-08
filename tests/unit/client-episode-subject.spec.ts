@@ -1,7 +1,19 @@
 import { describe, expect, it } from 'vitest'
-import { episodeApp, episodeSubject, surfaceTitle } from '../../src/client/episode-subject.js'
+import {
+  continuationResourceUri,
+  continuationSubject,
+  episodeApp,
+  episodeSubject,
+  friendlyAppName,
+  pickContinuationEpisode,
+  surfaceTitle,
+} from '../../src/client/episode-subject.js'
 import { en, type HistoryTranslate } from '../../src/client/locale.js'
-import type { EpisodeSummary } from '../../src/shared/index.js'
+import type {
+  EpisodeSummary,
+  ObservationId,
+  ResumeHandoff,
+} from '../../src/shared/index.js'
 
 /**
  * What the panel calls an episode, which is what the user reads.
@@ -23,6 +35,7 @@ function episode(overrides: Partial<EpisodeSummary> & { surfaces: EpisodeSummary
     endReason: 'timeout',
     summaryKind: 'deterministic',
     summary: 'Recent computer activity.',
+    summaryObservationIds: [1 as ObservationId],
     resources: [],
     confidence: 0.4,
     state: 'closed',
@@ -32,6 +45,15 @@ function episode(overrides: Partial<EpisodeSummary> & { surfaces: EpisodeSummary
 }
 
 describe('the episode subject', () => {
+  it('does not expose synthetic or JetBrains bundle tails as app names', () => {
+    expect(friendlyAppName('companion.browser')).toBe('Browser')
+    expect(friendlyAppName('com.jetbrains.intellij.ce')).toBe('IntelliJ IDEA')
+    expect(friendlyAppName('com.jetbrains.pycharm.ce')).toBe('PyCharm')
+    expect(friendlyAppName('com.google.android.studio')).toBe('Android Studio')
+    expect(friendlyAppName('com.googlecode.iterm2')).toBe('iTerm2')
+    expect(friendlyAppName('com.kingsoft.wpsoffice.mac', 'wpsoffice')).toBe('WPS Office')
+    expect(friendlyAppName('org.example.Custom', 'My Custom App')).toBe('My Custom App')
+  })
   it('prefers a workspace, then a resource, then the surface title, then the app', () => {
     const surfaces = [{ bundleId: 'Notepad.exe', surfaceKind: 'editor' as const, title: '无标题 - Notepad', firstSeenAtMs: 0, lastSeenAtMs: 1, observationCount: 1 }]
 
@@ -64,6 +86,52 @@ describe('the episode subject', () => {
     expect(episodeApp(episode({ surfaces: [{ bundleId: 'org.gnome.Nautilus.desktop', surfaceKind: 'window', firstSeenAtMs: 0, lastSeenAtMs: 1, observationCount: 1 }] }))).toBe('Nautilus')
     // A macOS bundle identifier keeps the existing tail rule.
     expect(episodeApp(episode({ surfaces: [{ bundleId: 'com.microsoft.VSCode', surfaceKind: 'editor', firstSeenAtMs: 0, lastSeenAtMs: 1, observationCount: 1 }] }))).toBe('VS Code')
+  })
+
+  it('picks a real workspace/file for Continue instead of letting Terminal-only activity take over', () => {
+    const terminal = episode({
+      id: 'episode-terminal' as EpisodeSummary['id'],
+      endedAtMs: 20,
+      surfaces: [{ bundleId: 'com.apple.Terminal', surfaceKind: 'terminal', firstSeenAtMs: 10, lastSeenAtMs: 20, observationCount: 1 }],
+    })
+    const editor = episode({
+      id: 'episode-editor' as EpisodeSummary['id'],
+      endedAtMs: 10,
+      workspace: { id: 'demo', root: '/repo/demo', title: 'demo' },
+      surfaces: [{ bundleId: 'com.microsoft.VSCode', surfaceKind: 'editor', firstSeenAtMs: 0, lastSeenAtMs: 10, observationCount: 1 }],
+      resources: [{ kind: 'file', canonicalUri: 'file:///repo/demo/src/main.ts', displayLabel: 'main.ts', firstSeenAtMs: 0, lastSeenAtMs: 10, observationCount: 1 }],
+      lastStrongResource: { kind: 'file', canonicalUri: 'file:///repo/demo/src/main.ts', displayLabel: 'main.ts' },
+    })
+
+    expect(continuationSubject(terminal)).toBeUndefined()
+    expect(continuationSubject(editor)).toBe('demo')
+    expect(pickContinuationEpisode([terminal, editor])?.id).toBe(editor.id)
+  })
+
+  it('uses the resolved handoff resource for Continue before the older Episode fallback', () => {
+    const item = episode({
+      surfaces: [{ bundleId: 'com.microsoft.VSCode', surfaceKind: 'editor', firstSeenAtMs: 0, lastSeenAtMs: 1, observationCount: 1 }],
+      resources: [{ kind: 'file', canonicalUri: 'file:///repo/deploy.html', displayLabel: 'deploy.html', firstSeenAtMs: 0, lastSeenAtMs: 1, observationCount: 1 }],
+      lastStrongResource: { kind: 'file', canonicalUri: 'file:///repo/deploy.html', displayLabel: 'deploy.html' },
+    })
+    const handoff = {
+      status: 'hit',
+      episodeId: item.id,
+      startedAtMs: item.startedAtMs,
+      lastActiveAtMs: item.endedAtMs,
+      lastActiveResource: { kind: 'file', canonicalUri: 'file:///repo/server.ts', displayLabel: 'server.ts' },
+      recentResources: [],
+      referenceResources: [],
+      changedResources: [],
+      verifications: [],
+      surfaces: [],
+      confidence: 0.95,
+      reasons: ['exact-resource'],
+      evidenceObservationIds: [1 as ObservationId],
+    } as ResumeHandoff
+
+    expect(continuationResourceUri(item, handoff)).toBe('file:///repo/server.ts')
+    expect(continuationResourceUri(item)).toBe('file:///repo/deploy.html')
   })
 
   it('never takes a title from an adapter that suppresses them', () => {

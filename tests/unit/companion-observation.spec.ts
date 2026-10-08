@@ -73,6 +73,34 @@ describe('editor observations (ADR 0009)', () => {
     expect(observation.source).toEqual({ provider: 'companion', adapter: 'vscode' })
     expect(JSON.stringify(observation)).not.toContain('secret')
   })
+
+  it('carries a save event as activity metadata', () => {
+    const observation = companionObservation({
+      source: 'editor',
+      app: { bundleId: 'com.microsoft.VSCode', name: 'Visual Studio Code' },
+      workspaceRoot: '/tmp/ws',
+      filePath: '/tmp/ws/main.ts',
+      event: 'save',
+      editorSession: 'save-probe',
+      seq: 1,
+      observedAtMs: 1_760_000_000_000,
+    })
+    expect(observation.activity).toEqual({ event: 'save' })
+  })
+
+  it('carries a verification event as activity metadata', () => {
+    const observation = companionObservation({
+      source: 'editor',
+      app: { bundleId: 'com.microsoft.VSCode', name: 'Visual Studio Code' },
+      workspaceRoot: '/tmp/ws',
+      event: 'verify-build-failure',
+      editorSession: 'verify-probe',
+      seq: 2,
+      observedAtMs: 1_760_000_001_000,
+    })
+    expect(observation.activity).toEqual({ event: 'verify-build-failure' })
+  })
+
 })
 
 describe('the adapter an editor observation is recorded with', () => {

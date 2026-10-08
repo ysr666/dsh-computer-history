@@ -10,6 +10,7 @@
 ## Core commands
 
     pnpm install
+    pnpm --dir extension-editor install --frozen-lockfile  # required before pack / release-shaped E2E
     pnpm typecheck
     pnpm lint
     pnpm test
@@ -162,3 +163,44 @@ rebuilding the URL from the boot entry.
 
 The rule this session keeps relearning applies here too: the failure is silent, so every claim above
 is a measurement, not a reading.
+
+
+## Verifying the native Continue capsule
+
+Continue means continue inside DSH, not reopen the foreground application. A real DSH 0.2.x render must leave
+one native ReferenceChipNode in the composer.
+
+Run an isolated QA/profile Host with stdout redirected to a local temporary log, seed a synthetic Episode, then:
+
+    CAPSULE_HOST_LOG=/tmp/dsh-capsule-host.log pnpm verify:continuation-capsule
+
+The script reads the Host's local token URL from that file, launches its own headless Chrome profile, opens
+Computer History, clicks Continue, and asserts that data-composer-chip=computer-history exists, is non-editable,
+renders the standard @ Computer History face, yields the panel to Conversation, and exposes no hidden handoff
+prompt in the page. Evidence is written under .debug/continuation-capsule-runtime/.
+
+Do not point this runtime check at the owner's normal Desktop profile. Use a throwaway DSH_HOME and synthetic
+history data.
+
+## Verifying the Continue execution path
+
+The browser capsule check proves the visible/native UI seam. The execution seam is separate and must not depend on
+a real cloud model or on the model choosing to call a History tool.
+
+Run:
+
+    pnpm verify:continuation-send
+
+This creates a real rc.2 AgentLoop with a deterministic fixture LLM, submits the durable
+`@"Computer History"` user message, and captures the first real model request. The assertion requires that request
+to contain the bounded `ContinuationBootstrap` even though the fixture model never calls
+`computer_history_continue`. It also asserts that Episode/session ids, Episode summary prose, and evidence ids do
+not enter the automatic Bootstrap.
+
+`computer_history_continue` remains available in the request as an optional deep-history tool. It is not a
+prerequisite for starting the continuation turn. Prior-session text projection is also optional: use the public
+`sessionQuery.readSurface()` seam only when a provider is already present; stock Desktop must not be prevented from
+loading when that optional service is absent. Runtime Bootstrap delivery is binding-driven: the Agent-scoped
+`system-prompt/assemble` seam checks the local Session→Episode continuation binding directly for the first open
+turn. Do not arm automatic continuation from `agent/inbox/claimed`; the real Desktop composition is not equivalent
+to the fixture event topology. The binding is consumed when that continuation turn stops or errors.

@@ -62,6 +62,29 @@ describe('client history API contract', () => {
     expect(init.body).toBeUndefined()
   })
 
+  it('encodes the privacy-preview scope on the fixed audit route', async () => {
+    const preview = {
+      scopeKey: 'app:com.microsoft.VSCode',
+      policyRevision: 3,
+      rulesInForce: {
+        protectedBundleIds: [],
+        protectedPatterns: [],
+        hasProtectRule: false,
+      },
+      checked: 2,
+      excluded: [],
+    }
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(preview))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(
+      historyApi.getRedactionPreview('app:com.microsoft.VSCode'),
+    ).resolves.toEqual(preview)
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      'api/computer-history/audit/preview?scope=app%3Acom.microsoft.VSCode',
+    )
+  })
+
   it('posts retention to the registered route', async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
       observationRetentionHours: 48,
@@ -251,6 +274,66 @@ describe('client history API contract', () => {
     expect(fetchMock.mock.calls[0]?.[0]).toBe('api/computer-history/pause')
   })
 
+
+  it('reads one stored Episode continuity handoff through the encoded route', async () => {
+    const handoff = {
+      status: 'hit',
+      episodeId: 'episode:alpha',
+      startedAtMs: 1,
+      lastActiveAtMs: 2,
+      recentResources: [],
+      referenceResources: [],
+      changedResources: [],
+      verifications: [],
+      surfaces: [],
+      confidence: 1,
+      reasons: ['recent-episode'],
+      evidenceObservationIds: [1],
+    }
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(handoff))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(
+      historyApi.getResumeHandoff('episode:alpha'),
+    ).resolves.toEqual(handoff)
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      'api/computer-history/resume/handoff?id=episode%3Aalpha',
+    )
+  })
+
+  it('binds a fresh DSH continuation session to an exact stored Episode', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ bound: true }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(historyApi.bindContinuationSession({
+      sessionId: 'session:new',
+      episodeId: 'episode:1' as never,
+    })).resolves.toEqual({ bound: true })
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe('api/computer-history/resume/continue-session')
+    expect(init.method).toBe('POST')
+    expect(JSON.parse(String(init.body))).toEqual({
+      sessionId: 'session:new',
+      episodeId: 'episode:1',
+    })
+  })
+
+  it('unbinds a failed continuation session through the fixed cleanup route', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ unbound: true }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(
+      historyApi.unbindContinuationSession('session:new'),
+    ).resolves.toEqual({ unbound: true })
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe('api/computer-history/resume/continue-session/unbind')
+    expect(init.method).toBe('POST')
+    expect(JSON.parse(String(init.body))).toEqual({
+      sessionId: 'session:new',
+    })
+  })
 
   it('uses the dedicated Resume open action without sending an arbitrary command', async () => {
     const fetchMock = vi.fn()

@@ -4,6 +4,7 @@ import type {
   HistoryControlStore,
 } from './store.js'
 import type { HistoryTranslate } from './locale.js'
+import type { ComputerHistoryPluginNavigation } from './plugin-navigation.js'
 import { failureText } from './locale.js'
 import {
   AboutRow,
@@ -18,6 +19,7 @@ import {
 
 export interface SettingsPageOptions {
   readonly store: HistoryControlStore
+  readonly getPluginNavigation?: () => ComputerHistoryPluginNavigation | undefined
 }
 
 interface SettingsComponentProps {
@@ -25,6 +27,19 @@ interface SettingsComponentProps {
 }
 
 export type SettingsViewMode = 'loading' | 'error' | 'ready'
+
+function settingsSectionLabel(label: string, danger = false): React.ReactElement {
+  return React.createElement(
+    'li',
+    {
+      className: danger
+        ? 'ch-settings-section-label ch-settings-section-label-danger'
+        : 'ch-settings-section-label',
+      'aria-hidden': true,
+    },
+    label,
+  )
+}
 
 export function settingsViewMode(
   snapshot: Pick<HistoryControlSnapshot, 'status'>,
@@ -36,6 +51,7 @@ export function settingsViewMode(
 
 export function createSettingsPage({
   store,
+  getPluginNavigation,
 }: SettingsPageOptions): (props: SettingsComponentProps) => React.ReactElement {
   return function SettingsPage({ t }: SettingsComponentProps): React.ReactElement {
     const snapshot = React.useSyncExternalStore(
@@ -87,17 +103,26 @@ export function createSettingsPage({
       )
     }
 
-    const props = { t, store, snapshot }
+    const pluginNavigation = getPluginNavigation?.()
+    const props = {
+      t, store, snapshot,
+      ...(pluginNavigation === undefined ? {} : { pluginNavigation }),
+    }
     return React.createElement(
       'ul', { className: 'ch-settings-list' },
+      settingsSectionLabel(t('settingsGeneral')),
       React.createElement(RecordingRow, props),
       React.createElement(ApplicationsRow, props),
       React.createElement(RetentionRow, props),
+      settingsSectionLabel(t('settingsConnections')),
       React.createElement(CompanionRow, props),
       React.createElement(EditorCompanionRow, props),
+      settingsSectionLabel(t('settingsDataPrivacy')),
       React.createElement(DataRow, props),
-      React.createElement(DeleteHistoryRow, props),
+      settingsSectionLabel(t('settingsAbout')),
       React.createElement(AboutRow, props),
+      settingsSectionLabel(t('settingsDangerZone'), true),
+      React.createElement(DeleteHistoryRow, props),
     )
   }
 }

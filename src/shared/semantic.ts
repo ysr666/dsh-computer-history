@@ -25,9 +25,25 @@ export interface SemanticOptIn {
   readonly createdAtMs: number
 }
 
+export type SemanticProviderUnavailableReason =
+  | 'not-wired'
+  | 'not-configured'
+  | 'invalid-configuration'
+
+export interface SemanticProviderReadiness {
+  readonly available: boolean
+  readonly reason?: SemanticProviderUnavailableReason
+  /** Model identity is safe to show; endpoints and credentials are deliberately omitted. */
+  readonly model?: string
+}
+
 export interface SemanticSummaryState {
   /** What a fresh episode gets today: deterministic text unless a scope opts in. */
   readonly active: 'deterministic'
-  readonly localProviderConfigured: boolean
+  /** Provider availability is a Host fact, not something the client infers from existing scopes. */
+  readonly providers: {
+    readonly local: SemanticProviderReadiness
+    readonly remote: SemanticProviderReadiness
+  }
   readonly scopes: readonly SemanticOptIn[]
 }

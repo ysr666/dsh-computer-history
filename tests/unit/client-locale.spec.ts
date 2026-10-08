@@ -24,6 +24,27 @@ describe('client locale contract', () => {
     }
   })
 
+  it('does not silently fall back to English for the continuity card in Chinese', () => {
+    const keys = [
+      'recentlySaved', 'savedTimes', 'gitChangedFiles', 'gitClean',
+      'gitObservedWhen', 'currentGitChanges', 'continuedAfterDshTurn', 'checkpointMeta',
+    ] as const
+    for (const key of keys) expect(zh[key], key).not.toBe(en[key])
+  })
+
+  it('labels continuity facts by provenance instead of presenting history as current truth', () => {
+    const en_t = translator(en)
+    const zh_t = translator(zh)
+    expect(en_t('savedFileCount', { count: 2 })).toBe('Saved in this work · 2')
+    expect(zh_t('savedFileCount', { count: 2 })).toBe('这段工作中保存 · 2')
+    expect(en_t('verificationSucceeded', { kind: 'Test' }))
+      .toBe('Last observed: Test passed')
+    expect(zh_t('verificationSucceeded', { kind: '测试' }))
+      .toBe('上次记录：测试通过')
+    expect(en_t('gitObservedWhen', { when: 'Just now' })).toBe('Checked Just now')
+    expect(zh_t('gitObservedWhen', { when: '刚刚' })).toBe('刚刚检查')
+  })
+
   it('maps capture protocol words through the locale namespace', () => {
     const t = ((key: keyof typeof en) => en[key]) as HistoryTranslate
     expect(captureLabel(t, 'running')).toBe('recording')

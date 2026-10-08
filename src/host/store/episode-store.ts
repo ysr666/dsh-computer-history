@@ -1,6 +1,7 @@
 import type { DatabaseSync, SQLOutputValue } from 'node:sqlite'
 import {
   EpisodeId,
+  type EpisodeChangedResource,
   type EpisodeBoundaryReason,
   type EpisodeDetail,
   type EpisodeResourceSummary,
@@ -8,6 +9,7 @@ import {
   type EpisodeSummary,
   type EpisodeSummaryKind,
   type EpisodeSurfaceSummary,
+  type EpisodeVerificationSummary,
   type ObservationId,
   type ResourceId,
   type ResourceKind,
@@ -169,6 +171,20 @@ function surfaceKind(value: string): SurfaceKind {
   throw new Error(`invalid surface kind: ${value}`)
 }
 
+function verificationFromActivityEvent(
+  value: string,
+): Pick<EpisodeVerificationSummary, 'kind' | 'result'> {
+  switch (value) {
+    case 'verify-build-success': return { kind: 'build', result: 'success' }
+    case 'verify-build-failure': return { kind: 'build', result: 'failure' }
+    case 'verify-test-success': return { kind: 'test', result: 'success' }
+    case 'verify-test-failure': return { kind: 'test', result: 'failure' }
+    case 'verify-other-success': return { kind: 'other', result: 'success' }
+    case 'verify-other-failure': return { kind: 'other', result: 'failure' }
+    default: throw new Error(`invalid verification activity event: ${value}`)
+  }
+}
+
 function resourceKind(value: string): ResourceKind {
   const allowed: readonly ResourceKind[] = [
     'file',
@@ -236,6 +252,24 @@ export class EpisodeStore {
     return Number(stored.oldest) === Number(observationIds[0])
       && Number(stored.newest)
         === Number(observationIds[stored.count - 1])
+  }
+
+  private replaceSummaryCitations(
+    id: EpisodeId,
+    citations: readonly ObservationId[],
+  ): void {
+    this.db.prepare(
+      'DELETE FROM episode_summary_citations WHERE episode_id = ?',
+    ).run(id)
+    const cite = this.db.prepare(`
+      INSERT OR IGNORE INTO episode_summary_citations(
+        episode_id,
+        observation_id
+      ) VALUES (?, ?)
+    `)
+    for (const observationId of citations) {
+      cite.run(id, Number(observationId))
+    }
   }
 
   public replace(
@@ -375,6 +409,48 @@ export class EpisodeStore {
           this.appendIsProven(input.observationIds, stored)
         ) {
           this.applyAppendedAggregates(input.id, appended)
+
+          const citations = input.summaryObservationIds
+            ?? input.observationIds
+          // A deterministic summary of the entire Episode is extended
+          // by the newly linked observations. Replacing every citation
+          // on every append would perform O(n²) writes over a long
+          // session. Verify that the existing citation set still has
+          // the expected prefix boundary before taking the delta path.
+          // Explicitly selected/subset citations still get an atomic
+          // full replacement, because their membership may have changed.
+          const previousCitations = this.db.prepare(`
+            SELECT
+              COUNT(*) AS count,
+              MIN(observation_id) AS oldest,
+              MAX(observation_id) AS newest
+            FROM episode_summary_citations
+            WHERE episode_id = ?
+          `).get(input.id) as {
+            count: number
+            oldest: number | null
+            newest: number | null
+          }
+          const canAppendCitations =
+            input.summaryKind === 'deterministic'
+            && citations.length === input.observationIds.length
+            && citations === input.observationIds
+            && Number(previousCitations.count) === stored.count
+            && previousCitations.oldest === stored.oldest
+            && previousCitations.newest === stored.newest
+
+          if (canAppendCitations) {
+            const insertCitation = this.db.prepare(`
+              INSERT OR IGNORE INTO episode_summary_citations(
+                episode_id, observation_id
+              ) VALUES (?, ?)
+            `)
+            for (const observationId of appended) {
+              insertCitation.run(input.id, Number(observationId))
+            }
+          } else {
+            this.replaceSummaryCitations(input.id, citations)
+          }
           commit()
           return
         }
@@ -419,20 +495,11 @@ export class EpisodeStore {
       // links and aggregates committed and its citations deleted - a summary
       // that had lost its evidence with nothing recording that it had, and no
       // way to roll back. The test forces exactly that failure.
-      this.db.prepare(
-        'DELETE FROM episode_summary_citations WHERE episode_id = ?',
-      ).run(input.id)
-      const cite = this.db.prepare(`
-        INSERT OR IGNORE INTO episode_summary_citations(
-          episode_id,
-          observation_id
-        ) VALUES (?, ?)
-      `)
-      const citations = input.summaryObservationIds
-        ?? input.observationIds
-      for (const observationId of citations) {
-        cite.run(input.id, Number(observationId))
-      }
+      this.replaceSummaryCitations(
+        input.id,
+        input.summaryObservationIds
+          ?? input.observationIds,
+      )
 
       commit()
 
@@ -733,6 +800,8 @@ export class EpisodeStore {
   ): EpisodeDetail {
     const id = EpisodeId(stringValue(row, 'id'))
     const resources = this.readResources(id)
+    const changedResources = this.readChangedResources(id)
+    const verifications = this.readVerifications(id)
     const surfaces = this.readSurfaces(id)
     const observationIds = this.db.prepare(`
       SELECT observation_id
@@ -785,6 +854,8 @@ export class EpisodeStore {
       ).map(citation => citation.observation_id as ObservationId),
       ...(lastStrongResource ? { lastStrongResource } : {}),
       resources,
+      ...(changedResources.length === 0 ? {} : { changedResources }),
+      ...(verifications.length === 0 ? {} : { verifications }),
       surfaces,
       confidence: numberValue(row, 'confidence'),
       state: episodeState(stringValue(row, 'state')),
@@ -824,6 +895,69 @@ export class EpisodeStore {
       const displayLabel = nullableString(row, 'display_label')
       if (displayLabel) resource.displayLabel = displayLabel
       return resource
+    })
+  }
+
+  private readChangedResources(id: EpisodeId): EpisodeChangedResource[] {
+    return this.db.prepare(`
+      SELECT
+        r.kind,
+        r.canonical_uri,
+        r.display_label,
+        MAX(o.observed_at_ms) AS last_changed_at_ms,
+        COUNT(*) AS change_count
+      FROM episode_observations eo
+      JOIN observations o ON o.id = eo.observation_id
+      JOIN resources r ON r.id = o.resource_id
+      WHERE eo.episode_id = ?
+        AND o.activity_event = 'save'
+      GROUP BY r.id, r.kind, r.canonical_uri, r.display_label
+      ORDER BY last_changed_at_ms DESC, r.id
+    `).all(id).map((row) => {
+      const resource: {
+        kind: ResourceKind
+        canonicalUri: string
+        displayLabel?: string
+        lastChangedAtMs: number
+        changeCount: number
+      } = {
+        kind: resourceKind(stringValue(row, 'kind')),
+        canonicalUri: stringValue(row, 'canonical_uri'),
+        lastChangedAtMs: numberValue(row, 'last_changed_at_ms'),
+        changeCount: numberValue(row, 'change_count'),
+      }
+      const displayLabel = nullableString(row, 'display_label')
+      if (displayLabel) resource.displayLabel = displayLabel
+      return resource
+    })
+  }
+
+  private readVerifications(id: EpisodeId): EpisodeVerificationSummary[] {
+    return this.db.prepare(`
+      SELECT
+        o.activity_event,
+        MAX(o.observed_at_ms) AS last_observed_at_ms,
+        COUNT(*) AS observation_count
+      FROM episode_observations eo
+      JOIN observations o ON o.id = eo.observation_id
+      WHERE eo.episode_id = ?
+        AND o.activity_event IN (
+          'verify-build-success', 'verify-build-failure',
+          'verify-test-success', 'verify-test-failure',
+          'verify-other-success', 'verify-other-failure'
+        )
+      GROUP BY o.activity_event
+      ORDER BY last_observed_at_ms DESC, o.activity_event
+    `).all(id).map((row) => {
+      const verification = verificationFromActivityEvent(
+        stringValue(row, 'activity_event'),
+      )
+      return {
+        kind: verification.kind,
+        result: verification.result,
+        lastObservedAtMs: numberValue(row, 'last_observed_at_ms'),
+        observationCount: numberValue(row, 'observation_count'),
+      }
     })
   }
 

@@ -103,6 +103,9 @@ describe('redaction preview', () => {
     expect(preview.checked).toBe(4)
     expect(reasons.some(entry => entry.includes('zsh'))).toBe(true)
     expect(reasons.some(entry => entry.includes('.env'))).toBe(true)
+    expect(preview.excluded.map(entry => entry.reason)).toEqual(
+      expect.arrayContaining(['secure-path', 'policy-disallowed']),
+    )
     expect(preview.rulesInForce.hasProtectRule).toBe(false)
     history.close()
   })

@@ -20,6 +20,11 @@ export interface CaptureController {
 }
 
 export interface LocalBackendConfig {
+  /** Providers the Host can actually execute. Omitted means the execution seam is unavailable. */
+  readonly semanticProviders?: {
+    readonly local?: { readonly model: string }
+    readonly remote?: { readonly model: string }
+  }
   readonly observationRetentionHours: number
   readonly episodeRetentionDays: number
   readonly autoResume: boolean

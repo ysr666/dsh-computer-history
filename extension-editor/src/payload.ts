@@ -33,6 +33,24 @@ export function declaredIdentity(appName: string): { bundleId: string, name: str
   }
 }
 
+export type EditorActivityEvent =
+  | 'save'
+  | 'verify-build-success'
+  | 'verify-build-failure'
+  | 'verify-test-success'
+  | 'verify-test-failure'
+  | 'verify-other-success'
+  | 'verify-other-failure'
+
+export function taskVerificationEvent(input: {
+  readonly kind: 'build' | 'test' | 'other'
+  readonly exitCode?: number
+}): EditorActivityEvent | undefined {
+  if (input.exitCode === undefined) return undefined
+  const result = input.exitCode === 0 ? 'success' : 'failure'
+  return `verify-${input.kind}-${result}`
+}
+
 export interface EditorMetadata {
   /** Absolute path of the workspace folder the editor vouches for. */
   readonly workspaceRoot: string
@@ -41,6 +59,7 @@ export interface EditorMetadata {
   readonly languageId?: string
   readonly surfaceKind?: 'editor' | 'diff' | 'terminal' | 'output'
   readonly title?: string
+  readonly event?: EditorActivityEvent
 }
 
 export interface EditorObservationPayload extends EditorMetadata {
@@ -66,6 +85,7 @@ export function buildEditorPayload(input: {
     ...(input.metadata.languageId === undefined ? {} : { languageId: input.metadata.languageId }),
     ...(input.metadata.surfaceKind === undefined ? {} : { surfaceKind: input.metadata.surfaceKind }),
     ...(input.metadata.title === undefined ? {} : { title: input.metadata.title }),
+    ...(input.metadata.event === undefined ? {} : { event: input.metadata.event }),
     editorSession: input.session,
     seq: input.seq,
     observedAtMs: input.observedAtMs,

@@ -1,4 +1,4 @@
-import type { EpisodeSummary, SurfaceKind, TimelineActivity } from '../shared/index.js'
+import { isGenericContinuationCandidate, type EpisodeSummary, type ResumeHandoff, type SurfaceKind, type TimelineActivity } from '../shared/index.js'
 import type { HistoryTranslate } from './locale.js'
 
 /**
@@ -13,7 +13,7 @@ import type { HistoryTranslate } from './locale.js'
  * The order is deliberate: a workspace name says more than a file, a file says more than the window it is open
  * in, and the window title says more than the application.
  */
-export function friendlyAppName(bundleId: string): string {
+export function friendlyAppName(bundleId: string, discoveredName?: string): string {
   const known: Record<string, string> = {
     'com.apple.Notes': 'Notes',
     'com.apple.Preview': 'Preview',
@@ -24,9 +24,25 @@ export function friendlyAppName(bundleId: string): string {
     'com.google.Chrome': 'Google Chrome',
     'com.microsoft.VSCode': 'VS Code',
     'com.microsoft.edgemac': 'Microsoft Edge',
+    'com.microsoft.Word': 'Microsoft Word',
     'com.openai.chat': 'ChatGPT',
+    'com.googlecode.iterm2': 'iTerm2',
+    'com.kingsoft.wpsoffice.mac': 'WPS Office',
+    'md.obsidian': 'Obsidian',
+    'companion.browser': 'Browser',
+    'com.google.android.studio': 'Android Studio',
+    'com.jetbrains.intellij': 'IntelliJ IDEA',
+    'com.jetbrains.intellij.ce': 'IntelliJ IDEA',
+    'com.jetbrains.pycharm': 'PyCharm',
+    'com.jetbrains.pycharm.ce': 'PyCharm',
+    'com.jetbrains.goland': 'GoLand',
+    'com.jetbrains.webstorm': 'WebStorm',
+    'com.jetbrains.clion': 'CLion',
+    'com.jetbrains.rustrover': 'RustRover',
+    'com.jetbrains.datagrip': 'DataGrip',
   }
   if (known[bundleId]) return known[bundleId]
+  if (discoveredName?.trim()) return discoveredName.trim()
   // Two of the three platforms report an identity that is not a reverse-DNS name, and the tail rule below
   // turned both into a file extension: `Notepad.exe` displayed as `exe` and `org.gnome.Terminal.desktop` as
   // `desktop`. Measured on the Linux row, where the panel would have named every application `desktop`.
@@ -45,6 +61,40 @@ export function episodeApp(
 ): string {
   const first = episode.surfaces[0]?.bundleId
   return first ? friendlyAppName(first) : '—'
+}
+
+/**
+ * Human-readable anchor for the primary generic Continue candidate.
+ * Terminal-only activity deliberately yields no continuation subject.
+ */
+export function continuationSubject(
+  episode: Pick<EpisodeSummary, 'workspace' | 'lastStrongResource' | 'resources' | 'surfaces'>,
+): string | undefined {
+  if (episodeApp(episode) === 'Terminal') return undefined
+  const workspace = episode.workspace?.title?.trim()
+  if (workspace) return workspace
+  return episode.lastStrongResource?.displayLabel
+    ?? episode.resources[0]?.displayLabel
+}
+
+/** First recent Episode that is both auditable and useful as a generic Continue target. */
+export function pickContinuationEpisode(
+  episodes: readonly EpisodeSummary[],
+): EpisodeSummary | undefined {
+  return episodes.find(episode =>
+    isGenericContinuationCandidate(episode)
+    && continuationSubject(episode) !== undefined,
+  )
+}
+
+export function continuationResourceUri(
+  episode: Pick<EpisodeSummary, 'lastStrongResource' | 'resources'>,
+  handoff?: ResumeHandoff | null,
+): string | undefined {
+  if (handoff?.status === 'hit' && handoff.lastActiveResource?.canonicalUri) {
+    return handoff.lastActiveResource.canonicalUri
+  }
+  return (episode.lastStrongResource ?? episode.resources[0])?.canonicalUri
 }
 
 export function isHomeDirectoryResource(

@@ -18,6 +18,7 @@ function observation(input: {
   app?: string
   surface?: ActivityObservation['surface']['kind']
   collector?: string
+  provider?: ActivityObservation['source']['provider']
   idleSeconds?: number
   secure?: boolean
   protected?: boolean
@@ -70,7 +71,7 @@ function observation(input: {
       protected: input.protected ?? false,
     },
     source: {
-      provider: 'macos-ax',
+      provider: input.provider ?? 'macos-ax',
       adapter: 'generic',
     },
     policyRevision: 1,
@@ -79,6 +80,28 @@ function observation(input: {
 }
 
 describe('deterministic episode builder', () => {
+  it('extends duration when liveness confirms the same work state', () => {
+    const episodes = buildEpisodes([
+      observation({
+        id: 1,
+        atMs: 1_000,
+        workspace: 'alpha',
+        resource: 'file:///alpha/src/provider.ts',
+      }),
+      observation({
+        id: 2,
+        atMs: 31_000,
+        workspace: 'alpha',
+        resource: 'file:///alpha/src/provider.ts',
+      }),
+    ])
+
+    expect(episodes).toHaveLength(1)
+    expect(episodes[0]?.startedAtMs).toBe(1_000)
+    expect(episodes[0]?.endedAtMs).toBe(31_000)
+    expect(episodes[0]?.resources[0]?.observationCount).toBe(2)
+  })
+
   it('keeps Code, Terminal, and Preview resources in one workspace episode', () => {
     const episodes = buildEpisodes([
       observation({
@@ -201,6 +224,72 @@ describe('deterministic episode builder', () => {
     expect(episodes).toHaveLength(2)
     expect(episodes[0]?.boundary.endReason).toBe('timeout')
     expect(episodes[1]?.boundary.startReason).toBe('timeout')
+  })
+
+  it('does not treat companion sessions as native collector restarts', () => {
+    const sameNative = buildEpisodes([
+      observation({
+        id: 1,
+        atMs: 1_000,
+        workspace: 'alpha',
+        resource: 'file:///alpha/src/provider.ts',
+        collector: 'native-1',
+      }),
+      observation({
+        id: 2,
+        atMs: 10_000,
+        resource: 'https://docs.example/retry',
+        resourceKind: 'url',
+        app: 'companion.browser',
+        surface: 'browser',
+        collector: 'browser-1',
+        provider: 'companion',
+      }),
+      observation({
+        id: 3,
+        atMs: 20_000,
+        workspace: 'alpha',
+        resource: 'file:///alpha/src/provider.ts',
+        collector: 'native-1',
+      }),
+    ])
+
+    expect(sameNative).toHaveLength(1)
+    expect(sameNative[0]?.resources.map(resource => resource.kind))
+      .toEqual(['file', 'url'])
+
+    const restartedNative = buildEpisodes([
+      observation({
+        id: 1,
+        atMs: 1_000,
+        workspace: 'alpha',
+        resource: 'file:///alpha/src/provider.ts',
+        collector: 'native-1',
+      }),
+      observation({
+        id: 2,
+        atMs: 10_000,
+        resource: 'https://docs.example/retry',
+        resourceKind: 'url',
+        app: 'companion.browser',
+        surface: 'browser',
+        collector: 'browser-1',
+        provider: 'companion',
+      }),
+      observation({
+        id: 3,
+        atMs: 20_000,
+        workspace: 'alpha',
+        resource: 'file:///alpha/src/provider.ts',
+        collector: 'native-2',
+      }),
+    ])
+
+    expect(restartedNative).toHaveLength(2)
+    expect(restartedNative[0]?.boundary.endReason)
+      .toBe('collector-restart')
+    expect(restartedNative[1]?.boundary.startReason)
+      .toBe('collector-restart')
   })
 
   it('splits on idle and collector restart boundaries', () => {

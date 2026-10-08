@@ -71,6 +71,66 @@ jobs:
       - run: pnpm verify
       - run: pnpm install --frozen-lockfile
         working-directory: extension-editor
+
+      - name: Install DSH 0.2 product-journey CLI
+        run: |
+          root=/tmp/dsh-product-journey-cli
+          rm -rf "$root"
+          mkdir -p "$root"
+          printf '{"private":true}\\n' > "$root/package.json"
+          pnpm --dir "$root" add --ignore-scripts @deepseek-ai/dsh@0.2.0-rc.2
+          "$root/node_modules/.bin/dsh" --version
+          echo "DSH_CLI=$root/node_modules/.bin/dsh" >> "$GITHUB_ENV"
+
+      - name: Install stable Chrome for Testing
+        run: |
+          python3 <<'PYCODE'
+          import json
+          import subprocess
+          import urllib.request
+          import zipfile
+          from pathlib import Path
+
+          endpoint = (
+              'https://googlechromelabs.github.io/chrome-for-testing/'
+              'last-known-good-versions-with-downloads.json'
+          )
+          native_machine = subprocess.check_output(
+              ['uname', '-m'],
+              text=True,
+          ).strip()
+          platform_name = 'mac-arm64' if native_machine == 'arm64' else 'mac-x64'
+          with urllib.request.urlopen(endpoint, timeout=30) as response:
+              data = json.load(response)
+          stable = data['channels']['Stable']
+          match = next(
+              item for item in stable['downloads']['chrome']
+              if item['platform'] == platform_name
+          )
+          archive = Path('/tmp/chrome-for-testing.zip')
+          destination = Path('/tmp/chrome-for-testing')
+          if destination.exists():
+              import shutil
+              shutil.rmtree(destination)
+          urllib.request.urlretrieve(match['url'], archive)
+          destination.mkdir(parents=True)
+          with zipfile.ZipFile(archive) as bundle:
+              bundle.extractall(destination)
+          print(
+              f"Chrome for Testing {stable['version']} "
+              f"({platform_name}) from {match['url']}"
+          )
+          PYCODE
+          chrome=$(find /tmp/chrome-for-testing -type f \\
+            -path '*/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing' \\
+            -print -quit)
+          test -n "$chrome"
+          chmod +x "$chrome"
+          xattr -dr com.apple.quarantine /tmp/chrome-for-testing 2>/dev/null || true
+          app=$(dirname "$(dirname "$(dirname "$chrome")")")
+          version=$(plutil -extract CFBundleShortVersionString raw -o - "$app/Contents/Info.plist")
+          echo "Chrome for Testing $version"
+          echo "PANEL_CHROME=$chrome" >> "$GITHUB_ENV"
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: release-native-darwin
@@ -106,6 +166,12 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/package"
           pnpm pack --pack-destination "$RUNNER_TEMP/package"
+
+      - name: Run installed product journey against the assembled release tarball
+        run: |
+          tarball=$(ls "$RUNNER_TEMP"/package/dsh-computer-history-*.tgz | head -1)
+          test -n "$tarball"
+          DSH_PRODUCT_TARBALL="$tarball" pnpm e2e:product-journey
 
       - name: Scan for release blockers
         env:

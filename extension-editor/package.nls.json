@@ -1,0 +1,7 @@
+{
+  "displayName": "Computer History — VS Code Companion",
+  "description": "Lets Computer History know which workspace and file you're working in so DSH can resume the right task. Metadata only; file contents are never read.",
+  "configurationTitle": "Computer History · Diagnostics",
+  "traceFileDescription": "Advanced diagnostics only. Optional file path for the companion decision log; leave empty to use the default local Computer History log.",
+  "untrustedWorkspaceDescription": "Reads the workspace root and active file path only; it never reads file contents."
+}

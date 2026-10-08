@@ -1,8 +1,9 @@
 //! The collector engine, shared by every platform.
 //!
 //! Mirrors `native/macos/Sources/ComputerHistoryCollector/Collector.swift`: a 5 s heartbeat reconciles
-//! the foreground state, an unchanged fingerprint does not produce a second observation, policy decides
-//! what is eligible before anything is read, and a secure or protected surface is reported so the host can
+//! the foreground state. Changes emit immediately; an unchanged eligible state emits a bounded 30 s
+//! liveness observation so Episode duration is backed by evidence without storing one row every tick.
+//! Policy decides what is eligible before anything is read, and a secure or protected surface is reported so the host can
 //! count the refusal instead of losing it.
 //!
 //! Nothing here knows about a platform: `platform.rs` hands over the facts, `command.rs` the policy, and
@@ -17,6 +18,7 @@ use crate::platform::{Availability, ElementState, ObservationSource};
 use crate as protocol;
 
 pub const HEARTBEAT_SECONDS: u64 = 5;
+const LIVENESS_HEARTBEAT_MS: i64 = 30_000;
 const IDLE_BOUNDARY_SECONDS: u64 = 8 * 60;
 
 const REASON_SECURE_FIELD: &str = "secure-field";
@@ -25,8 +27,8 @@ const REASON_UNQUERYABLE: &str = "focused-element-unqueryable";
 const REASON_PROTECTED: &str = "protected-app";
 const PROTECTED_ADAPTER_MARKER: &str = "protected";
 
-/// The facts an observation is deduplicated by. An unchanged fingerprint produces nothing, which is why
-/// sitting in one file does not produce one observation per heartbeat.
+/// The facts an observation is deduplicated by. Unchanged eligible state is suppressed between bounded
+/// liveness observations, so sitting in one file does not produce one observation per 5 s heartbeat.
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Fingerprint {
     pid: i32,
@@ -65,6 +67,7 @@ pub struct Collector<S: ObservationSource> {
     protected: HashSet<String>,
     protected_paths: Vec<String>,
     last_fingerprint: Option<Fingerprint>,
+    last_observation_at_ms: Option<i64>,
     last_availability: Option<Availability>,
 }
 
@@ -109,6 +112,7 @@ impl<S: ObservationSource> Collector<S> {
             protected: HashSet::new(),
             protected_paths: Vec::new(),
             last_fingerprint: None,
+            last_observation_at_ms: None,
             last_availability: None,
         }
     }
@@ -332,16 +336,23 @@ impl<S: ObservationSource> Collector<S> {
             idle_boundary,
             reason,
         };
-        if self.last_fingerprint.as_ref() == Some(&fingerprint) {
+        let observed_at_ms = (self.clock)();
+        let unchanged = self.last_fingerprint.as_ref() == Some(&fingerprint);
+        if unchanged
+            && self
+                .last_observation_at_ms
+                .is_some_and(|last| observed_at_ms.saturating_sub(last) < LIVENESS_HEARTBEAT_MS)
+        {
             return lines;
         }
         self.last_fingerprint = Some(fingerprint);
+        self.last_observation_at_ms = Some(observed_at_ms);
         self.seq += 1;
         lines.push(
             protocol::Observation {
                 collector_session: self.session.clone(),
                 seq: self.seq,
-                observed_at_ms: (self.clock)(),
+                observed_at_ms,
                 pid: facts.pid,
                 application_id: truncated(Some(reported_id.to_string()), 512).unwrap_or_default(),
                 // The host refuses lines whose fields exceed its own bounds, and a refusal on the wire
@@ -535,6 +546,13 @@ mod tests {
 
     fn test_clock() -> i64 {
         TEST_CLOCK.fetch_add(1, Ordering::Relaxed)
+    }
+
+
+    static LIVENESS_TEST_CLOCK: AtomicI64 = AtomicI64::new(1_792_000_000_000);
+
+    fn liveness_test_clock() -> i64 {
+        LIVENESS_TEST_CLOCK.load(Ordering::Relaxed)
     }
 
     struct FakeSource {
@@ -775,6 +793,38 @@ mod tests {
 
         // The same state on the next heartbeat is deduplicated rather than repeated.
         assert!(collector.tick().is_empty());
+    }
+
+    #[test]
+    fn unchanged_state_emits_a_bounded_liveness_observation() {
+        let base = 1_792_000_000_000;
+        LIVENESS_TEST_CLOCK.store(base, Ordering::Relaxed);
+        let source = FakeSource::new(vec![Some(facts("Code.exe")); 4]);
+        let mut collector = Collector::create(
+            "liveness-1".to_string(),
+            source,
+            TEST_ADAPTERS,
+            liveness_test_clock,
+        );
+
+        let first = configure(&mut collector, &["Code.exe"]);
+        assert_eq!(observations(&first).len(), 1);
+
+        LIVENESS_TEST_CLOCK.store(base + 5_000, Ordering::Relaxed);
+        assert!(collector.tick().is_empty());
+
+        LIVENESS_TEST_CLOCK.store(base + 29_999, Ordering::Relaxed);
+        assert!(collector.tick().is_empty());
+
+        LIVENESS_TEST_CLOCK.store(base + 30_000, Ordering::Relaxed);
+        let liveness_lines = collector.tick();
+        let liveness = observations(&liveness_lines);
+        assert_eq!(liveness.len(), 1, "{liveness:?}");
+        assert!(liveness[0].contains("\"seq\":2"), "{liveness:?}");
+        assert!(
+            liveness[0].contains("\"observedAtMs\":1792000030000"),
+            "{liveness:?}",
+        );
     }
 
     #[test]

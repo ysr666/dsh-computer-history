@@ -2,33 +2,72 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>Computer History Companion</title>
-    <style>
-      body { font: 13px/1.5 -apple-system, system-ui, sans-serif; margin: 16px; max-width: 520px; }
-      label { display: block; margin-top: 12px; font-weight: 600; }
-      input { width: 100%; padding: 6px; margin-top: 4px; }
-      button { margin-top: 14px; padding: 6px 12px; }
-      #status { margin-top: 12px; white-space: pre-wrap; }
-      .hint { color: #555; font-weight: 400; }
-    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Computer History · Browser Companion</title>
+    <link rel="stylesheet" href="options.css" />
   </head>
   <body>
-    <h1>Computer History Companion</h1>
-    <p class="hint">
-      Reports the active tab's origin and path to your local DeepSeek Harness
-      Computer History intake. It never reads page content, and it never reports
-      private windows — this extension is not even allowed to run there.
-    </p>
+    <main class="page">
+      <header class="hero">
+        <div class="product-mark" aria-hidden="true">CH</div>
+        <div>
+          <p class="eyebrow" data-i18n="productName">Computer History</p>
+          <h1 data-i18n="companionTitle">Browser Companion</h1>
+          <p class="intro" data-i18n="intro">Adds the active tab's origin and path to your local work history so DSH can continue the right project later.</p>
+        </div>
+      </header>
 
-    <label for="port">Intake port</label>
-    <input id="port" type="number" min="1" max="65535" value="19388" />
+      <div class="privacy-strip" role="note">
+        <span data-i18n="metadataOnly">Metadata only</span>
+        <span data-i18n="noPageContent">No page content</span>
+        <span data-i18n="disabledPrivate">Disabled in private windows</span>
+      </div>
 
-    <label for="token">Pairing token</label>
-    <input id="token" type="password" placeholder="shown once in the panel" />
+      <section class="panel" aria-labelledby="pairing-title">
+        <div class="panel-head">
+          <div>
+            <h2 id="pairing-title" data-i18n="pairingTitle">Pair with Computer History</h2>
+            <p data-i18n="pairingBody">Paste the one-time token shown in Computer History → Browser companion.</p>
+          </div>
+          <span class="connection-state" id="connection-state" data-tone="idle">
+            <span class="status-dot" aria-hidden="true"></span>
+            <span id="connection-label" data-i18n="notChecked">Not checked</span>
+          </span>
+        </div>
 
-    <button id="save">Save</button>
-    <button id="test">Test pairing</button>
-    <div id="status"></div>
+        <label class="field" for="token">
+          <span data-i18n="tokenLabel">Pairing token</span>
+          <input
+            id="token"
+            type="password"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="Paste the token shown once in DSH"
+            data-i18n-placeholder="tokenPlaceholder"
+          />
+        </label>
+
+        <div class="actions">
+          <button class="button button-primary" id="test" type="button" data-i18n="testPairing">Test pairing</button>
+          <button class="button" id="save" type="button" data-i18n="saveSettings">Save settings</button>
+        </div>
+
+        <div id="status" class="status" data-tone="info" role="status" aria-live="polite" hidden></div>
+
+        <details class="advanced">
+          <summary data-i18n="advanced">Advanced</summary>
+          <div class="advanced-body">
+            <label class="field" for="port">
+              <span data-i18n="portLabel">Local intake port</span>
+              <input id="port" type="number" min="1" max="65535" value="19388" inputmode="numeric" />
+            </label>
+            <p data-i18n="portHelp">Keep the default unless Computer History reports a different port. The companion only connects to 127.0.0.1.</p>
+          </div>
+        </details>
+      </section>
+
+      <p class="footnote" data-i18n="footnote">The pairing token is stored by the browser extension. Computer History stores only its digest and never exposes the token again.</p>
+    </main>
 
     <script type="module" src="options.js"></script>
   </body>

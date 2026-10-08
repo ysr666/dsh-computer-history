@@ -154,6 +154,9 @@ describe('Computer History Host API', () => {
       '/api/computer-history/recover',
       '/api/computer-history/resume',
       '/api/computer-history/resume-hint',
+      '/api/computer-history/resume/continue-session',
+      '/api/computer-history/resume/continue-session/unbind',
+      '/api/computer-history/resume/handoff',
       '/api/computer-history/resume/open',
       '/api/computer-history/retention',
       '/api/computer-history/search',
@@ -361,6 +364,138 @@ describe('Computer History Host API', () => {
   })
 
 
+
+  it('builds a read-only continuity handoff only from a stored episode', async () => {
+    const episode = {
+      id: 'episode:handoff',
+      startedAtMs: 100,
+      endedAtMs: 200,
+      boundary: {
+        startReason: 'first-observation',
+        endReason: 'timeout',
+      },
+      workspace: {
+        id: 'alpha',
+        root: '/tmp/alpha',
+        title: 'alpha',
+      },
+      summaryKind: 'deterministic',
+      summary: 'work',
+      summaryObservationIds: [1],
+      lastStrongResource: {
+        kind: 'file',
+        canonicalUri: 'file:///tmp/alpha/a.ts',
+        displayLabel: 'a.ts',
+      },
+      resources: [{
+        kind: 'file',
+        canonicalUri: 'file:///tmp/alpha/a.ts',
+        displayLabel: 'a.ts',
+        firstSeenAtMs: 100,
+        lastSeenAtMs: 200,
+        observationCount: 1,
+      }],
+      changedResources: [{
+        kind: 'file',
+        canonicalUri: 'file:///tmp/alpha/a.ts',
+        displayLabel: 'a.ts',
+        lastChangedAtMs: 180,
+        changeCount: 2,
+      }],
+      surfaces: [{
+        bundleId: 'com.microsoft.VSCode',
+        surfaceKind: 'editor',
+        firstSeenAtMs: 100,
+        lastSeenAtMs: 200,
+        observationCount: 1,
+      }],
+      confidence: 1,
+      state: 'closed',
+      observationIds: [1],
+    }
+    const api = harness({
+      getEpisode: async () => episode,
+      latestDshCheckpoint: () => ({
+        sessionId: 'session-a',
+        turn: 3,
+        checkpointAtMs: 90,
+        workspace: episode.workspace,
+      }),
+    })
+
+    const response = await api.request(
+      '/resume/handoff?id=episode%3Ahandoff',
+    )
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({
+      status: 'hit',
+      changedResources: [{
+        displayLabel: 'a.ts',
+        changeCount: 2,
+      }],
+      checkpoint: {
+        sessionId: 'session-a',
+        turn: 3,
+      },
+    })
+    expect((await api.request('/resume/handoff')).status).toBe(400)
+  })
+
+  it('binds a fresh DSH continuation session only to a stored Episode', async () => {
+    const bindings: unknown[] = []
+    const unbound: string[] = []
+    const { request } = harness({
+      bindContinuationSession(value: unknown) {
+        bindings.push(value)
+      },
+      unbindContinuationSession(sessionId: string) {
+        unbound.push(sessionId)
+        return true
+      },
+    })
+
+    const response = await request('/resume/continue-session', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        sessionId: 'session:new',
+        episodeId: 'episode:1',
+      }),
+    })
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ bound: true })
+    expect(bindings).toEqual([{
+      sessionId: 'session:new',
+      episodeId: 'episode:1',
+    }])
+
+    const cleanup = await request('/resume/continue-session/unbind', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        sessionId: 'session:new',
+      }),
+    })
+    expect(cleanup.status).toBe(200)
+    expect(await cleanup.json()).toEqual({ unbound: true })
+    expect(unbound).toEqual(['session:new'])
+
+    const malformed = await request('/resume/continue-session', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        sessionId: '',
+        episodeId: 'episode:1',
+      }),
+    })
+    expect(malformed.status).toBe(400)
+  })
 
   it('opens only resources that belong to the named stored episode', async () => {
     const storedUri = new URL('../../package.json', import.meta.url).href

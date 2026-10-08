@@ -2,6 +2,7 @@ import type { DatabaseSync, SQLOutputValue } from 'node:sqlite'
 import {
   PHASE1_ADAPTERS,
   CollectorSessionId,
+  type ActivityEventKind,
   type ActivityObservation,
   type EpisodeId,
   type ObservationAdapter,
@@ -115,6 +116,21 @@ function adapter(value: string): ObservationAdapter {
   throw new Error(`invalid observation adapter: ${value}`)
 }
 
+function activityEventKind(value: string): ActivityEventKind {
+  switch (value) {
+    case 'save':
+    case 'verify-build-success':
+    case 'verify-build-failure':
+    case 'verify-test-success':
+    case 'verify-test-failure':
+    case 'verify-other-success':
+    case 'verify-other-failure':
+      return value
+    default:
+      throw new Error(`invalid activity event: ${value}`)
+  }
+}
+
 function resourceKind(value: string): ResourceKind {
   if (
     value === 'file'
@@ -154,6 +170,7 @@ export class ObservationStore {
         workspace_source,
         workspace_confidence,
         idle_seconds,
+        activity_event,
         privacy_secure,
         privacy_protected,
         privacy_reason,
@@ -162,7 +179,7 @@ export class ObservationStore {
         policy_revision,
         expires_at_ms
       ) VALUES (
-        ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
+        ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
       )
     `).run(
       observation.collectorSessionId,
@@ -184,6 +201,7 @@ export class ObservationStore {
       observation.workspace.source,
       observation.workspace.confidence,
       observation.activity.idleSeconds ?? null,
+      observation.activity.event ?? null,
       observation.privacy.secure ? 1 : 0,
       observation.privacy.protected ? 1 : 0,
       observation.privacy.reason ?? null,
@@ -290,6 +308,7 @@ export class ObservationStore {
     const workspaceRoot = optionalString(row, 'workspace_root')
     const workspaceTitle = optionalString(row, 'workspace_title')
     const idleSeconds = optionalNumber(row, 'idle_seconds')
+    const activityEvent = optionalString(row, 'activity_event')
     const privacyReason = optionalString(row, 'privacy_reason')
     const resourceUri = optionalString(row, 'resource_uri')
     const resourceKindValue = optionalString(row, 'resource_kind')
@@ -344,7 +363,10 @@ export class ObservationStore {
         source: workspaceSource(requiredString(row, 'workspace_source')),
         confidence: requiredNumber(row, 'workspace_confidence'),
       },
-      activity: idleSeconds === undefined ? {} : { idleSeconds },
+      activity: {
+        ...(idleSeconds === undefined ? {} : { idleSeconds }),
+        ...(activityEvent === undefined ? {} : { event: activityEventKind(activityEvent) }),
+      },
       privacy: {
         secure: requiredNumber(row, 'privacy_secure') === 1,
         protected: requiredNumber(row, 'privacy_protected') === 1,

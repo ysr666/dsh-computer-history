@@ -9,6 +9,7 @@ import type {
   RetentionSettings,
 } from './audit.js'
 import type { TimelineDay, WorkThreadDetail } from './audit-view.js'
+import type { BindContinuationSessionRequest } from './continuation-reference.js'
 import type { EpisodeId } from './ids.js'
 import type {
   MinimisedSummaryPayload,
@@ -17,7 +18,12 @@ import type {
 } from './semantic.js'
 import type { PolicyRule, PolicySnapshot } from './policy.js'
 import type { SurfaceKind } from './observation.js'
-import type { ResumeRequest, ResumeResolution } from './resume.js'
+import type {
+  DshCheckpoint,
+  RecordDshCheckpointRequest,
+  ResumeRequest,
+  ResumeResolution,
+} from './resume.js'
 
 export interface RecentEpisodesRequest {
   readonly sinceMs?: number
@@ -293,6 +299,24 @@ export interface ComputerHistoryServiceContract {
     request: ResumeRequest,
     signal?: AbortSignal,
   ): Promise<ResumeResolution>
+
+  /** Persist a metadata-only top-level DSH turn boundary for continuity. */
+  recordDshCheckpoint(request: RecordDshCheckpointRequest): DshCheckpoint
+
+  latestDshCheckpoint(request: {
+    readonly workspaceId?: string
+    readonly workspaceRoot?: string
+    readonly atOrBeforeMs: number
+  }): DshCheckpoint | undefined
+
+  /** Bind a freshly-created DSH Session to the exact Episode selected by Continue. */
+  bindContinuationSession(request: BindContinuationSessionRequest): void
+
+  /** Resolve an explicit Continue capsule without exposing its Episode id in chat text. */
+  continuationEpisodeForSession(sessionId: string): EpisodeId | undefined
+
+  /** Remove a failed/abandoned Continue binding without deleting the DSH Session itself. */
+  unbindContinuationSession(sessionId: string): boolean
 
   delete(
     request: DeleteHistoryRequest,

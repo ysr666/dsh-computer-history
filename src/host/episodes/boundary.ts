@@ -10,6 +10,7 @@ export function hasStrongWorkspace(
   if (
     observation.workspace.source !== 'dsh'
     && observation.workspace.source !== 'git'
+    && observation.workspace.source !== 'companion'
   ) {
     return false
   }

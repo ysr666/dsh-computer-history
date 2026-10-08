@@ -55,8 +55,10 @@ requireSource(
   'native collector must reconcile sleep/wake lifecycle',
 )
 requireSource(
-  collectorSource.includes('guard fingerprint != lastObservationFingerprint'),
-  'native heartbeat must suppress unchanged metadata',
+  collectorSource.includes('fingerprint == lastObservationFingerprint')
+    && collectorSource.includes('lastObservationAt')
+    && collectorSource.includes('livenessHeartbeatInterval'),
+  'native heartbeat must suppress unchanged metadata between bounded liveness observations',
 )
 const pauseSource = collectorSource.slice(
   collectorSource.indexOf('func setPaused'),
@@ -104,6 +106,33 @@ struct NativeTests {
         )
         precondition(
             phase1AdapterForBundle("com.microsoft.VSCode")?.id == "vscode"
+        )
+
+
+        // A stable surface is sampled for liveness at 30 s, not every 5 s heartbeat.
+        precondition(
+            shouldEmitObservation(
+                fingerprintUnchanged: true,
+                lastObservedAt: 100,
+                now: 129.999,
+                livenessInterval: livenessHeartbeatInterval
+            ) == false
+        )
+        precondition(
+            shouldEmitObservation(
+                fingerprintUnchanged: true,
+                lastObservedAt: 100,
+                now: 130,
+                livenessInterval: livenessHeartbeatInterval
+            )
+        )
+        precondition(
+            shouldEmitObservation(
+                fingerprintUnchanged: false,
+                lastObservedAt: 129.999,
+                now: 130,
+                livenessInterval: livenessHeartbeatInterval
+            )
         )
         precondition(
             phase1AdapterForBundle("com.google.Chrome") == nil
@@ -452,6 +481,7 @@ try {
     'native/macos/Sources/ComputerHistoryCollector/Privacy.swift',
     'native/macos/Sources/ComputerHistoryCollector/SupportedApps.swift',
     'native/macos/Sources/ComputerHistoryCollector/Protocol.swift',
+    'native/macos/Sources/ComputerHistoryCollector/Liveness.swift',
     testSource,
     '-o', executable,
   ])

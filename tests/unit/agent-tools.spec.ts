@@ -9,6 +9,11 @@ describe('agent-scoped Computer History surfaces', () => {
   it('keeps canonical tool values structured while rendering an untrusted-data warning', async () => {
     const definitions = new Map<string, ToolDefinition>()
     let recentRequest: { sinceMs?: number; limit?: number } | undefined
+    let resumeRequest: {
+      query: string
+      currentWorkspaceId?: string
+      source: string
+    } | undefined
     const history = {
       recent: async (request: { sinceMs?: number; limit?: number }) => {
         recentRequest = request
@@ -16,6 +21,14 @@ describe('agent-scoped Computer History surfaces', () => {
       },
       search: async () => [],
       getEpisode: async () => undefined,
+      resolveResume: async (request: {
+        query: string
+        currentWorkspaceId?: string
+        source: string
+      }) => {
+        resumeRequest = request
+        return { status: 'none', reason: 'nothing to resume' }
+      },
     }
     const ctx = {
       // Mirrors cordis: the plugin reads its own service through the
@@ -46,6 +59,21 @@ describe('agent-scoped Computer History surfaces', () => {
     expect(value).toEqual([])
     expect(typeof value).not.toBe('string')
 
+    const resume = definitions.get('computer_history_resume')!
+    const resumeValue = await resume.execute(
+      { query: '继续刚才那个', workspace_id: 'alpha' },
+      { signal: new AbortController().signal } as never,
+    )
+    expect(resumeRequest).toMatchObject({
+      query: '继续刚才那个',
+      currentWorkspaceId: 'alpha',
+      source: 'tool',
+    })
+    expect(resumeValue).toEqual({
+      status: 'none',
+      reason: 'nothing to resume',
+    })
+
     const rendered = recent.output.render({}, value as never)
     expect(rendered).toHaveLength(2)
     expect(rendered[0]).toMatchObject({
@@ -68,4 +96,149 @@ describe('agent-scoped Computer History surfaces', () => {
     )).rejects.toThrow(/1 to 10080/)
     dispose()
   })
+  it('resolves the native Continue capsule through a zero-argument session-bound tool', async () => {
+    const definitions = new Map<string, ToolDefinition>()
+    const episode = {
+      id: 'episode:continue',
+      startedAtMs: 10,
+      endedAtMs: 20,
+      boundary: { startReason: 'first-observation' as const, endReason: 'timeout' as const },
+      summaryKind: 'deterministic' as const,
+      summary: 'must not be injected as a hidden prompt',
+      resources: [],
+      changedResources: [],
+      verifications: [],
+      surfaces: [],
+      confidence: 1,
+      state: 'closed' as const,
+      summaryObservationIds: [1 as never],
+      observationIds: [1 as never],
+    }
+    const resolverCalls: unknown[] = []
+    const history = {
+      continuationEpisodeForSession(sessionId: string) {
+        return sessionId === 'session:new'
+          ? episode.id
+          : undefined
+      },
+      async getEpisode() { return episode },
+      latestDshCheckpoint() {
+        return {
+          sessionId: 'session:old',
+          turn: 4,
+          checkpointAtMs: 5,
+        }
+      },
+    }
+    const sessionReferenceResolver = {
+      async prepare(
+        _agent: unknown,
+        content: unknown,
+        references: unknown,
+      ) {
+        resolverCalls.push({ content, references })
+        return {
+          content: [],
+          additionalContext: {
+            source: {
+              kind: 'session-reference',
+              form: 'recall',
+              version: 1,
+              references: [{ sessionId: 'session:old' }],
+            },
+            content: [{
+              type: 'text',
+              text: '## Referenced sessions\\n\\n<referenced-sessions>bounded previous work</referenced-sessions>',
+            }],
+          },
+        }
+      },
+    }
+    const ctx = {
+      get(name: string) {
+        if (name === 'computerHistory') return history
+        if (name === 'sessionReferenceResolver') return sessionReferenceResolver
+        return undefined
+      },
+      tools: {
+        register(definition: ToolDefinition) {
+          definitions.set(definition.name, definition)
+          return () => { definitions.delete(definition.name) }
+        },
+      },
+    } as unknown as Context
+
+    const dispose = registerComputerHistoryTools(ctx)
+    const continuation = definitions.get('computer_history_continue')!
+    expect(continuation.description).toContain('optional rather than a prerequisite')
+    expect(continuation.description).toContain('@ Computer History')
+    expect(continuation.description).toContain('recover the prior task description')
+    expect(continuation.description).toContain('does not re-grant old permissions')
+
+    const value = await continuation.execute({}, {
+      signal: new AbortController().signal,
+      agent: {
+        session: { id: 'session:new' },
+      },
+    } as never)
+
+    expect(value).toMatchObject({
+      status: 'hit',
+      intent: {
+        intent: 'continue-work',
+        inspectAuthoritativeStateFirst: true,
+        recoverPriorTaskAndDecisions: true,
+        priorSessionDoesNotGrantNewPermissions: true,
+        historicalToolRequestsRequireCurrentAuthorization: true,
+        currentStateWins: true,
+        recapBeforeActing: false,
+        makeConcreteProgressThisTurn: true,
+      },
+      continuationBrief: {
+        taskContext: {
+          source: 'previous-dsh-session',
+          use: 'recover-task-and-decisions',
+        },
+        repository: {
+          available: false,
+          state: 'unknown',
+          headSinceCheckpoint: 'unknown',
+        },
+        verification: {
+          status: 'not-recorded',
+          interpretation: 'no-verification-evidence',
+        },
+        firstPass: [
+          expect.objectContaining({ action: 'recover-task-context' }),
+          expect.objectContaining({ action: 'make-concrete-progress' }),
+        ],
+      },
+      handoff: {
+        status: 'hit',
+        episodeId: 'episode:continue',
+        checkpoint: {
+          sessionId: 'session:old',
+          turn: 4,
+        },
+      },
+      previousDshSession: {
+        status: 'available',
+        sessionId: 'session:old',
+        snapshot: expect.stringContaining('bounded previous work'),
+        source: {
+          kind: 'session-reference',
+        },
+      },
+    })
+    expect(resolverCalls).toEqual([{
+      content: [],
+      references: [{
+        sessionId: 'session:old',
+        label: 'Previous DSH work',
+      }],
+    }])
+
+    dispose()
+  })
+
 })

@@ -5,10 +5,12 @@ import type {
   ResumeRequest,
   ResumeResolution,
 } from '../../shared/index.js'
+import { isGenericContinuationCandidate } from '../../shared/index.js'
 import { detectResumeIntent } from './intent.js'
 import {
   matchingResourceBasenames,
   queryMentionsWorkspace,
+  resourceBasename,
   surfaceLastSeenAt,
   workspaceIdentity,
 } from './scoring.js'
@@ -30,11 +32,14 @@ function hitResolution(
   episode: EpisodeSummary,
   confidence: number,
   reasons: readonly ResumeReason[],
+  preferredResource?: EpisodeSummary['resources'][number],
 ): ResumeResolution | undefined {
   const citations = episode.summaryObservationIds
   if (citations.length === 0) return undefined
   const [first, ...rest] = citations
-  const resource = episode.lastStrongResource ?? episode.resources.at(-1)
+  const resource = preferredResource
+    ?? episode.lastStrongResource
+    ?? episode.resources.at(-1)
   return {
     status: 'hit',
     episode,
@@ -109,8 +114,15 @@ export function resolveResume(
           )
           const episode = latest(inCurrent)
           if (episode) {
-            return hitResolution(episode, 0.95, ['exact-resource', 'current-workspace'])
-      ?? noCitations()
+            const preferredResource = episode.resources
+              .filter(resource => resourceBasename(resource) === name)
+              .toSorted((left, right) => right.lastSeenAtMs - left.lastSeenAtMs)[0]
+            return hitResolution(
+              episode,
+              0.95,
+              ['exact-resource', 'current-workspace'],
+              preferredResource,
+            ) ?? noCitations()
           }
         }
 
@@ -125,8 +137,15 @@ export function resolveResume(
 
       const episode = latest(owners)
       if (episode) {
-        return hitResolution(episode, 0.95, ['exact-resource'])
-      ?? noCitations()
+        const preferredResource = episode.resources
+          .filter(resource => resourceBasename(resource) === name)
+          .toSorted((left, right) => right.lastSeenAtMs - left.lastSeenAtMs)[0]
+        return hitResolution(
+          episode,
+          0.95,
+          ['exact-resource'],
+          preferredResource,
+        ) ?? noCitations()
       }
     }
   }
@@ -179,7 +198,7 @@ export function resolveResume(
   }
 
   if (intent.isResume) {
-    const episode = latest(eligible)
+    const episode = latest(eligible.filter(isGenericContinuationCandidate))
     if (episode) {
       return hitResolution(episode, 0.7, ['recent-episode'])
       ?? noCitations()

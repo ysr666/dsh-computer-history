@@ -21,7 +21,7 @@ export interface CollectorHello {
   readonly capabilities: readonly CollectorCapability[]
 }
 
-import type { ObservationProvider } from './observation.js'
+import type { ActivityEventKind, ObservationProvider } from './observation.js'
 
 export interface NativeObservation {
   readonly v: 1
@@ -46,6 +46,7 @@ export interface NativeObservation {
   }
   readonly activity?: {
     readonly idleSeconds?: number
+    readonly event?: ActivityEventKind
   }
   readonly privacy: {
     readonly secure: boolean

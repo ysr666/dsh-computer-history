@@ -1,4 +1,5 @@
 import type {
+  BindContinuationSessionRequest,
   CompanionKind,
   PairingRotation,
   PairingState,
@@ -8,6 +9,7 @@ import type {
   ComputerHistoryState,
   DeleteHistoryRequest,
   DeleteHistoryResult,
+  DshCheckpoint,
   EpisodeDetail,
   EpisodeId,
   EpisodeSummary,
@@ -15,6 +17,7 @@ import type {
   PolicySnapshot,
   PolicyUpdate,
   RecentEpisodesRequest,
+  RecordDshCheckpointRequest,
   RedactionPreview,
   RetentionSettings,
   TimelineDay,
@@ -55,6 +58,8 @@ import { DeletionService } from '../retention/index.js'
 import { ObservationStore } from '../store/observation-store.js'
 import { RetentionSettingsStore } from '../store/retention-settings.js'
 import {
+  ContinuationSessionStore,
+  DshCheckpointStore,
   EpisodeStore,
   PolicyStore,
 } from '../store/index.js'
@@ -237,6 +242,68 @@ implements ComputerHistoryServiceContract {
     ))
   }
 
+  public recordDshCheckpoint(
+    request: RecordDshCheckpointRequest,
+  ): DshCheckpoint {
+    if (!Number.isSafeInteger(request.turn) || request.turn < 1) {
+      throw new Error('DSH checkpoint turn must be a positive safe integer')
+    }
+    if (!Number.isFinite(request.checkpointAtMs)) {
+      throw new Error('DSH checkpoint time must be finite')
+    }
+    const expiresAtMs = request.checkpointAtMs
+      + this.config.episodeRetentionDays * 86_400_000
+    return new DshCheckpointStore(this.requireDb()).upsert(request, expiresAtMs)
+  }
+
+  public latestDshCheckpoint(request: {
+    readonly workspaceId?: string
+    readonly workspaceRoot?: string
+    readonly atOrBeforeMs: number
+  }): DshCheckpoint | undefined {
+    return new DshCheckpointStore(this.requireDb()).latestForWorkspace(request)
+  }
+
+  public bindContinuationSession(
+    request: BindContinuationSessionRequest,
+  ): void {
+    if (
+      request.sessionId.length < 1
+      || request.sessionId.length > 512
+      || String(request.episodeId).length < 1
+      || String(request.episodeId).length > 1_000
+    ) {
+      throw new Error('invalid continuation session binding')
+    }
+    if (!this.episodes.get(request.episodeId)) {
+      throw new Error('continuation episode not found')
+    }
+    const nowMs = this.now()
+    const expiresAtMs = nowMs
+      + this.config.episodeRetentionDays * 86_400_000
+    new ContinuationSessionStore(this.requireDb()).bind(
+      request,
+      nowMs,
+      expiresAtMs,
+    )
+  }
+
+  public continuationEpisodeForSession(
+    sessionId: string,
+  ): EpisodeId | undefined {
+    if (sessionId.length < 1 || sessionId.length > 512) return undefined
+    return new ContinuationSessionStore(this.requireDb())
+      .episodeForSession(sessionId, this.now())
+  }
+
+  public unbindContinuationSession(
+    sessionId: string,
+  ): boolean {
+    if (sessionId.length < 1 || sessionId.length > 512) return false
+    return new ContinuationSessionStore(this.requireDb())
+      .deleteSession(sessionId)
+  }
+
   public async delete(
     request: DeleteHistoryRequest,
     _signal?: AbortSignal,
@@ -351,11 +418,21 @@ implements ComputerHistoryServiceContract {
    * model only when a scope is switched on.
    */
   public semanticState(): SemanticSummaryState {
-    return this.withSynchronousOperation(() => ({
-      active: 'deterministic',
-      localProviderConfigured: false,
-      scopes: this.semanticOptIns?.list() ?? [],
-    }))
+    return this.withSynchronousOperation(() => {
+      const providers = this.config.semanticProviders
+      return {
+        active: 'deterministic',
+        providers: {
+          local: providers?.local
+            ? { available: true, model: providers.local.model }
+            : { available: false, reason: 'not-wired' },
+          remote: providers?.remote
+            ? { available: true, model: providers.remote.model }
+            : { available: false, reason: 'not-wired' },
+        },
+        scopes: this.semanticOptIns?.list() ?? [],
+      }
+    })
   }
 
   /** The exact payload a provider would see for this scope (ADR 0004 §4). */
@@ -472,7 +549,13 @@ implements ComputerHistoryServiceContract {
   }): SemanticOptIn {
     return this.withSynchronousOperation(() => {
       if (!this.semanticOptIns) {
-        throw new Error('semantic summaries are unavailable')
+        throw new SummaryProviderError('semantic summaries are unavailable')
+      }
+      const provider = this.config.semanticProviders?.[request.providerKind]
+      if (!provider) {
+        throw new SummaryProviderError(
+          `${request.providerKind} summary provider is not available on this Host`,
+        )
       }
       return this.semanticOptIns.grant(
         parseScopeKey(request.scopeKey),

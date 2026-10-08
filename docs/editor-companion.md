@@ -18,12 +18,16 @@ policy dimension. No new trusted concept.
 | `filePath` | `window.activeTextEditor.document.uri.fsPath` |
 | `languageId` | `document.languageId` |
 | `surfaceKind` | active view: editor, diff, terminal |
-| `title` | the file's base name |
+| `title` | the file's base name |\n| `event` | `save`, or a bounded build/test/other success/failure fact from VS Code Tasks |
+| `event` | optional closed metadata event; currently only `save`, from `onDidSaveTextDocument` |
 
 Not sent, and **not expressible**: document text, selections, diagnostics, UI
-strings. The payload shape has no field for them, the Host refuses unknown
-fields instead of ignoring them, and a guard test asserts the extension never
-mentions `getText`, `.text` or `.selection` at all.
+strings, task names, task sources, command lines, or task output. Verification
+records only the standard task group (`build`, `test`, or `other`) and whether
+its process succeeded or failed; terminated tasks with no exit code are not
+reported. The payload shape has no field for content, the Host refuses unknown
+fields instead of ignoring them, and guard tests reject text-reading APIs and
+task-text/command access.
 
 ## Install and pair
 
@@ -74,6 +78,7 @@ content-type: application/json
   "languageId": "typescript",
   "surfaceKind": "editor",
   "title": "main.ts",
+  "event": "save",
   "editorSession": "any-stable-id",
   "seq": 1,
   "observedAtMs": 1790000000000
@@ -97,6 +102,8 @@ and one the built-in protected list covers is dropped even if the user allowed i
 selection, a diagnostic, a UI string or a file's contents, and unknown fields are
 **refused rather than ignored** - so adding one is a protocol error, not a
 harmless extra. Paths are metadata; contents are not.
+
+**Activity events.** `event` is optional and the Host currently accepts only `save`. It means the editor reported a document-save event for the named file; it does **not** mean the Host read the file, diff, edit contents or diagnostics. The Host persists this as provenance and derives `changedResources` from save observations. A native Accessibility/UIA/AT-SPI observation cannot assert this event.
 
 **Rules the client has to honour.** Send an absolute `workspaceRoot`; if you send
 `filePath` it must live under that root. Use a stable `editorSession` per editor

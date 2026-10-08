@@ -344,20 +344,48 @@ describe('episode store', () => {
       endedAtMs: first.observedAtMs,
       updatedAtMs: 20_000,
       observationIds: [firstId],
-            })
+      summaryObservationIds: [firstId],
+    })
+    // A normal deterministic append must not rewrite the full citation
+    // table: doing so on every observation makes long Episodes quadratic.
+    history.db.exec(`
+      CREATE TEMP TRIGGER forbid_citation_rewrite
+      BEFORE DELETE ON episode_summary_citations
+      BEGIN
+        SELECT RAISE(ABORT, 'unexpected wholesale citation rewrite');
+      END
+    `)
+    const allIds = [firstId, secondId]
     episodes.replace({
       ...base,
       endedAtMs: second.observedAtMs,
       updatedAtMs: 30_000,
-      observationIds: [firstId, secondId],
+      observationIds: allIds,
+      summaryObservationIds: allIds,
     }, {
       provenance: 'append',
       appendObservationIds: [secondId],
     })
+    history.db.exec('DROP TRIGGER forbid_citation_rewrite')
 
     expect(episodes.get(id)).toMatchObject({
       observationIds: [firstId, secondId],
-            })
+      summaryObservationIds: [firstId, secondId],
+    })
+
+    // A deliberate citation selection change is not a simple append:
+    // the fallback must still replace the old citations atomically.
+    episodes.replace({
+      ...base,
+      endedAtMs: second.observedAtMs,
+      updatedAtMs: 40_000,
+      observationIds: allIds,
+      summaryObservationIds: [secondId],
+    }, {
+      provenance: 'append',
+      appendObservationIds: [],
+    })
+    expect(episodes.get(id)?.summaryObservationIds).toEqual([secondId])
     history.close()
   })
 

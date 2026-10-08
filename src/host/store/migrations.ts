@@ -7,6 +7,11 @@ import { migration0005 } from './migrations/0005-retention-settings.js'
 import { migration0006 } from './migrations/0006-companion-workspace-source.js'
 import { migration0007 } from './migrations/0007-remote-summary-sends.js'
 import { migration0008 } from './migrations/0008-companion-pairing-kinds.js'
+import { migration0009 } from './migrations/0009-activity-event.js'
+import { migration0010 } from './migrations/0010-dsh-checkpoints.js'
+import { migration0011 } from './migrations/0011-dsh-checkpoint-git-head.js'
+import { migration0012 } from './migrations/0012-verification-events.js'
+import { migration0013 } from './migrations/0013-continuation-sessions.js'
 
 export interface Migration {
   readonly version: number
@@ -32,6 +37,11 @@ const MIGRATIONS: readonly Migration[] = [
   migration0006,
   migration0007,
   migration0008,
+  migration0009,
+  migration0010,
+  migration0011,
+  migration0012,
+  migration0013,
 ]
 
 function schemaVersion(db: DatabaseSync): number {

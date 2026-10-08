@@ -1,0 +1,120 @@
+{
+  "extensionName": {
+    "message": "电脑使用记录 — 浏览器连接器"
+  },
+  "extensionDescription": {
+    "message": "把当前标签页的来源与路径作为元数据加入本机“电脑使用记录”，让 DSH 能继续正确的工作；不会读取页面正文。"
+  },
+  "pageTitle": {
+    "message": "电脑使用记录 · 浏览器连接器"
+  },
+  "productName": {
+    "message": "电脑使用记录"
+  },
+  "companionTitle": {
+    "message": "浏览器连接器"
+  },
+  "intro": {
+    "message": "把当前标签页的来源与路径加入本机工作记录，方便 DSH 之后继续正确的项目。"
+  },
+  "metadataOnly": {
+    "message": "仅记录元数据"
+  },
+  "noPageContent": {
+    "message": "不读取页面正文"
+  },
+  "disabledPrivate": {
+    "message": "隐私窗口中停用"
+  },
+  "pairingTitle": {
+    "message": "连接“电脑使用记录”"
+  },
+  "pairingBody": {
+    "message": "粘贴“电脑使用记录 → 浏览器连接器”中显示的一次性配对令牌。"
+  },
+  "notChecked": {
+    "message": "尚未检查"
+  },
+  "tokenLabel": {
+    "message": "配对令牌"
+  },
+  "tokenPlaceholder": {
+    "message": "粘贴 DSH 中仅显示一次的令牌"
+  },
+  "testPairing": {
+    "message": "测试连接"
+  },
+  "saveSettings": {
+    "message": "保存设置"
+  },
+  "advanced": {
+    "message": "高级"
+  },
+  "portLabel": {
+    "message": "本机接收端口"
+  },
+  "portHelp": {
+    "message": "除非“电脑使用记录”提示使用其他端口，否则保持默认值。连接器只会连接 127.0.0.1。"
+  },
+  "footnote": {
+    "message": "配对令牌保存在浏览器扩展中；“电脑使用记录”只保存它的摘要，不会再次显示原始令牌。"
+  },
+  "portInvalid": {
+    "message": "端口必须是 1 到 65535 之间的数字。"
+  },
+  "pairingSaved": {
+    "message": "已保存配对"
+  },
+  "storedToken": {
+    "message": "已保存一个配对令牌。你可以测试连接，或粘贴新令牌来替换它。"
+  },
+  "notPaired": {
+    "message": "尚未配对"
+  },
+  "settingsSaved": {
+    "message": "设置已保存"
+  },
+  "savedLocal": {
+    "message": "已保存在本机。浏览器元数据将发送到 127.0.0.1:$PORT$。",
+    "placeholders": {
+      "port": {
+        "content": "$1"
+      }
+    }
+  },
+  "tokenNeeded": {
+    "message": "需要配对令牌"
+  },
+  "tokenNeededBody": {
+    "message": "请先粘贴“电脑使用记录”中仅显示一次的配对令牌。"
+  },
+  "checking": {
+    "message": "正在检查…"
+  },
+  "checkingBody": {
+    "message": "正在检查本机“电脑使用记录”接收端…"
+  },
+  "connected": {
+    "message": "已连接"
+  },
+  "connectedBody": {
+    "message": "连接成功。“电脑使用记录”已接受这个浏览器连接器。"
+  },
+  "pairingRejected": {
+    "message": "配对被拒绝"
+  },
+  "pairingRejectedBody": {
+    "message": "能够连接“电脑使用记录”，但令牌未被接受。请在 DSH 中创建新令牌后重试。"
+  },
+  "offline": {
+    "message": "电脑使用记录未运行"
+  },
+  "offlineBody": {
+    "message": "127.0.0.1:$PORT$ 上没有“电脑使用记录”接收端。请打开 DSH，并确认“电脑使用记录”正在运行。",
+    "placeholders": {
+      "port": {
+        "content": "$1"
+      }
+    }
+  }
+}

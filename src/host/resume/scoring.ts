@@ -9,7 +9,9 @@ export function normalizeQuery(value: string): string {
   return value.trim().toLowerCase()
 }
 
-function basename(resource: ResourceIdentity): string | undefined {
+export function resourceBasename(
+  resource: ResourceIdentity,
+): string | undefined {
   if (resource.kind === 'file' || resource.kind === 'directory') {
     try {
       const url = new URL(resource.canonicalUri)
@@ -57,7 +59,7 @@ export function matchingResourceBasenames(
   const matches = new Set<string>()
 
   for (const resource of episode.resources) {
-    const name = basename(resource)
+    const name = resourceBasename(resource)
     if (!name || name.length < 2) continue
     if (normalized.includes(name)) matches.add(name)
   }
