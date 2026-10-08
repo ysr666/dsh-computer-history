@@ -28,7 +28,7 @@ verified, it says so rather than describing the intention.
 | Shared collector protocol checks on macOS / Windows / Linux | ✅ |
 | One tarball contains all three native collectors + SHA-256 provenance | ✅ |
 | Same tarball clean-installs and reaches packaged collector handshake on macOS / Windows / Linux | ✅ |
-| Installed bundle's **client panel** appears and works on the release product path | ⬜ blocker |
+| Installed bundle's **client panel**, first-run and History/Privacy Settings appear and work on macOS / Windows / Linux | ✅ |
 | `pnpm verify:release:blockers` at release cut | ⬜ run at release cut |
 | Non-`-dev` package version + matching changelog section | ⬜ set only when cutting the release |
 
@@ -54,17 +54,19 @@ ln -sfn "$PWD" ~/.dsh/profiles/<profile>/node_modules/dsh-computer-history
 Verified: the entry reaches `[active]`. Every phase's runtime evidence was
 produced on this path.
 
-## Installing from the tarball: three-platform Host/collector path verified; client panel still open
+## Installing from the tarball: three-platform product path verified
 
 ```bash
-npm pack                                        # dsh-computer-history-<version>.tgz
 dsh plugin --profile <profile> add ./dsh-computer-history-<version>.tgz
-# then list the package in the profile's package.json "bundles" and start the Host
-#   the CLI normally does this itself for a package it installs for the first time; it does not repair a
-#   package that was already in `dependencies` (an earlier failed attempt). Skipping it is silent: the log
-#   says `pending (waiting for services: connection, workspaceRegistry)` and the Host never listens
-#   (docs/development.md has the measurement)
+# restart/start the Host for that profile
 ```
+
+The release acceptance uses a fresh throwaway profile and asserts that `dsh plugin add` itself wrote
+`dsh-computer-history` into both the profile dependency set and the profile bundle list. It never repairs that
+entry by hand. The bare CLI-created test profile does not always include `@deepseek-ai/dsh-web-app` as a layer
+on macOS/Linux, so the harness may add **only that Host shell layer** before opening a browser; Windows already
+had it. This isolates a DSH profile-fixture detail from the thing this release owns: the installed Computer
+History bundle has to register itself.
 
 The original local measurement proved that a packed plugin could become an active Host bundle. PR #118 then
 measured the stronger three-platform distribution claim in GitHub Actions run `37623433497` from commit
@@ -107,22 +109,52 @@ Three approaches recorded as measured failures, so nobody repeats them:
 - **a profile copied into a temporary `DSH_HOME`**: its bundles and `file:` dependencies do not
   resolve there at all.
 
-**Still open, and stated as such:** the installed bundle's **client half** still needs the release-grade
-product-path measurement in issue #44. The native package/Host boundary is now proven on all three platforms;
-that does not by itself prove that the installed panel and Settings surface are visible and usable everywhere.
-Until #44 is closed, this document does not call the public Alpha release-ready.
+PR #123 then measured the installed **client** from the exact assembled tarball in Packaged alpha matrix run
+`37714440513` at commit `9dabd9e93be871d1e3f3a754c3abebc3bdb29c9e`, using DSH
+`0.2.0-rc.2` and the throwaway profile `packaged-client`. All three OS jobs passed the same browser-level
+acceptance:
+
+```text
+Windows  boot entry: dsh-computer-history
+         installed client response: 200
+         .ch-main mounted
+         .ch-first-run visible
+         /state=200 /policy=200 /retention=200
+         Settings / History & Privacy: 8 rows
+
+macOS    boot entry: dsh-computer-history
+         installed client response: 200
+         .ch-main mounted
+         .ch-first-run visible
+         /state=200 /policy=200 /retention=200
+         Settings / History & Privacy: 8 rows
+
+Linux    boot entry: dsh-computer-history
+         installed client response: 200
+         .ch-main mounted
+         .ch-first-run visible
+         /state=200 /policy=200 /retention=200
+         Settings / History & Privacy: 8 rows
+```
+
+The check starts the real DSH Web App in a real headless Chrome and captures the actual network response whose
+plugin URL contains `dsh-computer-history/client.js`; it does not reconstruct that URL from the boot manifest.
+No checkout symlink/junction and no `collectorExecutable` override are used. This closes the installed-client
+product-path blocker; the remaining pre-publication work is the deliberate release cut (version, changelog,
+release-blocker scan/preflight and tag), not another platform implementation.
 
 ## Publishing
 
 Do not publish `v0.1.0-alpha.1` until the readiness table above has no product blocker.
-The version/changelog/tag changes are intentionally deferred until that point so a public
-branch cannot accidentally look release-ready before the installed client path is proven.
+The installed product path is now proven. The version/changelog/tag changes remain intentionally deferred to the
+release cut so a development branch cannot accidentally look like a published pre-release.
 
 Push a tag named `v` + the version in `package.json` (`.github/workflows/release.yml`). The workflow builds
 the macOS, Windows and Linux collectors on their native runners, refuses mixed-source artifacts, assembles one
 tarball, records native hashes, runs `pnpm verify:release`, then clean-installs that exact tarball on all three
-platforms. GitHub Release publication happens only after all three packaged collector handshakes pass. **It needs
-no certificate and no repository secret.**
+platforms. Each install must pass both the packaged collector handshake **and** the installed-client browser gate
+(Main, first-run, History/Privacy reads and Settings) before GitHub Release publication. **It needs no certificate
+and no repository secret.**
 
 ### Why no certificate: a plugin install is not an app install
 
@@ -172,4 +204,5 @@ DSH_RELEASE_TARBALL=/tmp/dsh-computer-history-<version>.tgz pnpm verify:release
 
 The `DSH_NATIVE_PREBUILT=1` guard is deliberate: it prevents the assembly machine from silently rebuilding one
 platform's collector and replacing the bytes that came from that platform's runner. The public release workflow
-uses the same assembly and three clean-install gates; it has not published a tag yet.
+uses the same assembly and three clean-install gates, including `pnpm e2e:packaged-client` on each OS; it has not
+published a tag yet.
