@@ -162,3 +162,27 @@ rebuilding the URL from the boot entry.
 
 The rule this session keeps relearning applies here too: the failure is silent, so every claim above
 is a measurement, not a reading.
+
+### Resolved on the packaged release path — 2026-10-08
+
+The historical failure above is now closed by a stronger measurement rather than by deleting the record. PR #123,
+Packaged alpha matrix run `37714440513`, commit
+`9dabd9e93be871d1e3f3a754c3abebc3bdb29c9e`, installed the exact assembled three-platform tarball into a fresh
+throwaway DSH `0.2.0-rc.2` profile named `packaged-client` and opened it in a real headless Chrome on macOS,
+Windows and Linux.
+
+Every OS observed all of these from the **installed package**:
+
+- `window.__DSH_BOOT__.entries` contained `dsh-computer-history`;
+- the actual combined `/plugins/...dsh-computer-history/client.js...` network response was HTTP 200;
+- the sidebar entry mounted `.ch-main`;
+- a fresh store rendered `.ch-first-run`;
+- browser-originated History/Privacy reads returned `/state=200 /policy=200 /retention=200`;
+- the Computer History Settings surface rendered eight `.ch-settings-item` rows.
+
+The harness never repairs the Computer History bundle list: before boot it asserts that `dsh plugin add` already
+put `dsh-computer-history` in both profile dependencies and bundles. A bare CLI-created test profile on macOS
+and Linux did not include `@deepseek-ai/dsh-web-app` as a layer, so the harness adds **only that DSH shell layer**
+when necessary; Windows already had it. No checkout junction/symlink and no `collectorExecutable` override are
+used. The old next-step instruction above — “read the actual Network events” — is therefore satisfied, and the
+installed-client release blocker is no longer open.
