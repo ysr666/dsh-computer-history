@@ -190,8 +190,15 @@ This step requires npm account access; the repository cannot grant npm ownership
 ### Immutable manual release flow
 
 When the bootstrap and Trusted Publisher are ready, merge the **approved** release PR and check
-that the final `main` SHA is fully green. In GitHub Actions → **Release** → Run workflow,
-select **main** and fill:
+that the final `main` SHA is fully green. If the last merge changed **only Markdown**,
+the normal CI workflow is intentionally skipped by path filters: manually run
+**Actions → CI → Run workflow** on `main` and wait for both Node jobs to pass
+at the **exact current main SHA**. The release-blocker scan accepts this
+exact-SHA manual CI as equivalent to an exact-SHA push CI; it never accepts
+an older successful commit. All push-triggered checks for the current SHA
+must still be green.
+
+In GitHub Actions → **Release** → Run workflow, select **main** and fill:
 
 - `tag` = `v1.0.0`
 - `target_sha` = the **exact current main SHA**, not a branch name
