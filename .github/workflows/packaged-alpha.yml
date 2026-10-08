@@ -179,6 +179,8 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: packaged-client-${{ matrix.os }}
-          path: .debug/e2e-macos/**/panel-render/**
+          path: |
+            .debug/e2e-macos/**/panel-render/*.png
+            .debug/e2e-macos/**/panel-render/*.txt
           if-no-files-found: warn
           retention-days: 3
