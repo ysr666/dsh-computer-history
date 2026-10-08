@@ -49,6 +49,7 @@ const explicitAllowBundles = (process.env.DSH_E2E_ALLOW_BUNDLES ?? '')
 const captureOptIn = process.env.DSH_E2E_ALLOW_PRESET === '1' || explicitAllowBundles.length > 0
 const expectActivity = process.env.DSH_E2E_EXPECT_ACTIVITY === '1'
 const expectedProvider = process.env.DSH_E2E_EXPECT_PROVIDER?.trim() || undefined
+const verifyPackagedPanel = process.env.DSH_E2E_VERIFY_PANEL === '1'
 const activityTimeoutMs = Math.max(1_000, Number(process.env.DSH_E2E_ACTIVITY_TIMEOUT_MS ?? 20_000))
 
 const REPO = path.resolve(import.meta.dirname, '..')
@@ -402,6 +403,38 @@ ${collectorLine}    collectorRestart: false
         )
       }
     }
+  }
+
+  if (verifyPackagedPanel) {
+    const panelOut = path.join(artifacts, 'panel-render')
+    const panelCheck = spawnSync(
+      process.execPath,
+      [path.join(REPO, 'scripts', 'verify-panel-render.mjs')],
+      {
+        cwd: REPO,
+        env: {
+          ...process.env,
+          PANEL_URL: `http://127.0.0.1:${webPort}/`,
+          PANEL_COOKIE_FILE: jar,
+          PANEL_EXPECT_FIRST_RUN: '1',
+          PANEL_OUT: panelOut,
+          PANEL_CDP_PORT: String(webPort + 500),
+        },
+        stdio: 'inherit',
+        timeout: 420_000,
+      },
+    )
+    const panelOk = panelCheck.status === 0 && panelCheck.error === undefined
+    record(
+      'installed client panel',
+      panelOk,
+      panelOk
+        ? `first-run + History / Privacy render checks passed in ${path.relative(REPO, panelOut)}`
+        : panelCheck.error?.code === 'ETIMEDOUT'
+          ? 'render check timed out after 420s'
+          : `render check exit ${panelCheck.status ?? 'unknown'}`,
+    )
+    if (!panelOk) throw new Error('installed client panel verification failed')
   }
 } catch (error) {
   record('run', false, error instanceof Error ? error.message : String(error))
