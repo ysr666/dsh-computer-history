@@ -285,7 +285,10 @@ jobs:
           RELEASE_SHA: ${{ inputs.target_sha }}
         run: |
           set -euo pipefail
-          EXISTING_TAG_SHA="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" --jq '.object.sha' 2>/dev/null || true)"
+          # matching-refs returns [] (HTTP 200) for a missing tag. Unlike the
+          # exact ref endpoint, it cannot confuse gh's stdout 404 JSON with a
+          # real SHA. Any API failure remains fatal under set -e.
+          EXISTING_TAG_SHA="$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/$RELEASE_TAG" --jq ".[] | select(.ref == \"refs/tags/$RELEASE_TAG\") | .object.sha")"
           if [ -n "$EXISTING_TAG_SHA" ]; then
             test "$EXISTING_TAG_SHA" = "$RELEASE_SHA" || { echo '::error::immutable tag points elsewhere'; exit 1; }
             echo "::notice::$RELEASE_TAG already points at the verified SHA; keeping it"
