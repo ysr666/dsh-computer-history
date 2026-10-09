@@ -10,10 +10,16 @@ import { episodeEvidenceLevel } from './evidence.js'
 import { memoryIdForThreadKey } from './projector.js'
 
 const MAX_SCANNED = 1000
-const DAY_MS = 86_400_000
 
 function dateMidnight(value: Date): number {
   return new Date(value.getFullYear(), value.getMonth(), value.getDate()).getTime()
+}
+
+/** Civil date arithmetic, never 24h subtraction across daylight-saving changes. */
+function shiftLocalDays(midnight: number, offset: number): number {
+  const date = new Date(midnight)
+  date.setDate(date.getDate() + offset)
+  return date.getTime()
 }
 
 export function interpretHistoryQuestion(
@@ -39,7 +45,7 @@ export function interpretHistoryQuestion(
 
   const today = dateMidnight(new Date(nowMs))
   const weekday = (new Date(today).getDay() + 6) % 7
-  const thisMonday = today - weekday * DAY_MS
+  const thisMonday = shiftLocalDays(today, -weekday)
   let from: number | undefined
   let until: number | undefined
   let remaining = lower
@@ -48,17 +54,17 @@ export function interpretHistoryQuestion(
   if (duration) {
     const days = Number(duration[1])
     if (days < 1 || days > 90) throw new Error('time range must be within 1..90 days')
-    from = today - (days - 1) * DAY_MS
+    from = shiftLocalDays(today, -(days - 1))
     remaining = remaining.replace(duration[0], ' ')
   } else if (/(上周|last week)/i.test(lower)) {
-    from = thisMonday - 7 * DAY_MS
+    from = shiftLocalDays(thisMonday, -7)
     until = thisMonday
     remaining = remaining.replace(/上周|last week/gi, ' ')
   } else if (/(本周|这周|this week)/i.test(lower)) {
     from = thisMonday
     remaining = remaining.replace(/本周|这周|this week/gi, ' ')
   } else if (/(昨天|yesterday)/i.test(lower)) {
-    from = today - DAY_MS
+    from = shiftLocalDays(today, -1)
     until = today
     remaining = remaining.replace(/昨天|yesterday/gi, ' ')
   } else if (/(今天|today)/i.test(lower)) {
@@ -72,7 +78,7 @@ export function interpretHistoryQuestion(
       throw new Error('invalid or future date')
     }
     from = chosen.getTime()
-    until = from + DAY_MS
+    until = shiftLocalDays(from, 1)
     remaining = remaining.replace(explicitDate[0], ' ')
   }
 

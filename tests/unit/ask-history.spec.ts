@@ -60,6 +60,22 @@ describe('M3 offline Ask Your History', () => {
     expect(lastWeek.until).toBe(new Date(2026, 9, 5).getTime())
   })
 
+  it('keeps local calendar-day windows correct across daylight-saving changes', () => {
+    const previous = process.env.TZ
+    try {
+      process.env.TZ = 'America/Los_Angeles'
+      const afterDst = new Date(2026, 10, 3, 12).getTime()
+      const lastWeek = interpretHistoryQuestion('上周项目', afterDst)
+      expect(lastWeek.from).toBe(new Date(2026, 9, 26).getTime())
+      expect(lastWeek.until).toBe(new Date(2026, 10, 2).getTime())
+      const twoDays = interpretHistoryQuestion('最近2天文件', afterDst)
+      expect(twoDays.from).toBe(new Date(2026, 10, 2).getTime())
+    } finally {
+      if (previous === undefined) delete process.env.TZ
+      else process.env.TZ = previous
+    }
+  })
+
   it('returns a source Episode for matching file and does not quote summaries', () => {
     const result = askHistoryFromEpisodes(
       [episode('e1')], { query: 'TripMap routes.ts 文件' }, NOW,
