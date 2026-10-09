@@ -698,6 +698,23 @@ export function registerHistoryApi(
     },
   }))
 
+  // Advisory associations never change Episode.threadKey or Continue ranking.
+  ctx.effect(() => ctx.connection.fetch.register({
+    path: HISTORY_API_PREFIX + '/memory/links',
+    methods: ['GET'],
+    requestBody: 'buffered',
+    fetch: async (request: Request) => {
+      try {
+        const id = requiredQueryText(new URL(request.url), 'id', 67)
+        if (!/^pm_[a-f0-9]{64}$/.test(id)) {
+          return textResponse('Invalid memory id.', 400)
+        }
+        const result = await history.getThreadActivityLinks(id, request.signal)
+        return result ? json(result) : textResponse('Not found.', 404)
+      } catch (error) { return requestFailure(error) }
+    },
+  }))
+
   // Persistent memories require an explicit user save acknowledgement.
   // These are local Host UI routes, never registered as DSH Agent tools.
   ctx.effect(() => ctx.connection.fetch.register({

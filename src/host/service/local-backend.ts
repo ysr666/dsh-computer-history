@@ -9,6 +9,7 @@ import type {
   AskHistoryRequest,
   AskHistoryResult,
   ProjectMemory,
+  ThreadActivityLinks,
   ListProjectMemoriesRequest,
   ConfirmUserMemoryNoteRequest,
   UserMemoryNote,
@@ -60,7 +61,7 @@ import {
   buildWorkThreads,
 } from '../episodes/threads.js'
 import { resolveResume } from '../resume/index.js'
-import { askHistoryFromEpisodes, buildProjectMemories, memoryIdForThreadKey, MemoryReadGrants } from '../memory/index.js'
+import { askHistoryFromEpisodes, buildProjectMemories, buildThreadActivityLinks, memoryIdForThreadKey, MemoryReadGrants } from '../memory/index.js'
 import { MemoryNoteStore } from '../store/memory-note-store.js'
 import { phase1AdapterForBundle } from '../ingestion/index.js'
 import {
@@ -239,6 +240,31 @@ implements ComputerHistoryServiceContract {
         ...(query ? { query } : {}),
         limit: boundedLimit(request.limit, 20, 100),
       }, nowMs)
+    })
+  }
+
+  public getThreadActivityLinks(
+    id: string, signal?: AbortSignal,
+  ): Promise<ThreadActivityLinks | undefined> {
+    return this.withOperation(() => {
+      signal?.throwIfAborted()
+      if (!/^pm_[a-f0-9]{64}$/.test(id)) return undefined
+      const nowMs = this.now()
+      const threadKey = this.episodes.listMemoryThreadKeys(nowMs)
+        .find(key => memoryIdForThreadKey(key) === id)
+      if (!threadKey) return undefined
+      // Keep this link lookup project-anchored even when global recency has
+      // moved past the project's Episodes. Both sides stay within a 1000 cap.
+      const anchors = this.episodes.listRecentByThreadKey(threadKey, 250, nowMs)
+      const recent = this.episodes.listRecent({
+        limit: 750, notExpiredAtMs: nowMs,
+      })
+      const unique = new Map<string, EpisodeSummary>()
+      for (const ep of [...anchors, ...recent]) unique.set(String(ep.id), ep)
+      return buildThreadActivityLinks(
+        [...unique.values()], id, nowMs,
+        anchors.length === 250 || recent.length === 750,
+      )
     })
   }
 

@@ -715,6 +715,28 @@ export class EpisodeStore {
       .map(row => this.materialize(row))
   }
 
+  /** The newest retained Episodes for read-only cross-app hints only.
+   * Does not change stable chronological listByThreadKey or Resume ordering. */
+  public listRecentByThreadKey(
+    threadKey: string,
+    limit = 250,
+    notExpiredAtMs?: number,
+  ): readonly EpisodeSummary[] {
+    const key = threadKey.trim()
+    if (!key) return []
+    const bounded = Math.max(1, Math.min(1_000, Math.trunc(limit)))
+    return this.db.prepare(`
+      SELECT e.*
+      FROM episodes e
+      WHERE e.state != 'invalidated'
+        AND e.thread_key = ?
+        AND (? IS NULL OR e.expires_at_ms IS NULL OR e.expires_at_ms > ?)
+      ORDER BY e.ended_at_ms DESC, e.id DESC
+      LIMIT ?
+    `).all(key, notExpiredAtMs ?? null, notExpiredAtMs ?? null, bounded)
+      .map(row => this.materialize(row))
+  }
+
   public latestForWorkspace(workspaceId: string): EpisodeSummary | undefined {
     const id = workspaceId.trim()
     if (!id) return undefined

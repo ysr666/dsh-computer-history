@@ -5,7 +5,7 @@ import {
 import os from 'node:os'
 import path from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   CollectorSessionId,
   EpisodeId,
@@ -296,6 +296,54 @@ describe('local computer history backend', () => {
       .toBe('no-evidence')
     await backend.delete({ scope: { kind: 'all' } })
     expect((await backend.askHistory({ query: 'alpha files' })).items).toEqual([])
+    history.close()
+  })
+
+  it('derives M4 links without changing primary Work Thread identity', async () => {
+    const history = openTempDatabase()
+    seedEpisode(history)
+    const policies = new PolicyStore(history.db)
+    policies.ensureInitial(1)
+    const backend = new LocalComputerHistoryBackend(
+      new EpisodeStore(history.db), policies,
+      new DeletionService(history.db), new FakeCapture(),
+      { observationRetentionHours: 24, episodeRetentionDays: 30,
+        autoResume: false, now: () => 10_000 },
+      undefined, new SemanticOptInStore(history.db), history.db,
+    )
+    const projects = await backend.listProjectMemories()
+    const project = projects[0]!
+    const result = await backend.getThreadActivityLinks(project.id)
+    expect(result).toMatchObject({
+      projectMemoryId: project.id,
+      links: [], scannedEpisodes: 1, scanTruncated: false,
+    })
+    expect((await backend.listProjectMemories())[0]?.id).toBe(project.id)
+    expect(await backend.getThreadActivityLinks('pm_' + 'f'.repeat(64)))
+      .toBeUndefined()
+    await backend.delete({ scope: { kind: 'all' } })
+    expect(await backend.getThreadActivityLinks(project.id)).toBeUndefined()
+    history.close()
+  })
+
+  it('still resolves an old trusted project if global recent Episodes omit it', async () => {
+    const history = openTempDatabase()
+    seedEpisode(history)
+    const episodes = new EpisodeStore(history.db)
+    const policies = new PolicyStore(history.db)
+    policies.ensureInitial(1)
+    const backend = new LocalComputerHistoryBackend(
+      episodes, policies, new DeletionService(history.db), new FakeCapture(),
+      { observationRetentionHours: 24, episodeRetentionDays: 30,
+        autoResume: false, now: () => 10_000 },
+      undefined, new SemanticOptInStore(history.db), history.db,
+    )
+    const project = (await backend.listProjectMemories())[0]!
+    vi.spyOn(episodes, 'listRecent').mockReturnValue([])
+    const links = await backend.getThreadActivityLinks(project.id)
+    expect(links).toMatchObject({
+      projectMemoryId: project.id, scannedEpisodes: 1, links: [],
+    })
     history.close()
   })
 
@@ -1129,6 +1177,7 @@ describe('Cordis computer history service', () => {
       },
       async listProjectMemories() { return [] },
       async getProjectMemory() { return undefined },
+      async getThreadActivityLinks() { return undefined },
       async listUserMemoryNotes() { return [] },
       async saveUserMemoryNote() {
         return {

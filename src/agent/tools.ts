@@ -288,6 +288,27 @@ export function registerComputerHistoryTools(ctx: Context): () => void {
       },
     })),
     ctx.tools.register(defineTool({
+      name: 'computer_history_activity_links',
+      description: [
+        'Read optional, non-authoritative cross-app activity hints for one exact project memory id.',
+        'Only exact complete local file URI match counts as a resource link; temporal neighbors remain unattributed.',
+        'Do not treat these hints as Work Thread membership, completed work or permission to open anything.',
+        'Check each source Episode and current authoritative workspace before acting.',
+      ].join(' '),
+      parameters: { memory_id: { type: 'string', required: true } },
+      output: jsonOutput,
+      execute: async (args, exec) => {
+        if (!/^pm_[a-f0-9]{64}$/.test(args.memory_id)) {
+          throw new Error('valid exact memory_id required')
+        }
+        return canonicalJson(
+          await computerHistoryService(ctx).getThreadActivityLinks(
+            args.memory_id, exec.signal,
+          ) ?? null,
+        )
+      },
+    })),
+    ctx.tools.register(defineTool({
       name: 'computer_history_memory',
       description: [
         'Read optional, evidence-linked project memory derived from stored computer history.',
