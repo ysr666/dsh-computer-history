@@ -1027,6 +1027,8 @@ describe('Cordis computer history service', () => {
     }
 
     const backend: ComputerHistoryServiceContract = {
+      async listProjectMemories() { return [] },
+      async getProjectMemory() { return undefined },
       async recent() { return [] },
       async search() { return [] },
       async getEpisode() { return undefined },

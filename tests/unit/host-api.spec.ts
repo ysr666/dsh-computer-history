@@ -16,6 +16,8 @@ interface Calls {
   search?: unknown
   episode?: unknown
   thread?: unknown
+  memoryList?: unknown
+  memoryId?: unknown
   policy?: unknown
   deletion?: unknown
 }
@@ -50,6 +52,14 @@ function harness(overrides: Record<string, unknown> = {}) {
     },
     async getEpisode(id: unknown) {
       calls.episode = id
+      return undefined
+    },
+    async listProjectMemories(request: unknown) {
+      calls.memoryList = request
+      return []
+    },
+    async getProjectMemory(id: unknown) {
+      calls.memoryId = id
       return undefined
     },
     async threads() {
@@ -146,6 +156,8 @@ describe('Computer History Host API', () => {
       '/api/computer-history/episode',
       '/api/computer-history/export',
       '/api/computer-history/import',
+      '/api/computer-history/memory/project',
+      '/api/computer-history/memory/projects',
       '/api/computer-history/pairing',
       '/api/computer-history/pairing/rotate',
       '/api/computer-history/pause',
@@ -314,6 +326,45 @@ describe('Computer History Host API', () => {
       expect(response.headers.get('cache-control'), suffix)
         .toBe('no-store')
     })
+  })
+
+  it('provides read-only memory endpoints with bounded, validated inputs', async () => {
+    const memory = {
+      id: 'pm_' + 'a'.repeat(64),
+      title: 'project',
+      episodeCount: 1,
+      lastActiveAtMs: 100,
+      recentEpisodeIds: ['ep'],
+      facts: [],
+      status: 'active',
+    }
+    const { request, calls } = harness({
+      async listProjectMemories(input: unknown) {
+        calls.memoryList = input
+        return [memory]
+      },
+      async getProjectMemory(id: string) {
+        calls.memoryId = id
+        return id === memory.id ? memory : undefined
+      },
+    })
+
+    const list = await request('/memory/projects?query=project&limit=2')
+    expect(list.status).toBe(200)
+    expect(list.headers.get('cache-control')).toBe('no-store')
+    expect(calls.memoryList).toEqual({ query: 'project', limit: 2 })
+    await expect(list.json()).resolves.toEqual([memory])
+    const detail = await request('/memory/project?id=' + memory.id)
+    expect(detail.status).toBe(200)
+    expect(calls.memoryId).toBe(memory.id)
+    await expect(detail.json()).resolves.toEqual(memory)
+
+    expect((await request('/memory/project?id=invalid')).status).toBe(400)
+    expect((await request('/memory/project?id=pm_' + 'b'.repeat(64))).status).toBe(404)
+    expect((await request('/memory/projects?limit=0')).status).toBe(400)
+    expect((await request('/memory/projects?limit=101')).status).toBe(400)
+    expect((await request('/memory/projects?query=')).status).toBe(400)
+    expect((await request('/memory/projects?query=' + 'x'.repeat(201))).status).toBe(400)
   })
 
   it('returns one exact stored work thread and validates its key', async () => {

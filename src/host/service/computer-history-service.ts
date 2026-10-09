@@ -23,6 +23,8 @@ import type {
   SemanticOptIn,
   SemanticSummaryState,
   WorkThread,
+  ProjectMemory,
+  ListProjectMemoriesRequest,
   WorkThreadDetail,
   PolicyRule,
   PolicySnapshot,
@@ -137,6 +139,19 @@ export class ComputerHistoryService
 
   public getState(): ComputerHistoryState {
     return this.backend.getState()
+  }
+
+  public listProjectMemories(
+    request?: ListProjectMemoriesRequest,
+    signal?: AbortSignal,
+  ): Promise<readonly ProjectMemory[]> {
+    return this.backend.listProjectMemories(request, signal)
+  }
+
+  public getProjectMemory(
+    id: string, signal?: AbortSignal,
+  ): Promise<ProjectMemory | undefined> {
+    return this.backend.getProjectMemory(id, signal)
   }
 
   public threads(

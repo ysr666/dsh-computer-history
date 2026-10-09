@@ -21,6 +21,7 @@ import {
   renderTimelineDay, timelineSkeleton, threadSkeleton,
 } from './timeline-view.js'
 import { appIcon } from './app-icon.js'
+import { WorkMemoryView } from './memory-view.js'
 import { HistoryGlyph } from './history-icon.js'
 import {
   continuationResourceUri,
@@ -1107,6 +1108,12 @@ export function createHistoryPage({
               ? t('showFewerThreads')
               : t('showMoreThreads', { count: threads.length - 6 })),
           )
+        : null,
+      threads && threads.length > 0
+        ? React.createElement(WorkMemoryView, {
+            locale: activeLocale,
+            historyRevision: controls.historyRevision,
+          })
         : null,
     )
 
