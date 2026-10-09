@@ -12,7 +12,7 @@
   <a href="https://github.com/ysr666/dsh-computer-history/stargazers"><img src="https://img.shields.io/github/stars/ysr666/dsh-computer-history?style=flat-square&logo=github&label=Stars" alt="GitHub Stars" /></a>
   <a href="https://github.com/ysr666/dsh-computer-history/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/ysr666/dsh-computer-history/ci.yml?branch=main&style=flat-square&label=CI" alt="CI" /></a>
   <a href="https://github.com/ysr666/dsh-computer-history/actions/workflows/collectors.yml"><img src="https://img.shields.io/github/actions/workflow/status/ysr666/dsh-computer-history/collectors.yml?branch=main&style=flat-square&label=collectors" alt="Collectors" /></a>
-  <img src="https://img.shields.io/badge/status-v1.0.0%20candidate-5B4CF0?style=flat-square" alt="Status: v1.0.0 release candidate" />
+  <img src="https://img.shields.io/badge/status-v1.0.0%20published-2EA44F?style=flat-square" alt="Status: v1.0.0 published" />
   <img src="https://img.shields.io/badge/privacy-metadata--only-2EA44F?style=flat-square" alt="Privacy: metadata only" />
   <img src="https://img.shields.io/badge/storage-local%20SQLite-4D8CCB?style=flat-square" alt="Storage: local SQLite" />
 </p>
@@ -28,12 +28,12 @@
 <p align="center">English · <a href="README.zh.md">简体中文</a></p>
 
 > [!NOTE]
-> **v1.0.0 release candidate — not published yet.** One three-platform package has passed clean-install/browser verification, but the public npm package, tag and GitHub Release do not exist yet. Use the documented compatibility and privacy constraints.
+> **v1.0.0 is published.** The same native-verified tarball passed the full installed-product journey and clean installation on Windows, macOS and Linux. [npm package](https://www.npmjs.com/package/dsh-computer-history/v/1.0.0) · [GitHub Release](https://github.com/ysr666/dsh-computer-history/releases/tag/v1.0.0). Host compatibility and privacy limits remain as documented.
 
 > [!WARNING]
-> 📌 **Announcement — v1.0.0 release candidate (not yet available on npm).**
+> 📌 **Announcement — v1.0.0 is available on npm and GitHub.**
 >
-> The first public Computer History release is planned as one installable package for Windows, macOS and Linux. It includes the native collectors, evidence-based Timeline, Continue into a DSH session, local privacy controls and browser/editor companions. Three-platform packaged-client verification and the macOS end-to-end product journey have passed; **this is not a claim of a published or fully supported product**. See [v1.0.0 notes](docs/releases/v1.0.0.md) and [release status](docs/release.md). Linux still needs a real desktop X/AT-SPI session for actual capture.
+> The first public Computer History release ships as **one installable package for Windows, macOS and Linux**. It includes native collectors, an evidence-based Timeline, Continue into a DSH session, local privacy controls and optional browser/editor companions. Published artifacts passed the three-platform packaged-client tests and the macOS end-to-end journey. **Publication does not imply compatibility with untested DSH Host versions**. See [v1.0.0 notes](docs/releases/v1.0.0.md), [release evidence](docs/release.md), and [the verified release run](https://github.com/ysr666/dsh-computer-history/actions/runs/37903396146). Linux still needs a real desktop X/AT-SPI session for actual capture.
 >
 <p align="center">
   <img src="docs/assets/panel-v1-recent-work-en.png" width="48%" alt="Computer History timeline in DSH" />
@@ -98,16 +98,16 @@ Capture starts **off**, application access is **include-only**, protected surfac
 The shared collector contract is continuously checked on GitHub Actions across macOS, Windows and Linux. Live evidence and known limits are recorded in [docs/validation-three-platforms.md](docs/validation-three-platforms.md).
 
 > [!IMPORTANT]
-> The planned **v1.0.0 is a single three-platform artifact**, not a macOS-only package. The release pipeline builds each
+> The published **v1.0.0 is a single three-platform artifact**, not a macOS-only package. The release pipeline builds each
 > native collector on its own OS, records its source commit and SHA-256, assembles all three into one plugin tarball,
 > then clean-installs that same tarball on macOS, Windows and Linux without a `collectorExecutable` override.
 > The installed client now also passes real first-run, Settings and successful History/Privacy browser checks on
-> **all three platforms** ([measured evidence](docs/release.md)); macOS additionally passes a 52/52 full lifecycle
-> journey. Publishing still requires the approved npm namespace, Trusted Publishing and the final release preflight.
+> **all three platforms** ([measured evidence](docs/release.md)); macOS additionally passed a 56/56 full lifecycle
+> journey. npm OIDC Trusted Publishing and byte-for-byte npm/GitHub artifact identity were verified in the [successful release](https://github.com/ysr666/dsh-computer-history/actions/runs/37903396146).
 
 ## Quick start
 
-**Available only after [v1.0.0 is published](https://github.com/ysr666/dsh-computer-history/releases/tag/v1.0.0)** on npm. Until then use the [development checkout](#development-from-source).
+**Available now:** [npm `dsh-computer-history@1.0.0`](https://www.npmjs.com/package/dsh-computer-history/v/1.0.0) and the [matching GitHub Release](https://github.com/ysr666/dsh-computer-history/releases/tag/v1.0.0). Install into an existing verified DSH profile.
 
 ### 1. Install in an existing DSH profile
 
@@ -144,7 +144,7 @@ Only DSH `0.2.0-rc.2` has been verified as the Host; other versions are not impl
 
 ## Development from source
 
-Until the public release, use the source checkout:
+For development or contribution, use the source checkout:
 
 ```sh
 git clone https://github.com/ysr666/dsh-computer-history.git
