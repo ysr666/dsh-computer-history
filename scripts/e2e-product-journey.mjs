@@ -1217,12 +1217,19 @@ try {
     },
   )
   writeFileSync(path.join(artifacts, 'browser-matrix.log'), browserMatrix.out)
+  // Emit only safe, actionable test results on failure. The raw subprocess
+  // log can contain a pairing token and must never be uploaded or echoed.
+  const browserMatrixSummary = browserMatrix.out.split('\n')
+    .filter(line => /^(PASS  |FAIL  |matrix: |baseline companion rows|policy update: |extension id: |allowed control readiness: |the control cell failed:|control diagnostic:)/.test(line))
+    .slice(-20)
+    .join(' | ')
   requireCheck(
     'real Chrome Browser Companion privacy matrix passes',
     browserMatrix.status === 0,
     browserMatrix.status === 0
       ? 'Extensions.loadUnpacked + 7 privacy cells'
-      : browserMatrix.out.trim().split('\n').slice(-5).join(' | '),
+      : browserMatrixSummary || 'Browser Companion exited with status '
+        + browserMatrix.status + '; see local diagnostic log',
   )
 
   const restoredPolicy = apiRequest(
