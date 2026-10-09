@@ -62,6 +62,11 @@ function harness(overrides: Record<string, unknown> = {}) {
       calls.memoryId = id
       return undefined
     },
+    async listUserMemoryNotes() { return [] },
+    async saveUserMemoryNote() { throw new Error('stub') },
+    async updateUserMemoryNote() { return false },
+    async removeUserMemoryNote() { return false },
+    async restoreUserMemoryNotes() { return { restored: 0, skipped: 0 } },
     async threads() {
       return []
     },
@@ -156,6 +161,11 @@ describe('Computer History Host API', () => {
       '/api/computer-history/episode',
       '/api/computer-history/export',
       '/api/computer-history/import',
+      '/api/computer-history/memory/note/delete',
+      '/api/computer-history/memory/note/save',
+      '/api/computer-history/memory/note/update',
+      '/api/computer-history/memory/notes',
+      '/api/computer-history/memory/notes/restore',
       '/api/computer-history/memory/project',
       '/api/computer-history/memory/projects',
       '/api/computer-history/pairing',
@@ -326,6 +336,86 @@ describe('Computer History Host API', () => {
       expect(response.headers.get('cache-control'), suffix)
         .toBe('no-store')
     })
+  })
+
+  it('requires explicit long-term consent before persisting a note', async () => {
+    let saved: unknown
+    let updated: unknown
+    let removed: unknown
+    const note = {
+      id: 'a'.repeat(8) + '-' + 'b'.repeat(4) + '-' + 'c'.repeat(4)
+        + '-' + 'd'.repeat(4) + '-' + 'e'.repeat(12),
+      projectId: 'pm_' + 'a'.repeat(64),
+      projectLabel: 'Alpha',
+      text: 'my own note',
+      evidenceLevel: 'user-confirmed',
+      createdAtMs: 1,
+      updatedAtMs: 1,
+    }
+    const { request } = harness({
+      async listUserMemoryNotes() { return [note] },
+      async saveUserMemoryNote(input: unknown) { saved = input; return note },
+      async updateUserMemoryNote(id: string, text: string) {
+        updated = { id, text }; return true
+      },
+      async removeUserMemoryNote(id: string) { removed = id; return true },
+    })
+    const post = (suffix: string, payload: unknown) => request(suffix, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    const source = { projectId: note.projectId, episodeId: 'episode-x', text: 'my own note' }
+    expect((await post('/memory/note/save', source)).status).toBe(400)
+    expect(saved).toBeUndefined()
+    expect((await post('/memory/note/save', {
+      ...source, retentionAcknowledged: 'true',
+    })).status).toBe(400)
+    const accepted = await post('/memory/note/save', {
+      ...source, retentionAcknowledged: true,
+    })
+    expect(accepted.status).toBe(201)
+    expect(accepted.headers.get('cache-control')).toBe('no-store')
+    expect(saved).toEqual({ ...source, retentionAcknowledged: true })
+    await expect(accepted.json()).resolves.toEqual(note)
+    expect((await request('/memory/notes')).status).toBe(200)
+    expect((await request('/memory/notes?projectId=bad')).status).toBe(400)
+    expect((await post('/memory/note/update', { id: note.id, text: 'edit' })).status)
+      .toBe(200)
+    expect(updated).toEqual({ id: note.id, text: 'edit' })
+    expect((await post('/memory/note/delete', { id: note.id })).status).toBe(400)
+    expect(removed).toBeUndefined()
+    expect((await post('/memory/note/delete', {
+      id: note.id, confirmDelete: true,
+    })).status).toBe(200)
+    expect(removed).toBe(note.id)
+  })
+
+  it('never restores persistent notes without separate explicit consent', async () => {
+    let restored: unknown
+    const { request } = harness({
+      async restoreUserMemoryNotes(document: unknown, confirmed: unknown) {
+        restored = { document, confirmed }
+        return { restored: 1, skipped: 0 }
+      },
+    })
+    const post = (payload: unknown) => request('/memory/notes/restore', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    const document = {
+      schema: 'dsh-computer-history/v1', schemaVersion: 14,
+      tables: { memory_projects: [], memory_user_notes: [], memory_note_apps: [] },
+    }
+    expect((await post({ document })).status).toBe(400)
+    expect(restored).toBeUndefined()
+    expect((await post({
+      document, retentionAcknowledged: false,
+    })).status).toBe(400)
+    const result = await post({ document, retentionAcknowledged: true })
+    expect(result.status).toBe(200)
+    expect(restored).toEqual({ document, confirmed: true })
+    await expect(result.json()).resolves.toEqual({ restored: 1, skipped: 0 })
   })
 
   it('provides read-only memory endpoints with bounded, validated inputs', async () => {

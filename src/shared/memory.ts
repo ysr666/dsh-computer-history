@@ -37,3 +37,23 @@ export interface ListProjectMemoriesRequest {
   /** Optional literal case-insensitive match over names and observed facts. */
   readonly query?: string
 }
+
+
+/** Written exclusively through an explicit UI user action; never inferred. */
+export interface UserMemoryNote {
+  readonly id: string
+  readonly projectId: string
+  readonly projectLabel: string
+  readonly text: string
+  readonly evidenceLevel: 'user-confirmed'
+  readonly createdAtMs: number
+  readonly updatedAtMs: number
+}
+
+export interface ConfirmUserMemoryNoteRequest {
+  readonly projectId: string
+  readonly episodeId: string
+  readonly text: string
+  /** Explicit user acknowledgement; no default or automatic caller may imply it. */
+  readonly retentionAcknowledged: true
+}

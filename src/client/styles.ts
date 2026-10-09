@@ -1,6 +1,7 @@
 import { FOUNDATION_STYLES } from './styles/foundation.js'
 import { TIMELINE_STYLES } from './styles/timeline.js'
 import { CONTINUITY_STYLES } from './styles/continuity.js'
+import { MEMORY_STYLES } from './styles/memory.js'
 import { SETTINGS_STYLES } from './styles/settings.js'
 import { RESPONSIVE_STYLES } from './styles/responsive.js'
 
@@ -9,6 +10,7 @@ const CSS = [
   FOUNDATION_STYLES,
   TIMELINE_STYLES,
   CONTINUITY_STYLES,
+  MEMORY_STYLES,
   SETTINGS_STYLES,
   RESPONSIVE_STYLES,
 ].join('\n')

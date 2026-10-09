@@ -1109,12 +1109,6 @@ export function createHistoryPage({
               : t('showMoreThreads', { count: threads.length - 6 })),
           )
         : null,
-      threads && threads.length > 0
-        ? React.createElement(WorkMemoryView, {
-            locale: activeLocale,
-            historyRevision: controls.historyRevision,
-          })
-        : null,
     )
 
     const summaryStatus = (() => {
@@ -1310,7 +1304,12 @@ export function createHistoryPage({
         ? React.createElement('div', { className: 'ch-alert ch-alert-error', role: 'alert' }, actionError)
         : null,
       allContentUnavailable
-        ? unavailableSection
+        ? React.createElement(React.Fragment, null,
+            unavailableSection,
+            React.createElement(WorkMemoryView, {
+              locale: activeLocale,
+              historyRevision: controls.historyRevision,
+            }))
         : React.createElement(
             React.Fragment,
             null,
@@ -1318,6 +1317,10 @@ export function createHistoryPage({
             !isFirstRun && hasAnyEpisode ? resumeSection : null,
             !isFirstRun ? timelineSection : null,
             !isFirstRun ? threadSection : null,
+            React.createElement(WorkMemoryView, {
+              locale: activeLocale,
+              historyRevision: controls.historyRevision,
+            }),
             !isFirstRun ? semanticSection : null,
           ),
     )

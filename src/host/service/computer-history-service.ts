@@ -25,6 +25,8 @@ import type {
   WorkThread,
   ProjectMemory,
   ListProjectMemoriesRequest,
+  ConfirmUserMemoryNoteRequest,
+  UserMemoryNote,
   WorkThreadDetail,
   PolicyRule,
   PolicySnapshot,
@@ -152,6 +154,34 @@ export class ComputerHistoryService
     id: string, signal?: AbortSignal,
   ): Promise<ProjectMemory | undefined> {
     return this.backend.getProjectMemory(id, signal)
+  }
+
+  public listUserMemoryNotes(
+    projectId?: string, signal?: AbortSignal,
+  ): Promise<readonly UserMemoryNote[]> {
+    return this.backend.listUserMemoryNotes(projectId, signal)
+  }
+
+  public saveUserMemoryNote(
+    request: ConfirmUserMemoryNoteRequest, signal?: AbortSignal,
+  ): Promise<UserMemoryNote> {
+    return this.backend.saveUserMemoryNote(request, signal)
+  }
+
+  public updateUserMemoryNote(
+    id: string, text: string, signal?: AbortSignal,
+  ): Promise<boolean> {
+    return this.backend.updateUserMemoryNote(id, text, signal)
+  }
+
+  public removeUserMemoryNote(id: string, signal?: AbortSignal): Promise<boolean> {
+    return this.backend.removeUserMemoryNote(id, signal)
+  }
+
+  public restoreUserMemoryNotes(
+    document: unknown, retentionAcknowledged: true, signal?: AbortSignal,
+  ): Promise<{ readonly restored: number; readonly skipped: number }> {
+    return this.backend.restoreUserMemoryNotes(document, retentionAcknowledged, signal)
   }
 
   public threads(

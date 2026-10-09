@@ -664,6 +664,138 @@ export function registerHistoryApi(
     },
   }))
 
+  // Persistent memories require an explicit user save acknowledgement.
+  // These are local Host UI routes, never registered as DSH Agent tools.
+  ctx.effect(() => ctx.connection.fetch.register({
+    path: HISTORY_API_PREFIX + '/memory/notes',
+    methods: ['GET'],
+    requestBody: 'buffered',
+    fetch: async (request: Request) => {
+      try {
+        const projectId = optionalQueryText(new URL(request.url), 'projectId', 67)
+        if (projectId && !/^pm_[0-9a-f]{64}$/.test(projectId)) {
+          throw new RequestValidationError('invalid project id')
+        }
+        return json(await history.listUserMemoryNotes(projectId, request.signal))
+      } catch (error) { return requestFailure(error) }
+    },
+  }))
+
+  ctx.effect(() => ctx.connection.fetch.register({
+    path: HISTORY_API_PREFIX + '/memory/notes/restore',
+    methods: ['POST'],
+    requestBody: 'buffered',
+    fetch: async (request: Request) => {
+      let data: unknown
+      try {
+        const text = await request.text()
+        if (text.length > 2_000_000) {
+          return textResponse('Note backup exceeds the 2MB limit.', 413)
+        }
+        data = JSON.parse(text) as unknown
+      } catch { return textResponse('Invalid JSON.', 400) }
+      if (!data || typeof data !== 'object' || Array.isArray(data)) {
+        return textResponse('Invalid note restore request.', 400)
+      }
+      const body = data as Record<string, unknown>
+      if (body.retentionAcknowledged !== true
+        || !body.document || typeof body.document !== 'object') {
+        return textResponse('Explicit confirmation and note backup required.', 400)
+      }
+      try {
+        return json(await history.restoreUserMemoryNotes(
+          body.document, true, request.signal,
+        ))
+      } catch { return textResponse('Note restore failed validation or conflicted.', 409) }
+    },
+  }))
+
+  ctx.effect(() => ctx.connection.fetch.register({
+    path: HISTORY_API_PREFIX + '/memory/note/save',
+    methods: ['POST'],
+    requestBody: 'buffered',
+    fetch: async (request: Request) => {
+      let payload: unknown
+      try { payload = await request.json() } catch {
+        return textResponse('Invalid JSON.', 400)
+      }
+      if (typeof payload !== 'object' || !payload || Array.isArray(payload)) {
+        return textResponse('Invalid note request.', 400)
+      }
+      const data = payload as Record<string, unknown>
+      if (data.retentionAcknowledged !== true
+        || typeof data.projectId !== 'string'
+        || !/^pm_[0-9a-f]{64}$/.test(data.projectId)
+        || typeof data.episodeId !== 'string'
+        || data.episodeId.length < 1 || data.episodeId.length > 1000
+        || typeof data.text !== 'string'
+        || data.text.trim().length < 1 || data.text.trim().length > 1000) {
+        return textResponse('Explicit confirmation, valid project and note text required.', 400)
+      }
+      try {
+        return json(await history.saveUserMemoryNote({
+          projectId: data.projectId, episodeId: data.episodeId,
+          text: data.text, retentionAcknowledged: true,
+        }, request.signal), 201)
+      } catch {
+        return textResponse('Could not save this note; verify its source still exists.', 409)
+      }
+    },
+  }))
+
+  ctx.effect(() => ctx.connection.fetch.register({
+    path: HISTORY_API_PREFIX + '/memory/note/update',
+    methods: ['POST'],
+    requestBody: 'buffered',
+    fetch: async (request: Request) => {
+      let payload: unknown
+      try { payload = await request.json() } catch {
+        return textResponse('Invalid JSON.', 400)
+      }
+      if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+        return textResponse('Invalid note request.', 400)
+      }
+      const data = payload as Record<string, unknown>
+      if (typeof data.id !== 'string'
+        || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data.id)
+        || typeof data.text !== 'string'
+        || data.text.trim().length < 1 || data.text.trim().length > 1000) {
+        return textResponse('Invalid note update.', 400)
+      }
+      try {
+        return (await history.updateUserMemoryNote(
+          data.id, data.text, request.signal,
+        )) ? json({ updated: true }) : textResponse('Not found.', 404)
+      } catch { return textResponse('Could not update note.', 409) }
+    },
+  }))
+
+  ctx.effect(() => ctx.connection.fetch.register({
+    path: HISTORY_API_PREFIX + '/memory/note/delete',
+    methods: ['POST'],
+    requestBody: 'buffered',
+    fetch: async (request: Request) => {
+      let payload: unknown
+      try { payload = await request.json() } catch {
+        return textResponse('Invalid JSON.', 400)
+      }
+      if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+        return textResponse('Invalid note request.', 400)
+      }
+      const data = payload as Record<string, unknown>
+      if (typeof data.id !== 'string'
+        || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data.id)
+        || data.confirmDelete !== true) {
+        return textResponse('Explicit note deletion confirmation required.', 400)
+      }
+      try {
+        return (await history.removeUserMemoryNote(data.id, request.signal))
+          ? json({ deleted: true })
+          : textResponse('Not found.', 404)
+      } catch { return textResponse('Could not delete note.', 409) }
+    },
+  }))
+
   ctx.effect(() => ctx.connection.fetch.register({
     path: HISTORY_API_PREFIX + '/threads',
     methods: ['GET'],
