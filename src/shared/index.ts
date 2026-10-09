@@ -1,6 +1,7 @@
 export * from './api.js'
 export * from './constants.js'
 export * from './episode.js'
+export * from './memory.js'
 export * from './ids.js'
 export * from './observation.js'
 export * from './policy.js'

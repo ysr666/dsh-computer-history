@@ -26,6 +26,8 @@ export interface PersistedEpisodeResource {
 export interface PersistedEpisodeSurface extends EpisodeSurfaceSummary {}
 
 export interface EpisodeListQuery {
+  /** Optional read-time TTL fence. Only Work Memory uses this today. */
+  readonly notExpiredAtMs?: number
   readonly sinceMs?: number
   readonly workspaceId?: string
   readonly limit?: number
@@ -652,6 +654,10 @@ export class EpisodeStore {
     const clauses = ["e.state != 'invalidated'"]
     const params: Array<string | number> = []
 
+    if (query.notExpiredAtMs !== undefined) {
+      clauses.push('(e.expires_at_ms IS NULL OR e.expires_at_ms > ?)')
+      params.push(query.notExpiredAtMs)
+    }
     if (query.sinceMs !== undefined) {
       clauses.push('e.ended_at_ms >= ?')
       params.push(query.sinceMs)
@@ -676,9 +682,23 @@ export class EpisodeStore {
     `).all(...params).map((row) => this.materialize(row))
   }
 
+  /** Index-only lookup for an opaque memory ID; do not materialize all Episodes. */
+  public listMemoryThreadKeys(nowMs: number): readonly string[] {
+    return (this.db.prepare(`
+      SELECT DISTINCT thread_key
+      FROM episodes
+      WHERE state != 'invalidated'
+        AND thread_key IS NOT NULL
+        AND thread_key != ''
+        AND (expires_at_ms IS NULL OR expires_at_ms > ?)
+      ORDER BY thread_key
+    `).all(nowMs) as Array<{ thread_key: string }>).map(row => row.thread_key)
+  }
+
   public listByThreadKey(
     threadKey: string,
     limit = 1_000,
+    notExpiredAtMs?: number,
   ): readonly EpisodeSummary[] {
     const key = threadKey.trim()
     if (!key) return []
@@ -688,9 +708,11 @@ export class EpisodeStore {
       FROM episodes e
       WHERE e.state != 'invalidated'
         AND e.thread_key = ?
+        AND (? IS NULL OR e.expires_at_ms IS NULL OR e.expires_at_ms > ?)
       ORDER BY e.started_at_ms ASC
       LIMIT ?
-    `).all(key, bounded).map(row => this.materialize(row))
+    `).all(key, notExpiredAtMs ?? null, notExpiredAtMs ?? null, bounded)
+      .map(row => this.materialize(row))
   }
 
   public latestForWorkspace(workspaceId: string): EpisodeSummary | undefined {

@@ -26,6 +26,7 @@ import type {
   SupportedApplicationInventory,
   TimelineDay,
   WorkThread,
+  ProjectMemory,
   WorkThreadDetail,
 } from '../shared/index.js'
 import { historyApiPath, type HistoryApiSuffix } from './api-route.js'
@@ -109,6 +110,10 @@ export const historyApi = {
     requestJson(`/timeline?days=${days}`),
   getRecent: (limit = 1): Promise<readonly EpisodeSummary[]> =>
     requestJson(`/recent?limit=${limit}`),
+  getProjectMemories: (limit = 20, query?: string): Promise<readonly ProjectMemory[]> =>
+    requestJson(`/memory/projects?limit=${limit}${query ? '&query=' + encodeURIComponent(query) : ''}`),
+  getProjectMemory: (id: string): Promise<ProjectMemory> =>
+    requestJson(`/memory/project?id=${encodeURIComponent(id)}`),
   getThreads: (limit = 20): Promise<readonly WorkThread[]> =>
     requestJson(`/threads?limit=${limit}`),
   getThread: (threadKey: string): Promise<WorkThreadDetail> =>

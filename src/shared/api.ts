@@ -1,3 +1,4 @@
+import type { ListProjectMemoriesRequest, ProjectMemory } from './memory.js'
 import type {
   EpisodeDetail,
   EpisodeSummary,
@@ -270,6 +271,14 @@ export interface ComputerHistoryServiceContract {
   revokeSemanticOptIn(request: {
     readonly scopeKey: string
   }): { readonly revoked: boolean; readonly purged: number; readonly forgotten: number }
+
+  /** Read-only, on-demand memory; no persistent copy or new capture. */
+  listProjectMemories(
+    request?: ListProjectMemoriesRequest,
+    signal?: AbortSignal,
+  ): Promise<readonly ProjectMemory[]>
+
+  getProjectMemory(id: string, signal?: AbortSignal): Promise<ProjectMemory | undefined>
 
   /** Work threads over stored episodes (ADR 0004 §5: each carries citations). */
   threads(request?: { readonly limit?: number }): Promise<readonly WorkThread[]>

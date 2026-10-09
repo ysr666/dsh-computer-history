@@ -4,6 +4,8 @@ import type {
   PairingRotation,
   PairingState,
   WorkThread,
+  ProjectMemory,
+  ListProjectMemoriesRequest,
   WorkThreadDetail,
   ComputerHistoryServiceContract,
   ComputerHistoryState,
@@ -53,6 +55,7 @@ import {
   buildWorkThreads,
 } from '../episodes/threads.js'
 import { resolveResume } from '../resume/index.js'
+import { buildProjectMemories, memoryIdForThreadKey } from '../memory/index.js'
 import { phase1AdapterForBundle } from '../ingestion/index.js'
 import {
   DeletionService,
@@ -161,6 +164,46 @@ implements ComputerHistoryServiceContract {
     if (this.activeOperations === 0) return Promise.resolve()
     return new Promise<void>(resolve => {
       this.idleWaiters.push(resolve)
+    })
+  }
+
+  public listProjectMemories(
+    request: ListProjectMemoriesRequest = {},
+    signal?: AbortSignal,
+  ): Promise<readonly ProjectMemory[]> {
+    return this.withOperation(() => {
+      signal?.throwIfAborted()
+      const query = request.query?.trim()
+      if (request.query !== undefined && (!query || query.length > 200)) {
+        throw new Error('memory query must be 1..200 characters')
+      }
+      const nowMs = this.now()
+      return buildProjectMemories(this.episodes.listRecent({
+        limit: 1_000,
+        notExpiredAtMs: nowMs,
+      }), {
+        ...(query ? { query } : {}),
+        limit: boundedLimit(request.limit, 20, 100),
+      }, nowMs)
+    })
+  }
+
+  public getProjectMemory(
+    id: string,
+    signal?: AbortSignal,
+  ): Promise<ProjectMemory | undefined> {
+    return this.withOperation(() => {
+      signal?.throwIfAborted()
+      if (!/^pm_[0-9a-f]{64}$/.test(id)) return undefined
+      const nowMs = this.now()
+      const threadKey = this.episodes.listMemoryThreadKeys(nowMs)
+        .find(key => memoryIdForThreadKey(key) === id)
+      if (!threadKey) return undefined
+      return buildProjectMemories(
+        this.episodes.listByThreadKey(threadKey, 1_000, nowMs),
+        { limit: 1 },
+        nowMs,
+      )[0]
     })
   }
 

@@ -72,6 +72,49 @@ function observation(seq: number, uri: string): ActivityObservation {
 }
 
 describe('episode store', () => {
+  it('finds live memory thread keys without materializing expired episodes', () => {
+    const history = openTempDatabase()
+    const store = new EpisodeStore(history.db)
+    const sql = history.db.prepare(`
+      INSERT INTO episodes(
+        id, started_at_ms, ended_at_ms, start_reason, end_reason,
+        summary_kind, summary_text, confidence, state, created_at_ms,
+        updated_at_ms, expires_at_ms, thread_key
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `)
+    for (const [id, expiry, thread] of [
+      ['a', 10, 'workspace:old'], ['b', 400, 'workspace:live'],
+      ['c', 400, 'workspace:live'], ['d', 400, null],
+    ] as const) {
+      sql.run(id, 1, 2, 'first-observation', 'timeout',
+        'deterministic', 'summary', 0.8, 'closed', 2, 2, expiry, thread)
+    }
+    expect(store.listMemoryThreadKeys(100)).toEqual(['workspace:live'])
+    expect(store.listByThreadKey('workspace:live', 100, 100)).toHaveLength(2)
+    expect(store.listByThreadKey('workspace:old', 100, 100)).toEqual([])
+    history.close()
+  })
+
+  it('supports a read-time TTL fence for Work Memory when maintenance is delayed', () => {
+    const history = openTempDatabase()
+    const episodes = new EpisodeStore(history.db)
+    const insert = history.db.prepare(`
+      INSERT INTO episodes(
+        id, started_at_ms, ended_at_ms, start_reason, end_reason,
+        summary_kind, summary_text, confidence, state, created_at_ms,
+        updated_at_ms, expires_at_ms
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `)
+    for (const [id, expiry] of [['already-expired', 2_000], ['still-live', 4_000]] as const) {
+      insert.run(id, 100, 200, 'first-observation', 'timeout',
+        'deterministic', 'observed', 1, 'closed', 200, 200, expiry)
+    }
+    expect(episodes.listRecent({ limit: 10 })).toHaveLength(2)
+    expect(episodes.listRecent({ limit: 10, notExpiredAtMs: 2_000 })
+      .map(item => String(item.id))).toEqual(['still-live'])
+    expect(episodes.listRecent({ limit: 10, notExpiredAtMs: 4_000 })).toEqual([])
+    history.close()
+  })
   it('reads app-switch as a valid persisted boundary reason', () => {
     const history = openTempDatabase()
     const episodes = new EpisodeStore(history.db)

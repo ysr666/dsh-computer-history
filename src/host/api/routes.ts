@@ -622,6 +622,48 @@ export function registerHistoryApi(
     },
   }))
 
+  // Work Memory is a read-only projection of current stored Episodes.
+  // Each GET re-evaluates the surviving evidence; no stale cache survives Forget.
+  ctx.effect(() => ctx.connection.fetch.register({
+    path: HISTORY_API_PREFIX + '/memory/projects',
+    methods: ['GET'],
+    requestBody: 'buffered',
+    fetch: async (request: Request) => {
+      try {
+        const url = new URL(request.url)
+        const limit = optionalQueryInteger(url, 'limit', 1, 100)
+        const query = optionalQueryText(url, 'query', 200)
+        if (query !== undefined && !query.trim()) {
+          throw new RequestValidationError('query must not be blank')
+        }
+        return json(await history.listProjectMemories({
+          ...(limit === undefined ? {} : { limit }),
+          ...(query === undefined ? {} : { query }),
+        }, request.signal))
+      } catch (error) {
+        return requestFailure(error)
+      }
+    },
+  }))
+
+  ctx.effect(() => ctx.connection.fetch.register({
+    path: HISTORY_API_PREFIX + '/memory/project',
+    methods: ['GET'],
+    requestBody: 'buffered',
+    fetch: async (request: Request) => {
+      try {
+        const id = requiredQueryText(new URL(request.url), 'id', 67)
+        if (!/^pm_[0-9a-f]{64}$/.test(id)) {
+          return textResponse('Invalid memory id.', 400)
+        }
+        const project = await history.getProjectMemory(id, request.signal)
+        return project ? json(project) : textResponse('Not found.', 404)
+      } catch (error) {
+        return requestFailure(error)
+      }
+    },
+  }))
+
   ctx.effect(() => ctx.connection.fetch.register({
     path: HISTORY_API_PREFIX + '/threads',
     methods: ['GET'],

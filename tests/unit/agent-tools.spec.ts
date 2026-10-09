@@ -96,6 +96,51 @@ describe('agent-scoped Computer History surfaces', () => {
     )).rejects.toThrow(/1 to 10080/)
     dispose()
   })
+  it('exposes Work Memory as an optional untrusted read tool', async () => {
+    const definitions = new Map<string, ToolDefinition>()
+    const id = 'pm_' + 'a'.repeat(64)
+    let query: unknown
+    let selected: string | undefined
+    const memory = { id, title: 'Project A', facts: [], episodeCount: 1 }
+    const history = {
+      async listProjectMemories(request: unknown) {
+        query = request
+        return [memory]
+      },
+      async getProjectMemory(memoryId: string) {
+        selected = memoryId
+        return memory
+      },
+    }
+    const ctx = {
+      get(name: string) {
+        return name === 'computerHistory' ? history : undefined
+      },
+      tools: {
+        register(definition: ToolDefinition) {
+          definitions.set(definition.name, definition)
+          return () => { definitions.delete(definition.name) }
+        },
+      },
+    } as unknown as Context
+
+    const dispose = registerComputerHistoryTools(ctx)
+    const tool = definitions.get('computer_history_memory')!
+    const exec = { signal: new AbortController().signal } as never
+    expect(await tool.execute({ query: 'Project', limit: 2 }, exec)).toEqual([memory])
+    expect(query).toEqual({ query: 'Project', limit: 2 })
+    expect(await tool.execute({ memory_id: id }, exec)).toEqual(memory)
+    expect(selected).toBe(id)
+    await expect(tool.execute({ memory_id: '../etc/passwd' }, exec))
+      .rejects.toThrow(/opaque memory id/)
+    await expect(tool.execute({ query: ' ' }, exec))
+      .rejects.toThrow(/1..200/)
+    expect(tool.output.render({}, [memory] as never)[0]).toMatchObject({
+      type: 'text',
+      text: expect.stringContaining('untrusted metadata'),
+    })
+    dispose()
+  })
   it('resolves the native Continue capsule through a zero-argument session-bound tool', async () => {
     const definitions = new Map<string, ToolDefinition>()
     const episode = {
