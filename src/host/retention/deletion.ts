@@ -12,6 +12,7 @@ import {
   DeletionLogStore,
   DshCheckpointStore,
   EpisodeStore,
+  MemoryNoteStore,
   ObservationStore,
   ResourceStore,
 } from '../store/index.js'
@@ -34,6 +35,7 @@ interface DeletionPlan {
   readonly derivedEpisodeIds?: readonly EpisodeId[]
   readonly audit: {
     readonly scope: 'time-range' | 'episode' | 'app' | 'all'
+    readonly episodeId?: EpisodeId
     readonly rangeStartMs?: number
     readonly rangeEndMs?: number
     readonly bundleId?: string
@@ -136,6 +138,7 @@ export class DeletionService {
         : {}),
       audit: {
         scope: scope.kind,
+        ...(scope.kind === 'episode' ? { episodeId: scope.episodeId } : {}),
         ...(scope.kind === 'time-range'
           ? {
               rangeStartMs: scope.startMs,
@@ -216,6 +219,26 @@ export class DeletionService {
           episodeId,
           this.hasCompleteProvenance(episodeId),
         )
+      }
+
+      // Explicit user Forget also revokes confirmed notes anchored to the
+      // affected scope. This runs BEFORE evidence deletion in the same outer
+      // transaction; retention sweeps intentionally do not revoke notes.
+      const notes = new MemoryNoteStore(this.db)
+      if (plan.audit.scope === 'all') {
+        notes.forget({ kind: 'all' })
+      } else if (plan.audit.scope === 'episode' && plan.audit.episodeId) {
+        notes.forget({ kind: 'episode', episodeId: plan.audit.episodeId })
+      } else if (plan.audit.scope === 'app' && plan.audit.bundleId) {
+        notes.forget({ kind: 'app', bundleId: plan.audit.bundleId })
+      } else if (plan.audit.scope === 'time-range'
+        && plan.audit.rangeStartMs !== undefined
+        && plan.audit.rangeEndMs !== undefined) {
+        notes.forget({
+          kind: 'time-range',
+          startMs: plan.audit.rangeStartMs,
+          endMs: plan.audit.rangeEndMs,
+        })
       }
 
       this.db.exec(`

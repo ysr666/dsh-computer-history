@@ -30,6 +30,12 @@ export const EXPORTED_TABLES = [
   'episode_resources',
   'episode_surfaces',
   'episode_summary_citations',
+  // Confirmed memories must be visible in the user's audit/export. Importing
+  // them is deliberately NOT automatic: restoring indefinite-retention notes
+  // requires a separate explicit confirmation flow, unlike expired Episodes.
+  'memory_projects',
+  'memory_user_notes',
+  'memory_note_apps',
 ] as const
 
 const IMPORTED_HISTORY_TABLES = new Set<ExportedTable>([
