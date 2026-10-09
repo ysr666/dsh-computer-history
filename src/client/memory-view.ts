@@ -1,5 +1,5 @@
 import React from 'react'
-import type { MemoryFact, ProjectMemory, UserMemoryNote } from '../shared/index.js'
+import type { MemoryFact, ProjectMemory, ThreadActivityLinks, UserMemoryNote } from '../shared/index.js'
 import { historyApi } from './api.js'
 
 interface WorkMemoryViewProps {
@@ -33,6 +33,11 @@ export function WorkMemoryView({ locale, historyRevision }: WorkMemoryViewProps)
   const [projects, setProjects] = React.useState<readonly ProjectMemory[] | null>()
   const [notes, setNotes] = React.useState<readonly UserMemoryNote[] | null>()
   const [selected, setSelected] = React.useState<ProjectMemory>()
+  const [activityLinks, setActivityLinks] = React.useState<ThreadActivityLinks | null>()
+  const [linkSource, setLinkSource] = React.useState<string>()
+  const [linkEvidence, setLinkEvidence] = React.useState<{
+    episodeId: string; activity: string; anchor: string
+  }>()
   const [draft, setDraft] = React.useState('')
   const [acknowledged, setAcknowledged] = React.useState(false)
   const [editId, setEditId] = React.useState<string>()
@@ -52,11 +57,16 @@ export function WorkMemoryView({ locale, historyRevision }: WorkMemoryViewProps)
   const uploadRef = React.useRef<HTMLInputElement>(null)
   const revision = React.useRef(0)
   const projectRequest = React.useRef(0)
+  const evidenceRequest = React.useRef(0)
 
   React.useEffect(() => {
     const current = ++revision.current
     projectRequest.current += 1
+    evidenceRequest.current += 1
     setSelected(undefined)
+    setActivityLinks(undefined)
+    setLinkSource(undefined)
+    setLinkEvidence(undefined)
     setAcknowledged(false)
     setDraft('')
     setEditId(undefined)
@@ -101,8 +111,17 @@ export function WorkMemoryView({ locale, historyRevision }: WorkMemoryViewProps)
     setError('')
     setNotice('')
     setSelected(undefined)
+    setActivityLinks(undefined)
+    setLinkSource(undefined)
+    setLinkEvidence(undefined)
+    evidenceRequest.current += 1
     setDraft('')
     setAcknowledged(false)
+    void historyApi.getThreadActivityLinks(id).then(links => {
+      if (projectRequest.current === current) setActivityLinks(links)
+    }).catch(() => {
+      if (projectRequest.current === current) setActivityLinks(null)
+    })
     void historyApi.getProjectMemory(id).then(project => {
       if (projectRequest.current === current) setSelected(project)
     }).catch(() => {
@@ -110,6 +129,39 @@ export function WorkMemoryView({ locale, historyRevision }: WorkMemoryViewProps)
         setError(t('此项目已不可用。', 'This project is no longer available.'))
       }
     })
+  }
+
+  const inspectLink = async (episodeId: string, anchorId: string): Promise<void> => {
+    if (linkSource === episodeId) {
+      evidenceRequest.current += 1
+      setLinkSource(undefined)
+      setLinkEvidence(undefined)
+      return
+    }
+    const current = ++evidenceRequest.current
+    const project = projectRequest.current
+    setLinkSource(episodeId)
+    setLinkEvidence(undefined)
+    try {
+      const [activity, anchor] = await Promise.all([
+        historyApi.getEpisode(episodeId), historyApi.getEpisode(anchorId),
+      ])
+      if (current === evidenceRequest.current && projectRequest.current === project) {
+        setLinkEvidence({
+          episodeId,
+          activity: activity.summary,
+          anchor: anchor.summary,
+        })
+      }
+    } catch {
+      if (current === evidenceRequest.current && projectRequest.current === project) {
+        setLinkEvidence({
+          episodeId,
+          activity: t('来源已过期或不可用。', 'Source expired or unavailable.'),
+          anchor: '',
+        })
+      }
+    }
   }
 
   const save = async (): Promise<void> => {
@@ -490,6 +542,61 @@ export function WorkMemoryView({ locale, historyRevision }: WorkMemoryViewProps)
                 ? t(' · 原始记录已过期', ' · Raw records expired')
                 : t(' · 有历史记录', ' · Historical record')),
           ))),
+        React.createElement('h3', null,
+          t('跨应用活动线索', 'Cross-application activity hints')),
+        React.createElement('p', { className: 'ch-muted' },
+          t('文件完全一致可提供关联证据；仅时间接近不代表属于该项目。不会改变项目归组或继续工作排序。',
+            'An exact shared file is evidence of a possible relationship. Nearby activity is not attributed to this project. Neither affects thread grouping or Continue.')),
+        activityLinks === undefined
+          ? React.createElement('p', { className: 'ch-muted', role: 'status' },
+              t('正在分析活动线索…', 'Checking activity links…'))
+          : activityLinks === null
+            ? React.createElement('p', { className: 'ch-muted' },
+                t('暂时无法读取关联线索。', 'Activity links unavailable.'))
+            : activityLinks.links.length === 0
+              ? React.createElement('p', { className: 'ch-muted' },
+                  t('没有足够的独立证据建立额外关联。', 'No additional links supported by available evidence.'))
+              : React.createElement('ul', { className: 'ch-memory-link-list' },
+                  ...activityLinks.links.map(link => React.createElement(
+                    'li', { key: link.episodeId },
+                    React.createElement('span', { className: 'ch-memory-link-label' },
+                      link.kind === 'exact-resource'
+                        ? t('相同文件线索', 'Exact-file link')
+                        : t('同期活动 · 未归属', 'Nearby · unattributed')),
+                    React.createElement('strong', null, link.label),
+                    React.createElement('span', { className: 'ch-muted' },
+                      new Date(link.observedAtMs).toLocaleString(zh ? 'zh-CN' : 'en-US')),
+                    link.sharedResourceUri
+                      ? React.createElement('span', { className: 'ch-muted' },
+                          link.sharedResourceUri)
+                      : null,
+                    React.createElement('button', {
+                      type: 'button', className: 'ch-text-action',
+                      onClick: () => { void inspectLink(link.episodeId, link.anchorEpisodeId) },
+                    }, linkSource === link.episodeId
+                      ? t('收起来源', 'Hide source') : t('检查来源', 'Inspect sources')),
+                    linkSource === link.episodeId
+                      ? React.createElement('div', { className: 'ch-memory-link-evidence' },
+                          React.createElement('p', { className: 'ch-muted' },
+                            t('活动片段：', 'Activity Episode: ') + link.episodeId
+                            + ' · ' + t('项目锚点：', 'Project anchor: ') + link.anchorEpisodeId),
+                          linkEvidence?.episodeId === link.episodeId
+                            ? React.createElement(React.Fragment, null,
+                                React.createElement('p', null, linkEvidence.activity),
+                                linkEvidence.anchor
+                                  ? React.createElement('p', null, linkEvidence.anchor)
+                                  : null,
+                              )
+                            : React.createElement('p', { role: 'status', className: 'ch-muted' },
+                                t('检查中…', 'Inspecting…')),
+                        )
+                      : null,
+                  )),
+                ),
+        activityLinks?.scanTruncated
+          ? React.createElement('p', { className: 'ch-muted' },
+              t('检索数量有上限，当前线索并不完整。', 'Bounded scan; links may be incomplete.'))
+          : null,
         React.createElement('h3', null, t('为此项目保存笔记', 'Save a note for this project')),
         React.createElement('textarea', {
           rows: 3, maxLength: 1000,

@@ -40,6 +40,18 @@ export const MEMORY_STYLES = `
 .ch-memory-list>li p{flex-basis:100%;margin:1px 0;white-space:pre-wrap;overflow-wrap:anywhere}
 .ch-memory-list>li strong{font-size:12px}
 .ch-memory-list>li>button{min-width:0;overflow-wrap:anywhere}
+/* Advisory links never resemble confirmed thread membership. */
+.ch-memory-link-list{list-style:none;display:grid;gap:7px;margin:8px 0 15px;padding:0}
+.ch-memory-link-list>li{display:flex;flex-wrap:wrap;gap:5px 9px;align-items:baseline;
+  padding:10px 12px;border-radius:9px;border:1px dashed var(--dsw-alias-border-l1);
+  background:var(--dsw-alias-bg-layer-2);font-size:12px;min-width:0;overflow-wrap:anywhere}
+.ch-memory-link-list>li strong{font-weight:600;min-width:0;overflow-wrap:anywhere}
+.ch-memory-link-list>li .ch-muted{font-size:11px;overflow-wrap:anywhere}
+.ch-memory-link-list>li p{margin:2px 0;flex-basis:100%;word-break:break-all}
+.ch-memory-link-evidence{flex-basis:100%;min-width:0;border-top:1px solid var(--dsw-alias-border-l1);
+  margin-top:6px;padding-top:7px}
+.ch-memory-link-evidence p{margin:5px 0;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere}
+.ch-memory-link-label{font-size:10px;font-weight:650;color:var(--dsw-alias-label-secondary)}
 .ch-memory-share{margin-top:12px;padding:10px 12px;border-top:1px solid var(--dsw-alias-border-l1);font-size:12px}
 .ch-memory-share>.ch-muted{line-height:1.6;margin:0 0 8px}
 .ch-memory-code{display:block;width:100%;max-width:420px;margin:6px 0 9px;font:inherit}

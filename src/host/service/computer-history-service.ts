@@ -26,6 +26,7 @@ import type {
   AskHistoryRequest,
   AskHistoryResult,
   ProjectMemory,
+  ThreadActivityLinks,
   ListProjectMemoriesRequest,
   ConfirmUserMemoryNoteRequest,
   UserMemoryNote,
@@ -172,6 +173,12 @@ export class ComputerHistoryService
     signal?: AbortSignal,
   ): Promise<readonly ProjectMemory[]> {
     return this.backend.listProjectMemories(request, signal)
+  }
+
+  public getThreadActivityLinks(
+    id: string, signal?: AbortSignal,
+  ): Promise<ThreadActivityLinks | undefined> {
+    return this.backend.getThreadActivityLinks(id, signal)
   }
 
   public getProjectMemory(

@@ -140,6 +140,42 @@ describe('agent-scoped Computer History surfaces', () => {
     dispose()
   })
 
+  it('exposes M4 associations as advisory read-only Agent data', async () => {
+    const definitions = new Map<string, ToolDefinition>()
+    const id = 'pm_' + 'a'.repeat(64)
+    const result = {
+      projectMemoryId: id, links: [{
+        episodeId: 'e1', anchorEpisodeId: 'e0',
+        kind: 'nearby-unassigned', attribution: 'unattributed',
+      }], scanTruncated: false,
+    }
+    const ctx = {
+      get(name: string) {
+        return name === 'computerHistory'
+          ? { async getThreadActivityLinks(projectId: string) {
+              return projectId === id ? result : undefined
+            } }
+          : undefined
+      },
+      tools: { register(definition: ToolDefinition) {
+        definitions.set(definition.name, definition)
+        return () => { definitions.delete(definition.name) }
+      } },
+    } as unknown as Context
+    const dispose = registerComputerHistoryTools(ctx)
+    const tool = definitions.get('computer_history_activity_links')!
+    const exec = { signal: new AbortController().signal } as never
+    expect(await tool.execute({ memory_id: id }, exec)).toEqual(result)
+    expect(await tool.execute({ memory_id: 'pm_' + 'b'.repeat(64) }, exec))
+      .toBeNull()
+    await expect(tool.execute({ memory_id: 'relative/path' }, exec))
+      .rejects.toThrow(/valid exact memory_id/)
+    expect(tool.output.render({}, result as never)[0]).toMatchObject({
+      type: 'text', text: expect.stringContaining('untrusted metadata'),
+    })
+    dispose()
+  })
+
   it('exposes Work Memory as an optional untrusted read tool', async () => {
     const definitions = new Map<string, ToolDefinition>()
     const id = 'pm_' + 'a'.repeat(64)

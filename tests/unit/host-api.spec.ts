@@ -68,6 +68,7 @@ function harness(overrides: Record<string, unknown> = {}) {
       calls.memoryList = request
       return []
     },
+    async getThreadActivityLinks() { return undefined },
     async getProjectMemory(id: unknown) {
       calls.memoryId = id
       return undefined
@@ -172,6 +173,7 @@ describe('Computer History Host API', () => {
       '/api/computer-history/episode',
       '/api/computer-history/export',
       '/api/computer-history/import',
+      '/api/computer-history/memory/links',
       '/api/computer-history/memory/note/ai-read-code',
       '/api/computer-history/memory/note/ai-read-revoke',
       '/api/computer-history/memory/note/delete',
@@ -493,6 +495,12 @@ describe('Computer History Host API', () => {
         calls.memoryId = id
         return id === memory.id ? memory : undefined
       },
+      async getThreadActivityLinks(id: string) {
+        return id === memory.id ? {
+          projectMemoryId: id, links: [], scannedEpisodes: 1,
+          scanTruncated: false, caveat: 'Not project membership',
+        } : undefined
+      },
     })
 
     const list = await request('/memory/projects?query=project&limit=2')
@@ -505,6 +513,14 @@ describe('Computer History Host API', () => {
     expect(calls.memoryId).toBe(memory.id)
     await expect(detail.json()).resolves.toEqual(memory)
 
+    const links = await request('/memory/links?id=' + memory.id)
+    expect(links.status).toBe(200)
+    expect(links.headers.get('cache-control')).toBe('no-store')
+    await expect(links.json()).resolves.toMatchObject({
+      projectMemoryId: memory.id, links: [], scanTruncated: false,
+    })
+    expect((await request('/memory/links?id=invalid')).status).toBe(400)
+    expect((await request('/memory/links?id=pm_' + 'b'.repeat(64))).status).toBe(404)
     expect((await request('/memory/project?id=invalid')).status).toBe(400)
     expect((await request('/memory/project?id=pm_' + 'b'.repeat(64))).status).toBe(404)
     expect((await request('/memory/projects?limit=0')).status).toBe(400)
