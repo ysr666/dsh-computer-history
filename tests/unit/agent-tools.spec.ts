@@ -96,6 +96,50 @@ describe('agent-scoped Computer History surfaces', () => {
     )).rejects.toThrow(/1 to 10080/)
     dispose()
   })
+  it('requires a one-time capability before exposing user-confirmed notes to an Agent', async () => {
+    const tools = new Map<string, ToolDefinition>()
+    let codeRead: string | undefined
+    const note = {
+      id: 'note-id', projectId: 'pm_x', projectLabel: 'A',
+      text: 'A user-confirmed private note',
+      evidenceLevel: 'user-confirmed' as const,
+    }
+    const history = {
+      async readOneConfirmedNote(code: string) {
+        codeRead = code
+        return code === 'A'.repeat(32) ? note : undefined
+      },
+      async askHistory() {
+        return {
+          status: 'no-evidence', notesAccess: 'not-searched', items: [],
+        }
+      },
+    }
+    const ctx = {
+      get(name: string) { return name === 'computerHistory' ? history : undefined },
+      tools: { register(definition: ToolDefinition) {
+        tools.set(definition.name, definition)
+        return () => { tools.delete(definition.name) }
+      } },
+    } as unknown as Context
+    const dispose = registerComputerHistoryTools(ctx)
+    const exec = { signal: new AbortController().signal } as never
+    const ask = tools.get('computer_history_ask')!
+    const answer = await ask.execute({ query: 'what happened last week' }, exec)
+    expect(answer).toMatchObject({ notesAccess: 'not-searched' })
+    expect(codeRead).toBeUndefined()
+    const read = tools.get('computer_history_note_read')!
+    await expect(read.execute({ code: 'invalid' }, exec)).rejects.toThrow(/invalid/)
+    expect(codeRead).toBeUndefined()
+    expect(await read.execute({ code: 'B'.repeat(32) }, exec)).toBeNull()
+    expect(await read.execute({ code: 'A'.repeat(32) }, exec)).toEqual(note)
+    expect(codeRead).toBe('A'.repeat(32))
+    expect(read.output.render({}, note as never)[0]).toMatchObject({
+      type: 'text', text: expect.stringContaining('untrusted metadata'),
+    })
+    dispose()
+  })
+
   it('exposes Work Memory as an optional untrusted read tool', async () => {
     const definitions = new Map<string, ToolDefinition>()
     const id = 'pm_' + 'a'.repeat(64)

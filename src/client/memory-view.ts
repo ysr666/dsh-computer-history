@@ -38,6 +38,9 @@ export function WorkMemoryView({ locale, historyRevision }: WorkMemoryViewProps)
   const [editId, setEditId] = React.useState<string>()
   const [editText, setEditText] = React.useState('')
   const [deleteId, setDeleteId] = React.useState<string>()
+  const [shareNoteId, setShareNoteId] = React.useState<string>()
+  const [shareConsent, setShareConsent] = React.useState(false)
+  const [shareCode, setShareCode] = React.useState<string>()
   const [pending, setPending] = React.useState(false)
   const [error, setError] = React.useState('')
   const [notice, setNotice] = React.useState('')
@@ -58,6 +61,9 @@ export function WorkMemoryView({ locale, historyRevision }: WorkMemoryViewProps)
     setDraft('')
     setEditId(undefined)
     setDeleteId(undefined)
+    setShareNoteId(undefined)
+    setShareConsent(false)
+    setShareCode(undefined)
     setError('')
     setNotice('')
     setRestoreFile(undefined)
@@ -233,6 +239,42 @@ export function WorkMemoryView({ locale, historyRevision }: WorkMemoryViewProps)
     }
   }
 
+  const closeShare = async (): Promise<void> => {
+    if (pending) return
+    if (shareCode) {
+      setPending(true)
+      try {
+        await historyApi.revokeAiNoteReadCode(shareCode)
+      } catch {
+        setError(t('无法撤销读取码；它仍会在十分钟内自动过期。',
+          'Could not revoke code; it will still expire after ten minutes.'))
+        setPending(false)
+        return
+      } finally {
+        setPending(false)
+      }
+    }
+    setShareNoteId(undefined)
+    setShareConsent(false)
+    setShareCode(undefined)
+  }
+
+  const shareOnce = async (noteId: string): Promise<void> => {
+    if (shareNoteId !== noteId || !shareConsent || pending) return
+    setPending(true)
+    setError('')
+    try {
+      const grant = await historyApi.issueAiNoteReadCode(noteId)
+      setShareCode(grant.code)
+      setNotice(t(
+        '一次性授权码有效期 10 分钟，使用一次后失效。请仅主动发送给你信任的 DSH 会话。',
+        'One-time code expires in 10 minutes or after use. Share only with a DSH session you trust.',
+      ))
+    } catch {
+      setError(t('无法授权读取该笔记。', 'Could not authorise this note.'))
+    } finally { setPending(false) }
+  }
+
   const noteCards = notes?.map(note => React.createElement(
     'li', { key: note.id, className: 'ch-memory-note-card' },
     React.createElement('div', { className: 'ch-memory-note-body' },
@@ -286,7 +328,60 @@ export function WorkMemoryView({ locale, historyRevision }: WorkMemoryViewProps)
               disabled: pending,
               onClick: () => setDeleteId(note.id),
             }, t('删除', 'Delete')),
+        React.createElement('button', {
+          type: 'button', className: 'ch-text-action', disabled: pending,
+          onClick: () => {
+            if (shareCode) {
+              void closeShare()
+              return
+            }
+            setShareNoteId(shareNoteId === note.id ? undefined : note.id)
+            setShareConsent(false)
+          },
+        }, t('授权 AI 读取一次', 'Allow one AI read')),
       ),
+      shareNoteId === note.id && editId !== note.id
+        ? React.createElement('div', { className: 'ch-memory-share' },
+            React.createElement('p', { className: 'ch-muted' },
+              t(
+                '仅授权这一条笔记。生成的一次性码必须由你主动发送给 DSH 中的 AI；笔记正文可能进入你当前配置的模型（包括远程模型）上下文。',
+                'Authorise exactly this note. You must personally provide the one-time code to DSH. Its text may enter the context of your configured model, including a remote model.',
+              )),
+            React.createElement('p', { className: 'ch-muted' },
+              t('此授权仅控制 Computer History 提供的 AI 读取工具，不代表对其他本地文件访问工具的系统级隔离。',
+                'This permission controls the Computer History AI tool, not OS-level access by other local file tools.')),
+            React.createElement('label', { className: 'ch-memory-checkbox' },
+              React.createElement('input', {
+                type: 'checkbox', checked: shareConsent,
+                disabled: shareCode !== undefined,
+                onChange: (event: React.ChangeEvent<HTMLInputElement>) =>
+                  setShareConsent(event.target.checked),
+              }),
+              t('我已了解上述 AI 读取范围与可能的模型外发。', 'I understand the AI read scope and possible model disclosure.')),
+            shareCode
+              ? React.createElement('div', null,
+                  React.createElement('label', { className: 'ch-muted' },
+                    t('一次性读取码（点击文本框后手动复制）', 'One-time code (select to copy)')),
+                  React.createElement('input', {
+                    type: 'text', readOnly: true, value: shareCode,
+                    className: 'ch-input ch-memory-code',
+                    'aria-label': t('一次性读取码', 'One-time access code'),
+                    onFocus: (event: React.FocusEvent<HTMLInputElement>) =>
+                      event.currentTarget.select(),
+                  }),
+                )
+              : React.createElement('button', {
+                  type: 'button', className: 'ch-button',
+                  disabled: pending || !shareConsent,
+                  onClick: () => { void shareOnce(note.id) },
+                }, t('生成一次性读取码', 'Generate one-time code')),
+            React.createElement('button', {
+              type: 'button', className: 'ch-text-action',
+              onClick: () => { void closeShare() },
+            }, shareCode ? t('撤销读取码并关闭', 'Revoke code and close')
+              : t('关闭', 'Close')),
+          )
+        : null,
     ),
   ))
 

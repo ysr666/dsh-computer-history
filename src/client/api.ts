@@ -27,6 +27,8 @@ import type {
   TimelineDay,
   WorkThread,
   ProjectMemory,
+  AskHistoryRequest,
+  AskHistoryResult,
   UserMemoryNote,
   ConfirmUserMemoryNoteRequest,
   WorkThreadDetail,
@@ -112,10 +114,17 @@ export const historyApi = {
     requestJson(`/timeline?days=${days}`),
   getRecent: (limit = 1): Promise<readonly EpisodeSummary[]> =>
     requestJson(`/recent?limit=${limit}`),
+  askHistory: (request: AskHistoryRequest): Promise<AskHistoryResult> =>
+    postJson('/ask', request),
   getProjectMemories: (limit = 20, query?: string): Promise<readonly ProjectMemory[]> =>
     requestJson(`/memory/projects?limit=${limit}${query ? '&query=' + encodeURIComponent(query) : ''}`),
   getProjectMemory: (id: string): Promise<ProjectMemory> =>
     requestJson(`/memory/project?id=${encodeURIComponent(id)}`),
+  revokeAiNoteReadCode: (code: string): Promise<{ revoked: boolean }> =>
+    postJson('/memory/note/ai-read-revoke', { code }),
+  issueAiNoteReadCode: (noteId: string): Promise<{
+    readonly code: string; readonly expiresAtMs: number
+  }> => postJson('/memory/note/ai-read-code', { noteId, acknowledged: true }),
   getSavedMemoryNotes: (): Promise<readonly UserMemoryNote[]> =>
     requestJson('/memory/notes'),
   restoreSavedNotes: (

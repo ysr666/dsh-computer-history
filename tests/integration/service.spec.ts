@@ -247,10 +247,55 @@ describe('local computer history backend', () => {
       ...input, retentionAcknowledged: true,
     })
     expect(await backend.listUserMemoryNotes()).toEqual([note])
+
+    await expect(backend.issueNoteReadCode(note.id, false as never))
+      .rejects.toThrow(/consent/)
+    const first = await backend.issueNoteReadCode(note.id, true)
+    expect(first.code).toMatch(/^[A-Za-z0-9_-]{32}$/)
+    expect(await backend.readOneConfirmedNote(first.code)).toEqual(note)
+    expect(await backend.readOneConfirmedNote(first.code)).toBeUndefined()
+
+    const revoked = await backend.issueNoteReadCode(note.id, true)
+    expect(await backend.revokeNoteReadCode(revoked.code)).toBe(true)
+    expect(await backend.readOneConfirmedNote(revoked.code)).toBeUndefined()
+
+    const old = await backend.issueNoteReadCode(note.id, true)
     expect(await backend.updateUserMemoryNote(note.id, 'revised')).toBe(true)
+    expect(await backend.readOneConfirmedNote(old.code)).toBeUndefined()
     expect((await backend.listUserMemoryNotes())[0]?.text).toBe('revised')
+    const beforeDelete = await backend.issueNoteReadCode(note.id, true)
     expect(await backend.removeUserMemoryNote(note.id)).toBe(true)
+    expect(await backend.readOneConfirmedNote(beforeDelete.code)).toBeUndefined()
     expect(await backend.listUserMemoryNotes()).toEqual([])
+    history.close()
+  })
+
+  it('answers bounded metadata questions without reading user-confirmed notes', async () => {
+    const history = openTempDatabase()
+    seedEpisode(history)
+    const policies = new PolicyStore(history.db)
+    policies.ensureInitial(1)
+    const backend = new LocalComputerHistoryBackend(
+      new EpisodeStore(history.db), policies, new DeletionService(history.db),
+      new FakeCapture(), {
+        observationRetentionHours: 24, episodeRetentionDays: 30,
+        autoResume: false, now: () => 10_000,
+      }, undefined, new SemanticOptInStore(history.db), history.db,
+    )
+    const project = (await backend.listProjectMemories())[0]!
+    await backend.saveUserMemoryNote({
+      projectId: project.id, episodeId: 'episode:collector-service:1',
+      text: 'Secret private strategy; never expose in ask',
+      retentionAcknowledged: true,
+    })
+    const result = await backend.askHistory({ query: 'alpha files' })
+    expect(result.items.some(hit => hit.title === 'provider.ts')).toBe(true)
+    expect(result.notesAccess).toBe('not-searched')
+    expect(JSON.stringify(result)).not.toContain('Secret private strategy')
+    expect((await backend.askHistory({ query: 'a nonexistent file' })).status)
+      .toBe('no-evidence')
+    await backend.delete({ scope: { kind: 'all' } })
+    expect((await backend.askHistory({ query: 'alpha files' })).items).toEqual([])
     history.close()
   })
 
@@ -1072,6 +1117,16 @@ describe('Cordis computer history service', () => {
     }
 
     const backend: ComputerHistoryServiceContract = {
+      async issueNoteReadCode() { return { code: 'test', expiresAtMs: 1 } },
+      async readOneConfirmedNote() { return undefined },
+      async revokeNoteReadCode() { return false },
+      async askHistory() {
+        return {
+          status: 'no-evidence' as const, question: '', intent: 'overview' as const,
+          items: [], scannedEpisodes: 0, scanTruncated: false,
+          notesAccess: 'not-searched' as const, caveat: 'test',
+        }
+      },
       async listProjectMemories() { return [] },
       async getProjectMemory() { return undefined },
       async listUserMemoryNotes() { return [] },

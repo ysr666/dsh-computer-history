@@ -154,6 +154,20 @@ export class MemoryNoteStore {
     }>).map(materialize)
   }
 
+  public getOne(id: string): UserMemoryNote | undefined {
+    const row = this.db.prepare(`
+      SELECT n.id, n.project_id, p.label, n.note_text,
+             n.created_at_ms, n.updated_at_ms
+      FROM memory_user_notes n
+      JOIN memory_projects p ON p.id = n.project_id
+      WHERE n.id = ?
+    `).get(id) as {
+      id: string; project_id: string; label: string; note_text: string;
+      created_at_ms: number; updated_at_ms: number
+    } | undefined
+    return row ? materialize(row) : undefined
+  }
+
   public update(id: string, textInput: string, nowMs = Date.now()): boolean {
     const noteText = normaliseText(textInput)
     return this.db.prepare(`
