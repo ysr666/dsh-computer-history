@@ -110,6 +110,12 @@ if (!/chrome='\/Applications\/Google Chrome\.app\/Contents\/MacOS\/Google Chrome
 if (/last-known-good-versions-with-downloads\.json/.test(releaseWorkflowSource)) {
   problems.push(`${RELEASE_WORKFLOW}: release Chrome cannot float to a new major version`)
 }
+// GitHub's gh api can write an HTTP 404 JSON body to stdout even on a failed
+// request. Never treat a nonempty suppressed error body as an existing tag.
+if (!releaseWorkflowSource.includes('git/matching-refs/tags/$RELEASE_TAG')
+  || releaseWorkflowSource.includes('git/ref/tags/$RELEASE_TAG" --jq \'\.object.sha\' 2>/dev/null || true')) {
+  problems.push(`${RELEASE_WORKFLOW}: tag discovery can mistake HTTP 404 for an existing immutable tag`)
+}
 if (!/DSH_CLI=/.test(releaseWorkflowSource)) {
   problems.push(`${RELEASE_WORKFLOW}: product journey no longer provisions DSH_CLI`)
 }
