@@ -2,7 +2,17 @@
 
 ## Unreleased
 
-- No changes recorded after the v1.0.0 candidate.
+- No changes recorded after the v1.0.1 compatibility candidate.
+
+## 1.0.1
+
+**Compatibility candidate: not yet published.** The previously released v1.0.0 tarball and tag remain immutable.
+
+- Add *explicit*, narrowly scoped peer compatibility for DeepSeek Harness `0.2.1-alpha.2` and Cordis `4.0.5-alpha.1`, without accepting unverified alpha versions or dropping DSH `0.2.0-rc.2` support.
+- Verify the published v1.0.0 runtime unchanged against an actual isolated DSH `0.2.1-alpha.2` Host (55/55 end-to-end checks), including first-run policy, Browser/Editor privacy boundaries, evidence-complete Episode, native Continue, disable/re-enable and uninstall preservation.
+- Teach the installed product journey to select its Host Web App independently of the stable default; isolate official npm Registry selection and **koffi-only** native-build approval to disposable alpha test profiles. Do not relax global pnpm or user profile build-script policies.
+- Maintain the stable three-platform RC2 release gates; add a macOS Alpha 2 compatibility verification gate for candidate changes. Alpha 2 verification does not imply all desktop platforms or other alpha versions are supported.
+
 
 ## 1.0.0
 

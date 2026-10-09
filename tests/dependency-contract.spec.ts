@@ -39,7 +39,7 @@ describe('DSH Host dependency compatibility contract', () => {
       .filter(([name]) => name.startsWith('@deepseek-ai/dsh-'))
     expect(dshPeers.length).toBeGreaterThan(0)
     for (const [name, range] of dshPeers) {
-      expect(range, name).toBe('>=0.2.0-rc.2 <0.3.0')
+      expect(range, name).toBe('>=0.2.0-rc.2 <0.3.0 || 0.2.1-alpha.2')
     }
   })
 })
