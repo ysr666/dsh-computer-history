@@ -353,17 +353,37 @@ try {
   // Cell 1 + 3: an allowed origin, with a query string and a fragment.
   const allowedUrl = `${siteOrigin}/allowed/page?token=secret#part-3`
   await visit(allowedUrl)
-  const afterAllowed = rowCount(siteLike)
+  // MV3 startup and Host ingestion are asynchronous. A fixed 2-second delay
+  // sometimes falsely fails the positive control on hosted macOS, even though
+  // the same real browser test passed on the PR. Wait for actual persistence,
+  // never for a predetermined sleep to have elapsed. A missing observation is
+  // still an unequivocal failure after the bounded deadline.
+  const controlStart = Date.now()
+  let afterAllowed = rowCount(siteLike)
+  while (afterAllowed <= before && Date.now() - controlStart < 12_000) {
+    // eslint-disable-next-line no-await-in-loop
+    await sleep(300)
+    afterAllowed = rowCount(siteLike)
+  }
+  console.log(
+    `allowed control readiness: baseline=${before} observed=${afterAllowed}`
+      + ` waitedMs=${Date.now() - controlStart}`,
+  )
   record(
     'allowed origin stores rows',
     true,
     afterAllowed > before,
     `${before} → ${afterAllowed}`,
   )
-  if (afterAllowed === before) {
+  if (afterAllowed <= before) {
     console.error(
       'the control cell failed: every other cell would pass vacuously, so the '
       + 'matrix is reported as failing rather than as mostly green',
+    )
+    console.error(
+      'control diagnostic: no persisted companion observation after bounded '
+      + 'readiness; policy HTTP ' + policyResponse.status
+      + '; site URL rows=' + storedUrls().filter(uri => uri.startsWith(siteOrigin)).length,
     )
   }
   const urls = storedUrls().filter(uri => uri.startsWith(siteOrigin))
