@@ -1,4 +1,7 @@
-import type { ListProjectMemoriesRequest, ProjectMemory } from './memory.js'
+import type {
+  ConfirmUserMemoryNoteRequest, ListProjectMemoriesRequest,
+  ProjectMemory, UserMemoryNote,
+} from './memory.js'
 import type {
   EpisodeDetail,
   EpisodeSummary,
@@ -279,6 +282,19 @@ export interface ComputerHistoryServiceContract {
   ): Promise<readonly ProjectMemory[]>
 
   getProjectMemory(id: string, signal?: AbortSignal): Promise<ProjectMemory | undefined>
+
+  /** User-confirmed notes are separate from automatically derived work facts. */
+  listUserMemoryNotes(projectId?: string, signal?: AbortSignal): Promise<readonly UserMemoryNote[]>
+  saveUserMemoryNote(
+    request: ConfirmUserMemoryNoteRequest, signal?: AbortSignal,
+  ): Promise<UserMemoryNote>
+  updateUserMemoryNote(
+    id: string, text: string, signal?: AbortSignal,
+  ): Promise<boolean>
+  removeUserMemoryNote(id: string, signal?: AbortSignal): Promise<boolean>
+  restoreUserMemoryNotes(
+    document: unknown, retentionAcknowledged: true, signal?: AbortSignal,
+  ): Promise<{ readonly restored: number; readonly skipped: number }>
 
   /** Work threads over stored episodes (ADR 0004 §5: each carries citations). */
   threads(request?: { readonly limit?: number }): Promise<readonly WorkThread[]>

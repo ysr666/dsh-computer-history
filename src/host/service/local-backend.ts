@@ -1,3 +1,4 @@
+import { EpisodeId } from '../../shared/index.js'
 import type {
   BindContinuationSessionRequest,
   CompanionKind,
@@ -6,6 +7,8 @@ import type {
   WorkThread,
   ProjectMemory,
   ListProjectMemoriesRequest,
+  ConfirmUserMemoryNoteRequest,
+  UserMemoryNote,
   WorkThreadDetail,
   ComputerHistoryServiceContract,
   ComputerHistoryState,
@@ -13,7 +16,6 @@ import type {
   DeleteHistoryResult,
   DshCheckpoint,
   EpisodeDetail,
-  EpisodeId,
   EpisodeSummary,
   PolicyRule,
   PolicySnapshot,
@@ -56,6 +58,7 @@ import {
 } from '../episodes/threads.js'
 import { resolveResume } from '../resume/index.js'
 import { buildProjectMemories, memoryIdForThreadKey } from '../memory/index.js'
+import { MemoryNoteStore } from '../store/memory-note-store.js'
 import { phase1AdapterForBundle } from '../ingestion/index.js'
 import {
   DeletionService,
@@ -204,6 +207,89 @@ implements ComputerHistoryServiceContract {
         { limit: 1 },
         nowMs,
       )[0]
+    })
+  }
+
+  public listUserMemoryNotes(
+    projectId?: string, signal?: AbortSignal,
+  ): Promise<readonly UserMemoryNote[]> {
+    return this.withOperation(() => {
+      signal?.throwIfAborted()
+      if (projectId !== undefined && !/^pm_[0-9a-f]{64}$/.test(projectId)) {
+        throw new Error('invalid project id')
+      }
+      return new MemoryNoteStore(this.requireDb()).list(projectId)
+    })
+  }
+
+  public saveUserMemoryNote(
+    request: ConfirmUserMemoryNoteRequest,
+    signal?: AbortSignal,
+  ): Promise<UserMemoryNote> {
+    return this.withOperation(() => {
+      signal?.throwIfAborted()
+      if (request.retentionAcknowledged !== true
+        || !/^pm_[0-9a-f]{64}$/.test(request.projectId)
+        || typeof request.episodeId !== 'string'
+        || request.episodeId.length < 1
+        || request.episodeId.length > 1_000
+        || typeof request.text !== 'string') {
+        throw new Error('explicit user confirmation and valid source are required')
+      }
+      const anchor = this.episodes.get(EpisodeId(request.episodeId))
+      const nowMs = this.now()
+      if (!anchor?.threadKey
+        || memoryIdForThreadKey(anchor.threadKey) !== request.projectId) {
+        throw new Error('confirmed note source does not match project')
+      }
+      // A source exists, but must still be valid at current retention time.
+      const project = buildProjectMemories(
+        this.episodes.listByThreadKey(anchor.threadKey, 1_000, nowMs),
+        { limit: 1 }, nowMs,
+      )[0]
+      if (!project || project.id !== request.projectId) {
+        throw new Error('project source is no longer retained')
+      }
+      return new MemoryNoteStore(this.requireDb()).save({
+        threadKey: anchor.threadKey,
+        projectLabel: project.title,
+        text: request.text,
+        anchor,
+      }, nowMs)
+    })
+  }
+
+  public updateUserMemoryNote(
+    id: string, noteText: string, signal?: AbortSignal,
+  ): Promise<boolean> {
+    return this.withOperation(() => {
+      signal?.throwIfAborted()
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+        throw new Error('invalid memory note id')
+      }
+      return new MemoryNoteStore(this.requireDb()).update(id, noteText, this.now())
+    })
+  }
+
+  public removeUserMemoryNote(id: string, signal?: AbortSignal): Promise<boolean> {
+    return this.withOperation(() => {
+      signal?.throwIfAborted()
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+        throw new Error('invalid memory note id')
+      }
+      return new MemoryNoteStore(this.requireDb()).remove(id)
+    })
+  }
+
+  public restoreUserMemoryNotes(
+    document: unknown, retentionAcknowledged: true, signal?: AbortSignal,
+  ): Promise<{ readonly restored: number; readonly skipped: number }> {
+    return this.withOperation(() => {
+      signal?.throwIfAborted()
+      if (retentionAcknowledged !== true) {
+        throw new Error('explicit restore confirmation required')
+      }
+      return new MemoryNoteStore(this.requireDb()).restoreExport(document, true)
     })
   }
 

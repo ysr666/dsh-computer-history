@@ -46,7 +46,7 @@ function fixture() {
       anchor,
     }, NOW)
   }
-  return { history, db, notes, addEpisode, save }
+  return { history, db, dataDirectory, notes, addEpisode, save }
 }
 
 afterEach(() => {
@@ -163,6 +163,105 @@ describe('M2 confirmed persistent notes', () => {
     expect(target.notes.list()).toEqual([])
     source.history.close()
     target.history.close()
+  })
+
+  it('restores an exported long-term note only after explicit approval', () => {
+    const source = fixture()
+    const note = source.save()
+    const document = exportHistory(source.db, 10_000)
+    const target = fixture()
+    expect(() => target.notes.restoreExport(document, false)).toThrow(/confirmation/)
+    expect(target.notes.list()).toEqual([])
+    expect(target.notes.restoreExport(document, true)).toEqual({
+      restored: 1, skipped: 0,
+    })
+    expect(target.notes.list()).toEqual([note])
+    expect(target.db.prepare('SELECT bundle_id FROM memory_note_apps').all())
+      .toEqual([{ bundle_id: 'editor.alpha' }])
+    expect(target.notes.restoreExport(document, true)).toEqual({
+      restored: 0, skipped: 1,
+    })
+    source.history.close()
+    target.history.close()
+  })
+
+  it('rejects malformed, conflicting or orphaned backup rows transactionally', () => {
+    const source = fixture()
+    source.save()
+    const document = exportHistory(source.db, 10_000)
+    const target = fixture()
+    const original = document.tables.memory_user_notes![0]!
+    const conflict = {
+      ...document,
+      tables: {
+        ...document.tables,
+        memory_user_notes: [{ ...original, note_text: 'different' }],
+      },
+    }
+    expect(() => target.notes.restoreExport({
+      ...document, tables: {
+        ...document.tables,
+        memory_projects: [{ ...document.tables.memory_projects![0], id: 'fake' }],
+      },
+    }, true)).toThrow(/project identity/)
+    expect(target.notes.list()).toEqual([])
+    target.notes.restoreExport(document, true)
+    expect(() => target.notes.restoreExport(conflict, true)).toThrow(/conflict/)
+    expect(target.notes.list()[0]?.text).toBe(source.notes.list()[0]?.text)
+    expect(() => target.notes.restoreExport({
+      ...document, tables: {
+        ...document.tables, memory_note_apps: [{ note_id: 'orphan', bundle_id: 'x' }],
+      },
+    }, true)).toThrow(/application reference/)
+    expect(target.notes.list()).toHaveLength(1)
+    source.history.close()
+    target.history.close()
+  })
+
+  it('refuses stale source selection after another Host deletes the Episode', () => {
+    const first = fixture()
+    const anchor = first.addEpisode('stale', 'editor.alpha')
+    const second = openHistoryDatabase({
+      dataDirectory: first.dataDirectory, nowMs: NOW,
+    })
+    new EpisodeStore(second.db).delete(anchor.id)
+    expect(() => first.notes.save({
+      threadKey: 'workspace:alpha', projectLabel: 'Alpha',
+      text: 'must not become permanent', anchor,
+    }, NOW)).toThrow(/not currently retained/)
+    expect(first.notes.list()).toEqual([])
+    second.close()
+    first.history.close()
+  })
+
+  it('sees a second Host full Forget on the original connection', () => {
+    const first = fixture()
+    first.save()
+    const second = openHistoryDatabase({
+      dataDirectory: first.dataDirectory, nowMs: NOW,
+    })
+    new DeletionService(second.db).delete({ scope: { kind: 'all' } }, NOW + 1)
+    expect(first.notes.list()).toEqual([])
+    second.close()
+    first.history.close()
+  })
+
+  it('rolls back note revocation if the surrounding Forget transaction fails', () => {
+    const { history, db, notes, save } = fixture()
+    const note = save()
+    db.exec(`
+      CREATE TRIGGER force_forget_failure
+      BEFORE INSERT ON deletion_log BEGIN
+        SELECT RAISE(ABORT, 'injected forget failure');
+      END
+    `)
+    expect(() => new DeletionService(db).delete({
+      scope: { kind: 'all' },
+    }, NOW + 1)).toThrow(/injected forget failure/)
+    expect(notes.list()).toEqual([note])
+    expect(db.prepare('SELECT COUNT(*) AS count FROM memory_projects').get())
+      .toEqual({ count: 1 })
+    history.close()
   })
 
   it('rejects forget outside the history deletion transaction', () => {

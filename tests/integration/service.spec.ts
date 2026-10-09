@@ -209,6 +209,51 @@ describe('local computer history backend', () => {
     })
   })
 
+  it('saves only explicitly confirmed notes tied to a live evidence source', async () => {
+    const history = openTempDatabase()
+    const episodeId = seedEpisode(history)
+    const policies = new PolicyStore(history.db)
+    policies.ensureInitial(100)
+    const backend = new LocalComputerHistoryBackend(
+      new EpisodeStore(history.db),
+      policies,
+      new DeletionService(history.db),
+      new FakeCapture(),
+      {
+        observationRetentionHours: 24,
+        episodeRetentionDays: 30,
+        autoResume: false,
+        now: () => 10_000,
+      },
+      undefined,
+      new SemanticOptInStore(history.db),
+      history.db,
+    )
+    const project = (await backend.listProjectMemories())[0]!
+    const input = {
+      projectId: project.id,
+      episodeId: String(episodeId),
+      text: 'I want to remember this',
+    }
+    await expect(backend.saveUserMemoryNote({
+      ...input, retentionAcknowledged: false as never,
+    })).rejects.toThrow(/explicit user confirmation/)
+    expect(await backend.listUserMemoryNotes()).toEqual([])
+    await expect(backend.saveUserMemoryNote({
+      ...input, projectId: 'pm_' + 'b'.repeat(64),
+      retentionAcknowledged: true,
+    })).rejects.toThrow(/does not match/)
+    const note = await backend.saveUserMemoryNote({
+      ...input, retentionAcknowledged: true,
+    })
+    expect(await backend.listUserMemoryNotes()).toEqual([note])
+    expect(await backend.updateUserMemoryNote(note.id, 'revised')).toBe(true)
+    expect((await backend.listUserMemoryNotes())[0]?.text).toBe('revised')
+    expect(await backend.removeUserMemoryNote(note.id)).toBe(true)
+    expect(await backend.listUserMemoryNotes()).toEqual([])
+    history.close()
+  })
+
   it('composes store, resume, policy, capture, and deletion behavior', async () => {
     const history = openTempDatabase()
     const episodeId = seedEpisode(history)
@@ -1029,6 +1074,17 @@ describe('Cordis computer history service', () => {
     const backend: ComputerHistoryServiceContract = {
       async listProjectMemories() { return [] },
       async getProjectMemory() { return undefined },
+      async listUserMemoryNotes() { return [] },
+      async saveUserMemoryNote() {
+        return {
+          id: 'fixture', projectId: 'fixture', projectLabel: 'fixture',
+          text: 'fixture', evidenceLevel: 'user-confirmed' as const,
+          createdAtMs: 1, updatedAtMs: 1,
+        }
+      },
+      async updateUserMemoryNote() { return false },
+      async removeUserMemoryNote() { return false },
+      async restoreUserMemoryNotes() { return { restored: 0, skipped: 0 } },
       async recent() { return [] },
       async search() { return [] },
       async getEpisode() { return undefined },

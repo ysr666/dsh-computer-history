@@ -27,6 +27,8 @@ import type {
   TimelineDay,
   WorkThread,
   ProjectMemory,
+  UserMemoryNote,
+  ConfirmUserMemoryNoteRequest,
   WorkThreadDetail,
 } from '../shared/index.js'
 import { historyApiPath, type HistoryApiSuffix } from './api-route.js'
@@ -114,6 +116,18 @@ export const historyApi = {
     requestJson(`/memory/projects?limit=${limit}${query ? '&query=' + encodeURIComponent(query) : ''}`),
   getProjectMemory: (id: string): Promise<ProjectMemory> =>
     requestJson(`/memory/project?id=${encodeURIComponent(id)}`),
+  getSavedMemoryNotes: (): Promise<readonly UserMemoryNote[]> =>
+    requestJson('/memory/notes'),
+  restoreSavedNotes: (
+    document: unknown,
+  ): Promise<{ readonly restored: number; readonly skipped: number }> =>
+    postJson('/memory/notes/restore', { document, retentionAcknowledged: true }),
+  saveMemoryNote: (input: ConfirmUserMemoryNoteRequest): Promise<UserMemoryNote> =>
+    postJson('/memory/note/save', input),
+  updateMemoryNote: (id: string, text: string): Promise<{ updated: true }> =>
+    postJson('/memory/note/update', { id, text }),
+  deleteMemoryNote: (id: string): Promise<{ deleted: true }> =>
+    postJson('/memory/note/delete', { id, confirmDelete: true }),
   getThreads: (limit = 20): Promise<readonly WorkThread[]> =>
     requestJson(`/threads?limit=${limit}`),
   getThread: (threadKey: string): Promise<WorkThreadDetail> =>

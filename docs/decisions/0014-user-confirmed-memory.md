@@ -1,6 +1,6 @@
 # ADR 0014: Explicit user-confirmed Work Memory notes (M2 draft)
 
-Status: **Proposed / implementation in progress**
+Status: **Draft implementation / awaiting review**
 Date: 2026-10-10
 
 ## Decision
@@ -14,8 +14,9 @@ persistent note automatically.
 The user must see, **before saving**: the selected project label, the exact
 note text, that it persists after short-term Episodes expire until deleted, and
 that explicit Forget can remove it. No unattended model prompts or background
-saves. The user-facing confirmation UI and public write APIs are not yet
-implemented in this initial M2 storage slice.
+saves. The user-facing UI requires a separate acknowledgement checkbox and Save
+action; the Host endpoint independently enforces retention acknowledgement.
+The DSH Agent tool set does not expose any long-term note mutation.
 
 ## Storage and source boundaries
 
@@ -49,16 +50,16 @@ cached or retained by this migration.
 
 The normal audit export includes all three new tables so the user can see
 everything the Host retains. Existing history-import flows **must not**
-silently reactivate indefinitely-retained notes. The initial M2 slice therefore
-validates but does **not** import these rows. A separate restore-notes consent
-flow, with collision checks and an explicit UI choice, is a prerequisite for
-shipping a completed M2 feature.
+silently reactivate indefinitely-retained notes. The normal history import continues to ignore all note tables. A distinct
+restore API validates project identity, provenance and application links,
+rejects conflicting identities transactionally, and requires a second explicit
+user confirmation after the UI has shown the backup contents.
 
 ## Implementation boundary
 
 - No new collector events, model call, network egress, or changes to Continue.
-- M2 is **not yet user-facing or ready for release**: service API, opt-in UI,
-  note editor/removal, explicit restore semantics and comprehensive cross-Host
-  regression coverage remain to be completed.
+- M2 now has user-acknowledged save/edit/delete UI, isolated restore UI and
+  Host API. It is **not yet approved for release** pending review of platform
+  integration, opt-in copy and any outstanding CI checks.
 - Keep M2 on a separate review branch and do not claim completion from the
   migration and store tests alone.
