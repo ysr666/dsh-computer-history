@@ -760,6 +760,16 @@ function historySnapshot() {
       'SELECT session_id, episode_id FROM continuation_sessions '
       + 'ORDER BY bound_at_ms',
     ).all()
+    // Observe the *actual* kinds and URIs of stored test events. Chrome can
+    // legitimately emit more than one allowed-page event during MV3 startup;
+    // a bare fixed count cannot distinguish that from leaked privacy data.
+    const observationSources = db.prepare(
+      'SELECT o.id, o.bundle_id AS bundleId, '
+      + 'o.activity_event AS activityEvent, '
+      + 'r.canonical_uri AS canonicalUri '
+      + 'FROM observations o LEFT JOIN resources r ON r.id = o.resource_id '
+      + 'ORDER BY o.id',
+    ).all()
     const resources = episodeId === undefined
       ? []
       : db.prepare(
@@ -776,9 +786,42 @@ function historySnapshot() {
       citations,
       bindings,
       resources,
+      observationSources,
     }
   } finally {
     db.close()
+  }
+}
+
+/** Strictly account for every installed-product fixture observation.
+ * Three real editor events plus one or more *allowed* browser navigations are
+ * valid. Extra app identities, denied URLs, or a missing editor event fail.
+ */
+function journeyEvidenceAudit(snapshot) {
+  const editor = snapshot.observationSources.filter(
+    row => row.bundleId === 'com.microsoft.VSCode',
+  )
+  const browser = snapshot.observationSources.filter(
+    row => row.bundleId === 'companion.browser',
+  )
+  const editorEvents = editor.map(row => row.activityEvent)
+  const browserUris = browser.map(row => row.canonicalUri)
+  const valid = editor.length === 3
+    && editorEvents.includes('save')
+    && editorEvents.includes('verify-test-success')
+    && browser.length >= 1
+    && browserUris.every(uri =>
+      typeof uri === 'string'
+        && /^http:\/\/127\.0\.0\.1:\\d+\/allowed\/page$/.test(uri))
+    && editor.length + browser.length === snapshot.observations
+    && snapshot.observationSources.length === snapshot.observations
+  return {
+    valid,
+    editorCount: editor.length,
+    editorEvents,
+    browserCount: browser.length,
+    browserUris,
+    unrecognizedCount: snapshot.observations - editor.length - browser.length,
   }
 }
 
@@ -788,6 +831,7 @@ function sameHistoryCounts(left, right) {
     && left.links === right.links
     && left.citations === right.citations
     && left.bindings.length === right.bindings.length
+    && JSON.stringify(left.observationSources) === JSON.stringify(right.observationSources)
 }
 
 async function waitForHistory(
@@ -1293,16 +1337,17 @@ try {
   )
 
   const aggregate = await waitForHistory(snapshot =>
-    snapshot.observations === 4
+    journeyEvidenceAudit(snapshot).valid
     && snapshot.episodeCount === 1
-    && snapshot.links === 4
-    && snapshot.citations === 4
+    && snapshot.links === snapshot.observations
+    && snapshot.citations === snapshot.observations
     && snapshot.resources.length >= 2,
   )
   writeFileSync(
     path.join(artifacts, 'aggregate.json'),
     JSON.stringify(aggregate, null, 2) + '\n',
   )
+  const aggregateAudit = journeyEvidenceAudit(aggregate)
   requireCheck(
     'short Browser detour stays inside one workspace Episode',
     aggregate.episodeCount === 1
@@ -1310,14 +1355,17 @@ try {
     JSON.stringify(aggregate.episodes),
   )
   requireCheck(
-    'Episode keeps all four observation links',
-    aggregate.observations === 4 && aggregate.links === 4,
-    'observations=' + aggregate.observations + ' links=' + aggregate.links,
+    'Episode links cover every expected editor and allowed Browser observation',
+    aggregateAudit.valid
+      && aggregate.observations >= 4
+      && aggregate.links === aggregate.observations,
+    JSON.stringify({ audit: aggregateAudit, observations: aggregate.observations,
+      links: aggregate.links }),
   )
   requireCheck(
-    'Episode summary keeps all four citations',
-    aggregate.citations === 4,
-    'citations=' + aggregate.citations,
+    'Episode summary cites every stored observation',
+    aggregate.citations === aggregate.observations,
+    'observations=' + aggregate.observations + ' citations=' + aggregate.citations,
   )
 
   const liveRecent = apiRequest('GET', '/recent?limit=10')
@@ -1760,11 +1808,12 @@ try {
     JSON.stringify(historyAfterUninstall),
   )
   requireCheck(
-    'final preserved history is 4 observations / 1 Episode / 4 citations / 1 binding',
-    historyAfterUninstall.observations === 4
+    'final preserved history retains all editor/browser evidence and one binding',
+    journeyEvidenceAudit(historyAfterUninstall).valid
+      && historyAfterUninstall.observations >= 4
       && historyAfterUninstall.episodeCount === 1
-      && historyAfterUninstall.links === 4
-      && historyAfterUninstall.citations === 4
+      && historyAfterUninstall.links === historyAfterUninstall.observations
+      && historyAfterUninstall.citations === historyAfterUninstall.observations
       && historyAfterUninstall.bindings.length === 1,
     JSON.stringify(historyAfterUninstall),
   )
