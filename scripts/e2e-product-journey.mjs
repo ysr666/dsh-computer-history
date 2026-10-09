@@ -228,30 +228,36 @@ const installEnv = {
 }
 
 function addBundle(spec) {
-  let result = run(
-    cli,
-    ['plugin', '--profile', profile, 'add', spec],
-    { env: installEnv, timeout: 180_000 },
-  )
-  if (result.status !== 0) {
-    const workspace = path.join(
-      home,
-      'profiles',
-      profile,
-      'pnpm-workspace.yaml',
-    )
-    if (existsSync(workspace)) {
-      writeFileSync(
-        workspace,
-        readFileSync(workspace, 'utf8')
-          .replaceAll(': set this to true or false', ': false'),
-      )
-    }
+  // Registry mirrors can lag behind a just-published DSH alpha. Only the
+  // isolated E2E profile may be switched, never the user's pnpm configuration.
+  const e2eRegistry = process.env.DSH_E2E_REGISTRY
+  if (e2eRegistry && e2eRegistry !== 'https://registry.npmjs.org/') {
+    throw new Error('DSH_E2E_REGISTRY must be the official npm Registry')
+  }
+  const attempts = e2eRegistry ? 3 : 2
+  let result
+  for (let attempt = 0; attempt < attempts; attempt++) {
     result = run(
       cli,
       ['plugin', '--profile', profile, 'add', spec],
       { env: installEnv, timeout: 180_000 },
     )
+    if (result.status === 0) return result
+    const profileDir = path.join(home, 'profiles', profile)
+    const workspace = path.join(profileDir, 'pnpm-workspace.yaml')
+    if (!existsSync(workspace)) break
+    if (e2eRegistry) {
+      writeFileSync(path.join(profileDir, '.npmrc'),
+        'registry=' + e2eRegistry + '\n')
+    }
+    const workspaceSource = readFileSync(workspace, 'utf8')
+    // For the *throwaway* 0.2.1-alpha.2 Host only: explicitly approve the
+    // known koffi native dependency, not arbitrary scripts. DSH's own pnpm
+    // 11 policy generates this placeholder during the first real install.
+    const approved = process.env.DSH_E2E_ALLOW_KOFFI === '1'
+      ? workspaceSource.replace('koffi: set this to true or false', 'koffi: true')
+      : workspaceSource
+    writeFileSync(workspace, approved.replaceAll(': set this to true or false', ': false'))
   }
   return result
 }
@@ -912,7 +918,9 @@ try {
     )
   }
 
-  const webApp = addBundle('@deepseek-ai/dsh-web-app@0.2.0-rc.2')
+  const webApp = addBundle(
+    process.env.DSH_WEB_APP_SPEC ?? '@deepseek-ai/dsh-web-app@0.2.0-rc.2',
+  )
   requireCheck(
     'install DSH web app',
     webApp.status === 0,

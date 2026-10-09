@@ -78,6 +78,10 @@ if (!packagedWorkflowSource.includes("'scripts/e2e-product-journey.mjs'")
   || !packagedWorkflowSource.includes("'scripts/product-journey-*.mjs'")) {
   problems.push(`${PACKAGED_WORKFLOW}: product journey edits no longer trigger PR validation`)
 }
+if (!packagedWorkflowSource.includes('name: installed DSH 0.2.1-alpha.2 compatibility (macos-14)')
+  || !packagedWorkflowSource.includes("DSH_WEB_APP_SPEC: '@deepseek-ai/dsh-web-app@0.2.1-alpha.2'")
+  || !packagedWorkflowSource.includes('DSH_E2E_ALLOW_KOFFI:'))
+  problems.push(`${PACKAGED_WORKFLOW}: explicit isolated Alpha 2 installed-product PR gate is missing`)
 const releaseWorkflowSource = readFileSync(RELEASE_WORKFLOW, 'utf8')
 const releaseDocSource = readFileSync(RELEASE_DOC, 'utf8')
 if (!/^\s*runs-on:\s*macos(?:-[^\s#]+)?\s*$/m.test(releaseWorkflowSource)) {
