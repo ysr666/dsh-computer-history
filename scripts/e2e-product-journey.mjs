@@ -812,7 +812,7 @@ function journeyEvidenceAudit(snapshot) {
     && browser.length >= 1
     && browserUris.every(uri =>
       typeof uri === 'string'
-        && /^http:\/\/127\.0\.0\.1:\\d+\/allowed\/page$/.test(uri))
+        && /^http:\/\/127\.0\.0\.1:\d+\/allowed\/page$/.test(uri))
     && editor.length + browser.length === snapshot.observations
     && snapshot.observationSources.length === snapshot.observations
   return {
