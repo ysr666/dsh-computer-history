@@ -4,19 +4,19 @@ This document states what has been **measured**. Where a step has not been
 verified, it says so rather than describing the intention.
 
 > [!IMPORTANT]
-> **First public release target: `v1.0.0` — a three-platform release candidate, not yet published.**
+> **`v1.0.0` published on 2026-10-09.** [GitHub Release](https://github.com/ysr666/dsh-computer-history/releases/tag/v1.0.0) · [npm](https://www.npmjs.com/package/dsh-computer-history/v/1.0.0) · [successful release run](https://github.com/ysr666/dsh-computer-history/actions/runs/37903396146).
 >
 > The packaged collector path is now measured end-to-end on macOS, Windows and Linux. Each native collector is
 > built on its own runner from the same commit, all three exact binaries are assembled into one plugin tarball
 > with SHA-256 provenance, and that same tarball clean-installs on all three runners without a
 > `collectorExecutable` override.
 >
-> The installed **client half** is verified on the macOS full product journey (52/52 checks including
-> Continue, disable/re-enable and uninstall). A separate release browser gate now covers **Windows, macOS and
+> The installed **client half** passed the macOS full product journey (56/56 checks including
+> Continue, Browser Companion privacy, disable/re-enable and uninstall). A separate release browser gate now covers **Windows, macOS and
 > Linux** using the same assembled tarball, verifying the first-run panel, Settings and successful History/Privacy
 > responses without checkout wiring. Issue #44 was closed by the macOS product-path PR #125; the added three-OS
-> browser gate qualifies the wider three-platform Alpha claim. The v1.0.0 tag is **not published** and still
-> requires a non-dev version, changelog and release-cut preflight.
+> browser gate qualifies the three-platform packaged-client claim. The immutable `v1.0.0` tag points to
+> `5703ecd787cec082e9cd7b705706a0aaf9960f1a`; npm OIDC published the exact checked artifact.
 
 ## v1.0.0 readiness
 
@@ -30,12 +30,12 @@ verified, it says so rather than describing the intention.
 | Shared collector protocol checks on macOS / Windows / Linux | ✅ |
 | One tarball contains all three native collectors + SHA-256 provenance | ✅ |
 | Same tarball clean-installs and reaches packaged collector handshake on macOS / Windows / Linux | ✅ |
-| Installed client/Settings full product journey | ✅ macOS 52/52 from PR #125 |
+| Installed client/Settings full product journey | ✅ macOS 56/56 and Release #37903396146 |
 | Same installed client renders first-run and Settings, returns History/Privacy HTTP 200 | ✅ Windows / macOS / Linux packaged browser matrix |
-| `pnpm verify:release:blockers` at release cut | ⬜ run at release cut |
-| `1.0.0` metadata, release notes, main SHA and npm publishing workflow | ⏳ staged on preparation branch; validate on final main |
-| npm bootstrap package + GitHub Actions Trusted Publishing | ⬜ npm account owner action required before release |
-| Exact npm/GitHub tarball identity | ⬜ verified only when public publishing runs |
+| `pnpm verify:release:blockers` at release cut | ✅ final blocking scan passed |
+| `1.0.0` metadata, release notes, main SHA and npm publishing workflow | ✅ released at immutable SHA `5703ecd` |
+| npm bootstrap package + GitHub Actions Trusted Publishing | ✅ OIDC publish and signed provenance (Sigstore log index `3160850508`) |
+| Exact npm/GitHub tarball identity | ✅ SHA-1 `81eb105510a59077a1ca88bf82e530f1a87af8bb`; SHA-256 `7e9da2090e0963801e5b7f00198b4c94b3c39f9ce6104f882d19341ebf81932c` (byte-identical downloads) |
 
 
 ## What ships
@@ -142,17 +142,17 @@ a desktop. Actual Linux desktop/AT-SPI GUI acceptance remains distinct.
 
 The manual release workflow preserves the macOS complete installed-product journey from PR #125
 **and** now runs the three-OS browser product gate. The gates will rerun from the exact manually selected release
-commit; the public v1.0.0 has not yet been published.
+commit; the public v1.0.0 was published successfully in [Release #37903396146](https://github.com/ysr666/dsh-computer-history/actions/runs/37903396146).
 
-## Publishing v1.0.0 — manual, verified, one exact artifact
+## Published v1.0.0 — manual, verified, one exact artifact
 
-**Do not create a tag, npm release or GitHub Release while this branch is only a candidate.**
+**Release complete:** the tag, npm package and GitHub Release already exist. Do not recreate or move `v1.0.0`, or republish different bytes under `1.0.0`.
 The release workflow is `workflow_dispatch` (not push-tag triggered), adapted from
 DVR's immutable release pipeline and extended with DCH's three-platform native artifact jobs.
 
-### One-time npm package bootstrap (npm owner must perform)
+### One-time npm package bootstrap (historical; completed)
 
-The name `dsh-computer-history` was not present in the public npm Registry during the audit.
+During the initial audit, the `dsh-computer-history` name was unclaimed. It was subsequently reserved by the `0.0.0-bootstrap.0` package, and `1.0.0` has now been published. **Do not repeat these historical bootstrap commands for this package.**
 npm currently requires a package to exist before a Trusted Publisher can be registered.
 Only the npm account owner can bootstrap the name. A minimal placeholder published with a
 **non-default** dist-tag is preferred so it cannot be mistaken for this functional release:
@@ -189,7 +189,7 @@ This step requires npm account access; the repository cannot grant npm ownership
 
 ### Immutable manual release flow
 
-When the bootstrap and Trusted Publisher are ready, merge the **approved** release PR and check
+For any future release, after Trusted Publisher access is confirmed, merge the **approved** release PR and check
 that the final `main` SHA is fully green. If the last merge changed **only Markdown**,
 the normal CI workflow is intentionally skipped by path filters: manually run
 **Actions → CI → Run workflow** on `main` and wait for both Node jobs to pass
@@ -321,4 +321,4 @@ DSH_RELEASE_TARBALL=/tmp/dsh-computer-history-<version>.tgz pnpm verify:release
 
 The `DSH_NATIVE_PREBUILT=1` guard is deliberate: it prevents the assembly machine from silently rebuilding one
 platform's collector and replacing the bytes that came from that platform's runner. The public release workflow
-uses the same assembly and three clean-install gates; it has not published a tag yet.
+used the same assembly and three clean-install gates for the published `v1.0.0` artifact.
