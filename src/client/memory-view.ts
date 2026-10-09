@@ -347,6 +347,9 @@ export function WorkMemoryView({ locale, historyRevision }: WorkMemoryViewProps)
                 '仅授权这一条笔记。生成的一次性码必须由你主动发送给 DSH 中的 AI；笔记正文可能进入你当前配置的模型（包括远程模型）上下文。',
                 'Authorise exactly this note. You must personally provide the one-time code to DSH. Its text may enter the context of your configured model, including a remote model.',
               )),
+            React.createElement('p', { className: 'ch-muted' },
+              t('此授权仅控制 Computer History 提供的 AI 读取工具，不代表对其他本地文件访问工具的系统级隔离。',
+                'This permission controls the Computer History AI tool, not OS-level access by other local file tools.')),
             React.createElement('label', { className: 'ch-memory-checkbox' },
               React.createElement('input', {
                 type: 'checkbox', checked: shareConsent,

@@ -52,6 +52,13 @@ The code is a bearer capability: anyone with it could consume that one note
 during the validity window. Users should share it only in their intended
 DSH session. This is intentionally not an automatic project-wide permission.
 
+Security boundary: this opt-in constrains the **Computer History Agent tool
+surface**, not unrelated OS-level filesystem tools. The Host fetch route
+validates the acknowledgement field but cannot cryptographically attest an
+actual UI gesture. A separate trusted local process with direct read access
+to the SQLite file can bypass this plugin's permission UI. Do not present
+this feature as a sandbox against local arbitrary-code/file access.
+
 ## Verification
 
 Automated tests cover Chinese/English question interpretation, dates,
