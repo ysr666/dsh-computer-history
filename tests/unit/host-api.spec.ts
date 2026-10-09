@@ -54,6 +54,16 @@ function harness(overrides: Record<string, unknown> = {}) {
       calls.episode = id
       return undefined
     },
+    async issueNoteReadCode() { return { code: 'fixture', expiresAtMs: 123 } },
+    async readOneConfirmedNote() { return undefined },
+    async revokeNoteReadCode() { return false },
+    async askHistory(request: unknown) {
+      return {
+        status: 'no-evidence', question: (request as { query: string }).query,
+        intent: 'overview', items: [], scannedEpisodes: 0, scanTruncated: false,
+        notesAccess: 'not-searched', caveat: 'test',
+      }
+    },
     async listProjectMemories(request: unknown) {
       calls.memoryList = request
       return []
@@ -153,6 +163,7 @@ describe('Computer History Host API', () => {
   it('registers the stable route set and preserves no-store responses', async () => {
     const { request, routes } = harness()
     expect([...routes.keys()].toSorted()).toEqual([
+      '/api/computer-history/ask',
       '/api/computer-history/audit/preview',
       '/api/computer-history/companion/editor',
       '/api/computer-history/companion/setup',
@@ -161,6 +172,8 @@ describe('Computer History Host API', () => {
       '/api/computer-history/episode',
       '/api/computer-history/export',
       '/api/computer-history/import',
+      '/api/computer-history/memory/note/ai-read-code',
+      '/api/computer-history/memory/note/ai-read-revoke',
       '/api/computer-history/memory/note/delete',
       '/api/computer-history/memory/note/save',
       '/api/computer-history/memory/note/update',
@@ -416,6 +429,49 @@ describe('Computer History Host API', () => {
     expect(result.status).toBe(200)
     expect(restored).toEqual({ document, confirmed: true })
     await expect(result.json()).resolves.toEqual({ restored: 1, skipped: 0 })
+  })
+
+  it('offers strictly read-only AI history ask and explicit one-note read consent', async () => {
+    let asked: unknown
+    let granted: unknown
+    let revoked: unknown
+    const { request } = harness({
+      async askHistory(payload: unknown) {
+        asked = payload
+        return { status: 'no-evidence', question: 'test', items: [], notesAccess: 'not-searched' }
+      },
+      async issueNoteReadCode(id: string, ack: boolean) {
+        granted = { id, ack }
+        return { code: 'A'.repeat(32), expiresAtMs: 600_000 }
+      },
+      async revokeNoteReadCode(code: string) { revoked = code; return true },
+    })
+    const post = (suffix: string, body: unknown) => request(suffix, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    expect((await post('/ask', { query: '' })).status).toBe(400)
+    expect((await post('/ask', { query: 'x'.repeat(301) })).status).toBe(400)
+    expect((await post('/ask', { query: 'test', limit: 21 })).status).toBe(400)
+    const accepted = await post('/ask', { query: '昨天工作', limit: 5 })
+    expect(accepted.status).toBe(200)
+    expect(accepted.headers.get('cache-control')).toBe('no-store')
+    expect(asked).toEqual({ query: '昨天工作', limit: 5 })
+    await expect(accepted.json()).resolves.toMatchObject({ notesAccess: 'not-searched' })
+    const id = 'a'.repeat(8) + '-' + 'b'.repeat(4) + '-' + 'c'.repeat(4)
+      + '-' + 'd'.repeat(4) + '-' + 'e'.repeat(12)
+    expect((await post('/memory/note/ai-read-code', { noteId: id })).status).toBe(400)
+    expect(granted).toBeUndefined()
+    expect((await post('/memory/note/ai-read-code', {
+      noteId: id, acknowledged: true,
+    })).status).toBe(200)
+    expect(granted).toEqual({ id, ack: true })
+    expect((await post('/memory/note/ai-read-revoke', { code: 'invalid' })).status)
+      .toBe(400)
+    expect((await post('/memory/note/ai-read-revoke', {
+      code: 'A'.repeat(32),
+    })).status).toBe(200)
+    expect(revoked).toBe('A'.repeat(32))
   })
 
   it('provides read-only memory endpoints with bounded, validated inputs', async () => {

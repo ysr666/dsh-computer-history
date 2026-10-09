@@ -22,6 +22,7 @@ import {
 } from './timeline-view.js'
 import { appIcon } from './app-icon.js'
 import { WorkMemoryView } from './memory-view.js'
+import { AskHistoryView } from './ask-history-view.js'
 import { HistoryGlyph } from './history-icon.js'
 import {
   continuationResourceUri,
@@ -1306,6 +1307,10 @@ export function createHistoryPage({
       allContentUnavailable
         ? React.createElement(React.Fragment, null,
             unavailableSection,
+            React.createElement(AskHistoryView, {
+              locale: activeLocale,
+              historyRevision: controls.historyRevision,
+            }),
             React.createElement(WorkMemoryView, {
               locale: activeLocale,
               historyRevision: controls.historyRevision,
@@ -1317,6 +1322,10 @@ export function createHistoryPage({
             !isFirstRun && hasAnyEpisode ? resumeSection : null,
             !isFirstRun ? timelineSection : null,
             !isFirstRun ? threadSection : null,
+            React.createElement(AskHistoryView, {
+              locale: activeLocale,
+              historyRevision: controls.historyRevision,
+            }),
             React.createElement(WorkMemoryView, {
               locale: activeLocale,
               historyRevision: controls.historyRevision,

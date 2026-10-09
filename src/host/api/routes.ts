@@ -622,6 +622,40 @@ export function registerHistoryApi(
     },
   }))
 
+  // Natural-language history queries use an entirely local deterministic
+  // matcher; they never read user-confirmed notes or invoke an LLM.
+  ctx.effect(() => ctx.connection.fetch.register({
+    path: HISTORY_API_PREFIX + '/ask',
+    methods: ['POST'],
+    requestBody: 'buffered',
+    fetch: async (request: Request) => {
+      let body: unknown
+      try {
+        const text = await request.text()
+        if (text.length > 1024) return textResponse('Question too large.', 413)
+        body = JSON.parse(text) as unknown
+      } catch { return textResponse('Invalid JSON.', 400) }
+      if (!body || typeof body !== 'object' || Array.isArray(body)) {
+        return textResponse('Invalid question.', 400)
+      }
+      const input = body as Record<string, unknown>
+      if (typeof input.query !== 'string'
+        || input.query.trim().length < 1 || input.query.length > 300
+        || (input.limit !== undefined
+          && (!Number.isSafeInteger(input.limit)
+            || (input.limit as number) < 1 || (input.limit as number) > 20))) {
+        return textResponse('Question must be 1..300 characters, limit 1..20.', 400)
+      }
+      try {
+        return json(await history.askHistory({
+          query: input.query, ...(input.limit === undefined ? {} : { limit: input.limit as number }),
+        }, request.signal))
+      } catch {
+        return textResponse('Question could not be interpreted.', 400)
+      }
+    },
+  }))
+
   // Work Memory is a read-only projection of current stored Episodes.
   // Each GET re-evaluates the surviving evidence; no stale cache survives Forget.
   ctx.effect(() => ctx.connection.fetch.register({
@@ -707,6 +741,53 @@ export function registerHistoryApi(
           body.document, true, request.signal,
         ))
       } catch { return textResponse('Note restore failed validation or conflicted.', 409) }
+    },
+  }))
+
+  // A one-time model-read capability is issued only after a local UI action.
+  ctx.effect(() => ctx.connection.fetch.register({
+    path: HISTORY_API_PREFIX + '/memory/note/ai-read-revoke',
+    methods: ['POST'],
+    requestBody: 'buffered',
+    fetch: async (request: Request) => {
+      let body: unknown
+      try { body = await request.json() } catch {
+        return textResponse('Invalid JSON.', 400)
+      }
+      const input = body as { code?: unknown } | null
+      if (!input || typeof input.code !== 'string'
+        || !/^[a-zA-Z0-9_-]{32}$/.test(input.code)) {
+        return textResponse('Invalid note read code.', 400)
+      }
+      return json({ revoked: await history.revokeNoteReadCode(input.code, request.signal) })
+    },
+  }))
+
+  ctx.effect(() => ctx.connection.fetch.register({
+    path: HISTORY_API_PREFIX + '/memory/note/ai-read-code',
+    methods: ['POST'],
+    requestBody: 'buffered',
+    fetch: async (request: Request) => {
+      let body: unknown
+      try { body = await request.json() } catch {
+        return textResponse('Invalid JSON.', 400)
+      }
+      if (!body || typeof body !== 'object' || Array.isArray(body)) {
+        return textResponse('Invalid consent.', 400)
+      }
+      const input = body as Record<string, unknown>
+      if (input.acknowledged !== true
+        || typeof input.noteId !== 'string'
+        || !/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(input.noteId)) {
+        return textResponse('Explicit consent for one exact note is required.', 400)
+      }
+      try {
+        return json(await history.issueNoteReadCode(
+          input.noteId, true, request.signal,
+        ))
+      } catch {
+        return textResponse('Note not available for AI reading.', 404)
+      }
     },
   }))
 

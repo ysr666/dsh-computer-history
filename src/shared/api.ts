@@ -1,3 +1,4 @@
+import type { AskHistoryRequest, AskHistoryResult } from './ask-history.js'
 import type {
   ConfirmUserMemoryNoteRequest, ListProjectMemoriesRequest,
   ProjectMemory, UserMemoryNote,
@@ -274,6 +275,22 @@ export interface ComputerHistoryServiceContract {
   revokeSemanticOptIn(request: {
     readonly scopeKey: string
   }): { readonly revoked: boolean; readonly purged: number; readonly forgotten: number }
+
+  /** Bounded deterministic retrieval over retained metadata, no user notes. */
+  askHistory(
+    request: AskHistoryRequest, signal?: AbortSignal,
+  ): Promise<AskHistoryResult>
+
+  /** Local user permission: authorise exactly one note for one Agent read. */
+  issueNoteReadCode(
+    noteId: string, acknowledged: true, signal?: AbortSignal,
+  ): Promise<{ readonly code: string; readonly expiresAtMs: number }>
+
+  /** One-use token, not ambient right to enumerate saved notes. */
+  readOneConfirmedNote(
+    code: string, signal?: AbortSignal,
+  ): Promise<UserMemoryNote | undefined>
+  revokeNoteReadCode(code: string, signal?: AbortSignal): Promise<boolean>
 
   /** Read-only, on-demand memory; no persistent copy or new capture. */
   listProjectMemories(

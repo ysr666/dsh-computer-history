@@ -40,6 +40,9 @@ export const MEMORY_STYLES = `
 .ch-memory-list>li p{flex-basis:100%;margin:1px 0;white-space:pre-wrap;overflow-wrap:anywhere}
 .ch-memory-list>li strong{font-size:12px}
 .ch-memory-list>li>button{min-width:0;overflow-wrap:anywhere}
+.ch-memory-share{margin-top:12px;padding:10px 12px;border-top:1px solid var(--dsw-alias-border-l1);font-size:12px}
+.ch-memory-share>.ch-muted{line-height:1.6;margin:0 0 8px}
+.ch-memory-code{display:block;width:100%;max-width:420px;margin:6px 0 9px;font:inherit}
 @media(max-width:560px){
   .ch-work-memory{padding:12px}
   .ch-work-memory-body .ch-button{max-width:100%;white-space:normal;text-align:center}

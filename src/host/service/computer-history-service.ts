@@ -23,6 +23,8 @@ import type {
   SemanticOptIn,
   SemanticSummaryState,
   WorkThread,
+  AskHistoryRequest,
+  AskHistoryResult,
   ProjectMemory,
   ListProjectMemoriesRequest,
   ConfirmUserMemoryNoteRequest,
@@ -141,6 +143,28 @@ export class ComputerHistoryService
 
   public getState(): ComputerHistoryState {
     return this.backend.getState()
+  }
+
+  public askHistory(
+    request: AskHistoryRequest, signal?: AbortSignal,
+  ): Promise<AskHistoryResult> {
+    return this.backend.askHistory(request, signal)
+  }
+
+  public issueNoteReadCode(
+    noteId: string, acknowledged: true, signal?: AbortSignal,
+  ): Promise<{ readonly code: string; readonly expiresAtMs: number }> {
+    return this.backend.issueNoteReadCode(noteId, acknowledged, signal)
+  }
+
+  public readOneConfirmedNote(
+    code: string, signal?: AbortSignal,
+  ): Promise<UserMemoryNote | undefined> {
+    return this.backend.readOneConfirmedNote(code, signal)
+  }
+
+  public revokeNoteReadCode(code: string, signal?: AbortSignal): Promise<boolean> {
+    return this.backend.revokeNoteReadCode(code, signal)
   }
 
   public listProjectMemories(

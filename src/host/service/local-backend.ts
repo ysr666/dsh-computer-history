@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { EpisodeId } from '../../shared/index.js'
 import type {
   BindContinuationSessionRequest,
@@ -5,6 +6,8 @@ import type {
   PairingRotation,
   PairingState,
   WorkThread,
+  AskHistoryRequest,
+  AskHistoryResult,
   ProjectMemory,
   ListProjectMemoriesRequest,
   ConfirmUserMemoryNoteRequest,
@@ -57,7 +60,7 @@ import {
   buildWorkThreads,
 } from '../episodes/threads.js'
 import { resolveResume } from '../resume/index.js'
-import { buildProjectMemories, memoryIdForThreadKey } from '../memory/index.js'
+import { askHistoryFromEpisodes, buildProjectMemories, memoryIdForThreadKey, MemoryReadGrants } from '../memory/index.js'
 import { MemoryNoteStore } from '../store/memory-note-store.js'
 import { phase1AdapterForBundle } from '../ingestion/index.js'
 import {
@@ -96,6 +99,7 @@ implements ComputerHistoryServiceContract {
   private acceptingOperations = true
   private activeOperations = 0
   private readonly idleWaiters: Array<() => void> = []
+  private readonly memoryReadGrants = new MemoryReadGrants()
 
   public constructor(
     private readonly episodes: EpisodeStore,
@@ -167,6 +171,53 @@ implements ComputerHistoryServiceContract {
     if (this.activeOperations === 0) return Promise.resolve()
     return new Promise<void>(resolve => {
       this.idleWaiters.push(resolve)
+    })
+  }
+
+  public askHistory(
+    request: AskHistoryRequest, signal?: AbortSignal,
+  ): Promise<AskHistoryResult> {
+    return this.withOperation(() => {
+      signal?.throwIfAborted()
+      const nowMs = this.now()
+      return askHistoryFromEpisodes(
+        this.episodes.listRecent({ limit: 1_000, notExpiredAtMs: nowMs }),
+        request, nowMs,
+      )
+    })
+  }
+
+  public issueNoteReadCode(
+    noteId: string, acknowledged: true, signal?: AbortSignal,
+  ): Promise<{ readonly code: string; readonly expiresAtMs: number }> {
+    return this.withOperation(() => {
+      signal?.throwIfAborted()
+      if (acknowledged !== true || !/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(noteId)) {
+        throw new Error('explicit one-note AI read consent required')
+      }
+      const note = new MemoryNoteStore(this.requireDb()).getOne(noteId)
+      if (!note) throw new Error('note not found')
+      return this.memoryReadGrants.issue(note.id, createHash('sha256').update(note.text).digest('hex'), this.now())
+    })
+  }
+
+  public readOneConfirmedNote(
+    code: string, signal?: AbortSignal,
+  ): Promise<UserMemoryNote | undefined> {
+    return this.withOperation(() => {
+      signal?.throwIfAborted()
+      const grant = this.memoryReadGrants.consume(code, this.now())
+      if (!grant) return undefined
+      const note = new MemoryNoteStore(this.requireDb()).getOne(grant.noteId)
+      return note && createHash('sha256').update(note.text).digest('hex') === grant.contentDigest
+        ? note : undefined
+    })
+  }
+
+  public revokeNoteReadCode(code: string, signal?: AbortSignal): Promise<boolean> {
+    return this.withOperation(() => {
+      signal?.throwIfAborted()
+      return this.memoryReadGrants.revoke(code)
     })
   }
 
