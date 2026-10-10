@@ -82,6 +82,27 @@ describe('Continue capsule session bindings', () => {
     target.close()
   })
 
+  it('does not resolve an expired or invalidated Episode even while the Session binding TTL remains valid', () => {
+    const dataDirectory = root('source-expiry')
+    const handle = openHistoryDatabase({ dataDirectory, nowMs: 1 })
+    insertEpisode(handle.db)
+    const bindings = new ContinuationSessionStore(handle.db)
+    bindings.bind({
+      sessionId: 'session:new',
+      episodeId: 'episode:1' as never,
+    }, 100, 10_000)
+    expect(bindings.episodeForSession('session:new', 200)).toBe('episode:1')
+
+    handle.db.prepare('UPDATE episodes SET expires_at_ms = ? WHERE id = ?')
+      .run(199, 'episode:1')
+    expect(bindings.episodeForSession('session:new', 200)).toBeUndefined()
+
+    handle.db.prepare('UPDATE episodes SET expires_at_ms = NULL, state = ? WHERE id = ?')
+      .run('invalidated', 'episode:1')
+    expect(bindings.episodeForSession('session:new', 200)).toBeUndefined()
+    handle.close()
+  })
+
   it('removes one failed continuation binding without touching its Episode', () => {
     const dataDirectory = root('unbind')
     const handle = openHistoryDatabase({ dataDirectory, nowMs: 1 })
