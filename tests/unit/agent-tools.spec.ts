@@ -176,6 +176,59 @@ describe('agent-scoped Computer History surfaces', () => {
     dispose()
   })
 
+  it('makes M5 context available only on-demand in the exact current Continue session', async () => {
+    const definitions = new Map<string, ToolDefinition>()
+    let requested: string | undefined
+    let noteReadCalls = 0
+    const history = {
+      async contextualContinue(sessionId: string) {
+        requested = sessionId
+        return {
+          status: 'ready', boundEpisodeId: 'episode:bound',
+          privacy: { userConfirmedNotes: 'excluded' },
+          facts: [{ kind: 'resource', text: 'Recently used: README.md' }],
+        }
+      },
+      async readOneConfirmedNote() {
+        noteReadCalls += 1
+        return undefined
+      },
+    }
+    const ctx = {
+      get(name: string) {
+        return name === 'computerHistory' ? history : undefined
+      },
+      tools: {
+        register(definition: ToolDefinition) {
+          definitions.set(definition.name, definition)
+          return () => { definitions.delete(definition.name) }
+        },
+      },
+    } as unknown as Context
+    const dispose = registerComputerHistoryTools(ctx)
+    const tool = definitions.get('computer_history_continue_context')!
+    expect(tool.description).toContain('ONLY for this DSH session')
+    expect(tool.parameters).toEqual({ type: 'object', properties: {} })
+    const signal = new AbortController().signal
+    expect(await tool.execute({}, { signal } as never)).toEqual({
+      status: 'unavailable', reason: 'no-session-binding',
+    })
+    expect(requested).toBeUndefined()
+    const value = await tool.execute({}, {
+      agent: { session: { id: 'session:bound' } }, signal,
+    } as never)
+    expect(requested).toBe('session:bound')
+    expect(value).toMatchObject({
+      status: 'ready',
+      privacy: { userConfirmedNotes: 'excluded' },
+    })
+    expect(noteReadCalls).toBe(0)
+    expect(tool.output.render({}, value as never)[0]).toMatchObject({
+      type: 'text', text: expect.stringContaining('untrusted metadata'),
+    })
+    dispose()
+  })
+
   it('exposes Work Memory as an optional untrusted read tool', async () => {
     const definitions = new Map<string, ToolDefinition>()
     const id = 'pm_' + 'a'.repeat(64)
@@ -296,6 +349,7 @@ describe('agent-scoped Computer History surfaces', () => {
     const dispose = registerComputerHistoryTools(ctx)
     const continuation = definitions.get('computer_history_continue')!
     expect(continuation.description).toContain('optional rather than a prerequisite')
+    expect(continuation.description).toContain('computer_history_continue_context')
     expect(continuation.description).toContain('@ Computer History')
     expect(continuation.description).toContain('recover the prior task description')
     expect(continuation.description).toContain('does not re-grant old permissions')

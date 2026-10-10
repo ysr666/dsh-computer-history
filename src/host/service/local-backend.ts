@@ -10,6 +10,7 @@ import type {
   AskHistoryResult,
   ProjectMemory,
   ThreadActivityLinks,
+  ContextualContinueResult,
   ListProjectMemoriesRequest,
   ConfirmUserMemoryNoteRequest,
   UserMemoryNote,
@@ -61,7 +62,7 @@ import {
   buildWorkThreads,
 } from '../episodes/threads.js'
 import { resolveResume } from '../resume/index.js'
-import { askHistoryFromEpisodes, buildProjectMemories, buildThreadActivityLinks, memoryIdForThreadKey, MemoryReadGrants } from '../memory/index.js'
+import { askHistoryFromEpisodes, buildProjectMemories, buildThreadActivityLinks, projectContextualContinue, memoryIdForThreadKey, MemoryReadGrants } from '../memory/index.js'
 import { MemoryNoteStore } from '../store/memory-note-store.js'
 import { phase1AdapterForBundle } from '../ingestion/index.js'
 import {
@@ -240,6 +241,45 @@ implements ComputerHistoryServiceContract {
         ...(query ? { query } : {}),
         limit: boundedLimit(request.limit, 20, 100),
       }, nowMs)
+    })
+  }
+
+  public contextualContinue(
+    sessionId: string, signal?: AbortSignal,
+  ): Promise<ContextualContinueResult> {
+    return this.withOperation(() => {
+      signal?.throwIfAborted()
+      if (!sessionId || sessionId.length > 512) {
+        return { status: 'unavailable', reason: 'no-session-binding' }
+      }
+      const nowMs = this.now()
+      const boundId = new ContinuationSessionStore(this.requireDb())
+        .episodeForSession(sessionId, nowMs)
+      if (!boundId) return { status: 'unavailable', reason: 'no-session-binding' }
+      // Unlike plain getEpisode(), exact retained lookup must reject stale
+      // or forgotten evidence despite a still-valid session binding.
+      const bound = this.episodes.getRetained(boundId, nowMs)
+      if (!bound) return { status: 'unavailable', reason: 'source-not-retained' }
+      if (!bound.threadKey) return { status: 'unavailable', reason: 'no-trusted-project' }
+      const projectId = memoryIdForThreadKey(bound.threadKey)
+      const projectEpisodes = this.episodes.listRecentByThreadKey(
+        bound.threadKey, 1_000, nowMs,
+      )
+      const project = buildProjectMemories(projectEpisodes, { limit: 1 }, nowMs)[0]
+      if (!project || project.id !== projectId) {
+        return { status: 'unavailable', reason: 'source-not-retained' }
+      }
+
+      const anchors = projectEpisodes.slice(0, 250)
+      const recent = this.episodes.listRecent({ limit: 750, notExpiredAtMs: nowMs })
+      const unique = new Map<string, EpisodeSummary>()
+      for (const ep of [...anchors, ...recent]) unique.set(String(ep.id), ep)
+      const links = buildThreadActivityLinks(
+        [...unique.values()], projectId, nowMs,
+        projectEpisodes.length === 1_000
+          || anchors.length === 250 || recent.length === 750,
+      )
+      return projectContextualContinue(String(boundId), project, links)
     })
   }
 

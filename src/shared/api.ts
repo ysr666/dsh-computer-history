@@ -1,5 +1,6 @@
 import type { AskHistoryRequest, AskHistoryResult } from './ask-history.js'
 import type { ThreadActivityLinks } from './thread-intelligence.js'
+import type { ContextualContinueResult } from './contextual-continue.js'
 import type {
   ConfirmUserMemoryNoteRequest, ListProjectMemoriesRequest,
   ProjectMemory, UserMemoryNote,
@@ -300,6 +301,11 @@ export interface ComputerHistoryServiceContract {
   ): Promise<readonly ProjectMemory[]>
 
   getProjectMemory(id: string, signal?: AbortSignal): Promise<ProjectMemory | undefined>
+
+  /** Only a current DSH Continue binding permits this additional historical depth. */
+  contextualContinue(
+    sessionId: string, signal?: AbortSignal,
+  ): Promise<ContextualContinueResult>
 
   /** Suggested, non-authoritative cross-app associations; does not alter Work Threads. */
   getThreadActivityLinks(id: string, signal?: AbortSignal): Promise<ThreadActivityLinks | undefined>

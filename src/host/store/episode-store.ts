@@ -648,6 +648,16 @@ export class EpisodeStore {
     return this.materialize(row)
   }
 
+  /** TTL and deletion checked at the instant a bound Continue context is read. */
+  public getRetained(id: EpisodeId, nowMs: number): EpisodeDetail | undefined {
+    const row = this.db.prepare(`
+      SELECT * FROM episodes
+      WHERE id = ? AND state != 'invalidated'
+        AND (expires_at_ms IS NULL OR expires_at_ms > ?)
+    `).get(id, nowMs)
+    return row ? this.materialize(row) : undefined
+  }
+
   public listRecent(
     query: EpisodeListQuery = {},
   ): readonly EpisodeSummary[] {

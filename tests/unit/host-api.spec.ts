@@ -69,6 +69,9 @@ function harness(overrides: Record<string, unknown> = {}) {
       return []
     },
     async getThreadActivityLinks() { return undefined },
+    async contextualContinue() {
+      return { status: 'unavailable', reason: 'no-session-binding' }
+    },
     async getProjectMemory(id: unknown) {
       calls.memoryId = id
       return undefined
