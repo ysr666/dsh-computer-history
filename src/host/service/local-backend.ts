@@ -96,6 +96,15 @@ function boundedLimit(
   return Math.min(max, value)
 }
 
+function evidenceValidMs(value: number | undefined): boolean {
+  return value === undefined || (Number.isSafeInteger(value) && value >= 0)
+}
+
+function evidenceValidText(value: string | undefined, max: number): boolean {
+  return value === undefined || (typeof value === 'string'
+    && value.trim().length > 0 && value.length <= max)
+}
+
 export class LocalComputerHistoryBackend
 implements ComputerHistoryServiceContract {
   private readonly now: () => number
@@ -477,6 +486,66 @@ implements ComputerHistoryServiceContract {
     }))
   }
 
+  /** Structured Agent retrieval: deterministic filters, no NLP/model call here. */
+  public queryEvidence(
+    request: import('../../shared/index.js').HistoryEvidenceQuery,
+    signal?: AbortSignal,
+  ): Promise<import('../../shared/index.js').HistoryEvidencePage> {
+    return this.withOperation(() => {
+      signal?.throwIfAborted()
+      if (!evidenceValidMs(request.sinceMs) || !evidenceValidMs(request.untilMs)
+        || (request.sinceMs !== undefined && request.untilMs !== undefined
+          && request.untilMs <= request.sinceMs)) {
+        throw new Error('invalid history evidence time range')
+      }
+      if (request.limit !== undefined
+        && (!Number.isSafeInteger(request.limit) || request.limit < 1 || request.limit > 20)) {
+        throw new Error('history evidence limit must be 1..20')
+      }
+      if (!evidenceValidText(request.text, 500)
+        || !evidenceValidText(request.resourceText, 500)
+        || !evidenceValidText(request.workspaceId, 1000)
+        || !evidenceValidText(request.bundleId, 512)) {
+        throw new Error('invalid history evidence text filter')
+      }
+      if (request.resourceKind !== undefined
+        && !['file', 'directory', 'url', 'document', 'workspace'].includes(request.resourceKind)) {
+        throw new Error('invalid resource kind')
+      }
+      if (request.eventKind !== undefined
+        && !['save', 'test', 'build'].includes(request.eventKind)) {
+        throw new Error('invalid event kind')
+      }
+      if (request.cursor !== undefined
+        && (!Number.isSafeInteger(request.cursor.endedAtMs)
+          || request.cursor.endedAtMs < 0 || !request.cursor.episodeId
+          || request.cursor.episodeId.length > 1000)) {
+        throw new Error('invalid history cursor')
+      }
+      const result = this.episodes.queryEvidence(request, this.now())
+      return {
+        ...result,
+        notesAccess: 'not-searched',
+        caveat: [
+          'Retained metadata pointers only, not file or page contents.',
+          'Historical saves and test/build events are not proof of current state.',
+          'Episode-retained save/test/build facts originate only from previously',
+          'observed events, and expire with the parent Episode. Already expired',
+          'pre-migration raw events cannot be reconstructed retroactively.',
+          'Event time filters describe aggregate first/last bounds within an',
+          'Episode, not a proof of activity on every intervening date.',
+          'resourceText matches a literal URI/label on the same resource as',
+          'resource kind, and (when requested) the saved-resource event.',
+          'The broad text facet may match unrelated Episode metadata.',
+          'Test/build facts are Episode-level and',
+          'cannot certify that a specific file was tested or built.',
+          'No match does not prove the work never happened.',
+          'Verify authoritative current sources before continuing work.',
+        ].join(' '),
+      }
+    })
+  }
+
   public search(
     request: SearchEpisodesRequest,
     _signal?: AbortSignal,
@@ -558,10 +627,12 @@ implements ComputerHistoryServiceContract {
     ) {
       throw new Error('invalid continuation session binding')
     }
-    if (!this.episodes.get(request.episodeId)) {
-      throw new Error('continuation episode not found')
-    }
     const nowMs = this.now()
+    // A History hit may expire between the search and the user clicking Continue.
+    // Reject at bind time rather than opening a misleading empty DSH session.
+    if (!this.episodes.getRetained(request.episodeId, nowMs)) {
+      throw new Error('continuation episode is missing, invalidated or expired')
+    }
     const expiresAtMs = nowMs
       + this.config.episodeRetentionDays * 86_400_000
     new ContinuationSessionStore(this.requireDb()).bind(

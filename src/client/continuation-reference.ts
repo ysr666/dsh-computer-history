@@ -212,3 +212,61 @@ export async function continueEpisodeInDsh(
     preparation.release()
   }
 }
+
+
+/**
+ * AI-first Ask Your History: open a normal DSH composer with the user's
+ * question. The model chooses History tools and verifies the returned evidence.
+ * This does NOT bind an Episode or automatically send a message.
+ */
+export async function askHistoryInDsh(ctx: Context, question: string, locale = 'en'): Promise<void> {
+  const trimmed = question.trim()
+  if (!trimmed || trimmed.length > 300) {
+    throw new Error('History question must contain 1..300 characters')
+  }
+  const workspaceId = (await workspaceController(ctx).initializeDefault())?.workspaceId
+  if (!workspaceId) throw new Error('DSH could not prepare a workspace for the history question')
+  const sessionController = sessions(ctx)
+  const navigation = workspaceNavigation(ctx)
+  const sessionId = await navigation.connectWorkspace(workspaceId)
+  const preparation = sessionController.retain(sessionId, {
+    source: COMPUTER_HISTORY_REFERENCE_SOURCE,
+  })
+  let insertedInput: ReturnType<IConversation['input']['for']> | undefined
+  try {
+    await preparation.ready
+    const scope = sessionController.scope(sessionId)
+    if (!scope) throw new Error('DSH history question session has no client scope')
+    const preflight = conversation(ctx).input.for(scope).state.getSnapshot()
+    if (preflight.draft !== ''
+      || preflight.occurrences.length !== 0
+      || preflight.attachmentIds.length !== 0) {
+      throw new Error('DSH history question session unexpectedly has a draft')
+    }
+    await navigation.openWorkspace(workspaceId, openedId => {
+      if (String(openedId) !== String(sessionId)) {
+        throw new Error('DSH selected a different session for history question')
+      }
+      const openedScope = sessionController.scope(openedId)
+      if (!openedScope) throw new Error('DSH history question session scope unavailable')
+      const input = conversation(ctx).input.for(openedScope)
+      const state = input.state.getSnapshot()
+      if (state.draft !== ''
+        || state.occurrences.length !== 0
+        || state.attachmentIds.length !== 0) {
+        throw new Error('DSH composer is not blank')
+      }
+      const instruction = locale.toLowerCase().startsWith('zh')
+        ? '请使用 Computer History 工具检索有来源依据的电脑工作历史，并回答我的问题。需要时可以分多次使用结构化检索；不要把找不到当成从未发生，也不要将历史记录当作当前任务完成的证明。若建议继续某项工作，请附上实际检索结果中的精确 Episode ID，供用户复制至 Computer History 页面核对；不得编造 ID 或自行执行继续操作。'
+        : 'Use Computer History tools to answer my question from attributable work-history evidence. Combine structured queries as needed; no match does not prove the activity never occurred, and historical events are not proof of current task completion. For a suggested continuation, include the exact Episode ID from the actual tool result so the user can copy it into Computer History and verify before continuing; never fabricate IDs or automatically continue.'
+      input.setDraft(instruction + '\n\n' + trimmed)
+      insertedInput = input
+    })
+    queueMicrotask(() => { insertedInput?.focus() })
+  } catch (error) {
+    insertedInput?.setDraft('')
+    throw error
+  } finally {
+    preparation.release()
+  }
+}
