@@ -2,11 +2,29 @@
 
 ## Unreleased
 
-- No changes recorded after the v1.0.1 compatibility candidate.
+- No changes recorded since the v1.1.0 release candidate.
+
+## 1.1.0
+
+**Release candidate only — not yet tagged or published. Owner approval and exact-SHA release CI are required.**
+
+- **M1 Work Memory:** retained and provenance-linked project history based on exact trusted Work Thread keys.
+- **M2 confirmed notes:** explicit local save/edit/delete, export and separately approved restore; AI note reads require separate consent.
+- **M3 Ask Your History:** on-demand natural-language-oriented evidence retrieval from retained work history.
+- **M4 Work Thread Intelligence:** advisory exact-file and time-nearby cross-application suggestions, without changing project identity or Continue ranking.
+- **M5 Contextual Continue:** optional, current-session-bound project context from M1/M4; no automatic note exposure or first-turn expansion.
+- **M6 Suggested Skills:** evidence-based repeated activity hints, not generated/installed/executed Skills.
+- **M7 Suggested Automations:** user-reviewable recurring reminder drafts; no task scheduler, inferred clock time or unattended command execution.
+- **Privacy hotfix:** strip sensitive browser URL titles/credentials/query/fragment; migration 0015 and legacy-backup import redaction retain Episode/citation provenance.
+- **Release preflight:** read-only user-profile version/WAL inventory and documented consistent backup, isolated migration rehearsal and restore-based rollback plan.
+- macOS isolated DSH 0.2.1-alpha.2 + Chrome installed product journey reached 59 verified assertions, including M6/M7 empty states; full cross-platform CI is a separate mandatory release gate.
+- **Deployment limitation:** existing DSH 0.1.x profiles are not supported for in-place v1.1 without explicitly tested CLI/runtime upgrade. Never copy an active SQLite database file alone when WAL exists.
+
+See [candidate release notes](docs/releases/v1.1.0.md).
 
 ## 1.0.1
 
-**Compatibility candidate: not yet published.** The previously released v1.0.0 tarball and tag remain immutable.
+**Published 2026-10-09.** The existing v1.0.1 tarball and tag are immutable.
 
 - Add *explicit*, narrowly scoped peer compatibility for DeepSeek Harness `0.2.1-alpha.2` and Cordis `4.0.5-alpha.1`, without accepting unverified alpha versions or dropping DSH `0.2.0-rc.2` support.
 - Verify the published v1.0.0 runtime unchanged against an actual isolated DSH `0.2.1-alpha.2` Host (55/55 end-to-end checks), including first-run policy, Browser/Editor privacy boundaries, evidence-complete Episode, native Continue, disable/re-enable and uninstall preservation.
