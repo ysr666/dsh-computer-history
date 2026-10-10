@@ -142,7 +142,7 @@ npx @deepseek-ai/dsh@0.2.0-rc.2 plugin --profile web add dsh-computer-history@1.
 npx @deepseek-ai/dsh@0.2.0-rc.2 plugin --profile web remove dsh-computer-history
 ```
 
-首发只验证过 DSH `0.2.0-rc.2`，不应据此声称兼容所有 Host。参见[发布证据](docs/release.md)。
+已验证的 DSH Host 基线为 `0.2.0-rc.2`；`0.2.1-alpha.2` 另外通过了 macOS 安装版完整产品验收。这**不代表**所有 DSH 版本或其他平台都已验证兼容。参见[发布证据](docs/release.md)和 [v1.1.0 候选说明](docs/releases/v1.1.0.md)。
 
 ## 源码开发
 

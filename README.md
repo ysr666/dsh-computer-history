@@ -142,7 +142,7 @@ npx @deepseek-ai/dsh@0.2.0-rc.2 plugin --profile web add dsh-computer-history@1.
 npx @deepseek-ai/dsh@0.2.0-rc.2 plugin --profile web remove dsh-computer-history
 ```
 
-Only DSH `0.2.0-rc.2` has been verified as the Host; other versions are not implicitly supported. See [release evidence](docs/release.md).
+The tested DSH Host baseline is `0.2.0-rc.2`; `0.2.1-alpha.2` has additionally passed a macOS installed-product journey. This does **not** establish compatibility with every DSH version or platform. See [release evidence](docs/release.md) and the [v1.1.0 candidate notes](docs/releases/v1.1.0.md).
 
 ## Development from source
 
@@ -182,7 +182,7 @@ Pull requests run Node 22 + 24 core verification, relevant cross-platform collec
 
 ## Contributing
 
-Issues and pull requests are welcome while the first public release is prepared. Start with [CONTRIBUTING.md](CONTRIBUTING.md).
+Issues and pull requests are welcome as Computer History develops. Start with [CONTRIBUTING.md](CONTRIBUTING.md).
 
 > [!CAUTION]
 > Because this project handles sensitive local context, **do not attach real history databases, pairing/session tokens, credentials, private paths, or unredacted capture logs to public issues**. Use the private vulnerability-reporting path described in [SECURITY.md](SECURITY.md) for sensitive findings.
