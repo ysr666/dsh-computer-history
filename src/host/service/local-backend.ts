@@ -264,9 +264,16 @@ implements ComputerHistoryServiceContract {
         return { status: 'unavailable', reason: 'no-session-binding' }
       }
       const nowMs = this.now()
-      const boundId = new ContinuationSessionStore(this.requireDb())
-        .episodeForSession(sessionId, nowMs)
-      if (!boundId) return { status: 'unavailable', reason: 'no-session-binding' }
+      const bindings = new ContinuationSessionStore(this.requireDb())
+      const boundId = bindings.episodeForSession(sessionId, nowMs)
+      if (!boundId) {
+        return {
+          status: 'unavailable',
+          reason: bindings.hasLiveBinding(sessionId, nowMs)
+            ? 'source-not-retained'
+            : 'no-session-binding',
+        }
+      }
       // Unlike plain getEpisode(), exact retained lookup must reject stale
       // or forgotten evidence despite a still-valid session binding.
       const bound = this.episodes.getRetained(boundId, nowMs)
