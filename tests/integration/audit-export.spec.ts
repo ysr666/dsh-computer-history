@@ -259,6 +259,111 @@ describe('audit export and import', () => {
     target.close()
   })
 
+  it('rebuilds the compacted event index from imported linked raw observations, ignoring forged aggregate counts', () => {
+    const source = database('dch-restorable-raw-src-')
+    seed(source.db)
+    source.db.prepare("UPDATE observations SET activity_event='save' WHERE id=1").run()
+    source.db.prepare(
+      'INSERT INTO episode_saved_resources(episode_id, resource_id, first_changed_at_ms, last_changed_at_ms, change_count) VALUES (?, ?, ?, ?, ?)',
+    ).run('ep1', 1, 1, 1, 1)
+
+    const document = structuredClone(exportHistory(source.db, 5000)) as unknown as {
+      tables: Record<string, Array<Record<string, unknown>>>
+    }
+    // The copied compacted summary is deliberately untrusted. It must not
+    // change the restored, independently recomputed linked raw-event count.
+    document.tables.episode_saved_resources![0]!.change_count = 50000
+    source.close()
+
+    const target = database('dch-restorable-raw-dst-')
+    const result = importHistory(target.db, document)
+    expect(result.imported.episode_saved_resources).toBe(1)
+    expect(target.db.prepare(
+      'SELECT episode_id, resource_id, change_count FROM episode_saved_resources',
+    ).all()).toEqual([{ episode_id: 'ep1', resource_id: 1, change_count: 1 }])
+    expect(target.db.prepare(
+      'SELECT COUNT(*) AS n FROM episode_verification_results',
+    ).get()).toEqual({ n: 0 })
+    target.close()
+  })
+
+  it('reconstructs a historical test-success fact from an imported raw test observation', () => {
+    const source = database('dch-restorable-test-src-')
+    seed(source.db)
+    source.db.prepare(
+      "UPDATE observations SET activity_event='verify-test-success' WHERE id=1",
+    ).run()
+    source.db.prepare(
+      'INSERT INTO episode_verification_results(episode_id, activity_event, first_observed_at_ms, last_observed_at_ms, observation_count) VALUES (?, ?, ?, ?, ?)',
+    ).run('ep1', 'verify-test-success', 1, 1, 1)
+    const document = structuredClone(exportHistory(source.db, 5000)) as unknown as {
+      tables: Record<string, Array<Record<string, unknown>>>
+    }
+    document.tables.episode_verification_results![0]!.observation_count = 12_345
+    source.close()
+    const target = database('dch-restorable-test-dst-')
+    const result = importHistory(target.db, document)
+    expect(result.imported.episode_verification_results).toBe(1)
+    expect(target.db.prepare(
+      'SELECT activity_event, observation_count FROM episode_verification_results',
+    ).all()).toEqual([
+      { activity_event: 'verify-test-success', observation_count: 1 },
+    ])
+    target.close()
+  })
+
+  it('does not import forged verification aggregates without corresponding raw test events', () => {
+    const source = database('dch-forged-verification-src-')
+    seed(source.db)
+    const document = structuredClone(exportHistory(source.db, 5000)) as unknown as {
+      tables: Record<string, Array<Record<string, unknown>>>
+    }
+    document.tables.episode_verification_results = [{
+      episode_id: 'ep1',
+      activity_event: 'verify-test-success',
+      first_observed_at_ms: 1,
+      last_observed_at_ms: 1,
+      observation_count: 99,
+    }]
+    source.close()
+
+    const target = database('dch-forged-verification-dst-')
+    const result = importHistory(target.db, document)
+    expect(result.imported.episode_verification_results).toBe(0)
+    expect(target.db.prepare(
+      'SELECT COUNT(*) AS n FROM episode_verification_results',
+    ).get()).toEqual({ n: 0 })
+    target.close()
+  })
+
+  it('exports Episode-retained event facts for audit but never trusts unproven imported aggregates', () => {
+    const source = database('dch-audit-compacted-src-')
+    seed(source.db)
+    source.db.prepare(
+      'INSERT INTO episode_saved_resources(episode_id, resource_id, first_changed_at_ms, last_changed_at_ms, change_count) VALUES (?, ?, ?, ?, ?)',
+    ).run('ep1', 1, 1, 1, 1)
+    source.db.prepare(
+      'INSERT INTO episode_verification_results(episode_id, activity_event, first_observed_at_ms, last_observed_at_ms, observation_count) VALUES (?, ?, ?, ?, ?)',
+    ).run('ep1', 'verify-test-success', 1, 1, 1)
+    // Simulate the shorter raw TTL. Export retains the bounded aggregate,
+    // but a user-provided backup alone does not prove an observation occurred.
+    source.db.prepare('DELETE FROM observations').run()
+    const document = exportHistory(source.db, 5000)
+    expect(document.tables.episode_saved_resources).toHaveLength(1)
+    expect(document.tables.episode_verification_results).toHaveLength(1)
+    source.close()
+
+    const target = database('dch-audit-compacted-dst-')
+    const result = importHistory(target.db, document)
+    expect(result.imported.episode_saved_resources).toBe(0)
+    expect(result.imported.episode_verification_results).toBe(0)
+    expect(target.db.prepare('SELECT COUNT(*) AS n FROM episode_saved_resources').get())
+      .toEqual({ n: 0 })
+    expect(target.db.prepare('SELECT COUNT(*) AS n FROM episode_verification_results').get())
+      .toEqual({ n: 0 })
+    target.close()
+  })
+
   it('never carries the pairing digest', () => {
     const source = database('dsh-ch-export-cred-')
     seed(source.db)

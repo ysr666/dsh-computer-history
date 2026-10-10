@@ -1,10 +1,15 @@
 import React from 'react'
-import type { AskHistoryResult, HistorySearchHit } from '../shared/index.js'
+import type {
+  AskHistoryResult, EpisodeDetail, EpisodeSummary, HistorySearchHit,
+} from '../shared/index.js'
 import { historyApi } from './api.js'
 
 interface Props {
   readonly locale: string
   readonly historyRevision: number
+  /** Opens a normal editable DSH composer; does not automatically send. */
+  readonly onAskWithAi?: (question: string) => Promise<void>
+  readonly onContinue?: (episode: EpisodeSummary) => Promise<void>
 }
 
 function translatedKind(kind: HistorySearchHit['kind'], zh: boolean): string {
@@ -15,24 +20,69 @@ function translatedKind(kind: HistorySearchHit['kind'], zh: boolean): string {
   return zh ? cn[kind] : kind
 }
 
+/**
+ * Never re-resolve an ambiguous phrase when the user selected an exact hit.
+ * Read the original Episode before invoking the existing Continue flow.
+ * The Host's Continue binding performs the authoritative retention check.
+ */
+async function readExactHistoryEpisode(
+  episodeId: string,
+  getEpisode: (id: string) => Promise<EpisodeDetail>,
+): Promise<EpisodeDetail> {
+  const exactId = episodeId.trim()
+  if (!exactId || exactId.length > 1_000) throw new Error('Invalid Episode ID')
+  const episode = await getEpisode(exactId)
+  if (!episode || String(episode.id) !== exactId || episode.state === 'invalidated') {
+    throw new Error('Selected history episode is unavailable')
+  }
+  return episode
+}
+
+export async function continueExactHistoryEpisode(
+  episodeId: string,
+  getEpisode: (id: string) => Promise<EpisodeDetail>,
+  continueEpisode: (episode: EpisodeSummary) => Promise<void>,
+): Promise<void> {
+  // Re-fetch the exact retained source before passing it to the existing
+  // Continue path; the Host itself re-checks TTL on binding.
+  await continueEpisode(await readExactHistoryEpisode(episodeId, getEpisode))
+}
+
+export async function continueFromHistoryHit(
+  hit: HistorySearchHit,
+  getEpisode: (id: string) => Promise<EpisodeDetail>,
+  continueEpisode: (episode: EpisodeSummary) => Promise<void>,
+): Promise<void> {
+  return continueExactHistoryEpisode(hit.episodeId, getEpisode, continueEpisode)
+}
+
 /** A local metadata index, not an AI-composed answer. */
-export function AskHistoryView({ locale, historyRevision }: Props): React.ReactElement {
+export function AskHistoryView({ locale, historyRevision, onAskWithAi, onContinue }: Props): React.ReactElement {
   const zh = locale.toLowerCase().startsWith('zh')
   const t = (cn: string, en: string): string => zh ? cn : en
   const [question, setQuestion] = React.useState('')
   const [answer, setAnswer] = React.useState<AskHistoryResult>()
   const [loading, setLoading] = React.useState(false)
+  const [aiPending, setAiPending] = React.useState(false)
+  const [continuePendingId, setContinuePendingId] = React.useState<string>()
+  const [exactInput, setExactInput] = React.useState('')
+  const [exactEpisode, setExactEpisode] = React.useState<EpisodeDetail>()
+  const [exactPending, setExactPending] = React.useState(false)
   const [error, setError] = React.useState('')
   const [expanded, setExpanded] = React.useState(false)
   const [source, setSource] = React.useState<{
-    id: string; summary: string; startedAtMs: number; endedAtMs: number
+    hitId: string; id: string; summary: string; startedAtMs: number; endedAtMs: number
   }>()
   const requestId = React.useRef(0)
+  const exactRequestId = React.useRef(0)
+  const continueInFlight = React.useRef(false)
 
   React.useEffect(() => {
     requestId.current += 1
     setAnswer(undefined)
     setSource(undefined)
+    exactRequestId.current += 1
+    setExactEpisode(undefined)
     setLoading(false)
     setError('')
   }, [historyRevision])
@@ -56,14 +106,86 @@ export function AskHistoryView({ locale, historyRevision }: Props): React.ReactE
     }
   }
 
+  const askAi = async (): Promise<void> => {
+    if (!onAskWithAi || !question.trim() || aiPending) return
+    setError('')
+    setAiPending(true)
+    try {
+      await onAskWithAi(question.trim())
+    } catch {
+      setError(t('无法打开 DSH AI 对话，请检查会话功能。',
+        'Could not open a DSH AI conversation. Check session availability.'))
+    } finally {
+      setAiPending(false)
+    }
+  }
+
+  const continueHit = async (hit: HistorySearchHit): Promise<void> => {
+    if (!onContinue || continueInFlight.current) return
+    // A ref is synchronous even before React commits the disabled state.
+    // It prevents double-clicks from creating two DSH Continue sessions.
+    continueInFlight.current = true
+    setContinuePendingId(hit.id)
+    setError('')
+    try {
+      await continueFromHistoryHit(hit, historyApi.getEpisode, onContinue)
+    } catch {
+      setError(t('无法继续这条工作记录：它可能已经过期或不可用。',
+        'Cannot continue this work: its source may have expired or become unavailable.'))
+    } finally {
+      continueInFlight.current = false
+      setContinuePendingId(undefined)
+    }
+  }
+
+  const inspectExact = async (): Promise<void> => {
+    const id = exactInput.trim()
+    if (!id || id.length > 1_000 || exactPending) return
+    const request = ++exactRequestId.current
+    setExactPending(true)
+    setExactEpisode(undefined)
+    setError('')
+    try {
+      const episode = await readExactHistoryEpisode(id, historyApi.getEpisode)
+      if (request !== exactRequestId.current) return
+      setExactEpisode(episode)
+    } catch {
+      if (request === exactRequestId.current) {
+        setError(t('未找到有效的 Episode，请核对 AI 回答中的来源 ID。',
+          'No retained Episode matches this exact ID. Check the AI answer.'))
+      }
+    } finally {
+      if (request === exactRequestId.current) setExactPending(false)
+    }
+  }
+
+  const continueExact = async (): Promise<void> => {
+    if (!onContinue || !exactEpisode || continueInFlight.current) return
+    continueInFlight.current = true
+    const id = String(exactEpisode.id)
+    setContinuePendingId('exact:' + id)
+    setError('')
+    try {
+      await continueExactHistoryEpisode(id, historyApi.getEpisode, onContinue)
+    } catch {
+      setExactEpisode(undefined)
+      setError(t('无法继续这个 Episode：来源可能已经过期或不可用。',
+        'This Episode cannot be continued; the source may have expired.'))
+    } finally {
+      continueInFlight.current = false
+      setContinuePendingId(undefined)
+    }
+  }
+
   const openSource = async (hit: HistorySearchHit): Promise<void> => {
     const current = ++requestId.current
     setSource(undefined)
     setError('')
     try {
-      const episode = await historyApi.getEpisode(hit.episodeId)
+      const episode = await readExactHistoryEpisode(hit.episodeId, historyApi.getEpisode)
       if (requestId.current === current) {
         setSource({
+          hitId: hit.id,
           id: String(episode.id),
           summary: episode.summary,
           startedAtMs: episode.startedAtMs,
@@ -86,18 +208,21 @@ export function AskHistoryView({ locale, historyRevision }: Props): React.ReactE
         requestId.current += 1
         setExpanded(value => !value)
         setSource(undefined)
+        exactRequestId.current += 1
+        setExactEpisode(undefined)
         setLoading(false)
       },
-    }, t('问问工作历史', 'Ask Your History'), '  ', expanded ? '⌄' : '›'),
+    }, t('查询工作历史', 'Explore Work History'), '  ', expanded ? '⌄' : '›'),
     React.createElement('p', { className: 'ch-muted' },
-      t('用自然语言检索已记录的项目、文件和应用活动。无需联网，也不会读取文件正文。',
-        'Search recorded projects, files and app activity in natural language—locally, without file contents.')),
+      t('复杂问题可交给 DSH AI 组合检索；本地查找不调用模型，也不会读取文件正文。',
+        'Ask the DSH AI to combine evidence for complex questions, or search locally without a model. No file bodies are read.')),
     expanded ? React.createElement('div', { className: 'ch-ask-body' },
       React.createElement('form', {
         className: 'ch-ask-form',
         onSubmit: (event: React.FormEvent<HTMLFormElement>) => {
           event.preventDefault()
-          void ask()
+          if (onAskWithAi) void askAi()
+          else void ask()
         },
       },
       React.createElement('input', {
@@ -114,11 +239,85 @@ export function AskHistoryView({ locale, historyRevision }: Props): React.ReactE
           setLoading(false)
         },
       }),
-      React.createElement('button', {
+      onAskWithAi ? React.createElement('button', {
         type: 'submit', className: 'ch-button ch-continue-primary',
+        disabled: aiPending || !question.trim(),
+      }, aiPending ? t('正在打开…', 'Opening…') : t('在 DSH 中询问 AI', 'Ask DSH AI')) : null,
+      React.createElement('button', {
+        type: onAskWithAi ? 'button' : 'submit',
+        className: 'ch-button',
         disabled: loading || !question.trim(),
-      }, loading ? t('检索中…', 'Searching…') : t('查找记录', 'Find history')),
+        onClick: onAskWithAi ? () => { void ask() } : undefined,
+      }, loading ? t('检索中…', 'Searching…') : t('本地快速查找', 'Quick local search')),
       ),
+      onAskWithAi
+        ? React.createElement('p', { className: 'ch-muted' },
+            t('AI 查询会使用当前 DSH 模型。历史元数据可能进入所配置的远程模型；本地快速查找不会。问题会先进入可编辑的输入框，不会自动发送。',
+              'AI questions use your configured DSH model; work metadata may reach a remote provider. Quick local search does not. The question opens as an editable draft and is never sent automatically.'))
+        : null,
+      onAskWithAi && onContinue ? React.createElement('div', {
+        className: 'ch-ask-exact',
+      },
+      React.createElement('p', { className: 'ch-muted' },
+        t('AI 回答含有来源 Episode ID？粘贴 ID、核对历史来源，再手动继续。不会自动打开工作。',
+          'Have a source Episode ID from AI? Paste it, inspect the historical source, then explicitly continue. Nothing opens automatically.')),
+      React.createElement('form', {
+        className: 'ch-ask-form',
+        onSubmit: (event: React.FormEvent<HTMLFormElement>) => {
+          event.preventDefault()
+          void inspectExact()
+        },
+      },
+      React.createElement('input', {
+        type: 'text', maxLength: 1_000,
+        className: 'ch-input ch-ask-input',
+        value: exactInput,
+        'aria-label': t('来源 Episode ID', 'Source Episode ID'),
+        placeholder: t('粘贴准确的 Episode ID', 'Paste exact Episode ID'),
+        onChange: (event: React.ChangeEvent<HTMLInputElement>) => {
+          exactRequestId.current += 1
+          setExactInput(event.target.value)
+          setExactEpisode(undefined)
+          setExactPending(false)
+          setError('')
+        },
+      }),
+      React.createElement('button', {
+        type: 'submit', className: 'ch-button',
+        disabled: !exactInput.trim() || exactPending,
+      }, exactPending ? t('核对中…', 'Inspecting…') : t('核对 Episode 来源', 'Inspect Episode source')),
+      ),
+      exactEpisode ? React.createElement('div', {
+        className: 'ch-ask-source ch-ask-exact-preview',
+        role: 'region',
+        'aria-label': t('待确认的历史来源', 'Historical source awaiting confirmation'),
+      },
+      React.createElement('strong', null,
+        t('核对历史工作片段', 'Review historical work')),
+      React.createElement('p', { className: 'ch-ask-source-id' }, String(exactEpisode.id)),
+      React.createElement('p', { className: 'ch-ask-source-meta' },
+        (exactEpisode.workspace?.title || t('未关联项目', 'No recorded workspace'))
+        + ' · ' + new Date(exactEpisode.endedAtMs).toLocaleString(zh ? 'zh-CN' : 'en-US')),
+      React.createElement('p', { className: 'ch-ask-source-summary' }, exactEpisode.summary),
+      exactEpisode.resources.length > 0
+        ? React.createElement('ul', { className: 'ch-ask-source-resources' },
+            ...exactEpisode.resources.slice(0, 3).map(resource =>
+              React.createElement('li', { key: resource.kind + ':' + resource.canonicalUri },
+                resource.displayLabel || resource.canonicalUri)),
+          )
+        : null,
+      React.createElement('p', { className: 'ch-ask-source-caution' },
+        t('这是留存的历史线索，不代表文件现在存在或任务已经完成。继续之前请核对当前工作状态。',
+          'This is retained historical evidence, not proof the file still exists or the task is complete. Verify current work after continuing.')),
+      React.createElement('button', {
+        type: 'button', className: 'ch-button ch-continue-primary',
+        disabled: continuePendingId !== undefined,
+        onClick: () => { void continueExact() },
+      }, continuePendingId === 'exact:' + String(exactEpisode.id)
+        ? t('正在继续…', 'Continuing…')
+        : t('继续此 Episode', 'Continue this Episode')),
+      ) : null,
+      ) : null,
       error ? React.createElement('p', { role: 'alert' }, error) : null,
       answer ? React.createElement(React.Fragment, null,
         React.createElement('p', { className: 'ch-muted', role: 'status' },
@@ -150,14 +349,28 @@ export function AskHistoryView({ locale, historyRevision }: Props): React.ReactE
               : t('历史观测可追溯', 'Observation-backed evidence')),
           React.createElement('button', {
             type: 'button', className: 'ch-text-action',
+            'aria-label': t('查看来源：' + hit.title, 'Inspect source: ' + hit.title),
             onClick: () => { void openSource(hit) },
           }, t('查看来源 Episode', 'Inspect source Episode')),
+          onContinue ? React.createElement('button', {
+            type: 'button',
+            className: 'ch-button ch-continue-primary',
+            'aria-label': t('继续工作：' + hit.title, 'Continue work: ' + hit.title),
+            disabled: continuePendingId !== undefined,
+            onClick: () => { void continueHit(hit) },
+          }, continuePendingId === hit.id
+            ? t('正在继续…', 'Continuing…')
+            : t('继续此项工作', 'Continue this work')) : null,
+          source?.hitId === hit.id ? React.createElement('div', {
+            className: 'ch-ask-source',
+            role: 'region',
+            'aria-label': t('当前结果的来源', 'Source for selected result'),
+          },
+            React.createElement('strong', null, t('来源工作片段', 'Source Episode')),
+            React.createElement('p', { className: 'ch-muted' }, source.id),
+            React.createElement('p', null, source.summary),
+          ) : null,
           ))),
-        source ? React.createElement('div', { className: 'ch-ask-source' },
-          React.createElement('strong', null, t('来源工作片段', 'Source Episode')),
-          React.createElement('p', { className: 'ch-muted' }, source.id),
-          React.createElement('p', null, source.summary),
-        ) : null,
       ) : null,
     ) : null,
   )

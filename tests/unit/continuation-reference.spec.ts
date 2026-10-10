@@ -11,6 +11,7 @@ import {
   COMPUTER_HISTORY_REFERENCE_SOURCE,
   computerHistoryReference,
   continueEpisodeInDsh,
+  askHistoryInDsh,
 } from '../../src/client/continuation-reference.js'
 import type { EpisodeSummary } from '../../src/shared/index.js'
 
@@ -299,6 +300,49 @@ describe('Computer History continuation references', () => {
     expect(f.insertReference).not.toHaveBeenCalled()
     expect(f.openWorkspace).not.toHaveBeenCalled()
     expect(fetchMock).not.toHaveBeenCalled()
+    expect(f.release).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('AI-first Ask History composer handoff', () => {
+  it('opens a normal editable DSH draft without automatic sending or Continue binding', async () => {
+    const f = fixture()
+    const fetched = vi.fn()
+    vi.stubGlobal('fetch', fetched)
+    await askHistoryInDsh(f.ctx, 'Which webpages did I read yesterday?', 'en')
+    await Promise.resolve()
+    expect(f.initializeDefault).toHaveBeenCalledTimes(1)
+    expect(f.connectWorkspace).toHaveBeenCalledWith('workspace:default')
+    expect(f.insertReference).not.toHaveBeenCalled()
+    expect(f.setDraft).toHaveBeenCalledWith(expect.stringContaining(
+      'Which webpages did I read yesterday?',
+    ))
+    expect(f.setDraft.mock.calls[0]?.[0]).toContain('Computer History tools')
+    expect(fetched).not.toHaveBeenCalled()
+    expect(f.focus).toHaveBeenCalledTimes(1)
+    expect(f.release).toHaveBeenCalledTimes(1)
+  })
+
+  it('uses the selected Chinese language, never reading history automatically', async () => {
+    const f = fixture()
+    await askHistoryInDsh(f.ctx, '昨天看了什么网页？', 'zh-CN')
+    expect(f.setDraft.mock.calls[0]?.[0]).toContain('请使用 Computer History')
+    expect(f.setDraft.mock.calls[0]?.[0]).toContain('昨天看了什么网页？')
+  })
+
+  it('rejects an already-populated draft without overwriting it', async () => {
+    const f = fixture({ draft: 'original user draft' })
+    await expect(askHistoryInDsh(f.ctx, 'Yesterday project', 'en'))
+      .rejects.toThrow(/unexpectedly has a draft/)
+    expect(f.setDraft).not.toHaveBeenCalled()
+    expect(f.release).toHaveBeenCalledTimes(1)
+  })
+
+  it('cleans its own draft if navigation fails, without starting an Agent turn', async () => {
+    const f = fixture({ openThrowsAfterInsert: true })
+    await expect(askHistoryInDsh(f.ctx, 'Yesterday project', 'en'))
+      .rejects.toThrow(/navigation failed/)
+    expect(f.setDraft).toHaveBeenLastCalledWith('')
     expect(f.release).toHaveBeenCalledTimes(1)
   })
 })
