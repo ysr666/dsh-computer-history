@@ -347,6 +347,79 @@ describe('local computer history backend', () => {
     history.close()
   })
 
+  it('gates M5 contextual Continue by session binding, retained evidence and M2 privacy', async () => {
+    const history = openTempDatabase()
+    const episodeId = seedEpisode(history)
+    const policies = new PolicyStore(history.db)
+    policies.ensureInitial(1)
+    let nowMs = 10_000
+    const backend = new LocalComputerHistoryBackend(
+      new EpisodeStore(history.db), policies, new DeletionService(history.db),
+      new FakeCapture(), {
+        observationRetentionHours: 24, episodeRetentionDays: 30,
+        autoResume: false, now: () => nowMs,
+      }, undefined, new SemanticOptInStore(history.db), history.db,
+    )
+    expect(await backend.contextualContinue('other-session')).toEqual({
+      status: 'unavailable', reason: 'no-session-binding',
+    })
+    const project = (await backend.listProjectMemories())[0]!
+    await backend.saveUserMemoryNote({
+      projectId: project.id, episodeId: String(episodeId),
+      text: 'LONG_TERM_SECRET_DO_NOT_INCLUDE',
+      retentionAcknowledged: true,
+    })
+    backend.bindContinuationSession({ sessionId: 'continue:one', episodeId })
+    const result = await backend.contextualContinue('continue:one')
+    expect(result).toMatchObject({
+      status: 'ready',
+      boundEpisodeId: String(episodeId),
+      project: { id: project.id },
+      privacy: {
+        userConfirmedNotes: 'excluded',
+        unrelatedProjects: 'excluded',
+        readMode: 'bound-session-on-demand',
+      },
+    })
+    expect(JSON.stringify(result)).not.toContain('LONG_TERM_SECRET_DO_NOT_INCLUDE')
+    expect(JSON.stringify(result)).not.toContain('note_text')
+    expect(await backend.contextualContinue('continue:two')).toMatchObject({
+      status: 'unavailable', reason: 'no-session-binding',
+    })
+    // Binding remains active for 30 days, but the source's own Episode TTL
+    // is exactly 100_000: the new retained lookup must reject it at expiry.
+    nowMs = 100_000
+    expect(await backend.contextualContinue('continue:one')).toEqual({
+      status: 'unavailable', reason: 'source-not-retained',
+    })
+    nowMs = 10_000
+    await backend.delete({ scope: { kind: 'all' } })
+    expect((await backend.contextualContinue('continue:one')).status)
+      .toBe('unavailable')
+    history.close()
+  })
+
+  it('refuses an untrusted threadless Episode in session-bound context', async () => {
+    const history = openTempDatabase()
+    const episodeId = seedEpisode(history)
+    const policies = new PolicyStore(history.db)
+    policies.ensureInitial(1)
+    const backend = new LocalComputerHistoryBackend(
+      new EpisodeStore(history.db), policies, new DeletionService(history.db),
+      new FakeCapture(), {
+        observationRetentionHours: 24, episodeRetentionDays: 30,
+        autoResume: false, now: () => 10_000,
+      }, undefined, new SemanticOptInStore(history.db), history.db,
+    )
+    backend.bindContinuationSession({ sessionId: 'continue:untrusted', episodeId })
+    history.db.prepare('UPDATE episodes SET thread_key = NULL WHERE id = ?')
+      .run(episodeId)
+    expect(await backend.contextualContinue('continue:untrusted')).toEqual({
+      status: 'unavailable', reason: 'no-trusted-project',
+    })
+    history.close()
+  })
+
   it('composes store, resume, policy, capture, and deletion behavior', async () => {
     const history = openTempDatabase()
     const episodeId = seedEpisode(history)
@@ -1178,6 +1251,9 @@ describe('Cordis computer history service', () => {
       async listProjectMemories() { return [] },
       async getProjectMemory() { return undefined },
       async getThreadActivityLinks() { return undefined },
+      async contextualContinue() {
+        return { status: 'unavailable' as const, reason: 'no-session-binding' as const }
+      },
       async listUserMemoryNotes() { return [] },
       async saveUserMemoryNote() {
         return {
