@@ -174,10 +174,17 @@ function resourceOf(
       const url = new URL(raw)
       url.search = ''
       url.hash = ''
+      // The Host must not persist HTTP basic-auth credentials from an
+      // untrusted companion either; origin/path remain sufficient for history.
+      url.username = ''
+      url.password = ''
       return {
         kind: 'url',
         canonicalUri: url.href,
-        ...(message.window?.title ? { displayLabel: message.window.title } : {}),
+        // Browser document titles are free-form and may echo authentication
+        // query strings even when the URL was already stripped. Never store
+        // them as labels; derive display-only identity from sanitized URL.
+        displayLabel: url.host + url.pathname,
       }
     } catch { return undefined }
   }
@@ -418,6 +425,8 @@ export function normalizeObservation(
       kind: adapter.surfaceKind,
       ...(
         !adapter.suppressesWindowTitle
+        && resource?.kind !== 'url'
+        && adapter.surfaceKind !== 'browser'
         && message.window?.title
           ? { title: message.window.title }
           : {}

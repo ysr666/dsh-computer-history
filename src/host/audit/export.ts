@@ -3,6 +3,7 @@ import {
   type HistoryExport,
 } from '../../shared/index.js'
 import type { DatabaseSync } from 'node:sqlite'
+import { rederiveBrowserEpisodeSummaries } from '../episodes/browser-title-privacy.js'
 
 /**
  * Tables that make up "what this Host knows".
@@ -252,6 +253,30 @@ function optionalMappedId(
   return mapped
 }
 
+/** Restoring a legacy audit file is another untrusted Host ingress route. */
+function sanitizeImportedResource(row: ImportRow): ImportRow {
+  if (row.kind !== 'url') return row
+  const raw = requiredString(row, 'resources', 'canonical_uri')
+  let url: URL
+  try { url = new URL(raw) } catch {
+    throw new HistoryImportError('invalid URL in imported history')
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new HistoryImportError('unsupported URL scheme in imported history')
+  }
+  url.username = ''
+  url.password = ''
+  url.search = ''
+  url.hash = ''
+  return { ...row, canonical_uri: url.href, display_label: null }
+}
+
+function sanitizeImportedObservation(row: ImportRow): ImportRow {
+  return row.surface_kind === 'browser' || row.source_adapter === 'browser'
+    ? { ...row, window_title: null }
+    : row
+}
+
 function mappedId(
   row: ImportRow,
   table: ExportedTable,
@@ -374,7 +399,8 @@ export function importHistory(
         (imported.dsh_checkpoints ?? 0) + inserted.changes
     }
 
-    for (const row of rows.get('resources') ?? []) {
+    for (const rawRow of rows.get('resources') ?? []) {
+      const row = sanitizeImportedResource(rawRow)
       const sourceId = requiredInteger(row, 'resources', 'id')
       const kind = requiredString(row, 'resources', 'kind')
       const uri = requiredString(row, 'resources', 'canonical_uri')
@@ -392,7 +418,8 @@ export function importHistory(
             UPDATE resources
             SET first_seen_at_ms = MIN(first_seen_at_ms, ?),
                 last_seen_at_ms = MAX(last_seen_at_ms, ?),
-                display_label = COALESCE(display_label, ?)
+                display_label = CASE WHEN kind = 'url' THEN NULL
+                  ELSE COALESCE(display_label, ?) END
             WHERE id = ?
           `).run(
             firstSeen,
@@ -411,7 +438,8 @@ export function importHistory(
       imported.resources = (imported.resources ?? 0) + inserted.changes
     }
 
-    for (const row of rows.get('observations') ?? []) {
+    for (const rawRow of rows.get('observations') ?? []) {
+      const row = sanitizeImportedObservation(rawRow)
       const sourceId = requiredInteger(row, 'observations', 'id')
       const session = requiredString(row, 'observations', 'collector_session')
       const seq = requiredInteger(row, 'observations', 'collector_seq')
@@ -558,6 +586,10 @@ export function importHistory(
       imported.episode_summary_citations =
         (imported.episode_summary_citations ?? 0) + inserted.changes
     }
+
+    // A pre-v15 audit export may contain untrusted page titles in summary_text.
+    // Rebuild *only newly imported* browser-linked Episodes, not existing data.
+    rederiveBrowserEpisodeSummaries(db, newEpisodes)
 
     // Explicitly document the trust boundary in the result too: these rows may
     // be present in an audit export, but history import never applies them.

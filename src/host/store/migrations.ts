@@ -13,6 +13,7 @@ import { migration0011 } from './migrations/0011-dsh-checkpoint-git-head.js'
 import { migration0012 } from './migrations/0012-verification-events.js'
 import { migration0013 } from './migrations/0013-continuation-sessions.js'
 import { migration0014 } from './migrations/0014-user-confirmed-memory.js'
+import { migration0015 } from './migrations/0015-browser-title-redaction.js'
 
 export interface Migration {
   readonly version: number
@@ -44,6 +45,7 @@ const MIGRATIONS: readonly Migration[] = [
   migration0012,
   migration0013,
   migration0014,
+  migration0015,
 ]
 
 function schemaVersion(db: DatabaseSync): number {

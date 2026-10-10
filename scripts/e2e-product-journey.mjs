@@ -1433,6 +1433,65 @@ try {
     JSON.stringify(mainAfterWork),
   )
 
+  requireCheck(
+    'Browser title cannot reintroduce query tokens into history UI or Episode',
+    !mainAfterWork?.text.includes('?token=secret')
+      && !JSON.stringify(liveEpisode).includes('?token=secret')
+      && !JSON.stringify(liveEpisode).includes('#part-3'),
+    'browser display names and summaries contain no raw URL query/fragment',
+  )
+
+  const memoryToggle = await uiSession.evaluate(
+    "(() => { const b = document.querySelector('.ch-memory-toggle');"
+    + " if (!b) return false; b.click(); return true; })()",
+  )
+  requireCheck(
+    'Work Memory panel expands in real Chrome',
+    memoryToggle === true,
+    'Projects and notes panel is interactive',
+  )
+  let projectChoice
+  for (let i = 0; i < 30; i += 1) {
+    // eslint-disable-next-line no-await-in-loop
+    projectChoice = await uiSession.evaluate(
+      "(() => { const btn = document.querySelector('.ch-work-memory-body "
+      + ".ch-memory-list button');"
+      + " if (!btn) return false; btn.click(); return true; })()",
+    )
+    if (projectChoice) break
+    // eslint-disable-next-line no-await-in-loop
+    await sleep(180)
+  }
+  requireCheck(
+    'Work Memory exposes the retained project',
+    projectChoice === true,
+    'Project selector is available after the historical query',
+  )
+  let suggestionPanels
+  for (let i = 0; i < 30; i += 1) {
+    // eslint-disable-next-line no-await-in-loop
+    suggestionPanels = await uiSession.evaluate(
+      "(() => ({"
+      + " project: Boolean(document.querySelector('.ch-work-memory-body .ch-inspector h3')),"
+      + " skill: document.querySelector('.ch-skill-section')?.innerText ?? '',"
+      + " auto: document.querySelector('.ch-auto-section')?.innerText ?? ''"
+      + "}))()",
+    )
+    if (suggestionPanels.skill && suggestionPanels.auto) break
+    // eslint-disable-next-line no-await-in-loop
+    await sleep(180)
+  }
+  await uiSession.shot('04-memory-suggestions.png')
+  requireCheck(
+    'Skill and Automation panels render grounded insufficient-evidence states',
+    suggestionPanels?.project === true
+      && Boolean(suggestionPanels.skill)
+      && Boolean(suggestionPanels.auto)
+      && /证据不足|Not enough/.test(suggestionPanels.skill)
+      && /没有观察|No sufficiently/.test(suggestionPanels.auto),
+    'Both read-only candidate panels render for one-Episode project',
+  )
+
   uiSession.ws.close()
   uiSession = undefined
   writeHostLog()

@@ -3,7 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
-  EpisodeStore, MemoryNoteStore, openHistoryDatabase,
+  EpisodeStore, MemoryNoteStore, latestSchemaVersion, openHistoryDatabase,
 } from '../../src/host/store/index.js'
 import { DeletionService, RetentionService } from '../../src/host/retention/index.js'
 import { exportHistory, importHistory } from '../../src/host/audit/export.js'
@@ -54,9 +54,9 @@ afterEach(() => {
 })
 
 describe('M2 confirmed persistent notes', () => {
-  it('migrates to schema 14 and never creates a note without a user write', () => {
+  it('migrates to latest schema and never creates a note without a user write', () => {
     const { history, db, notes } = fixture()
-    expect(db.prepare('PRAGMA user_version').get()).toMatchObject({ user_version: 14 })
+    expect(db.prepare('PRAGMA user_version').get()).toMatchObject({ user_version: latestSchemaVersion() })
     expect(notes.list()).toEqual([])
     history.close()
   })

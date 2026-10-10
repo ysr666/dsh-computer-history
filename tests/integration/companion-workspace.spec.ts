@@ -280,7 +280,7 @@ describe('a vouched workspace (ADR 0009)', () => {
       expect.objectContaining({
         kind: 'url',
         canonicalUri: 'https://docs.example/guide',
-        displayLabel: 'Guide',
+        displayLabel: 'docs.example/guide',
       }),
     ]))
     expect(episodes[0]?.surfaces.map(surface => surface.surfaceKind))
