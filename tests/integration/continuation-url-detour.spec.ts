@@ -121,7 +121,7 @@ describe('explicit Continue URL detour evidence', () => {
       expect.objectContaining({
         kind: 'url',
         canonicalUri: 'https://docs.example/guide',
-        displayLabel: 'Guide',
+        displayLabel: 'docs.example/guide',
       }),
     ]))
     expect(episodes[0]?.surfaces.map(surface => surface.surfaceKind))
@@ -196,7 +196,7 @@ describe('explicit Continue URL detour evidence', () => {
       expect.objectContaining({
         kind: 'url',
         canonicalUri: 'https://docs.example/guide',
-        displayLabel: 'Guide',
+        displayLabel: 'docs.example/guide',
       }),
     ])
     expect(detour?.surfaces.map(surface => surface.surfaceKind))
@@ -216,7 +216,7 @@ describe('explicit Continue URL detour evidence', () => {
       referenceResources: [{
         kind: 'url',
         canonicalUri: 'https://docs.example/guide',
-        displayLabel: 'Guide',
+        displayLabel: 'docs.example/guide',
       }],
     })
     expect(bridge?.evidenceObservationIds.length).toBeGreaterThan(0)

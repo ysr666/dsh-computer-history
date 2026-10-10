@@ -870,8 +870,8 @@ describe('URL resources are provenance-gated (ADR 0007)', () => {
     expect(await ingestion.ingest({
       ...native('companion.browser'),
       window: {
-        title: 'Example page',
-        url: 'https://example.test/docs/guide?token=secret#section-3',
+        title: '/docs/guide?token=secret#section-3 page',
+        url: 'https://user:password@example.test/docs/guide?token=secret#section-3',
       },
       source: { provider: 'companion', adapter: 'browser' },
     })).toBe(true)
@@ -881,8 +881,12 @@ describe('URL resources are provenance-gated (ADR 0007)', () => {
     expect(observations[0]!.resource).toMatchObject({
       kind: 'url',
       canonicalUri: 'https://example.test/docs/guide',
-      displayLabel: 'Example page',
+      displayLabel: 'example.test/docs/guide',
     })
+    expect(observations[0]!.surface.title).toBeUndefined()
+    expect(JSON.stringify(observations[0])).not.toContain('secret')
+    expect(JSON.stringify(observations[0])).not.toContain('password')
+    expect(JSON.stringify(observations[0])).not.toContain('user:')
     expect(observations[0]!.source.provider).toBe('companion')
     expect(String(observations[0]!.resource?.canonicalUri)).not.toContain('secret')
     history.close()
