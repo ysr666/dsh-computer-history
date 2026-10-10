@@ -24,7 +24,11 @@ describe('legacy URL normalization collision in schema 15', () => {
     db.prepare("INSERT INTO episodes(id, started_at_ms, ended_at_ms, start_reason, end_reason, summary_kind, summary_text, confidence, state, created_at_ms, updated_at_ms) VALUES('ep1', 1, 4, 'first-observation', 'timeout', 'local', 'secret page', 1, 'closed', 1, 4)").run()
     db.prepare("INSERT INTO episode_resources(episode_id, resource_id, first_seen_at_ms, last_seen_at_ms, observation_count) VALUES('ep1',1,1,3,2)").run()
     db.prepare("INSERT INTO episode_resources(episode_id, resource_id, first_seen_at_ms, last_seen_at_ms, observation_count) VALUES('ep1',2,2,4,3)").run()
-    db.prepare('DELETE FROM schema_migrations WHERE version=15').run()
+    // Recreate a genuine pre-v15 schema snapshot. A fresh source DB now
+    // includes v16 retained-fact tables; those cannot exist on a v14 fixture.
+    db.exec('DROP TABLE episode_saved_resources')
+    db.exec('DROP TABLE episode_verification_results')
+    db.prepare('DELETE FROM schema_migrations WHERE version IN (15,16)').run()
     db.exec('PRAGMA user_version=14')
     store.close()
 

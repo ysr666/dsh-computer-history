@@ -467,6 +467,27 @@ describe('local computer history backend', () => {
     history.close()
   })
 
+  it('refuses a newly selected Continue source already expired before retention maintenance', () => {
+    const history = openTempDatabase()
+    const episodeId = seedEpisode(history)
+    const policies = new PolicyStore(history.db)
+    policies.ensureInitial(1)
+    const episodes = new EpisodeStore(history.db)
+    const backend = new LocalComputerHistoryBackend(
+      episodes, policies, new DeletionService(history.db),
+      new FakeCapture(), {
+        observationRetentionHours: 24, episodeRetentionDays: 30,
+        autoResume: false, now: () => 100_000,
+      }, undefined, new SemanticOptInStore(history.db), history.db,
+    )
+    expect(episodes.get(episodeId)).toBeDefined()
+    expect(() => backend.bindContinuationSession({
+      sessionId: 'new:expired', episodeId,
+    })).toThrow(/missing, invalidated or expired/)
+    expect(backend.continuationEpisodeForSession('new:expired')).toBeUndefined()
+    history.close()
+  })
+
   it('refuses an untrusted threadless Episode in session-bound context', async () => {
     const history = openTempDatabase()
     const episodeId = seedEpisode(history)
@@ -1306,6 +1327,7 @@ describe('Cordis computer history service', () => {
     }
 
     const backend: ComputerHistoryServiceContract = {
+      async queryEvidence() { return { items: [], hasMore: false, notesAccess: 'not-searched', caveat: 'fixture' } },
       async issueNoteReadCode() { return { code: 'test', expiresAtMs: 1 } },
       async readOneConfirmedNote() { return undefined },
       async revokeNoteReadCode() { return false },

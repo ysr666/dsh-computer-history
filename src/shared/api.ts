@@ -49,6 +49,36 @@ export interface SearchEpisodesRequest {
   readonly limit?: number
 }
 
+/** AI-friendly, bounded, metadata-only evidence retrieval. No regex or LLM in the Host. */
+export interface HistoryEvidenceQuery {
+  /** Unix milliseconds in the Host's clock domain, start inclusive. */
+  readonly sinceMs?: number
+  /** Unix milliseconds, end exclusive. */
+  readonly untilMs?: number
+  readonly workspaceId?: string
+  readonly bundleId?: string
+  readonly resourceKind?: 'file' | 'directory' | 'url' | 'document' | 'workspace'
+  /** May miss older events when the short-lived raw observation has expired. */
+  readonly eventKind?: 'save' | 'test' | 'build'
+  /** Optional *literal* metadata substring, not a natural-language question. */
+  readonly text?: string
+  /** Resource-specific literal URI/label substring (not regex or broad
+   * Episode text), correlated with resourceKind and eventKind=save
+   * on the same retained resource. */
+  readonly resourceText?: string
+  readonly limit?: number
+  /** Stable keyset cursor from the immediately preceding response. */
+  readonly cursor?: { readonly endedAtMs: number; readonly episodeId: string }
+}
+
+export interface HistoryEvidencePage {
+  readonly items: readonly EpisodeSummary[]
+  readonly hasMore: boolean
+  readonly nextCursor?: { readonly endedAtMs: number; readonly episodeId: string }
+  readonly notesAccess: 'not-searched'
+  readonly caveat: string
+}
+
 export type DeleteHistoryScope =
   | {
       readonly kind: 'time-range'
@@ -353,6 +383,12 @@ export interface ComputerHistoryServiceContract {
     request: SearchEpisodesRequest,
     signal?: AbortSignal,
   ): Promise<readonly EpisodeSummary[]>
+
+  /** Structured retrieval for an Agent that has already understood the user's question. */
+  queryEvidence(
+    request: HistoryEvidenceQuery,
+    signal?: AbortSignal,
+  ): Promise<HistoryEvidencePage>
 
   getEpisode(
     id: EpisodeId,
