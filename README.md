@@ -30,7 +30,7 @@
 > [!NOTE]
 > **v1.0.0 is published.** The same native-verified tarball passed the full installed-product journey and clean installation on Windows, macOS and Linux. [npm package](https://www.npmjs.com/package/dsh-computer-history/v/1.0.0) · [GitHub Release](https://github.com/ysr666/dsh-computer-history/releases/tag/v1.0.0). Host compatibility and privacy limits remain as documented.
 
-> **Next compatibility candidate (not yet published):** DCH `v1.0.1` targets DSH `0.2.1-alpha.2`; [candidate notes](docs/releases/v1.0.1.md). The currently published npm release remains `1.0.0` until a separate verified release.
+> **v1.0.1 is also published:** [npm v1.0.1](https://www.npmjs.com/package/dsh-computer-history/v/1.0.1) · [GitHub v1.0.1](https://github.com/ysr666/dsh-computer-history/releases/tag/v1.0.1). **v1.1.0 is a release candidate only (not yet published):** [v1.1.0 notes](docs/releases/v1.1.0.md) describe Work Memory, history exploration, contextual Continue and advisory Skills/Automations. Compatible DSH Host versions must be verified before installation.
 
 > [!WARNING]
 > 📌 **Announcement — v1.0.0 is available on npm and GitHub.**

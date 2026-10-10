@@ -30,7 +30,7 @@
 > [!NOTE]
 > **v1.0.0 已正式发布。** 同一份包含三平台原生采集器的安装包已通过完整产品流程和 Windows、macOS、Linux 干净安装验收。[npm 软件包](https://www.npmjs.com/package/dsh-computer-history/v/1.0.0) · [GitHub Release](https://github.com/ysr666/dsh-computer-history/releases/tag/v1.0.0)。Host 兼容性和隐私边界仍以文档为准。
 
-> **下一版兼容性候选（尚未发布）：** DCH `v1.0.1` 拟支持 DSH `0.2.1-alpha.2`；参阅[候选说明](docs/releases/v1.0.1.md)。正式 npm 最新版本在独立验收发布前仍是 `1.0.0`。
+> **v1.0.1 也已发布：** [npm v1.0.1](https://www.npmjs.com/package/dsh-computer-history/v/1.0.1) · [GitHub v1.0.1](https://github.com/ysr666/dsh-computer-history/releases/tag/v1.0.1)。**v1.1.0 目前只是发布候选（尚未发布）：** [v1.1.0 说明](docs/releases/v1.1.0.md)介绍工作记忆、历史检索、Contextual Continue 与 Skill/Automation 建议。安装前必须核实 DSH Host 兼容性。
 
 > [!WARNING]
 > 📌 **公告：v1.0.0 已在 npm 和 GitHub 正式发布**
