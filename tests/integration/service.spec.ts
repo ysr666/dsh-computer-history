@@ -326,6 +326,39 @@ describe('local computer history backend', () => {
     history.close()
   })
 
+  it('exposes skill candidates only for a retained trusted project and excludes M2 notes', async () => {
+    const history = openTempDatabase()
+    const sourceId = seedEpisode(history)
+    const episodes = new EpisodeStore(history.db)
+    const policies = new PolicyStore(history.db)
+    policies.ensureInitial(1)
+    const backend = new LocalComputerHistoryBackend(
+      episodes, policies, new DeletionService(history.db), new FakeCapture(), {
+        observationRetentionHours: 24, episodeRetentionDays: 30,
+        autoResume: false, now: () => 10_000,
+      }, undefined, new SemanticOptInStore(history.db), history.db,
+    )
+    const project = (await backend.listProjectMemories())[0]!
+    await backend.saveUserMemoryNote({
+      projectId: project.id, episodeId: String(sourceId),
+      text: 'PRIVATE_WORKFLOW_NOTE_NOT_FOR_DISCOVERY',
+      retentionAcknowledged: true,
+    })
+    const result = await backend.discoverSkillCandidates(project.id)
+    expect(result).toMatchObject({
+      conclusion: 'insufficient-evidence', candidates: [],
+      scannedEpisodes: 1, privacy: {
+        userConfirmedNotes: 'not-read', autoCreateOrInstall: false,
+      },
+    })
+    expect(JSON.stringify(result)).not.toContain('PRIVATE_WORKFLOW_NOTE_NOT_FOR_DISCOVERY')
+    expect(await backend.discoverSkillCandidates('pm_' + 'b'.repeat(64)))
+      .toBeUndefined()
+    await backend.delete({ scope: { kind: 'all' } })
+    expect(await backend.discoverSkillCandidates(project.id)).toBeUndefined()
+    history.close()
+  })
+
   it('still resolves an old trusted project if global recent Episodes omit it', async () => {
     const history = openTempDatabase()
     seedEpisode(history)
@@ -1251,6 +1284,7 @@ describe('Cordis computer history service', () => {
       async listProjectMemories() { return [] },
       async getProjectMemory() { return undefined },
       async getThreadActivityLinks() { return undefined },
+      async discoverSkillCandidates() { return undefined },
       async contextualContinue() {
         return { status: 'unavailable' as const, reason: 'no-session-binding' as const }
       },

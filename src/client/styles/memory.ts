@@ -40,6 +40,20 @@ export const MEMORY_STYLES = `
 .ch-memory-list>li p{flex-basis:100%;margin:1px 0;white-space:pre-wrap;overflow-wrap:anywhere}
 .ch-memory-list>li strong{font-size:12px}
 .ch-memory-list>li>button{min-width:0;overflow-wrap:anywhere}
+/* Suggestions are evidence cards, not executable or installed Skills. */
+.ch-skill-section{margin-top:17px;padding:12px;border:1px solid var(--dsw-alias-border-l1);
+  border-radius:10px;background:var(--dsw-alias-bg-layer-1);min-width:0}
+.ch-skill-section h3{font-size:12px;margin:0 0 6px}
+.ch-skill-section>.ch-muted{font-size:11px;line-height:1.55}
+.ch-skill-list{list-style:none;display:grid;gap:9px;margin:10px 0 0;padding:0}
+.ch-skill-candidate{border:1px solid var(--dsw-alias-border-l1);border-radius:9px;
+  padding:12px;background:var(--dsw-alias-bg-layer-2);min-width:0;font-size:12px}
+.ch-skill-candidate>strong{display:block;font-size:12px;line-height:1.5}
+.ch-skill-candidate>p{margin:7px 0;line-height:1.6}
+.ch-skill-subtitle{margin-top:9px;color:var(--dsw-alias-label-secondary)}
+.ch-skill-missing{padding-left:20px;margin:6px 0 9px;line-height:1.6}
+.ch-skill-evidence{padding-top:7px;display:flex;flex-direction:column;gap:4px;min-width:0}
+.ch-skill-evidence code{font-size:10px;white-space:normal;overflow-wrap:anywhere}
 /* Advisory links never resemble confirmed thread membership. */
 .ch-memory-link-list{list-style:none;display:grid;gap:7px;margin:8px 0 15px;padding:0}
 .ch-memory-link-list>li{display:flex;flex-wrap:wrap;gap:5px 9px;align-items:baseline;

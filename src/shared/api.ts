@@ -1,6 +1,7 @@
 import type { AskHistoryRequest, AskHistoryResult } from './ask-history.js'
 import type { ThreadActivityLinks } from './thread-intelligence.js'
 import type { ContextualContinueResult } from './contextual-continue.js'
+import type { SkillCandidateReport } from './skill-candidates.js'
 import type {
   ConfirmUserMemoryNoteRequest, ListProjectMemoriesRequest,
   ProjectMemory, UserMemoryNote,
@@ -306,6 +307,11 @@ export interface ComputerHistoryServiceContract {
   contextualContinue(
     sessionId: string, signal?: AbortSignal,
   ): Promise<ContextualContinueResult>
+
+  /** Read-only candidates, never Skill code, installations or execution. */
+  discoverSkillCandidates(
+    id: string, signal?: AbortSignal,
+  ): Promise<SkillCandidateReport | undefined>
 
   /** Suggested, non-authoritative cross-app associations; does not alter Work Threads. */
   getThreadActivityLinks(id: string, signal?: AbortSignal): Promise<ThreadActivityLinks | undefined>

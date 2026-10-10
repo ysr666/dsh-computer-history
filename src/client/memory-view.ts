@@ -1,6 +1,7 @@
 import React from 'react'
 import type { MemoryFact, ProjectMemory, ThreadActivityLinks, UserMemoryNote } from '../shared/index.js'
 import { historyApi } from './api.js'
+import { SkillCandidatesView } from './skill-candidates-view.js'
 
 interface WorkMemoryViewProps {
   readonly locale: string
@@ -542,6 +543,11 @@ export function WorkMemoryView({ locale, historyRevision }: WorkMemoryViewProps)
                 ? t(' · 原始记录已过期', ' · Raw records expired')
                 : t(' · 有历史记录', ' · Historical record')),
           ))),
+        React.createElement(SkillCandidatesView, {
+          key: selected.id,
+          projectId: selected.id,
+          locale,
+        }),
         React.createElement('h3', null,
           t('跨应用活动线索', 'Cross-application activity hints')),
         React.createElement('p', { className: 'ch-muted' },
