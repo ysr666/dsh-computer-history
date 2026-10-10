@@ -698,6 +698,23 @@ export function registerHistoryApi(
     },
   }))
 
+  // Discovery returns advisory patterns only; it cannot create or install Skills.
+  ctx.effect(() => ctx.connection.fetch.register({
+    path: HISTORY_API_PREFIX + '/memory/skill-candidates',
+    methods: ['GET'],
+    requestBody: 'buffered',
+    fetch: async (request: Request) => {
+      try {
+        const id = requiredQueryText(new URL(request.url), 'id', 67)
+        if (!/^pm_[0-9a-f]{64}$/.test(id)) {
+          return textResponse('Invalid project memory id.', 400)
+        }
+        const result = await history.discoverSkillCandidates(id, request.signal)
+        return result ? json(result) : textResponse('Not found.', 404)
+      } catch (error) { return requestFailure(error) }
+    },
+  }))
+
   // Advisory associations never change Episode.threadKey or Continue ranking.
   ctx.effect(() => ctx.connection.fetch.register({
     path: HISTORY_API_PREFIX + '/memory/links',

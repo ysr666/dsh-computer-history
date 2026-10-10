@@ -69,6 +69,7 @@ function harness(overrides: Record<string, unknown> = {}) {
       return []
     },
     async getThreadActivityLinks() { return undefined },
+    async discoverSkillCandidates() { return undefined },
     async contextualContinue() {
       return { status: 'unavailable', reason: 'no-session-binding' }
     },
@@ -186,6 +187,7 @@ describe('Computer History Host API', () => {
       '/api/computer-history/memory/notes/restore',
       '/api/computer-history/memory/project',
       '/api/computer-history/memory/projects',
+      '/api/computer-history/memory/skill-candidates',
       '/api/computer-history/pairing',
       '/api/computer-history/pairing/rotate',
       '/api/computer-history/pause',
@@ -504,6 +506,17 @@ describe('Computer History Host API', () => {
           scanTruncated: false, caveat: 'Not project membership',
         } : undefined
       },
+      async discoverSkillCandidates(id: string) {
+        return id === memory.id ? {
+          projectMemoryId: id, candidates: [],
+          scannedEpisodes: 1, scanTruncated: false,
+          conclusion: 'insufficient-evidence',
+          privacy: {
+            userConfirmedNotes: 'not-read', fileBodies: 'not-read',
+            autoCreateOrInstall: false,
+          }, caveat: 'Read only',
+        } : undefined
+      },
     })
 
     const list = await request('/memory/projects?query=project&limit=2')
@@ -522,6 +535,16 @@ describe('Computer History Host API', () => {
     await expect(links.json()).resolves.toMatchObject({
       projectMemoryId: memory.id, links: [], scanTruncated: false,
     })
+    const suggestions = await request('/memory/skill-candidates?id=' + memory.id)
+    expect(suggestions.status).toBe(200)
+    expect(suggestions.headers.get('cache-control')).toBe('no-store')
+    await expect(suggestions.json()).resolves.toMatchObject({
+      projectMemoryId: memory.id, candidates: [],
+      privacy: { autoCreateOrInstall: false },
+    })
+    expect((await request('/memory/skill-candidates?id=invalid')).status).toBe(400)
+    expect((await request('/memory/skill-candidates?id=pm_' + 'b'.repeat(64))).status)
+      .toBe(404)
     expect((await request('/memory/links?id=invalid')).status).toBe(400)
     expect((await request('/memory/links?id=pm_' + 'b'.repeat(64))).status).toBe(404)
     expect((await request('/memory/project?id=invalid')).status).toBe(400)

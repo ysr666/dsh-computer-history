@@ -27,6 +27,7 @@ import type {
   TimelineDay,
   WorkThread,
   ProjectMemory,
+  SkillCandidateReport,
   ThreadActivityLinks,
   AskHistoryRequest,
   AskHistoryResult,
@@ -121,6 +122,8 @@ export const historyApi = {
     requestJson(`/memory/projects?limit=${limit}${query ? '&query=' + encodeURIComponent(query) : ''}`),
   getProjectMemory: (id: string): Promise<ProjectMemory> =>
     requestJson(`/memory/project?id=${encodeURIComponent(id)}`),
+  getSkillCandidates: (id: string): Promise<SkillCandidateReport> =>
+    requestJson(('/memory/skill-candidates?id=' + encodeURIComponent(id)) as HistoryApiSuffix),
   getThreadActivityLinks: (id: string): Promise<ThreadActivityLinks> =>
     requestJson(('/memory/links?id=' + encodeURIComponent(id)) as HistoryApiSuffix),
   revokeAiNoteReadCode: (code: string): Promise<{ revoked: boolean }> =>

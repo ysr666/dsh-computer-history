@@ -27,6 +27,7 @@ import type {
   AskHistoryResult,
   ProjectMemory,
   ThreadActivityLinks,
+  SkillCandidateReport,
   ContextualContinueResult,
   ListProjectMemoriesRequest,
   ConfirmUserMemoryNoteRequest,
@@ -180,6 +181,12 @@ export class ComputerHistoryService
     sessionId: string, signal?: AbortSignal,
   ): Promise<ContextualContinueResult> {
     return this.backend.contextualContinue(sessionId, signal)
+  }
+
+  public discoverSkillCandidates(
+    id: string, signal?: AbortSignal,
+  ): Promise<SkillCandidateReport | undefined> {
+    return this.backend.discoverSkillCandidates(id, signal)
   }
 
   public getThreadActivityLinks(
