@@ -29,6 +29,12 @@ export const EXPORTED_TABLES = [
   'continuation_sessions',
   'episode_observations',
   'episode_resources',
+  // Episode-retained activity facts are visible in audit/export, but are not
+  // automatically trusted on import: only linked imported raw observations
+  // can re-establish these event facts; other serialized facts would promote
+  // unverified claims to observation-backed work-history evidence.
+  'episode_saved_resources',
+  'episode_verification_results',
   'episode_surfaces',
   'episode_summary_citations',
   // Confirmed memories must be visible in the user's audit/export. Importing
@@ -587,6 +593,49 @@ export function importHistory(
         (imported.episode_summary_citations ?? 0) + inserted.changes
     }
 
+    // Re-derive imported Episode activity from the imported observation links,
+    // never from serialized compacted rows (which can be edited independently).
+    // Only new Episodes are eligible: importing must never alter existing
+    // local evidence. Both queries remain inside the outer import transaction.
+    const restoreSaved = db.prepare(`
+      INSERT INTO episode_saved_resources(
+        episode_id, resource_id, first_changed_at_ms, last_changed_at_ms,
+        change_count
+      )
+      SELECT eo.episode_id, o.resource_id,
+        MIN(o.observed_at_ms), MAX(o.observed_at_ms), COUNT(*)
+      FROM episode_observations eo
+      JOIN observations o ON o.id = eo.observation_id
+      WHERE eo.episode_id = ? AND o.activity_event = 'save'
+        AND o.resource_id IS NOT NULL
+      GROUP BY eo.episode_id, o.resource_id
+    `)
+    const restoreVerifications = db.prepare(`
+      INSERT INTO episode_verification_results(
+        episode_id, activity_event,
+        first_observed_at_ms, last_observed_at_ms, observation_count
+      )
+      SELECT eo.episode_id, o.activity_event,
+        MIN(o.observed_at_ms), MAX(o.observed_at_ms), COUNT(*)
+      FROM episode_observations eo
+      JOIN observations o ON o.id = eo.observation_id
+      WHERE eo.episode_id = ?
+        AND o.activity_event IN (
+          'verify-build-success', 'verify-build-failure',
+          'verify-test-success', 'verify-test-failure',
+          'verify-other-success', 'verify-other-failure'
+        )
+      GROUP BY eo.episode_id, o.activity_event
+    `)
+    for (const episodeId of newEpisodes) {
+      const saved = restoreSaved.run(episodeId)
+      const checks = restoreVerifications.run(episodeId)
+      imported.episode_saved_resources =
+        (imported.episode_saved_resources ?? 0) + Number(saved.changes)
+      imported.episode_verification_results =
+        (imported.episode_verification_results ?? 0) + Number(checks.changes)
+    }
+
     // A pre-v15 audit export may contain untrusted page titles in summary_text.
     // Rebuild *only newly imported* browser-linked Episodes, not existing data.
     rederiveBrowserEpisodeSummaries(db, newEpisodes)
@@ -594,7 +643,9 @@ export function importHistory(
     // Explicitly document the trust boundary in the result too: these rows may
     // be present in an audit export, but history import never applies them.
     for (const table of rows.keys()) {
-      if (!IMPORTED_HISTORY_TABLES.has(table)) imported[table] = 0
+      if (!IMPORTED_HISTORY_TABLES.has(table)
+        && table !== 'episode_saved_resources'
+        && table !== 'episode_verification_results') imported[table] = 0
     }
 
     db.exec('COMMIT')

@@ -358,6 +358,12 @@ export class EpisodeStore {
         this.db.prepare(
           'DELETE FROM episode_surfaces WHERE episode_id = ?',
         ).run(input.id)
+        this.db.prepare(
+          'DELETE FROM episode_saved_resources WHERE episode_id = ?',
+        ).run(input.id)
+        this.db.prepare(
+          'DELETE FROM episode_verification_results WHERE episode_id = ?',
+        ).run(input.id)
       }
 
       const insertObservation = this.db.prepare(`
@@ -471,6 +477,12 @@ export class EpisodeStore {
         this.db.prepare(
           'DELETE FROM episode_surfaces WHERE episode_id = ?',
         ).run(input.id)
+        this.db.prepare(
+          'DELETE FROM episode_saved_resources WHERE episode_id = ?',
+        ).run(input.id)
+        this.db.prepare(
+          'DELETE FROM episode_verification_results WHERE episode_id = ?',
+        ).run(input.id)
       }
 
       {
@@ -486,6 +498,7 @@ export class EpisodeStore {
         // the link count against these counters, so the two must never
         // be able to drift apart.
         this.reconcileAggregates(input.id)
+        this.reconcileRetainedEvents(input.id)
       }
 
       // Citations are replaced wholesale: a summary's evidence is whatever the
@@ -579,9 +592,41 @@ export class EpisodeStore {
           episode_surfaces.observation_count + 1
     `)
 
+    const appendSaved = this.db.prepare(`
+      INSERT INTO episode_saved_resources(
+        episode_id, resource_id, first_changed_at_ms, last_changed_at_ms, change_count
+      )
+      SELECT ?, o.resource_id, o.observed_at_ms, o.observed_at_ms, 1
+      FROM observations o
+      WHERE o.id = ? AND o.activity_event = 'save' AND o.resource_id IS NOT NULL
+      ON CONFLICT(episode_id, resource_id) DO UPDATE SET
+        first_changed_at_ms = MIN(first_changed_at_ms, excluded.first_changed_at_ms),
+        last_changed_at_ms = MAX(last_changed_at_ms, excluded.last_changed_at_ms),
+        change_count = change_count + excluded.change_count
+    `)
+    const appendVerification = this.db.prepare(`
+      INSERT INTO episode_verification_results(
+        episode_id, activity_event, first_observed_at_ms, last_observed_at_ms, observation_count
+      )
+      SELECT ?, o.activity_event, o.observed_at_ms, o.observed_at_ms, 1
+      FROM observations o
+      WHERE o.id = ?
+        AND o.activity_event IN (
+          'verify-build-success', 'verify-build-failure',
+          'verify-test-success', 'verify-test-failure',
+          'verify-other-success', 'verify-other-failure'
+        )
+      ON CONFLICT(episode_id, activity_event) DO UPDATE SET
+        first_observed_at_ms = MIN(first_observed_at_ms, excluded.first_observed_at_ms),
+        last_observed_at_ms = MAX(last_observed_at_ms, excluded.last_observed_at_ms),
+        observation_count = observation_count + excluded.observation_count
+    `)
+
     for (const observationId of appended) {
       appendResource.run(id, observationId)
       appendSurface.run(id, observationId)
+      appendSaved.run(id, observationId)
+      appendVerification.run(id, observationId)
     }
   }
 
@@ -634,6 +679,36 @@ export class EpisodeStore {
       JOIN observations o ON o.id = eo.observation_id
       WHERE eo.episode_id = ?
       GROUP BY eo.episode_id, o.bundle_id, o.surface_kind
+    `).run(id)
+  }
+
+  private reconcileRetainedEvents(id: EpisodeId): void {
+    this.db.prepare(`
+      INSERT INTO episode_saved_resources(
+        episode_id, resource_id, first_changed_at_ms, last_changed_at_ms, change_count
+      )
+      SELECT eo.episode_id, o.resource_id, MIN(o.observed_at_ms), MAX(o.observed_at_ms), COUNT(*)
+      FROM episode_observations eo
+      JOIN observations o ON o.id = eo.observation_id
+      WHERE eo.episode_id = ? AND o.activity_event = 'save'
+        AND o.resource_id IS NOT NULL
+      GROUP BY eo.episode_id, o.resource_id
+    `).run(id)
+
+    this.db.prepare(`
+      INSERT INTO episode_verification_results(
+        episode_id, activity_event, first_observed_at_ms, last_observed_at_ms, observation_count
+      )
+      SELECT eo.episode_id, o.activity_event, MIN(o.observed_at_ms), MAX(o.observed_at_ms), COUNT(*)
+      FROM episode_observations eo
+      JOIN observations o ON o.id = eo.observation_id
+      WHERE eo.episode_id = ?
+        AND o.activity_event IN (
+          'verify-build-success', 'verify-build-failure',
+          'verify-test-success', 'verify-test-failure',
+          'verify-other-success', 'verify-other-failure'
+        )
+      GROUP BY eo.episode_id, o.activity_event
     `).run(id)
   }
 
@@ -839,6 +914,147 @@ export class EpisodeStore {
     `).all(...params).map((row) => this.materialize(row))
   }
 
+
+  /**
+   * Bounded, indexed metadata facets for the DSH AI agent. This intentionally
+   * does not interpret natural language: the model supplies each independent
+   * facet and may make several calls for a compound question.
+   */
+  public queryEvidence(
+    query: import('../../shared/index.js').HistoryEvidenceQuery,
+    nowMs: number,
+  ): {
+    readonly items: readonly EpisodeSummary[]
+    readonly hasMore: boolean
+    readonly nextCursor?: { readonly endedAtMs: number; readonly episodeId: string }
+  } {
+    const clauses = [
+      "e.state != 'invalidated'",
+      '(e.expires_at_ms IS NULL OR e.expires_at_ms > ?)',
+    ]
+    const params: Array<string | number> = [nowMs]
+
+    if (query.sinceMs !== undefined) {
+      clauses.push('e.ended_at_ms >= ?')
+      params.push(query.sinceMs)
+    }
+    if (query.untilMs !== undefined) {
+      clauses.push('e.started_at_ms < ?')
+      params.push(query.untilMs)
+    }
+    if (query.workspaceId) {
+      clauses.push('e.primary_workspace_id = ?')
+      params.push(query.workspaceId)
+    }
+    if (query.bundleId) {
+      clauses.push('EXISTS (SELECT 1 FROM episode_surfaces es WHERE es.episode_id = e.id AND es.bundle_id = ?)')
+      params.push(query.bundleId)
+    }
+    const correlatedSavedResource = query.eventKind === 'save'
+      && (query.resourceKind !== undefined || query.resourceText !== undefined)
+    if (query.resourceKind || query.resourceText) {
+      // The type, literal URI/label substring, save event, and time window
+      // MUST refer to the same resource. Otherwise a viewed file plus a
+      // different saved file in one Episode could yield an invented save.
+      // The retained tables preserve this property after raw TTL.
+      const source = correlatedSavedResource
+        ? 'episode_saved_resources saved'
+        : 'episode_resources er'
+      const alias = correlatedSavedResource ? 'saved' : 'er'
+      const tests = [alias + '.episode_id = e.id']
+      if (query.resourceKind) {
+        tests.push('r.kind = ?')
+        params.push(query.resourceKind)
+      }
+      if (query.resourceText) {
+        tests.push("(lower(r.canonical_uri) LIKE ? ESCAPE '\\' "
+          + "OR lower(COALESCE(r.display_label, '')) LIKE ? ESCAPE '\\')")
+        const needle = '%' + escapeLikePattern(query.resourceText.toLowerCase()) + '%'
+        params.push(needle, needle)
+      }
+      if (query.sinceMs !== undefined) {
+        tests.push(alias + (correlatedSavedResource
+          ? '.last_changed_at_ms >= ?'
+          : '.last_seen_at_ms >= ?'))
+        params.push(query.sinceMs)
+      }
+      if (query.untilMs !== undefined) {
+        tests.push(alias + (correlatedSavedResource
+          ? '.first_changed_at_ms < ?'
+          : '.first_seen_at_ms < ?'))
+        params.push(query.untilMs)
+      }
+      clauses.push('EXISTS (SELECT 1 FROM ' + source
+        + ' JOIN resources r ON r.id = ' + alias + '.resource_id WHERE '
+        + tests.join(' AND ') + ')')
+    }
+    if (query.eventKind) {
+      if (query.eventKind === 'save') {
+        // Already checked against the SAME saved resource above, if the
+        // query also requested a resource kind.
+        if (!correlatedSavedResource) {
+          const tests = ['saved.episode_id = e.id']
+          if (query.sinceMs !== undefined) {
+            tests.push('saved.last_changed_at_ms >= ?')
+            params.push(query.sinceMs)
+          }
+          if (query.untilMs !== undefined) {
+            tests.push('saved.first_changed_at_ms < ?')
+            params.push(query.untilMs)
+          }
+          clauses.push('EXISTS (SELECT 1 FROM episode_saved_resources saved WHERE '
+            + tests.join(' AND ') + ')')
+        }
+      } else {
+        const tests = [
+          'ev.episode_id = e.id', 'ev.activity_event LIKE ?',
+        ]
+        params.push('verify-' + query.eventKind + '-%')
+        if (query.sinceMs !== undefined) {
+          tests.push('ev.last_observed_at_ms >= ?')
+          params.push(query.sinceMs)
+        }
+        if (query.untilMs !== undefined) {
+          tests.push('ev.first_observed_at_ms < ?')
+          params.push(query.untilMs)
+        }
+        clauses.push('EXISTS (SELECT 1 FROM episode_verification_results ev WHERE '
+          + tests.join(' AND ') + ')')
+      }
+    }
+    if (query.text) {
+      const needle = '%' + escapeLikePattern(query.text.toLowerCase()) + '%'
+      clauses.push(
+        "(lower(e.summary_text) LIKE ? ESCAPE '\\' "
+        + "OR lower(COALESCE(e.primary_workspace_id, '')) LIKE ? ESCAPE '\\' "
+        + "OR lower(COALESCE(e.primary_workspace_title, '')) LIKE ? ESCAPE '\\' "
+        + "OR EXISTS (SELECT 1 FROM episode_resources er JOIN resources r ON r.id = er.resource_id "
+        + "WHERE er.episode_id = e.id AND (lower(r.canonical_uri) LIKE ? ESCAPE '\\' "
+        + "OR lower(COALESCE(r.display_label, '')) LIKE ? ESCAPE '\\')))",
+      )
+      params.push(needle, needle, needle, needle, needle)
+    }
+    if (query.cursor) {
+      clauses.push('(e.ended_at_ms < ? OR (e.ended_at_ms = ? AND e.id < ?))')
+      params.push(query.cursor.endedAtMs, query.cursor.endedAtMs, query.cursor.episodeId)
+    }
+    const limit = query.limit ?? 10
+    const rows = this.db.prepare(
+      'SELECT e.* FROM episodes e WHERE ' + clauses.join(' AND ')
+      + ' ORDER BY e.ended_at_ms DESC, e.id DESC LIMIT ?',
+    ).all(...params, limit + 1)
+    const hasMore = rows.length > limit
+    const items = rows.slice(0, limit).map(row => this.materialize(row))
+    const last = items.at(-1)
+    return {
+      items,
+      hasMore,
+      ...(hasMore && last
+        ? { nextCursor: { endedAtMs: last.endedAtMs, episodeId: String(last.id) } }
+        : {}),
+    }
+  }
+
   public deleteAll(): number {
     return Number(this.db.prepare('DELETE FROM episodes').run().changes)
   }
@@ -954,19 +1170,12 @@ export class EpisodeStore {
 
   private readChangedResources(id: EpisodeId): EpisodeChangedResource[] {
     return this.db.prepare(`
-      SELECT
-        r.kind,
-        r.canonical_uri,
-        r.display_label,
-        MAX(o.observed_at_ms) AS last_changed_at_ms,
-        COUNT(*) AS change_count
-      FROM episode_observations eo
-      JOIN observations o ON o.id = eo.observation_id
-      JOIN resources r ON r.id = o.resource_id
-      WHERE eo.episode_id = ?
-        AND o.activity_event = 'save'
-      GROUP BY r.id, r.kind, r.canonical_uri, r.display_label
-      ORDER BY last_changed_at_ms DESC, r.id
+      SELECT r.kind, r.canonical_uri, r.display_label,
+        es.last_changed_at_ms, es.change_count
+      FROM episode_saved_resources es
+      JOIN resources r ON r.id = es.resource_id
+      WHERE es.episode_id = ?
+      ORDER BY es.last_changed_at_ms DESC, es.resource_id
     `).all(id).map((row) => {
       const resource: {
         kind: ResourceKind
@@ -988,20 +1197,10 @@ export class EpisodeStore {
 
   private readVerifications(id: EpisodeId): EpisodeVerificationSummary[] {
     return this.db.prepare(`
-      SELECT
-        o.activity_event,
-        MAX(o.observed_at_ms) AS last_observed_at_ms,
-        COUNT(*) AS observation_count
-      FROM episode_observations eo
-      JOIN observations o ON o.id = eo.observation_id
-      WHERE eo.episode_id = ?
-        AND o.activity_event IN (
-          'verify-build-success', 'verify-build-failure',
-          'verify-test-success', 'verify-test-failure',
-          'verify-other-success', 'verify-other-failure'
-        )
-      GROUP BY o.activity_event
-      ORDER BY last_observed_at_ms DESC, o.activity_event
+      SELECT activity_event, last_observed_at_ms, observation_count
+      FROM episode_verification_results
+      WHERE episode_id = ?
+      ORDER BY last_observed_at_ms DESC, activity_event
     `).all(id).map((row) => {
       const verification = verificationFromActivityEvent(
         stringValue(row, 'activity_event'),

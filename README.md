@@ -30,7 +30,7 @@
 > [!NOTE]
 > **v1.0.0 is published.** The same native-verified tarball passed the full installed-product journey and clean installation on Windows, macOS and Linux. [npm package](https://www.npmjs.com/package/dsh-computer-history/v/1.0.0) · [GitHub Release](https://github.com/ysr666/dsh-computer-history/releases/tag/v1.0.0). Host compatibility and privacy limits remain as documented.
 
-> **Next compatibility candidate (not yet published):** DCH `v1.0.1` targets DSH `0.2.1-alpha.2`; [candidate notes](docs/releases/v1.0.1.md). The currently published npm release remains `1.0.0` until a separate verified release.
+> **v1.0.1 is also published:** [npm v1.0.1](https://www.npmjs.com/package/dsh-computer-history/v/1.0.1) · [GitHub v1.0.1](https://github.com/ysr666/dsh-computer-history/releases/tag/v1.0.1). **v1.1.0 is a release candidate only (not yet published):** [v1.1.0 notes](docs/releases/v1.1.0.md) describe Work Memory, history exploration, contextual Continue and advisory Skills/Automations. The separate [AI-first Draft PR #168](https://github.com/ysr666/dsh-computer-history/pull/168) adds bounded metadata-only evidence lookup and user-reviewed Episode → Continue; AI questions create editable, unsent drafts. Migration 0016 requires a verified backup/restore plan. **Neither PR is released**, and native Electron GUI / live-model end-to-end acceptance remain open. Compatible DSH Host versions must be verified before installation.
 
 > [!WARNING]
 > 📌 **Announcement — v1.0.0 is available on npm and GitHub.**
@@ -142,7 +142,7 @@ npx @deepseek-ai/dsh@0.2.0-rc.2 plugin --profile web add dsh-computer-history@1.
 npx @deepseek-ai/dsh@0.2.0-rc.2 plugin --profile web remove dsh-computer-history
 ```
 
-Only DSH `0.2.0-rc.2` has been verified as the Host; other versions are not implicitly supported. See [release evidence](docs/release.md).
+The tested DSH Host baseline is `0.2.0-rc.2`; `0.2.1-alpha.2` has additionally passed a macOS installed-product journey. This does **not** establish compatibility with every DSH version or platform. See [release evidence](docs/release.md) and the [v1.1.0 candidate notes](docs/releases/v1.1.0.md).
 
 ## Development from source
 
@@ -182,7 +182,7 @@ Pull requests run Node 22 + 24 core verification, relevant cross-platform collec
 
 ## Contributing
 
-Issues and pull requests are welcome while the first public release is prepared. Start with [CONTRIBUTING.md](CONTRIBUTING.md).
+Issues and pull requests are welcome as Computer History develops. Start with [CONTRIBUTING.md](CONTRIBUTING.md).
 
 > [!CAUTION]
 > Because this project handles sensitive local context, **do not attach real history databases, pairing/session tokens, credentials, private paths, or unredacted capture logs to public issues**. Use the private vulnerability-reporting path described in [SECURITY.md](SECURITY.md) for sensitive findings.
