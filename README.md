@@ -30,7 +30,7 @@
 > [!NOTE]
 > **v1.0.0 is published.** The same native-verified tarball passed the full installed-product journey and clean installation on Windows, macOS and Linux. [npm package](https://www.npmjs.com/package/dsh-computer-history/v/1.0.0) · [GitHub Release](https://github.com/ysr666/dsh-computer-history/releases/tag/v1.0.0). Host compatibility and privacy limits remain as documented.
 
-> **v1.0.1 is also published:** [npm v1.0.1](https://www.npmjs.com/package/dsh-computer-history/v/1.0.1) · [GitHub v1.0.1](https://github.com/ysr666/dsh-computer-history/releases/tag/v1.0.1). **v1.1.0 is a release candidate only (not yet published):** [v1.1.0 notes](docs/releases/v1.1.0.md) describe Work Memory, history exploration, contextual Continue and advisory Skills/Automations. Compatible DSH Host versions must be verified before installation.
+> **v1.0.1 is also published:** [npm v1.0.1](https://www.npmjs.com/package/dsh-computer-history/v/1.0.1) · [GitHub v1.0.1](https://github.com/ysr666/dsh-computer-history/releases/tag/v1.0.1). **v1.1.0 is a release candidate only (not yet published):** [v1.1.0 notes](docs/releases/v1.1.0.md) describe Work Memory, history exploration, contextual Continue and advisory Skills/Automations. The separate [AI-first Draft PR #168](https://github.com/ysr666/dsh-computer-history/pull/168) adds bounded metadata-only evidence lookup and user-reviewed Episode → Continue; AI questions create editable, unsent drafts. Migration 0016 requires a verified backup/restore plan. **Neither PR is released**, and native Electron GUI / live-model end-to-end acceptance remain open. Compatible DSH Host versions must be verified before installation.
 
 > [!WARNING]
 > 📌 **Announcement — v1.0.0 is available on npm and GitHub.**

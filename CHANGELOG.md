@@ -11,6 +11,16 @@
 - **M1 Work Memory:** retained and provenance-linked project history based on exact trusted Work Thread keys.
 - **M2 confirmed notes:** explicit local save/edit/delete, export and separately approved restore; AI note reads require separate consent.
 - **M3 Ask Your History:** on-demand natural-language-oriented evidence retrieval from retained work history.
+- **AI-first query (Draft PR #168):** opt-in metadata-only bounded DSH
+  history tool; `resource_text` together with file type/save/time
+  filters refers to the **same saved resource**, not co-occurring events.
+- **User-reviewed source → Continue (Draft PR #168):** editable, unsent
+  AI question draft; explicit Episode source inspection and Continue,
+  retained-source validation and duplicate-submit protection.
+- **Migration 0016 (Draft PR #168):** Episode-retained facts proven by
+  linked raw save/build/test observations. Previously expired events
+  cannot be fabricated. Consistent backup and restore rehearsal are
+  required; test/build is Episode-level, not per-file certification.
 - **M4 Work Thread Intelligence:** advisory exact-file and time-nearby cross-application suggestions, without changing project identity or Continue ranking.
 - **M5 Contextual Continue:** optional, current-session-bound project context from M1/M4; no automatic note exposure or first-turn expansion.
 - **M6 Suggested Skills:** evidence-based repeated activity hints, not generated/installed/executed Skills.
