@@ -104,3 +104,79 @@ CI. That is **not** proof that the owner's old `desktop` profile has been
 upgraded or that populated multi-project M6/M7 suggestions are useful.
 Release tagging/npm publishing and user-profile deployment require separate
 explicit approval.
+
+
+## Additional gate for the unmerged AI-first History candidate
+
+The published/mainline v1.1 M1–M7 inventory above is **not** the same thing
+as the separate AI-first candidate patch. That patch adds a new SQLite
+migration **0016** (Episode-retained save/build/test activity facts), evidence
+query APIs, and a source-checked AI-to-Continue bridge. Migration 0016 is
+forward-only and must NOT be applied to the original owner's desktop SQLite
+until the candidate is reviewed, signed/released, backed up and explicitly
+authorized.
+
+The read-only CLI preflight cannot detect or validate SQLite schema version:
+by design it never opens the database. A report with zero structural
+blockers means only that the manifest/WAL/SHM/profile inventory found none.
+Before approving this candidate, rehearse **0015 -> 0016** only against a
+fresh disposable database or consistent, separately authorized backup,
+including:
+- Surviving linked raw observations backfill into v16 Episode facts;
+- Expired raw data without Episode-retained evidence is never invented;
+- Episode deletion / forget cascades to its materialized facts;
+- Export/import recomputes aggregates only from actual imported linked raw
+  observations, never trusting supplied aggregate counts;
+- A backup containing only compacted Episode facts cannot reconstruct those
+  facts on import without linked raw evidence;
+- Downgrade is a database **restore**, not running an older DCH plugin against
+  a newer SQLite schema.
+
+The independent, capture-disabled QA `desktop` profile with DSH
+`0.2.0-rc.2` passed the **read-only inventory** on 2026-10-10:
+zero structural blockers, three cautions. This is **not** acceptance of a
+production migration, or proof that a populated multi-project user history
+will retain useful coverage. Production profile contents were not opened.
+
+
+## Fourteenth-pass synthetic WAL backup and restore rehearsal (2026-10-10)
+
+The automated integration test `tests/integration/synthetic-upgrade-rehearsal.spec.ts`
+now verifies the *backup-and-restore procedure*, not just migration 0016 itself.
+It generates a private temporary SQLite database with the v15 schema
+(equivalent to v15 by dropping migration-0016 tables and its version record
+in a **new synthetic-only** v16 database), creates a WAL with linked CAD-save
+and test-success activity, and deliberately removes the raw observation for
+one expired Episode. The original v15 database remains open during SQLite's
+**online backup API** operation, and a subsequent source write demonstrates
+that the backup is a point-in-time snapshot.
+
+Only the restored temporary copy is opened by the candidate Host and upgraded:
+- SQLite `integrity_check` reports `ok` and `foreign_key_check` has no rows;
+- one provable save and one provable test result are retained;
+- an Episode whose raw save was already deleted gets no invented save fact;
+- the source v15 database remains at version 15;
+- deliberately tampered migration checksums are rejected before upgrading;
+- a separate clean pre-migration backup restores successfully afterward.
+
+The temporary backup file is permission-restricted to `0600` in the test.
+Test files are deleted from the temporary directory; no user history or
+production DSH files are opened, transmitted or migrated. **Limit:** This
+is a generated v15-schema rehearsal, not a real archived v15 installation or
+a backup of an actual populated user profile. It also does not validate
+backup performance with a very large history, cross-platform ACL protection,
+or concurrent real collectors. The remaining production migration gate is
+unchanged: stop writers, obtain explicit authorization, back up user data
+consistently, verify a disposable restore, and only then consider an upgrade.
+
+
+### Fifteenth-pass migration atomicity check (synthetic)
+
+A new test creates a deliberately conflicting table in a disposable v15
+SQLite database. Migration 0016 first creates episode_saved_resources
+but then fails while attempting to create the already-present
+episode_verification_results. The migration runner rolls back the entire
+transaction: the version remains 15, no version-16 migration log row survives,
+and the first newly created table is absent. After removing the synthetic
+conflict, re-opening upgrades successfully and both fact tables contain
+only verifiable events. The test does not open or repair real history stores.

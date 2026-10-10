@@ -72,7 +72,9 @@ describe('browser title redaction (upgrade and future reads)', () => {
     `).run()
     // Simulate an actual v14 store with legacy browser titles rather than
     // mutating or migrating the user's real personal database.
-    db.prepare('DELETE FROM schema_migrations WHERE version = 15').run()
+    db.exec('DROP TABLE episode_saved_resources')
+    db.exec('DROP TABLE episode_verification_results')
+    db.prepare('DELETE FROM schema_migrations WHERE version IN (15, 16)').run()
     db.exec('PRAGMA user_version = 14')
     initial.close()
 
@@ -95,7 +97,7 @@ describe('browser title redaction (upgrade and future reads)', () => {
     expect(JSON.stringify(episode)).not.toContain('?token=')
     expect(episode.surfaces[0]?.title).toBeUndefined()
     expect(upgraded.db.prepare('PRAGMA user_version').get()).toEqual({
-      user_version: 15,
+      user_version: 16,
     })
     upgraded.close()
 
