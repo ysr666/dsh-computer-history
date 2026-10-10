@@ -11,7 +11,7 @@ export const ASK_HISTORY_STYLES = `
 .ch-ask-hit-top strong{overflow-wrap:anywhere}
 .ch-ask-kind{font-size:10px;font-weight:650;color:var(--dsw-alias-label-secondary)}
 .ch-ask-hit>.ch-muted{font-size:11px;margin:6px 0 0}
-.ch-ask-hit>.ch-text-action{margin-top:7px}
+.ch-ask-hit>.ch-text-action{margin-top:7px;min-height:28px}
 .ch-ask-hit>.ch-button{margin:7px 0 0 10px;min-height:30px;padding:0 11px;font-size:11px}
 .ch-ask-exact{margin-top:14px;padding-top:12px;border-top:1px solid var(--dsw-alias-border-l1)}
 .ch-ask-exact>.ch-muted{margin:0 0 8px;font-size:11px;line-height:1.5}
