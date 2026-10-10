@@ -2,6 +2,7 @@ import type { AskHistoryRequest, AskHistoryResult } from './ask-history.js'
 import type { ThreadActivityLinks } from './thread-intelligence.js'
 import type { ContextualContinueResult } from './contextual-continue.js'
 import type { SkillCandidateReport } from './skill-candidates.js'
+import type { AutomationCandidateReport } from './automation-candidates.js'
 import type {
   ConfirmUserMemoryNoteRequest, ListProjectMemoriesRequest,
   ProjectMemory, UserMemoryNote,
@@ -307,6 +308,11 @@ export interface ComputerHistoryServiceContract {
   contextualContinue(
     sessionId: string, signal?: AbortSignal,
   ): Promise<ContextualContinueResult>
+
+  /** Conservative cadence hints only; never schedules or creates a job. */
+  discoverAutomationCandidates(
+    id: string, signal?: AbortSignal,
+  ): Promise<AutomationCandidateReport | undefined>
 
   /** Read-only candidates, never Skill code, installations or execution. */
   discoverSkillCandidates(

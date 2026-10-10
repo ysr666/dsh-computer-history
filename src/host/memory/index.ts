@@ -1,6 +1,7 @@
 export * from './evidence.js'
 export * from './projector.js'
 export * from './skill-candidates.js'
+export * from './automation-candidates.js'
 export * from './thread-intelligence.js'
 export * from './contextual-continue.js'
 export * from './ask.js'

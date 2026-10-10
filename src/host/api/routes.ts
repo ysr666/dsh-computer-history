@@ -698,6 +698,23 @@ export function registerHistoryApi(
     },
   }))
 
+  // Recurrent activity hints are only review drafts, never scheduled jobs.
+  ctx.effect(() => ctx.connection.fetch.register({
+    path: HISTORY_API_PREFIX + '/memory/automation-candidates',
+    methods: ['GET'],
+    requestBody: 'buffered',
+    fetch: async (request: Request) => {
+      try {
+        const id = requiredQueryText(new URL(request.url), 'id', 67)
+        if (!/^pm_[0-9a-f]{64}$/.test(id)) {
+          return textResponse('Invalid project memory id.', 400)
+        }
+        const result = await history.discoverAutomationCandidates(id, request.signal)
+        return result ? json(result) : textResponse('Not found.', 404)
+      } catch (error) { return requestFailure(error) }
+    },
+  }))
+
   // Discovery returns advisory patterns only; it cannot create or install Skills.
   ctx.effect(() => ctx.connection.fetch.register({
     path: HISTORY_API_PREFIX + '/memory/skill-candidates',

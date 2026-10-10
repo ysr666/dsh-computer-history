@@ -2,6 +2,7 @@ import React from 'react'
 import type { MemoryFact, ProjectMemory, ThreadActivityLinks, UserMemoryNote } from '../shared/index.js'
 import { historyApi } from './api.js'
 import { SkillCandidatesView } from './skill-candidates-view.js'
+import { AutomationCandidatesView } from './automation-candidates-view.js'
 
 interface WorkMemoryViewProps {
   readonly locale: string
@@ -546,6 +547,12 @@ export function WorkMemoryView({ locale, historyRevision }: WorkMemoryViewProps)
         React.createElement(SkillCandidatesView, {
           key: selected.id,
           projectId: selected.id,
+          locale,
+        }),
+        React.createElement(AutomationCandidatesView, {
+          key: 'automations:' + selected.id,
+          projectId: selected.id,
+          projectTitle: selected.title,
           locale,
         }),
         React.createElement('h3', null,

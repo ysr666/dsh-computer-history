@@ -359,6 +359,41 @@ describe('local computer history backend', () => {
     history.close()
   })
 
+  it('keeps M7 reminder hints read-only, scoped and invalidated by Forget', async () => {
+    const history = openTempDatabase()
+    const sourceId = seedEpisode(history)
+    const policies = new PolicyStore(history.db)
+    policies.ensureInitial(1)
+    const backend = new LocalComputerHistoryBackend(
+      new EpisodeStore(history.db), policies,
+      new DeletionService(history.db), new FakeCapture(), {
+        observationRetentionHours: 24, episodeRetentionDays: 30,
+        autoResume: false, now: () => 10_000,
+      }, undefined, new SemanticOptInStore(history.db), history.db,
+    )
+    const project = (await backend.listProjectMemories())[0]!
+    await backend.saveUserMemoryNote({
+      projectId: project.id, episodeId: String(sourceId),
+      text: 'PRIVATE_AUTOMATION_NOTE_MUST_NOT_LEAK',
+      retentionAcknowledged: true,
+    })
+    const report = await backend.discoverAutomationCandidates(project.id)
+    expect(report).toMatchObject({
+      projectMemoryId: project.id, candidates: [],
+      conclusion: 'no-reliable-cadence', scannedEpisodes: 1,
+      privacy: {
+        confirmedNotes: 'not-read', backgroundMonitoring: false,
+        jobsCreated: false,
+      },
+    })
+    expect(JSON.stringify(report)).not.toContain('PRIVATE_AUTOMATION_NOTE_MUST_NOT_LEAK')
+    expect(await backend.discoverAutomationCandidates('pm_' + 'b'.repeat(64)))
+      .toBeUndefined()
+    await backend.delete({ scope: { kind: 'all' } })
+    expect(await backend.discoverAutomationCandidates(project.id)).toBeUndefined()
+    history.close()
+  })
+
   it('still resolves an old trusted project if global recent Episodes omit it', async () => {
     const history = openTempDatabase()
     seedEpisode(history)
@@ -1285,6 +1320,7 @@ describe('Cordis computer history service', () => {
       async getProjectMemory() { return undefined },
       async getThreadActivityLinks() { return undefined },
       async discoverSkillCandidates() { return undefined },
+      async discoverAutomationCandidates() { return undefined },
       async contextualContinue() {
         return { status: 'unavailable' as const, reason: 'no-session-binding' as const }
       },
