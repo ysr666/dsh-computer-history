@@ -23,6 +23,7 @@
     "verify": "pnpm check && pnpm verify:privacy && pnpm verify:adapters && pnpm verify:store-protection && pnpm verify:semantic-boundary && pnpm verify:architecture && pnpm verify:migrations && pnpm verify:native-timeouts && pnpm verify:collector-commands && pnpm verify:docs && pnpm verify:ci-boundaries && pnpm verify:collector-windows",
     "verify:release": "node scripts/verify-release.mjs",
     "verify:release:blockers": "node scripts/release-blockers.mjs",
+    "preflight:upgrade": "node scripts/preflight-local-upgrade.mjs",
     "e2e:macos": "node scripts/e2e-macos.mjs",
     "e2e:linux": "node scripts/e2e-linux.mjs",
     "e2e:linux-host": "node scripts/e2e-linux-host.mjs",

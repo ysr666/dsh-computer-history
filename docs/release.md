@@ -18,6 +18,10 @@ verified, it says so rather than describing the intention.
 > browser gate qualifies the three-platform packaged-client claim. The immutable `v1.0.0` tag points to
 > `5703ecd787cec082e9cd7b705706a0aaf9960f1a`; npm OIDC published the exact checked artifact.
 
+## Before upgrading an existing DSH 0.1.x profile to the v1.1 feature chain
+
+Use the **read-only** [v1.1 upgrade preflight and rollback plan](upgrade-v1.1-preflight.md) before touching a live profile or SQLite database. A CI-green plugin does not certify an older 0.1.x Host, and a database with WAL/SHM must not be backed up by copying `history.sqlite` alone.
+
 ## v1.0.0 readiness
 
 | Gate | Status |
