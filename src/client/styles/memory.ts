@@ -54,6 +54,25 @@ export const MEMORY_STYLES = `
 .ch-skill-missing{padding-left:20px;margin:6px 0 9px;line-height:1.6}
 .ch-skill-evidence{padding-top:7px;display:flex;flex-direction:column;gap:4px;min-width:0}
 .ch-skill-evidence code{font-size:10px;white-space:normal;overflow-wrap:anywhere}
+/* Evidence-based reminders: review drafts only, no scheduler side effects. */
+.ch-auto-section{margin-top:17px;padding:12px;border:1px solid var(--dsw-alias-border-l1);
+  border-radius:10px;background:var(--dsw-alias-bg-layer-1);min-width:0}
+.ch-auto-section h3{font-size:12px;margin:0 0 6px}
+.ch-auto-section>.ch-muted{font-size:11px;line-height:1.55}
+.ch-auto-list{list-style:none;display:grid;gap:9px;margin:10px 0 0;padding:0}
+.ch-auto-candidate{border:1px solid var(--dsw-alias-border-l1);border-radius:9px;
+  padding:12px;background:var(--dsw-alias-bg-layer-2);min-width:0;font-size:12px}
+.ch-auto-candidate>strong{display:block;font-size:12px;line-height:1.5}
+.ch-auto-candidate>p{margin:7px 0;line-height:1.6}
+.ch-auto-detail{display:grid;gap:6px;border-top:1px solid var(--dsw-alias-border-l1);margin-top:10px;padding-top:9px;min-width:0}
+.ch-auto-detail p{margin:2px 0;line-height:1.5;overflow-wrap:anywhere}
+.ch-auto-detail code{display:block;overflow-wrap:anywhere;font-size:10px}
+.ch-auto-label{font-size:11px;font-weight:650;color:var(--dsw-alias-label-secondary)}
+.ch-auto-draft{width:100%;box-sizing:border-box;max-width:100%;min-width:0;resize:vertical;
+  border:1px solid var(--dsw-alias-border-l1);border-radius:8px;padding:9px;
+  font:inherit;font-size:11px;line-height:1.55;color:var(--dsw-alias-label-primary);
+  background:var(--dsw-alias-bg-layer-1)}
+.ch-auto-draft:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:2px}
 /* Advisory links never resemble confirmed thread membership. */
 .ch-memory-link-list{list-style:none;display:grid;gap:7px;margin:8px 0 15px;padding:0}
 .ch-memory-link-list>li{display:flex;flex-wrap:wrap;gap:5px 9px;align-items:baseline;

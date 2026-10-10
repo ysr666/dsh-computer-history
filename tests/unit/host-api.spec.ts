@@ -70,6 +70,7 @@ function harness(overrides: Record<string, unknown> = {}) {
     },
     async getThreadActivityLinks() { return undefined },
     async discoverSkillCandidates() { return undefined },
+    async discoverAutomationCandidates() { return undefined },
     async contextualContinue() {
       return { status: 'unavailable', reason: 'no-session-binding' }
     },
@@ -177,6 +178,7 @@ describe('Computer History Host API', () => {
       '/api/computer-history/episode',
       '/api/computer-history/export',
       '/api/computer-history/import',
+      '/api/computer-history/memory/automation-candidates',
       '/api/computer-history/memory/links',
       '/api/computer-history/memory/note/ai-read-code',
       '/api/computer-history/memory/note/ai-read-revoke',
@@ -517,6 +519,17 @@ describe('Computer History Host API', () => {
           }, caveat: 'Read only',
         } : undefined
       },
+      async discoverAutomationCandidates(id: string) {
+        return id === memory.id ? {
+          projectMemoryId: id, candidates: [], scannedEpisodes: 1,
+          scanTruncated: false, conclusion: 'no-reliable-cadence',
+          privacy: {
+            confirmedNotes: 'not-read', fileBodies: 'not-read',
+            backgroundMonitoring: false, jobsCreated: false,
+            executableCommands: 'not-collected-or-run',
+          }, caveat: 'Read-only cadence evidence',
+        } : undefined
+      },
     })
 
     const list = await request('/memory/projects?query=project&limit=2')
@@ -535,6 +548,17 @@ describe('Computer History Host API', () => {
     await expect(links.json()).resolves.toMatchObject({
       projectMemoryId: memory.id, links: [], scanTruncated: false,
     })
+    const automations = await request('/memory/automation-candidates?id=' + memory.id)
+    expect(automations.status).toBe(200)
+    expect(automations.headers.get('cache-control')).toBe('no-store')
+    await expect(automations.json()).resolves.toMatchObject({
+      projectMemoryId: memory.id, candidates: [],
+      privacy: { jobsCreated: false, backgroundMonitoring: false },
+    })
+    expect((await request('/memory/automation-candidates?id=invalid')).status)
+      .toBe(400)
+    expect((await request('/memory/automation-candidates?id=pm_' + 'b'.repeat(64))).status)
+      .toBe(404)
     const suggestions = await request('/memory/skill-candidates?id=' + memory.id)
     expect(suggestions.status).toBe(200)
     expect(suggestions.headers.get('cache-control')).toBe('no-store')

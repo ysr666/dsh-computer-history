@@ -11,6 +11,7 @@ import type {
   ProjectMemory,
   ThreadActivityLinks,
   SkillCandidateReport,
+  AutomationCandidateReport,
   ContextualContinueResult,
   ListProjectMemoriesRequest,
   ConfirmUserMemoryNoteRequest,
@@ -63,7 +64,7 @@ import {
   buildWorkThreads,
 } from '../episodes/threads.js'
 import { resolveResume } from '../resume/index.js'
-import { askHistoryFromEpisodes, buildProjectMemories, buildThreadActivityLinks, discoverSkillCandidates, projectContextualContinue, memoryIdForThreadKey, MemoryReadGrants } from '../memory/index.js'
+import { askHistoryFromEpisodes, buildProjectMemories, buildThreadActivityLinks, discoverAutomationCandidates, discoverSkillCandidates, projectContextualContinue, memoryIdForThreadKey, MemoryReadGrants } from '../memory/index.js'
 import { MemoryNoteStore } from '../store/memory-note-store.js'
 import { phase1AdapterForBundle } from '../ingestion/index.js'
 import {
@@ -281,6 +282,22 @@ implements ComputerHistoryServiceContract {
           || anchors.length === 250 || recent.length === 750,
       )
       return projectContextualContinue(String(boundId), project, links)
+    })
+  }
+
+  public discoverAutomationCandidates(
+    id: string, signal?: AbortSignal,
+  ): Promise<AutomationCandidateReport | undefined> {
+    return this.withOperation(() => {
+      signal?.throwIfAborted()
+      if (!/^pm_[a-f0-9]{64}$/.test(id)) return undefined
+      const nowMs = this.now()
+      const threadKey = this.episodes.listMemoryThreadKeys(nowMs)
+        .find(key => memoryIdForThreadKey(key) === id)
+      if (!threadKey) return undefined
+      const episodes = this.episodes.listRecentByThreadKey(threadKey, 1_000, nowMs)
+      return discoverAutomationCandidates(episodes, id, nowMs,
+        episodes.length === 1_000)
     })
   }
 
