@@ -2,22 +2,22 @@
 
 ## Unreleased
 
-- No changes recorded since the v1.1.0 release candidate.
+- No changes recorded since v1.1.0.
 
 ## 1.1.0
 
-**Release candidate only — not yet tagged or published. Owner approval and exact-SHA release CI are required.**
+**Stable v1.1.0 release.** Tested against DSH 0.2.0-rc.2 and 0.2.1-alpha.2; existing SQLite stores require consistent backup before upgrade.
 
 - **M1 Work Memory:** retained and provenance-linked project history based on exact trusted Work Thread keys.
 - **M2 confirmed notes:** explicit local save/edit/delete, export and separately approved restore; AI note reads require separate consent.
 - **M3 Ask Your History:** on-demand natural-language-oriented evidence retrieval from retained work history.
-- **AI-first query (Draft PR #168):** opt-in metadata-only bounded DSH
+- **AI-first query:** opt-in metadata-only bounded DSH
   history tool; `resource_text` together with file type/save/time
   filters refers to the **same saved resource**, not co-occurring events.
-- **User-reviewed source → Continue (Draft PR #168):** editable, unsent
+- **User-reviewed source → Continue:** editable, unsent
   AI question draft; explicit Episode source inspection and Continue,
   retained-source validation and duplicate-submit protection.
-- **Migration 0016 (Draft PR #168):** Episode-retained facts proven by
+- **Migration 0016:** Episode-retained facts proven by
   linked raw save/build/test observations. Previously expired events
   cannot be fabricated. Consistent backup and restore rehearsal are
   required; test/build is Episode-level, not per-file certification.
@@ -30,7 +30,7 @@
 - macOS isolated DSH 0.2.1-alpha.2 + Chrome installed product journey reached 59 verified assertions, including M6/M7 empty states; full cross-platform CI is a separate mandatory release gate.
 - **Deployment limitation:** existing DSH 0.1.x profiles are not supported for in-place v1.1 without explicitly tested CLI/runtime upgrade. Never copy an active SQLite database file alone when WAL exists.
 
-See [candidate release notes](docs/releases/v1.1.0.md).
+See [release notes](docs/releases/v1.1.0.md).
 
 ## 1.0.1
 

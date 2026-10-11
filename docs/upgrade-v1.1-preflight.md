@@ -6,6 +6,21 @@ The latest v1.1 feature chain (M1–M7) uses UI and Host contracts measured on
 DSH `0.2.0-rc.2` and `0.2.1-alpha.2`. **These are specifically tested
 builds, not an assertion that all 0.2.x versions are compatible.**
 
+## Distinguish the terminal CLI from the embedded Desktop Host
+
+The `dsh --version` on PATH does not necessarily report the DSH version
+inside a running Electron Desktop application. On 2026-10-11, the separate
+terminal CLI read `0.1.2-rc.1`, while the installed desktop application's
+embedded DSH CLI read `0.2.0-rc.2`, a tested integration target. Do not
+treat the PATH-CLI incompatibility warning as proof the Desktop Host is
+incompatible; inspect the exact Host you intend to upgrade.
+
+An access-restricted local **online SQLite backup** and a v13→v16 migration
+rehearsal on an independent restore succeeded. This does not authorize or
+perform production installation or schema migration. The existing Host was
+not stopped or changed. Each other user/profile requires its own verified
+backup, compatibility check and approval.
+
 ## Current owner-machine finding (2026-10-10)
 
 The inspected everyday `desktop` profile on macOS uses:

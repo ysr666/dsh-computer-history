@@ -30,10 +30,10 @@
 > [!NOTE]
 > **v1.0.0 is published.** The same native-verified tarball passed the full installed-product journey and clean installation on Windows, macOS and Linux. [npm package](https://www.npmjs.com/package/dsh-computer-history/v/1.0.0) · [GitHub Release](https://github.com/ysr666/dsh-computer-history/releases/tag/v1.0.0). Host compatibility and privacy limits remain as documented.
 
-> **v1.0.1 is also published:** [npm v1.0.1](https://www.npmjs.com/package/dsh-computer-history/v/1.0.1) · [GitHub v1.0.1](https://github.com/ysr666/dsh-computer-history/releases/tag/v1.0.1). **v1.1.0 is a release candidate only (not yet published):** [v1.1.0 notes](docs/releases/v1.1.0.md) describe Work Memory, history exploration, contextual Continue and advisory Skills/Automations. The separate [AI-first Draft PR #168](https://github.com/ysr666/dsh-computer-history/pull/168) adds bounded metadata-only evidence lookup and user-reviewed Episode → Continue; AI questions create editable, unsent drafts. Migration 0016 requires a verified backup/restore plan. **Neither PR is released**, and native Electron GUI / live-model end-to-end acceptance remain open. Compatible DSH Host versions must be verified before installation.
+> **Latest stable release: v1.1.0.** [npm v1.1.0](https://www.npmjs.com/package/dsh-computer-history/v/1.1.0) · [GitHub v1.1.0](https://github.com/ysr666/dsh-computer-history/releases/tag/v1.1.0) · [release notes](docs/releases/v1.1.0.md). Adds Work Memory, bounded evidence search, source-reviewed Continue, advisory Skills/Automations and privacy fixes. Three-platform packaged CI passed; native Electron screen-reader behavior and arbitrary third-party combinations are not comprehensively tested. Install on a tested DSH Host and make a consistent SQLite backup before upgrading an existing profile.
 
 > [!WARNING]
-> 📌 **Announcement — v1.0.0 is available on npm and GitHub.**
+> 📌 **Announcement — Computer History v1.1.0 stable release.**
 >
 > The first public Computer History release ships as **one installable package for Windows, macOS and Linux**. It includes native collectors, an evidence-based Timeline, Continue into a DSH session, local privacy controls and optional browser/editor companions. Published artifacts passed the three-platform packaged-client tests and the macOS end-to-end journey. **Publication does not imply compatibility with untested DSH Host versions**. See [v1.0.0 notes](docs/releases/v1.0.0.md), [release evidence](docs/release.md), and [the verified release run](https://github.com/ysr666/dsh-computer-history/actions/runs/37903396146). Linux still needs a real desktop X/AT-SPI session for actual capture.
 >
@@ -142,7 +142,7 @@ npx @deepseek-ai/dsh@0.2.0-rc.2 plugin --profile web add dsh-computer-history@1.
 npx @deepseek-ai/dsh@0.2.0-rc.2 plugin --profile web remove dsh-computer-history
 ```
 
-The tested DSH Host baseline is `0.2.0-rc.2`; `0.2.1-alpha.2` has additionally passed a macOS installed-product journey. This does **not** establish compatibility with every DSH version or platform. See [release evidence](docs/release.md) and the [v1.1.0 candidate notes](docs/releases/v1.1.0.md).
+The tested DSH Host baseline is `0.2.0-rc.2`; `0.2.1-alpha.2` has additionally passed a macOS installed-product journey. This does **not** establish compatibility with every DSH version or platform. See [release evidence](docs/release.md) and the [v1.1.0 release notes](docs/releases/v1.1.0.md).
 
 ## Development from source
 

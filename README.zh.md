@@ -30,10 +30,10 @@
 > [!NOTE]
 > **v1.0.0 已正式发布。** 同一份包含三平台原生采集器的安装包已通过完整产品流程和 Windows、macOS、Linux 干净安装验收。[npm 软件包](https://www.npmjs.com/package/dsh-computer-history/v/1.0.0) · [GitHub Release](https://github.com/ysr666/dsh-computer-history/releases/tag/v1.0.0)。Host 兼容性和隐私边界仍以文档为准。
 
-> **v1.0.1 也已发布：** [npm v1.0.1](https://www.npmjs.com/package/dsh-computer-history/v/1.0.1) · [GitHub v1.0.1](https://github.com/ysr666/dsh-computer-history/releases/tag/v1.0.1)。**v1.1.0 目前只是发布候选（尚未发布）：** [v1.1.0 说明](docs/releases/v1.1.0.md)介绍工作记忆、历史检索、Contextual Continue 与 Skill/Automation 建议。另行提交的 [AI-first Draft PR #168](https://github.com/ysr666/dsh-computer-history/pull/168) 加入仅检索元数据的有界证据查询，以及用户检查来源并确认的 Episode → Continue；向 AI 提问只会建立**可编辑、尚未发送**的草稿。其 migration 0016 要求先完成一致性备份与恢复验证。**两条 PR 均未发布**，Electron 图形交互和真实模型端到端验收仍待完成。安装前必须核实 DSH Host 兼容性。
+> **最新正式版：v1.1.0。** [npm v1.1.0](https://www.npmjs.com/package/dsh-computer-history/v/1.1.0) · [GitHub v1.1.0](https://github.com/ysr666/dsh-computer-history/releases/tag/v1.1.0) · [发布说明](docs/releases/v1.1.0.md)。新增工作记忆、历史证据检索、来源核对后的 Continue、Skill/Automation 建议及隐私修复。已通过三平台打包安装与 CI；原生 Electron 读屏及任意第三方插件组合仍未全面验收。仅支持已测试的 DSH Host，升级已有历史库之前必须进行一致性备份。
 
 > [!WARNING]
-> 📌 **公告：v1.0.0 已在 npm 和 GitHub 正式发布**
+> 📌 **公告：Computer History v1.1.0 正式版**
 >
 > Computer History 首个公开版本使用**同一份三平台插件包**支持 Windows / macOS / Linux，提供基于证据的时间线、原生 DSH Continue、本地隐私控制及可选浏览器/编辑器 Companion。正式发布包已通过三平台打包验收和 macOS 完整产品流程。**正式发布不等于已验证所有 DSH Host 版本**；Linux 真实桌面采集仍需 X/AT-SPI 环境和权限。详情见 [v1.0.0 发布说明](docs/releases/v1.0.0.md)、[发布证据](docs/release.md)和[成功的 Release 工作流](https://github.com/ysr666/dsh-computer-history/actions/runs/37903396146)。
 >
@@ -142,7 +142,7 @@ npx @deepseek-ai/dsh@0.2.0-rc.2 plugin --profile web add dsh-computer-history@1.
 npx @deepseek-ai/dsh@0.2.0-rc.2 plugin --profile web remove dsh-computer-history
 ```
 
-已验证的 DSH Host 基线为 `0.2.0-rc.2`；`0.2.1-alpha.2` 另外通过了 macOS 安装版完整产品验收。这**不代表**所有 DSH 版本或其他平台都已验证兼容。参见[发布证据](docs/release.md)和 [v1.1.0 候选说明](docs/releases/v1.1.0.md)。
+已验证的 DSH Host 基线为 `0.2.0-rc.2`；`0.2.1-alpha.2` 另外通过了 macOS 安装版完整产品验收。这**不代表**所有 DSH 版本或其他平台都已验证兼容。参见[发布证据](docs/release.md)和 [v1.1.0 发布说明](docs/releases/v1.1.0.md)。
 
 ## 源码开发
 
