@@ -51,6 +51,7 @@ interface PanelFactoryOptions {
   readonly getActiveLocale: () => string
   readonly getPluginNavigation?: () => ComputerHistoryPluginNavigation | undefined
   readonly continueInDsh: (episode: EpisodeSummary) => Promise<void>
+  readonly askInDsh?: (question: string) => Promise<void>
   readonly store: HistoryControlStore
 }
 
@@ -141,6 +142,7 @@ export function createHistoryPage({
   getActiveLocale,
   getPluginNavigation,
   continueInDsh,
+  askInDsh,
   store,
 }: PanelFactoryOptions): (props: PanelComponentProps) => React.ReactElement {
   return function HistoryPage({ t }: PanelComponentProps): React.ReactElement {
@@ -1310,6 +1312,8 @@ export function createHistoryPage({
             React.createElement(AskHistoryView, {
               locale: activeLocale,
               historyRevision: controls.historyRevision,
+              ...(askInDsh ? { onAskWithAi: askInDsh } : {}),
+              onContinue: continueInDsh,
             }),
             React.createElement(WorkMemoryView, {
               locale: activeLocale,
@@ -1325,6 +1329,8 @@ export function createHistoryPage({
             React.createElement(AskHistoryView, {
               locale: activeLocale,
               historyRevision: controls.historyRevision,
+              ...(askInDsh ? { onAskWithAi: askInDsh } : {}),
+              onContinue: continueInDsh,
             }),
             React.createElement(WorkMemoryView, {
               locale: activeLocale,

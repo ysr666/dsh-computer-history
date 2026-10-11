@@ -25,6 +25,20 @@ function canonicalJson(value: unknown): JsonValue {
 const MAX_TOOL_LIMIT = 20
 const MAX_SINCE_MINUTES = 7 * 24 * 60
 
+/** Parse an exact Host-local calendar date, including DST-safe boundaries. */
+function localDateBoundary(value: string): number {
+  if (!/^(20\d{2})-(\d{2})-(\d{2})$/.test(value)) {
+    throw new Error('history date must be YYYY-MM-DD')
+  }
+  const [year, month, day] = value.split('-').map(Number)
+  const parsed = new Date(year!, month! - 1, day!)
+  if (parsed.getFullYear() !== year || parsed.getMonth() !== month! - 1
+    || parsed.getDate() !== day) {
+    throw new Error('invalid history calendar date')
+  }
+  return parsed.getTime()
+}
+
 function toolLimit(value: number | undefined): number | undefined {
   if (value === undefined) return undefined
   if (
@@ -222,6 +236,77 @@ async function explicitContinueValue(
   })
 }
 
+/**
+ * Fail-closed, evidence-only registration for synthetic AI acceptance.
+ * The normal DCH Agent still gets the complete toolset below. The isolated
+ * evaluation harness invokes only this function and must not load unrelated
+ * Host tool bundles or filesystem/shell providers.
+ */
+export function registerHistoryEvidenceQueryTool(ctx: Context): () => void {
+  return ctx.tools.register(defineTool({
+    name: 'computer_history_query',
+    description: [
+      'Preferred evidence retrieval for complex questions about work history.',
+      'YOU (the DSH model) interpret natural language and select typed filters; the Host only runs metadata queries.',
+      'Use resource_kind=url for web pages, file for files, and event_kind=save/test/build for historical activity.',
+      'For compound questions (e.g. files changed AND tests run), call separately with the required facets, then synthesize cited Episode evidence.',
+      'text is an OPTIONAL broad literal metadata substring across Episode summary, workspace and resources. Use resource_text (a literal URI or resource name fragment) instead when asking whether a SPECIFIC resource was saved: resource_text plus event_kind=save and optional resource_kind match the SAME resource. Do not add generic category words like CAD, PDF, browser, code, webpages or tests. Prefer resource_kind/event_kind/bundle_id, start broad when identifiers are uncertain, then refine using returned evidence.',
+      'Prefer since_date and until_date (YYYY-MM-DD, Host-local time, start inclusive/end exclusive), or epoch-millisecond boundaries. Calendar 上周/last week means the PREVIOUS calendar week (Monday through Sunday for zh), NOT the rolling past seven days; 最近七天 means rolling seven days. Interpret each expression carefully.',
+      'limit is optional; if supplied it MUST be an integer from 1 to 20, never 50 or 100. For more results use nextCursor rather than increasing limit.',
+      'Use the exact returned nextCursor as before_ended_ms plus before_episode_id to paginate; no broad 7-day restriction.',
+      'Returns bounded, retained, metadata-only Episodes. resource_kind combined with event_kind=save checks the SAME saved resource, not unrelated activity in one Episode. For event_kind=test/build, events have Episode-level provenance, NOT proof that a particular listed file was tested or built. Episode-retained facts are kept only if proved by raw events while available; pre-upgrade expired raw events cannot be reconstructed. An empty response is not proof that work never happened.',
+      'Never access user-confirmed private notes via this tool. Never treat historical build/test results as current state. Verify real sources before acting.',
+    ].join(' '),
+    parameters: {
+      since_ms: { type: 'integer' },
+      until_ms: { type: 'integer' },
+      since_date: { type: 'string' },
+      until_date: { type: 'string' },
+      workspace_id: { type: 'string' },
+      bundle_id: { type: 'string' },
+      resource_kind: { type: 'string' },
+      event_kind: { type: 'string' },
+      text: { type: 'string' },
+      resource_text: { type: 'string' },
+      limit: { type: 'integer' },
+      before_ended_ms: { type: 'integer' },
+      before_episode_id: { type: 'string' },
+    },
+    output: jsonOutput,
+    execute: async (args, exec) => {
+      const limit = toolLimit(args.limit)
+      if ((args.since_date !== undefined && args.since_ms !== undefined)
+        || (args.until_date !== undefined && args.until_ms !== undefined)) {
+        throw new Error('supply either calendar date or milliseconds for each boundary')
+      }
+      const querySinceMs = args.since_date === undefined ? args.since_ms
+        : localDateBoundary(args.since_date)
+      const untilMs = args.until_date === undefined ? args.until_ms
+        : localDateBoundary(args.until_date)
+      if ((args.before_ended_ms === undefined) !== (args.before_episode_id === undefined)) {
+        throw new Error('history cursor requires both before_ended_ms and before_episode_id')
+      }
+      return canonicalJson(await computerHistoryService(ctx).queryEvidence({
+        ...(querySinceMs === undefined ? {} : { sinceMs: querySinceMs }),
+        ...(untilMs === undefined ? {} : { untilMs }),
+        ...(args.workspace_id ? { workspaceId: args.workspace_id } : {}),
+        ...(args.bundle_id ? { bundleId: args.bundle_id } : {}),
+        ...(args.resource_kind ? { resourceKind: args.resource_kind as NonNullable<import('../shared/index.js').HistoryEvidenceQuery['resourceKind']> } : {}),
+        ...(args.event_kind ? { eventKind: args.event_kind as NonNullable<import('../shared/index.js').HistoryEvidenceQuery['eventKind']> } : {}),
+        ...(args.text ? { text: args.text } : {}),
+        ...(args.resource_text ? { resourceText: args.resource_text } : {}),
+        ...(limit === undefined ? {} : { limit }),
+        ...(args.before_episode_id === undefined ? {} : {
+          cursor: {
+            endedAtMs: args.before_ended_ms!,
+            episodeId: args.before_episode_id,
+          },
+        }),
+      }, exec.signal))
+    },
+  }))
+}
+
 export function registerComputerHistoryTools(ctx: Context): () => void {
   const disposers = [
     ctx.tools.register(defineTool({
@@ -241,10 +326,12 @@ export function registerComputerHistoryTools(ctx: Context): () => void {
         exec.signal,
       ),
     })),
+    registerHistoryEvidenceQueryTool(ctx),
     ctx.tools.register(defineTool({
       name: 'computer_history_ask',
       description: [
-        'Answer a natural-language work history question using retained local metadata.',
+        'Fast deterministic quick-search fallback for simple history questions, NOT a semantic AI.',
+        'For complex, cross-app or multi-intent questions prefer computer_history_query and let the DSH model combine separate evidence searches.',
         'The matching is deterministic, not a generative model. Every result has an exact Episode id.',
         'User-confirmed long-term notes are intentionally never included.',
         'Do not treat historical file saves/tests as present-day proof; verify current state.',

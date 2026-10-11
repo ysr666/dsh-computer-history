@@ -10,7 +10,7 @@
 // reads.
 //
 //   node scripts/verify-ci-boundaries.mjs
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 
 const WORKFLOW = '.github/workflows/collectors.yml'
@@ -84,6 +84,24 @@ if (!packagedWorkflowSource.includes('name: installed DSH 0.2.1-alpha.2 compatib
   problems.push(`${PACKAGED_WORKFLOW}: explicit isolated Alpha 2 installed-product PR gate is missing`)
 const releaseWorkflowSource = readFileSync(RELEASE_WORKFLOW, 'utf8')
 const releaseDocSource = readFileSync(RELEASE_DOC, 'utf8')
+// Release workflow dispatches must be generic: a stale prior release number
+// must not make an otherwise CI-green candidate impossible to publish.
+const releaseVersion = JSON.parse(readFileSync('package.json', 'utf8')).version
+const requiredReleaseNote = `docs/releases/v${releaseVersion}.md`
+if (!existsSync(requiredReleaseNote)) {
+  problems.push(`missing release notes for candidate ${releaseVersion}: ${requiredReleaseNote}`)
+}
+for (const readme of ['README.md', 'README.zh.md']) {
+  if (!readFileSync(readme, 'utf8').includes(requiredReleaseNote)) {
+    problems.push(`${readme}: candidate release announcement/link missing: ${requiredReleaseNote}`)
+  }
+}
+if (/test "\$VERSION" = "\d+\.\d+\.\d+"/.test(releaseWorkflowSource)) {
+  problems.push(`${RELEASE_WORKFLOW}: release preflight pins a prior version instead of validating tag against package.json`)
+}
+if (!releaseWorkflowSource.includes('test "$RELEASE_TAG" = "v$VERSION"')) {
+  problems.push(`${RELEASE_WORKFLOW}: exact tag-to-manifest version guard is missing`)
+}
 if (!/^\s*runs-on:\s*macos(?:-[^\s#]+)?\s*$/m.test(releaseWorkflowSource)) {
   problems.push(`${RELEASE_WORKFLOW}: release job is no longer a macOS job`)
 }

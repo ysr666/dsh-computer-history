@@ -30,10 +30,10 @@
 > [!NOTE]
 > **v1.0.0 is published.** The same native-verified tarball passed the full installed-product journey and clean installation on Windows, macOS and Linux. [npm package](https://www.npmjs.com/package/dsh-computer-history/v/1.0.0) · [GitHub Release](https://github.com/ysr666/dsh-computer-history/releases/tag/v1.0.0). Host compatibility and privacy limits remain as documented.
 
-> **Next compatibility candidate (not yet published):** DCH `v1.0.1` targets DSH `0.2.1-alpha.2`; [candidate notes](docs/releases/v1.0.1.md). The currently published npm release remains `1.0.0` until a separate verified release.
+> **Latest stable release: v1.1.0.** [npm v1.1.0](https://www.npmjs.com/package/dsh-computer-history/v/1.1.0) · [GitHub v1.1.0](https://github.com/ysr666/dsh-computer-history/releases/tag/v1.1.0) · [release notes](docs/releases/v1.1.0.md). Adds Work Memory, bounded evidence search, source-reviewed Continue, advisory Skills/Automations and privacy fixes. Three-platform packaged CI passed; native Electron screen-reader behavior and arbitrary third-party combinations are not comprehensively tested. Install on a tested DSH Host and make a consistent SQLite backup before upgrading an existing profile.
 
 > [!WARNING]
-> 📌 **Announcement — v1.0.0 is available on npm and GitHub.**
+> 📌 **Announcement — Computer History v1.1.0 stable release.**
 >
 > The first public Computer History release ships as **one installable package for Windows, macOS and Linux**. It includes native collectors, an evidence-based Timeline, Continue into a DSH session, local privacy controls and optional browser/editor companions. Published artifacts passed the three-platform packaged-client tests and the macOS end-to-end journey. **Publication does not imply compatibility with untested DSH Host versions**. See [v1.0.0 notes](docs/releases/v1.0.0.md), [release evidence](docs/release.md), and [the verified release run](https://github.com/ysr666/dsh-computer-history/actions/runs/37903396146). Linux still needs a real desktop X/AT-SPI session for actual capture.
 >
@@ -142,7 +142,7 @@ npx @deepseek-ai/dsh@0.2.0-rc.2 plugin --profile web add dsh-computer-history@1.
 npx @deepseek-ai/dsh@0.2.0-rc.2 plugin --profile web remove dsh-computer-history
 ```
 
-Only DSH `0.2.0-rc.2` has been verified as the Host; other versions are not implicitly supported. See [release evidence](docs/release.md).
+The tested DSH Host baseline is `0.2.0-rc.2`; `0.2.1-alpha.2` has additionally passed a macOS installed-product journey. This does **not** establish compatibility with every DSH version or platform. See [release evidence](docs/release.md) and the [v1.1.0 release notes](docs/releases/v1.1.0.md).
 
 ## Development from source
 
@@ -182,7 +182,7 @@ Pull requests run Node 22 + 24 core verification, relevant cross-platform collec
 
 ## Contributing
 
-Issues and pull requests are welcome while the first public release is prepared. Start with [CONTRIBUTING.md](CONTRIBUTING.md).
+Issues and pull requests are welcome as Computer History develops. Start with [CONTRIBUTING.md](CONTRIBUTING.md).
 
 > [!CAUTION]
 > Because this project handles sensitive local context, **do not attach real history databases, pairing/session tokens, credentials, private paths, or unredacted capture logs to public issues**. Use the private vulnerability-reporting path described in [SECURITY.md](SECURITY.md) for sensitive findings.

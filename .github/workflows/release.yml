@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Exact version tag (v1.0.1)
+        description: Exact version tag (for example, v1.1.0)
         type: string
         required: true
       target_sha:
@@ -42,7 +42,6 @@ jobs:
           git fetch --no-tags origin main:refs/remotes/origin/main
           MAIN_SHA="$(git rev-parse origin/main)"
           VERSION="$(node -p "require('./package.json').version")"
-          test "$VERSION" = "1.0.1"
           test "$RELEASE_TAG" = "v$VERSION"
           test "$(node -p "require('./package.json').private === true")" = 'false'
           test -s "docs/releases/$RELEASE_TAG.md"

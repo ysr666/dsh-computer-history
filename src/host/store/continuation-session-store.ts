@@ -33,13 +33,25 @@ export class ContinuationSessionStore {
     nowMs: number,
   ): EpisodeId | undefined {
     const row = this.db.prepare(`
-      SELECT episode_id
-      FROM continuation_sessions
-      WHERE session_id = ? AND expires_at_ms > ?
-    `).get(sessionId, nowMs) as { episode_id?: unknown } | undefined
+      SELECT binding.episode_id
+      FROM continuation_sessions AS binding
+      JOIN episodes AS episode ON episode.id = binding.episode_id
+      WHERE binding.session_id = ?
+        AND binding.expires_at_ms > ?
+        AND episode.state != 'invalidated'
+        AND (episode.expires_at_ms IS NULL OR episode.expires_at_ms > ?)
+    `).get(sessionId, nowMs, nowMs) as { episode_id?: unknown } | undefined
     return typeof row?.episode_id === 'string'
       ? row.episode_id as EpisodeId
       : undefined
+  }
+
+  /** A live Session binding exists but its source Episode may no longer be retained.
+   * Never expose its Episode id through this diagnostic-only predicate. */
+  public hasLiveBinding(sessionId: string, nowMs: number): boolean {
+    return this.db.prepare(
+      'SELECT 1 FROM continuation_sessions WHERE session_id = ? AND expires_at_ms > ?',
+    ).get(sessionId, nowMs) !== undefined
   }
 
   public deleteSession(sessionId: string): boolean {

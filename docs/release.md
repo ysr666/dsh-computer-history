@@ -1,5 +1,7 @@
 # Release: install, upgrade, roll back
 
+> **Latest version:** [Computer History v1.1.0](releases/v1.1.0.md). The v1.0.0 checks below are preserved as historical release evidence; current 1.1.0 notes state the tested Host versions, packaged CI results and SQLite upgrade precautions.
+
 This document states what has been **measured**. Where a step has not been
 verified, it says so rather than describing the intention.
 

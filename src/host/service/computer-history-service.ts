@@ -80,6 +80,13 @@ export class ComputerHistoryService
     return this.backend.search(request, signal)
   }
 
+  public queryEvidence(
+    request: import('../../shared/index.js').HistoryEvidenceQuery,
+    signal?: AbortSignal,
+  ): Promise<import('../../shared/index.js').HistoryEvidencePage> {
+    return this.backend.queryEvidence(request, signal)
+  }
+
   public getEpisode(
     id: EpisodeId,
     signal?: AbortSignal,

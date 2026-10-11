@@ -421,3 +421,74 @@ describe('agent-scoped Computer History surfaces', () => {
   })
 
 })
+
+describe('AI-first evidence query tool', () => {
+  it('lets the Agent compose typed resource and event searches without regex intent matching', async () => {
+    const tools = new Map<string, ToolDefinition>()
+    const requests: unknown[] = []
+    const history = {
+      async queryEvidence(request: unknown) {
+        requests.push(request)
+        return {
+          items: [], hasMore: false,
+          notesAccess: 'not-searched', caveat: 'Fixture retained metadata only',
+        }
+      },
+    }
+    const ctx = {
+      get(name: string) { return name === 'computerHistory' ? history : undefined },
+      tools: { register(definition: ToolDefinition) {
+        tools.set(definition.name, definition)
+        return () => { tools.delete(definition.name) }
+      } },
+    } as unknown as Context
+    const dispose = registerComputerHistoryTools(ctx)
+    const query = tools.get('computer_history_query')!
+    const exec = { signal: new AbortController().signal } as never
+    await query.execute({
+      resource_kind: 'url', since_ms: 100, until_ms: 200, limit: 5,
+    }, exec)
+    await query.execute({
+      event_kind: 'save', workspace_id: 'TripMap',
+      before_ended_ms: 180, before_episode_id: 'episode-12',
+    }, exec)
+    await query.execute({ event_kind: 'test', workspace_id: 'TripMap' }, exec)
+    expect(requests).toEqual([
+      { resourceKind: 'url', sinceMs: 100, untilMs: 200, limit: 5 },
+      { eventKind: 'save', workspaceId: 'TripMap',
+        cursor: { endedAtMs: 180, episodeId: 'episode-12' } },
+      { eventKind: 'test', workspaceId: 'TripMap' },
+    ])
+    await query.execute({
+      since_date: '2026-10-09', until_date: '2026-10-10', resource_kind: 'url',
+    }, exec)
+    expect(requests[3]).toEqual({
+      sinceMs: new Date(2026, 9, 9).getTime(),
+      untilMs: new Date(2026, 9, 10).getTime(),
+      resourceKind: 'url',
+    })
+    await query.execute({
+      event_kind: 'save', resource_kind: 'file',
+      resource_text: 'robot_joint.step', workspace_id: 'Synthetic',
+      limit: 3,
+    }, exec)
+    expect(requests[4]).toEqual({
+      eventKind: 'save', resourceKind: 'file',
+      resourceText: 'robot_joint.step', workspaceId: 'Synthetic',
+      limit: 3,
+    })
+    await expect(query.execute({ since_date: '2026-02-31' }, exec))
+      .rejects.toThrow(/invalid history calendar date/)
+    await expect(query.execute({ since_date: '2026-10-09', since_ms: 100 }, exec))
+      .rejects.toThrow(/either calendar date or milliseconds/)
+    await expect(query.execute({ before_episode_id: 'e1' }, exec))
+      .rejects.toThrow(/cursor requires both/)
+    expect(requests).toHaveLength(5)
+    const rendered = query.output.render({}, {
+      items: [], hasMore: false, notesAccess: 'not-searched',
+      caveat: 'fixture',
+    } as never)
+    expect((rendered[0] as { text: string }).text).toContain('untrusted metadata')
+    dispose()
+  })
+})

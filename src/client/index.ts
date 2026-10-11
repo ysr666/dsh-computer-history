@@ -30,6 +30,7 @@ import {
 import { applyPluginManagerSurfaces } from './plugin-surfaces.js'
 import {
   continueEpisodeInDsh,
+  askHistoryInDsh,
   registerComputerHistoryReferenceSource,
 } from './continuation-reference.js'
 
@@ -99,6 +100,7 @@ export function apply(ctx: Context): void {
     getActiveLocale: () => String(ctx.locale.getLocale().active),
     getPluginNavigation,
     continueInDsh: episode => continueEpisodeInDsh(ctx, episode),
+    askInDsh: question => askHistoryInDsh(ctx, question, String(ctx.locale.getLocale().active)),
     store,
   })
 

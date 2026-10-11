@@ -1,0 +1,4 @@
+# pnpm 11 reads dependency overrides from the workspace root.
+# Scope the security fix to the dev-only DOM-test chain (GHSA-93q8-gq69-wqmw).
+overrides:
+  pretty-format@27.0.2>ansi-regex: 5.0.1
