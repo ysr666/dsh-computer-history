@@ -146,6 +146,8 @@ The tested DSH Host baseline is `0.2.0-rc.2`; `0.2.1-alpha.2` has additionally p
 
 ## Development from source
 
+Developer Web auto-build, private Chrome full-page reload and native DSH HMR are covered in the [development guide](docs/development-live-reload.md). They are source-only tools, not release features.
+
 For development or contribution, use the source checkout:
 
 ```sh
