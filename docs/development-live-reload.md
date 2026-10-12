@@ -83,3 +83,18 @@ The upstream module lifecycle, not this developer script, owns cleanup,
 CSS and dependent plugin reactivation. Runtime changes to the native collector,
 Host code, permissions, store, or settings still require a separate Host
 validation. Other DSH versions and OSes must be verified before broad claims.
+
+## Preserve last-good Client when TypeScript compilation fails
+
+`pnpm build` deliberately deletes `lib/` as the first packaging step. A syntax
+error in `src/client/` then removes the deployed `client.js`, despite the dev
+watcher's promise not to refresh. Upstream DSH HMR polls this file on its own.
+
+The **development-only** watcher now uses `scripts/dev-staged-build.mjs` to
+compile all `tsdown` outputs into a temporary directory with the optional
+`DCH_DEV_BUILD_OUT_DIR` override, verify the complete Client/Host declarations,
+and publish all output siblings with atomic renames and `client.js` last.
+Build errors leave the last-good `lib/` unchanged, so the existing browser
+plugin stays running. The ordinary `pnpm build`, `prepack`, production output
+and package loading contracts remain unchanged. Disk failures during sibling
+publication are not transactional; repair with a clean build and restart.

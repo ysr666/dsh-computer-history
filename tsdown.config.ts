@@ -1,4 +1,8 @@
 import { defineConfig } from 'tsdown'
+import { join } from 'node:path'
+
+// Only dev:client sets this. Normal package/release builds still use lib/.
+const outDir = process.env.DCH_DEV_BUILD_OUT_DIR ?? 'lib'
 
 /**
  * Client modules are loaded by the DSH web client through
@@ -34,7 +38,7 @@ export default defineConfig([
     dts: true,
     sourcemap: false,
     clean: false,
-    outDir: 'lib',
+    outDir,
     fixedExtension: false,
     deps: { neverBundle: [/^@deepseek-ai\//, 'react'] },
   },
@@ -45,7 +49,7 @@ export default defineConfig([
     dts: true,
     sourcemap: false,
     clean: false,
-    outDir: 'lib',
+    outDir,
     fixedExtension: false,
     define: {
       'process.env.NODE_ENV': JSON.stringify(
@@ -75,7 +79,7 @@ export default defineConfig([
     dts: true,
     sourcemap: false,
     clean: false,
-    outDir: 'lib/.client-dts',
+    outDir: join(outDir, '.client-dts'),
     fixedExtension: false,
     deps: {
       neverBundle: CLIENT_EXTERNALS,

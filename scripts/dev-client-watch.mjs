@@ -60,9 +60,8 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
 function buildOnce(getChild) {
   return new Promise((resolveBuild, rejectBuild) => {
-    const isWindows = process.platform === 'win32'
-    const command = isWindows ? 'cmd.exe' : 'pnpm'
-    const args = isWindows ? ['/d', '/s', '/c', 'pnpm', 'build'] : ['build']
+    const command = process.execPath
+    const args = ['scripts/dev-staged-build.mjs']
     const child = spawn(command, args, { cwd: root, stdio: 'inherit' })
     getChild(child)
     child.once('error', rejectBuild)
@@ -148,7 +147,7 @@ function main() {
     // Client directly imports shared utilities; both trees are hot-build inputs.
     observe('src/client', true, () => true)
     observe('src/shared', true, () => true)
-    observe('scripts', false, filename => /^(?:write-build-info)\.mjs$/.test(filename))
+    observe('scripts', false, filename => /^(?:write-build-info|dev-staged-build)\.mjs$/.test(filename))
     observe('.', false, filename => /^(?:package\.json|tsconfig\.json|tsdown\.config\.ts)$/.test(filename))
   } catch (error) {
     for (const watcher of watches) watcher.close()
