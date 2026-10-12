@@ -85,3 +85,43 @@ test('reload failures report HTTP errors and do not prevent safe cleanup',async(
   await handle.close()
   assert.equal(closed,1)
 })
+
+test('native HMR opt-in requires a healthy DSH SSE channel and never reloads the page', async () => {
+  let refreshCount = 0
+  let closed = 0
+  let evaluated = 0
+  const page = {
+    goto: async () => ({status: () => 200}),
+    evaluate: async (fn: unknown) => {
+      assert.equal(typeof fn, 'function')
+      evaluated++
+      return true
+    },
+    isClosed: () => false,
+    reload: async () => { refreshCount++; return {status: () => 200} },
+  }
+  const handle = await openDevBrowser({ ...base, reloadMode: 'native-hmr' }, {
+    loadPuppeteer: async () => ({launch: async () => ({
+      newPage: async () => page,
+      close: async () => { closed++ },
+    })}),
+  })
+  await handle.reload()
+  await handle.reload()
+  await handle.close()
+  assert.equal(evaluated, 1)
+  assert.equal(refreshCount, 0)
+  assert.equal(closed, 1)
+})
+
+test('native HMR refuses an unavailable Host rather than silently falling back', async () => {
+  let closed = 0
+  await assert.rejects(openDevBrowser({ ...base, reloadMode: 'native-hmr' }, {
+    loadPuppeteer: async () => ({launch: async () => ({
+      newPage: async () => ({goto: async () => ({status: () => 200}), evaluate: async () => false}),
+      close: async () => { closed++ },
+    })}),
+  }), /Native DSH HMR is unavailable/)
+  assert.equal(closed, 1)
+  assert.throws(() => validateDevBrowserOptions({ ...base, reloadMode: 'unknown' } as never), /Unsupported/)
+})
