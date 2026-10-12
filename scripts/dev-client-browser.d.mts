@@ -3,6 +3,7 @@ export interface DevBrowserOptions {
   chromeBin: string
   puppeteerEntry: string
   headless?: boolean
+  reloadMode?: 'page' | 'native-hmr'
 }
 export function validateDevBrowserOptions(options: DevBrowserOptions): DevBrowserOptions
 export function openDevBrowser(

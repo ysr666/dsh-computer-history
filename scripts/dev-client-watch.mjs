@@ -86,6 +86,7 @@ function main() {
     chromeBin: process.env.DCH_DEV_CHROME_BIN,
     puppeteerEntry: process.env.DCH_DEV_PUPPETEER_ENTRY,
     headless: process.env.DCH_DEV_HEADLESS === '1',
+    reloadMode: process.env.DCH_DEV_RELOAD_MODE || 'page',
   }) : null
   const scheduler = createRebuildScheduler({
     async run() {
@@ -113,10 +114,14 @@ function main() {
               return
             }
             browser = launched
-            console.log('[dev:watch] Isolated browser opened (full-page reload mode).')
+            console.log(browserOptions.reloadMode === 'native-hmr'
+              ? '[dev:watch] Native DSH HMR active; changes swap Client without page navigation.'
+              : '[dev:watch] Isolated browser opened (full-page reload mode).')
           } else {
             await browser.reload()
-            console.log('[dev:watch] Browser page reloaded after successful build.')
+            console.log(browserOptions.reloadMode === 'native-hmr'
+              ? '[dev:watch] Build ready; DSH native HMR watches the emitted Client artifact.'
+              : '[dev:watch] Browser page reloaded after successful build.')
           }
         } catch (error) {
           console.error('[dev:watch] browser refresh failed (build succeeded):', error)
@@ -162,7 +167,7 @@ function main() {
   process.once('SIGTERM', stop)
   scheduler.request() // Initial build, including the browser factory contract check.
   console.log('[dev:watch] Watching src/client/, src/shared/, build info and compiler config. Ctrl+C to stop.')
-  if (browserOptions) console.log('[dev:watch] Browser mode enabled: reload, not HMR.')
+  if (browserOptions) console.log(`[dev:watch] Browser mode: ${browserOptions.reloadMode}`)
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

@@ -54,3 +54,32 @@ The companion prototype in `Agent Picket` passed isolated DSH 0.2.0-rc.2
 A→B bundle refreshing. Computer History must separately prove its own real
 DSH stable/preview Web behavior, including authenticated navigation and
 multi-tab reload, before claiming broad compatibility.
+
+## Upstream native Web HMR (opt-in)
+
+DSH 0.2.0-rc.2 includes `@deepseek-ai/dsh-client-hmr` by default in the Web
+composition. Its Host half watches the *emitted* `client.js` entry and
+publishes an SSE `rebuilt` event on `/plugins/events`. The browser replaces the
+plugin's Cordis fiber without page navigation. This keeps workspace and page
+state unrelated to Computer History, but the plugin's **own React component
+state is reset**. It is not React Fast Refresh, does not upgrade Host modules,
+and does not support Electron's independent Desktop scheme.
+
+With the same-checkout isolated Host and Chrome variables described above, opt in:
+
+```sh
+export DCH_DEV_RELOAD_MODE=native-hmr
+pnpm dev:client
+```
+
+The isolated Chrome helper confirms the boot graph has the HMR plugin and that
+`/plugins/events` responds with an SSE stream before suppressing its former
+page reload. A missing HMR service fails loudly and closes the private Chrome
+rather than silently claiming hot updates. Set `DCH_DEV_RELOAD_MODE=page`
+(or omit the variable) for the existing full-page fallback. Build-only watch
+also works with a separate browser already using upstream Web HMR.
+
+The upstream module lifecycle, not this developer script, owns cleanup,
+CSS and dependent plugin reactivation. Runtime changes to the native collector,
+Host code, permissions, store, or settings still require a separate Host
+validation. Other DSH versions and OSes must be verified before broad claims.
