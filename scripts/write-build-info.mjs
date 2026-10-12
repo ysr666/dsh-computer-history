@@ -8,8 +8,15 @@
 // whose *name* is the sha512 of `lib/index.js` carried that older mtime. A build time has to come from the
 // build, so the build writes it down.
 import { mkdirSync, writeFileSync } from 'node:fs'
+import { resolve, join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 
-const target = new URL('../lib/build-info.json', import.meta.url)
-mkdirSync(new URL('../lib/', import.meta.url), { recursive: true })
+const outputRoot = process.env.DCH_DEV_BUILD_OUT_DIR
+  ? resolve(process.env.DCH_DEV_BUILD_OUT_DIR)
+  : new URL('../lib/', import.meta.url)
+const target = typeof outputRoot === 'string'
+  ? pathToFileURL(join(outputRoot, 'build-info.json'))
+  : new URL('build-info.json', outputRoot)
+mkdirSync(outputRoot, { recursive: true })
 writeFileSync(target, `${JSON.stringify({ builtAtMs: Date.now() })}\n`)
 console.log(`build info written to ${target.pathname}`)
