@@ -1,4 +1,9 @@
-# DSH Computer History: isolated Web client live reload
+# DSH Computer History: Web Client development (Live Reload and native HMR)
+
+> **Status (2026-10-12):** Native DSH Web HMR and fail-closed staged
+> development builds are merged in `main`. `pnpm dev:client` supports
+> build-only, default full-page refresh, and opt-in `native-hmr` modes.
+> **No published product or Desktop behavior is changed by this tooling.**
 
 This **optional, development-only** tool rebuilds the existing `tsdown` Client
 factory after edits under `src/client` and `src/shared`. It does not replace the
@@ -6,20 +11,36 @@ published DSH `window.__ModuleLoader__.load({ id, factory })` contract with ESM,
 does not install the plugin, does not change the Host or native collector, and
 does not modify the normal `build`/release path.
 
+## Development modes at a glance
+
+| Mode | Configuration | Outcome |
+| --- | --- | --- |
+| Build only | `pnpm dev:client` | Rebuild safely; do not launch a browser |
+| Full-page Web reload | Set `DCH_DEV_BROWSER_URL`, `DCH_DEV_CHROME_BIN`, `DCH_DEV_PUPPETEER_ENTRY` | Refresh the isolated Chrome page after a successful rebuild; default mode |
+| Native DSH Web HMR | Same browser settings, plus `DCH_DEV_RELOAD_MODE=native-hmr` | Let upstream DSH replace the Client fiber without page navigation |
+
+For an older Host or unavailable `/plugins/events` endpoint, select
+`DCH_DEV_RELOAD_MODE=page` (or omit the mode variable). This is not React
+Fast Refresh; plugin-local UI state may reset and the Host must be restarted
+for Host/native collector changes.
+
 ## Build-only mode
 
 ```sh
 pnpm dev:client
 ```
 
-The initial build and every edit run the same `pnpm build` contract as the
-normal build. Source edits are debounced; builds are serialized so two clean
-passes cannot overwrite each other's `lib` output. On failure the watcher
-continues and **does not refresh the browser**. It checks that `lib/client.js`
-still declares the DSH factory and `lib/client.d.ts` exists. Editing Host-only
-files or native code does **not** hot-reload the Host; restart your isolated
-Host if those components change. Source watch intentionally does not follow
-`lib`, `.promo`, `native`, or other output directories.
+The initial build and every edit use the **development-only staged builder**
+(`scripts/dev-staged-build.mjs`). It runs the same `tsdown` compilation in a
+temporary directory, validates the Client factory and Host/Client declarations,
+then atomically publishes the new Client **last**. Regular `pnpm build` and
+release packaging are unchanged. Source edits are debounced and builds are
+serialized; compiler/validation failures leave the last-good `lib/` intact.
+No browser refresh is requested on a failed build.
+
+Editing Host-only files or native collector code does **not** hot-reload the
+running Host; restart its isolated profile as needed. The watch intentionally
+does not follow `lib`, `.promo`, `native`, or other generated directories.
 
 ## Optional browser full reload
 
@@ -45,15 +66,20 @@ into logs. The tool does not print the URL and uses a private CDP pipe rather
 than a remotely accessible Chrome debugging port. Ctrl+C terminates the owned
 Chrome. Browser failures cannot turn a successful build into a broken build.
 
-**This is full-page Live Reload, not HMR.** Browser React state is reset; no
-Client module is replaced in-place. It is only for development; do not use
-real History data or your everyday Desktop profile as a test fixture. No
-promise is made for Desktop custom-scheme HMR.
+**The default `page` mode is full-page Live Reload, not HMR.** It resets
+browser component state. With the opt-in `native-hmr` mode described below,
+upstream DSH instead replaces the Client module without navigating the page;
+the plugin's own React-local state can still reset. Both modes are for
+isolated development only: never use real History data or your everyday
+Desktop profile. Desktop custom-scheme HMR is not supported here.
 
-The companion prototype in `Agent Picket` passed isolated DSH 0.2.0-rc.2
-A→B bundle refreshing. Computer History must separately prove its own real
-DSH stable/preview Web behavior, including authenticated navigation and
-multi-tab reload, before claiming broad compatibility.
+Computer History itself has now passed isolated DSH 0.2.0-rc.2 + real
+Chrome A→B→C native swaps (one initial page navigation, no unexpected browser
+JavaScript errors) and a later 30-cycle stress run with stable observed CSS
+counts. The complete `src/client` → watcher → HMR → broken TypeScript →
+last-good bundle preserved → source recovery → HMR flow was separately tested
+with the Host left running. This does **not** establish blanket stable/preview,
+multi-tab, long-running memory, or Desktop compatibility.
 
 ## Upstream native Web HMR (opt-in)
 

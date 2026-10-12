@@ -146,6 +146,8 @@ npx @deepseek-ai/dsh@0.2.0-rc.2 plugin --profile web remove dsh-computer-history
 
 ## 源码开发
 
+开发环境下的自动构建、隔离Chrome整页刷新、DSH Web原生HMR及编译失败时保留旧Client的机制，详见[开发指南](docs/development-live-reload.md)。这些功能只用于源码开发，不改变正式发布包或Desktop运行方式。
+
 进行开发或贡献时，可使用源码 checkout：
 
 ```sh
