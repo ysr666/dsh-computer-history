@@ -2,3 +2,5 @@
 # Scope the security fix to the dev-only DOM-test chain (GHSA-93q8-gq69-wqmw).
 overrides:
   pretty-format@27.0.2>ansi-regex: 5.0.1
+  # DSH Host RC pins vulnerable undici 8.11.2; use the patched 8.12.3.
+  '@deepseek-ai/dsh-http-proxy>undici': 8.12.3

@@ -113,10 +113,8 @@ describe('ingestion performance gate', () => {
       WHERE bundle_id = 'com.microsoft.VSCode'
         AND surface_kind = 'editor'
     `).get()).toEqual({ count: 10_000 })
-    expect(durationMs).toBeLessThan(30_000)
-
-    // Three numbers, because the gate's one assertion (under 30s) hides both the throughput a regression
-    // would move and the store growth it would not: the baseline is recorded from these lines.
+    // Always report throughput and database growth before the time gate, including when it fails.
+    // This distinguishes a slow runner from changes to the expected stored results.
     console.log(
       'INGEST_10000_MS',
       Math.round(durationMs),
@@ -130,5 +128,6 @@ describe('ingestion performance gate', () => {
       statSync(history.databasePath).size,
     )
     history.close()
+    expect(durationMs).toBeLessThan(30_000)
   }, 40_000)
 })
