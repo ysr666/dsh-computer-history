@@ -1963,7 +1963,15 @@ try {
   if (process.env.DSH_E2E_KEEP === '1') {
     console.log('  kept throwaway home: ' + home)
   } else {
-    rmSync(home, { recursive: true, force: true })
+    // Chrome/GoogleUpdater can finish a final write after its process exits.
+    // Retry only transient filesystem races; a persistent cleanup error must
+    // still fail the gate rather than silently leave disposable profile data.
+    rmSync(home, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 250,
+    })
   }
 }
 
