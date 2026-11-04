@@ -79,10 +79,10 @@ if (!packagedWorkflowSource.includes("'scripts/e2e-product-journey.mjs'")
   problems.push(`${PACKAGED_WORKFLOW}: product journey edits no longer trigger PR validation`)
 }
 if (!packagedWorkflowSource.includes('name: installed DSH ${{ matrix.dsh_version }} compatibility (macos-14)')
-  || !packagedWorkflowSource.includes("dsh_version: ['0.2.1-alpha.2', '0.2.1-rc.2']")
+  || !packagedWorkflowSource.includes("dsh_version: ['0.2.1-alpha.2', '0.2.1-rc.2', '0.2.1-rc.5']")
   || !packagedWorkflowSource.includes("DSH_WEB_APP_SPEC: '@deepseek-ai/dsh-web-app@${{ matrix.dsh_version }}'")
   || !packagedWorkflowSource.includes('DSH_E2E_ALLOW_KOFFI:'))
-  problems.push(`${PACKAGED_WORKFLOW}: isolated Alpha 2 and RC 2 installed-product PR gates are missing`)
+  problems.push(`${PACKAGED_WORKFLOW}: isolated Alpha 2, RC 2 and RC 5 installed-product PR gates are missing`)
 const releaseWorkflowSource = readFileSync(RELEASE_WORKFLOW, 'utf8')
 const releaseDocSource = readFileSync(RELEASE_DOC, 'utf8')
 // Release workflow dispatches must be generic: a stale prior release number

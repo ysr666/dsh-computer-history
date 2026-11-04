@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 
-const SUPPORTED_DSH = new Set(['0.2.0-rc.2', '0.2.1-alpha.2', '0.2.1-rc.2'])
+const SUPPORTED_DSH = new Set(['0.2.0-rc.2', '0.2.1-alpha.2', '0.2.1-rc.2', '0.2.1-rc.5'])
 const INSTALL_PACKAGE = 'dsh-computer-history'
 
 function fileInfo(filepath) {

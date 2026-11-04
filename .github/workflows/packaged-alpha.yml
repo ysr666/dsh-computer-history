@@ -248,7 +248,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        dsh_version: ['0.2.1-alpha.2', '0.2.1-rc.2']
+        dsh_version: ['0.2.1-alpha.2', '0.2.1-rc.2', '0.2.1-rc.5']
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
