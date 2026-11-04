@@ -933,6 +933,14 @@ try {
     webApp.status === 0,
     webApp.status === 0 ? 'exit 0' : webApp.out.trim().slice(-180),
   )
+  // Optional isolated coexistence probe: browser-only annotation has a no-op
+  // Node entry and was reviewed before inclusion. No arbitrary plugin spec.
+  const coexistAnnotation = process.env.DCH_E2E_COEXIST_ANNOTATION === '1'
+  if (coexistAnnotation) {
+    const extra = addBundle('@changfenhuang/dsh-annotation@1.4.11')
+    requireCheck('install isolated annotation co-bundle', extra.status === 0,
+      extra.status === 0 ? 'exit 0' : extra.out.trim().slice(-180))
+  }
   const plugin = addBundle(tarball)
   requireCheck(
     'install Computer History',
@@ -1558,6 +1566,18 @@ try {
       ),
     String(openedPlugins),
   )
+
+  if (coexistAnnotation) {
+    let bothCardsPresent = false
+    for (let attempt = 0; attempt < 60 && !bothCardsPresent; attempt += 1) {
+      bothCardsPresent = await uiSession.evaluate(
+        "Boolean(document.querySelector('[data-plugin-package=\"dsh-computer-history\"]') && document.querySelector('[data-plugin-package=\"@changfenhuang/dsh-annotation\"]'))",
+      )
+      if (!bothCardsPresent) await sleep(250)
+    }
+    requireCheck('annotation and DCH plugin cards coexist in real Host UI',
+      bothCardsPresent, String(bothCardsPresent))
+  }
 
   // GitHub-hosted runners can show the Plugins panel before its package
   // inventory has arrived. Wait for this exact card rather than relying on
