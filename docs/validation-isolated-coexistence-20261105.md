@@ -10,7 +10,7 @@ Date: 2026-11-05 (China time); execution logs dated 2026-11-04 UTC.
 
 ## Boundary of the exercise
 
-Ran macOS real DSH Web Host and real Chrome on new per-run isolated `HOME`, `DSH_HOME`, Chrome user-data-dir and loopback listeners, with synthetic protocol-only collector. No existing DSH profile or its plugin configuration was copied or modified; no actual screen/keyboard capture, external tool calls, user history or model prompts. The browser side of the co-bundles is real.
+Ran macOS real DSH Web Host and real Chrome with a per-run isolated `DSH_HOME`, DCH history, Chrome user-data-dir and loopback listeners, using a synthetic protocol-only collector. The **main Host phase** also used a disposable `HOME`. The final plugin-uninstall package-manager phase deliberately reused the OS `HOME` to access pnpm's existing content-addressed store (as documented in the standard E2E script); the DSH profile, Chrome and DCH data remained throwaway throughout. This test therefore is **not** a general OS-HOME sandbox for arbitrary plugins. No production DSH profile or its plugin configuration was copied or modified; no actual screen/keyboard capture, external plugin tool calls, real user history or model prompts. The browser side of the co-bundles is real.
 
 Opt-in flags added to the product-journey script only for this test:
 `DCH_E2E_COEXIST_ANNOTATION=1` to install the pinned annotation version and verify its real Plugins UI card;
