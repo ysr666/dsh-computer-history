@@ -1559,6 +1559,16 @@ try {
     String(openedPlugins),
   )
 
+  // GitHub-hosted runners can show the Plugins panel before its package
+  // inventory has arrived. Wait for this exact card rather than relying on
+  // a fixed delay; never click a different package or skip the real UI.
+  let detailCardReady = false
+  for (let attempt = 0; attempt < 60 && !detailCardReady; attempt += 1) {
+    detailCardReady = await uiSession.evaluate(
+      "Boolean(document.querySelector('[data-plugin-package=\"dsh-computer-history\"] button:not([role=\"switch\"])'))",
+    )
+    if (!detailCardReady) await sleep(250)
+  }
   const openedDetail = await uiSession.evaluate(
     "(() => {"
     + "const card=document.querySelector('[data-plugin-package=\"dsh-computer-history\"]');"
@@ -1568,14 +1578,24 @@ try {
     + "if(!button)return false;button.click();return true;"
     + "})()",
   )
-  await sleep(1_200)
+  // The detail view is also asynchronous. Wait for its exact mounted subject;
+  // the subsequent assertion still fails if the card/button never appeared.
+  let detailMounted = false
+  for (let attempt = 0; attempt < 60 && !detailMounted; attempt += 1) {
+    detailMounted = await uiSession.evaluate(
+      "Boolean(document.querySelector('[data-plugin-detail=\"dsh-computer-history\"]'))",
+    )
+    if (!detailMounted) await sleep(250)
+  }
   requireCheck(
     'Computer History plugin detail opens',
     openedDetail === true
       && await uiSession.evaluate(
         "Boolean(document.querySelector('[data-plugin-detail=\"dsh-computer-history\"]'))",
       ),
-    String(openedDetail),
+    'clicked=' + String(openedDetail)
+      + ' cardReady=' + String(detailCardReady)
+      + ' detailMounted=' + String(detailMounted),
   )
   await uiSession.shot('04-plugin-detail.png')
 
