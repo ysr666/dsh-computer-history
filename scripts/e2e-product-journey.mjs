@@ -251,13 +251,20 @@ function addBundle(spec) {
         'registry=' + e2eRegistry + '\n')
     }
     const workspaceSource = readFileSync(workspace, 'utf8')
-    // For the *throwaway* 0.2.1-alpha.2 Host only: explicitly approve the
-    // known koffi native dependency, not arbitrary scripts. DSH's own pnpm
-    // 11 policy generates this placeholder during the first real install.
-    const approved = process.env.DSH_E2E_ALLOW_KOFFI === '1'
-      ? workspaceSource.replace('koffi: set this to true or false', 'koffi: true')
-      : workspaceSource
-    writeFileSync(workspace, approved.replaceAll(': set this to true or false', ': false'))
+    // This approval is opt-in and limited to the throwaway E2E profile.
+    // Alpha 2 writes a pending allowBuilds placeholder; RC 2 omits the
+    // placeholder entirely while pnpm 11 still rejects koffi's install script.
+    let approved = workspaceSource.replaceAll(': set this to true or false', ': false')
+    if (process.env.DSH_E2E_ALLOW_KOFFI === '1') {
+      if (/^\s*koffi:\s*false\s*$/m.test(approved)) {
+        approved = approved.replace(/^(\s*koffi:\s*)false\s*$/m, '$1true')
+      } else if (!/^\s*koffi:\s*true\s*$/m.test(approved)) {
+        approved = /^allowBuilds:\s*$/m.test(approved)
+          ? approved.replace(/^allowBuilds:\s*$/m, 'allowBuilds:\n  koffi: true')
+          : approved.trimEnd() + '\n\nallowBuilds:\n  koffi: true\n'
+      }
+    }
+    writeFileSync(workspace, approved)
   }
   return result
 }
@@ -1718,7 +1725,8 @@ try {
   await sleep(500)
   const uninstallConfirmed = await uiSession.evaluate(
     "(() => {"
-    + "const dialog=document.querySelector('[role=\"dialog\"],dialog');"
+    + "const dialogs=[...document.querySelectorAll('[role=\"dialog\"],dialog')];"
+    + "const dialog=dialogs.find(n=>/卸载「|Uninstall [\"“]/.test(n.textContent||''));"
     + "if(!dialog)return false;"
     + "const buttons=[...dialog.querySelectorAll('button')]"
     + ".filter(n=>n.getClientRects().length>0);"

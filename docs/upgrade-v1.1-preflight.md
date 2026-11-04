@@ -2,9 +2,12 @@
 
 Status: **Read-only preflight available; no user-profile migration approved or performed.**
 
-The latest v1.1 feature chain (M1–M7) uses UI and Host contracts measured on
-DSH `0.2.0-rc.2` and `0.2.1-alpha.2`. **These are specifically tested
-builds, not an assertion that all 0.2.x versions are compatible.**
+The v1.1 feature chain (M1–M7) uses UI and Host contracts measured on
+DSH `0.2.0-rc.2` and `0.2.1-alpha.2`, plus an isolated packaged Web Host
+product journey on `0.2.1-rc.2` (56/56 assertions; see
+`docs/validation-dsh-021-rc2-isolated-20261104.md`). **These are specifically
+tested combinations, not an assertion that all 0.2.x versions, native Electron
+shells, or co-installed bundles are compatible.**
 
 ## Distinguish the terminal CLI from the embedded Desktop Host
 

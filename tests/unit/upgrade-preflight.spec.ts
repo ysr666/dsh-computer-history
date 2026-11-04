@@ -82,7 +82,7 @@ describe('read-only user profile upgrade preflight', () => {
 
   it('marks exactly measured DSH versions as tested without granting approval', () => {
     const { root } = fixture({ pluginVersion: '1.1.0', withWal: false })
-    for (const dshVersion of ['0.2.0-rc.2', '0.2.1-alpha.2']) {
+    for (const dshVersion of ['0.2.0-rc.2', '0.2.1-alpha.2', '0.2.1-rc.2']) {
       const report = inspectUpgradeEnvironment({
         dshHome: root, dshVersion,
       })
