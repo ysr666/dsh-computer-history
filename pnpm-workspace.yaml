@@ -4,3 +4,6 @@ overrides:
   pretty-format@27.0.2>ansi-regex: 5.0.1
   # DSH Host RC pins vulnerable undici 8.11.2; use the patched 8.12.3.
   '@deepseek-ai/dsh-http-proxy>undici': 8.12.3
+  # Security patches for Vitest's dev server and pinned DSH Host Zod.
+  vite: 8.3.3
+  zod@4.6.5: 4.6.7

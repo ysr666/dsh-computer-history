@@ -3,3 +3,11 @@ allowBuilds:
   # pack job's install. The script installs vsce's signing helper and packaging here is unsigned
   # (`vsce package --skip-license`), so skipping it is the honest answer; flip it to true if signing is wanted.
   '@vscode/vsce-sign': false
+
+# These tool-only transitive dependencies are fixed beyond the ranges currently
+# declared by vsce/its Azure client. Keep a packaging smoke test in CI when
+# changing the overrides, especially for the Azure auth major-version jump.
+overrides:
+  '@vscode/vsce>minimatch': 11.0.4
+  'typed-rest-client>qs': 6.17.1
+  '@azure/identity>@azure/msal-node': 7.1.2
