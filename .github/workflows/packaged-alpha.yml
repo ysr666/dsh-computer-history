@@ -237,15 +237,18 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  # Unlike the stable three-platform gate above, this is a prerelease Host
-  # compatibility check. Run it on PRs only and do not infer Windows/Linux
-  # Alpha 2 Desktop coverage from a macOS installed-browser journey.
-  alpha2_compat:
-    name: installed DSH 0.2.1-alpha.2 compatibility (macos-14)
+  # PR-only installed Web Host compatibility. This does not establish native
+  # Electron or Windows/Linux desktop acceptance for either Host version.
+  host_compat:
+    name: installed DSH ${{ matrix.dsh_version }} compatibility (macos-14)
     if: github.event_name == 'pull_request'
     needs: assemble
     runs-on: macos-14
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        dsh_version: ['0.2.1-alpha.2', '0.2.1-rc.2', '0.2.1-rc.5']
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -261,22 +264,23 @@ jobs:
         with:
           name: three-platform-plugin
           path: ${{ runner.temp }}/package
-      - name: Install isolated Alpha 2 CLI and browser/editor test dependencies
+      - name: Install isolated Host CLI and browser/editor test dependencies
         run: |
           set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/dsh-alpha2-cli"
-          echo '{"private":true}' > "$RUNNER_TEMP/dsh-alpha2-cli/package.json"
-          npm install --prefix "$RUNNER_TEMP/dsh-alpha2-cli" --no-audit --no-fund \
-            --registry=https://registry.npmjs.org @deepseek-ai/dsh@0.2.1-alpha.2
-          "$RUNNER_TEMP/dsh-alpha2-cli/node_modules/.bin/dsh" --version | grep -Fx '0.2.1-alpha.2'
+          DSH_VERSION='${{ matrix.dsh_version }}'
+          mkdir -p "$RUNNER_TEMP/dsh-compat-cli"
+          echo '{"private":true}' > "$RUNNER_TEMP/dsh-compat-cli/package.json"
+          npm install --prefix "$RUNNER_TEMP/dsh-compat-cli" --no-audit --no-fund \
+            --registry=https://registry.npmjs.org "@deepseek-ai/dsh@$DSH_VERSION"
+          "$RUNNER_TEMP/dsh-compat-cli/node_modules/.bin/dsh" --version | grep -Fx "$DSH_VERSION"
           pnpm install --frozen-lockfile
           pnpm --dir extension-editor install --frozen-lockfile
           pnpm build:editor-extension
           pnpm build:extension
-      - name: Real Chrome + DCH lifecycle against isolated Alpha 2 Host
+      - name: Real Chrome + DCH lifecycle against isolated Host
         env:
           PANEL_CHROME: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
-          DSH_WEB_APP_SPEC: '@deepseek-ai/dsh-web-app@0.2.1-alpha.2'
+          DSH_WEB_APP_SPEC: '@deepseek-ai/dsh-web-app@${{ matrix.dsh_version }}'
           DSH_E2E_REGISTRY: https://registry.npmjs.org/
           DSH_E2E_ALLOW_KOFFI: '1'
         run: |
@@ -285,13 +289,13 @@ jobs:
           tarball=$(ls "$RUNNER_TEMP"/package/dsh-computer-history-*.tgz | head -1)
           test -f "$tarball"
           DSH_PRODUCT_TARBALL="$tarball" \
-            DSH_CLI="$RUNNER_TEMP/dsh-alpha2-cli/node_modules/.bin/dsh" \
+            DSH_CLI="$RUNNER_TEMP/dsh-compat-cli/node_modules/.bin/dsh" \
             pnpm e2e:product-journey
       - name: Preserve test results only, never Host/pairing secrets
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: alpha2-installed-product-checks
+          name: host-${{ matrix.dsh_version }}-installed-product-checks
           path: .debug/e2e-product-journey/**/checks.json
           if-no-files-found: warn
           retention-days: 3
