@@ -83,6 +83,15 @@ if (!packagedWorkflowSource.includes('name: installed DSH ${{ matrix.dsh_version
   || !packagedWorkflowSource.includes("DSH_WEB_APP_SPEC: '@deepseek-ai/dsh-web-app@${{ matrix.dsh_version }}'")
   || !packagedWorkflowSource.includes('DSH_E2E_ALLOW_KOFFI:'))
   problems.push(`${PACKAGED_WORKFLOW}: isolated Alpha 2, RC 2 and RC 5 installed-product PR gates are missing`)
+// Reviewed third-party coexistence must remain a separate, opt-in PR gate:
+// the default journey cannot silently enable external bundles or tooling.
+if (!packagedWorkflowSource.includes('pinned_coexistence:')
+  || !packagedWorkflowSource.includes("DCH_E2E_COEXIST_ANNOTATION: '1'")
+  || !packagedWorkflowSource.includes("DCH_E2E_COEXIST_DEV_INDEX: '1'")
+  || !packagedWorkflowSource.includes('name: pinned 3-plugin UI coexistence (macos-14)')
+  || !packagedWorkflowSource.includes('name: pinned-coexistence-installed-product-checks')) {
+  problems.push(`${PACKAGED_WORKFLOW}: pinned three-bundle coexistence PR gate is missing`)
+}
 const releaseWorkflowSource = readFileSync(RELEASE_WORKFLOW, 'utf8')
 const releaseDocSource = readFileSync(RELEASE_DOC, 'utf8')
 // Release workflow dispatches must be generic: a stale prior release number
