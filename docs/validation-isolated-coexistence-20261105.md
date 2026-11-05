@@ -29,6 +29,12 @@ In both cells, real Chrome displayed Computer History from DSH sidebar; its firs
 
 An initial worktree test failed because the isolated source tree had not generated `extension-editor/out/payload.js`. After the standard `pnpm build:editor-extension`, the full run passed. This was a QA build prerequisite, not a plugin conflict.
 
+## Repeatable PR gate (2026-11-05)
+
+The `Packaged alpha matrix` workflow now includes a **separate `pinned_coexistence` job** on pull requests. It downloads the same CI-assembled three-platform tarball (no build-from-checkout substitution), installs exact DSH CLI/Web Host `0.2.1-rc.5`, builds the Browser/Editor companions and runs the full `pnpm e2e:product-journey` under both `DCH_E2E_COEXIST_ANNOTATION=1` and `DCH_E2E_COEXIST_DEV_INDEX=1`. The flags install only hardcoded reviewed package versions. No `GH_TOKEN`, user profile, private configuration or model request is supplied, and only the redacted `checks.json` test record is uploaded with three-day retention. A CI boundary invariant detects accidental removal of the job.
+
+This is an **ongoing regression gate** for the three-package combination, not evidence of a wider production bundle stack. The new CI job must itself pass on its exact PR commit before its status can be called green.
+
 ## Explicit limits / next gates
 
 These two narrow coexistence cells are **not** a blanket multi-plugin guarantee. The annotation editor and dev-index tool invocation flows were not triggered; cross-plugin keyboard focus and all Settings affordances have not been exhaustively inspected. We did not run plugins that may start timers, network clients, notifications, remote bridges or processes (e.g., `dsh-mnemon`, `dsh-context`, `dsh-whale-widget`); no production secrets were available. The other installed external integrations, native Electron UI (#171), production SQLite migration (#172), and broader third-party co-existence (#173) remain separate, still-open gates.
