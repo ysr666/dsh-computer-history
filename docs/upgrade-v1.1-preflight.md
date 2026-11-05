@@ -1,6 +1,6 @@
 # v1.1 upgrade preflight and rollback plan
 
-Status: **Read-only preflight available; no user-profile migration approved or performed.**
+Status: **Read-only preflight available; one owner-authorized local backup and restored-copy rehearsal completed on 2026-11-05. The everyday Desktop profile has NOT been upgraded.**
 
 The v1.1 feature chain (M1–M7) uses UI and Host contracts measured on
 DSH `0.2.0-rc.2` and `0.2.1-alpha.2`, plus isolated packaged Web Host
@@ -19,11 +19,36 @@ embedded DSH CLI read `0.2.0-rc.2`, a tested integration target. Do not
 treat the PATH-CLI incompatibility warning as proof the Desktop Host is
 incompatible; inspect the exact Host you intend to upgrade.
 
-An access-restricted local **online SQLite backup** and a v13→v16 migration
-rehearsal on an independent restore succeeded. This does not authorize or
-perform production installation or schema migration. The existing Host was
-not stopped or changed. Each other user/profile requires its own verified
-backup, compatibility check and approval.
+**2026-11-05 observed Desktop contract:** The command-line `dsh` on PATH
+reported `0.2.1-rc.2`, while read-only inspection of the installed Electron
+app's ASAR package manifests confirmed its embedded Desktop Host, Web app,
+boot and base packages were all `0.2.1-rc.5`. RC5 explicitly rejects
+`dsh plugin --profile desktop` modifications: **`desktop` is exclusively
+managed by Electron**. Never bypass this by directly editing the live
+profile manifest or running pnpm inside it. Use the supported Electron
+plugin-management surface for production changes. A named disposable profile
+such as `upgrade-pilot` remains appropriate for CLI rehearsals.
+
+An earlier access-restricted **online SQLite backup** and v13→v16 migration
+rehearsal had succeeded by 2026-10-11 without stopping the existing Host.
+Separately, on **2026-11-05**, following explicit owner permission, the
+active Desktop/Host/collector were gracefully stopped for a consistent
+SQLite backup and an independent full profile/package rollback snapshot;
+the original Desktop/Host/collector were then relaunched and verified running.
+The actual backup reported **schema v13**. An isolated restored copy migrated
+v13→v14→v15→v16 with integrity and foreign-key checks clean, unchanged
+observation/Episode/link counts, conservative activity-event backfill and
+browser URL redaction. The original snapshot SHA remained unchanged.
+
+The current three-platform CI product artifact, `1.1.0`, was then installed
+and the original `0.1.0-dev.0` package restored via the **supported RC5 CLI
+in a separate named test profile**, retaining the 25 configured bundle names
+and dependencies. The live `desktop` profile was **never installed, migrated
+or modified**. This does not replace the native Electron GUI gate (#171),
+prove full third-party runtime coexistence, or authorize bypassing Desktop
+plugin management. No personal source paths, history rows or raw backups
+were uploaded. Each other user/profile still requires its own backup and
+compatibility checks.
 
 ## Current owner-machine finding (2026-10-10)
 
@@ -92,9 +117,11 @@ node scripts/preflight-local-upgrade.mjs \
 6. Rehearse migration **only on the disposable copy** first, including the
    new browser-title cleanup migration 0015, M1–M7 reads, retention and
    explicit note-grant boundary. Confirm the backup is still restorable.
-7. With a confirmed backup and an approved downtime window, explicitly
-   authorize the production CLI/profile/plugin upgrade and any migration.
-   Do **not** overwrite the old `file:` tarball in place.
+7. With a confirmed backup, an approved downtime window and the required
+   native Electron acceptance, perform the production **Desktop-managed**
+   plugin upgrade and any approved migration. RC5 rejects terminal CLI
+   plugin changes to `desktop`; do **not** bypass it with raw pnpm edits or
+   overwrite the old `file:` tarball in place.
 8. Validate the real installed client and a representative, user-approved
    historical project. Check that confidential browser query data does not
    appear in titles or summaries, and that no Skill or automation is
