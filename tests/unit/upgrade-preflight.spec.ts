@@ -97,6 +97,23 @@ describe('read-only user profile upgrade preflight', () => {
     expect(unverified.blockers).toHaveLength(1)
   })
 
+  it('warns that an Electron-managed desktop profile cannot be upgraded with the shell plugin CLI', () => {
+    const { root, profile } = fixture({ pluginVersion: '0.1.0-dev.0', withWal: false })
+    const before = readFileSync(path.join(profile, 'package.json'), 'utf8')
+    const report = inspectUpgradeEnvironment({
+      dshHome: root, profile: 'desktop', dshVersion: '0.2.1-rc.2',
+    })
+    expect(report.cautions.join(' ')).toContain('Electron-managed desktop profile')
+    expect(report.cautions.join(' ')).toContain('terminal dsh --version may differ')
+    expect(report.nextSteps.join(' ')).toContain('do not bypass its CLI protection')
+    expect(readFileSync(path.join(profile, 'package.json'), 'utf8')).toBe(before)
+    const isolated = inspectUpgradeEnvironment({
+      dshHome: root, profile: 'upgrade-pilot', dshVersion: '0.2.1-rc.5',
+    })
+    expect(isolated.cautions.join(' ')).not.toContain('Electron-managed desktop profile')
+    expect(isolated.nextSteps.join(' ')).not.toContain('CLI protection')
+  })
+
   it('does not read a user-chosen profile outside the DSH profiles directory', () => {
     const { root } = fixture()
     expect(() => inspectUpgradeEnvironment({

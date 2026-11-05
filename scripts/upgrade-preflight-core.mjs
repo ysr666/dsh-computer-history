@@ -82,6 +82,10 @@ export function inspectUpgradeEnvironment({
   if (bundles.filter(name => name !== INSTALL_PACKAGE).length > 0) {
     cautions.push('This profile has other bundles; check coexistence in an isolated profile before any live upgrade.')
   }
+  if (profile === 'desktop') {
+    cautions.push('The Electron-managed desktop profile rejects dsh plugin CLI changes on DSH 0.2.1-rc.5. Use the Desktop application plugin manager, not direct manifest or pnpm edits.')
+    cautions.push('The terminal dsh --version may differ from the Desktop app embedded Host version; verify the exact embedded runtime before upgrading.')
+  }
   return {
     mode: 'read-only',
     profile,
@@ -104,6 +108,9 @@ export function inspectUpgradeEnvironment({
     nextSteps: [
       'Do not mutate the active profile or history during preflight.',
       'Test the target DSH and Computer History package in a separate DSH_HOME and profile.',
+      ...(profile === 'desktop' ? [
+        'For the Electron-managed desktop profile, verify the embedded Host version and use Desktop plugin management; do not bypass its CLI protection by editing the live manifest.',
+      ] : []),
       'Stop the original Host/collector before migration or restore.',
       'With WAL present, make a consistent SQLite backup using SQLite backup API or equivalent safe snapshot, not a single-file copy.',
       'Verify backup restore and matching profile/companion configuration in isolation.',
