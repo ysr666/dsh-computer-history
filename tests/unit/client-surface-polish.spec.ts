@@ -27,6 +27,12 @@ describe('product surface polish', () => {
     expect(RESPONSIVE_STYLES).toContain('overflow-wrap:anywhere')
   })
 
+  it('keeps the History title below overlaid Electron window controls at compact widths', () => {
+    const compactMain = RESPONSIVE_STYLES.match(/@media\(max-width:720px\)\{\.ch-main\{padding:(\d+)px/)
+    expect(compactMain).not.toBeNull()
+    expect(Number(compactMain?.[1])).toBeGreaterThanOrEqual(60)
+  })
+
   it('keeps the Settings read-error card inside a narrow Host slot', () => {
     expect(RESPONSIVE_STYLES).toContain('.ch-settings-state{')
     expect(RESPONSIVE_STYLES).toContain('display:flex;flex-direction:column;align-items:flex-start')
